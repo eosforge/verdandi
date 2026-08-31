@@ -1,0 +1,147 @@
+{
+  "iterations": 2000,
+  "redis_version": "8.8.0",
+  "results": [
+    {
+      "calls": 2000,
+      "commands": {
+        "evalsha": {
+          "calls": 4000,
+          "server_usec": 181407,
+          "server_usec_per_logical_call": 90.7035
+        }
+      },
+      "scenario": "replace_small_map",
+      "throughput_per_second": 1492.1202992148835,
+      "wall_usec": {
+        "maximum": 2080.6,
+        "mean": 669.3887,
+        "p50": 625.9,
+        "p95": 1147.8,
+        "p99": 1410.3
+      }
+    },
+    {
+      "calls": 2000,
+      "commands": {
+        "evalsha": {
+          "calls": 4000,
+          "server_usec": 152020,
+          "server_usec_per_logical_call": 76.01
+        },
+        "hmget": {
+          "calls": 6000,
+          "server_usec": 7163,
+          "server_usec_per_logical_call": 3.5815
+        }
+      },
+      "scenario": "patch_one_map_field_with_projection",
+      "throughput_per_second": 1273.6285965281522,
+      "wall_usec": {
+        "maximum": 2551.6,
+        "mean": 784.3628,
+        "p50": 702.8,
+        "p95": 1262.0,
+        "p99": 1556.7
+      }
+    },
+    {
+      "calls": 2000,
+      "commands": {
+        "evalsha": {
+          "calls": 2000,
+          "server_usec": 179853,
+          "server_usec_per_logical_call": 89.9265
+        }
+      },
+      "scenario": "read_full_64_fields",
+      "throughput_per_second": 1838.7918328589708,
+      "wall_usec": {
+        "maximum": 1492.2,
+        "mean": 542.91635,
+        "p50": 522.1,
+        "p95": 762.4,
+        "p99": 936.1
+      }
+    },
+    {
+      "calls": 2000,
+      "commands": {
+        "evalsha": {
+          "calls": 2000,
+          "server_usec": 72533,
+          "server_usec_per_logical_call": 36.2665
+        }
+      },
+      "scenario": "read_one_field_delta",
+      "throughput_per_second": 2953.4013806856115,
+      "wall_usec": {
+        "maximum": 1058.1,
+        "mean": 337.6563,
+        "p50": 320.6,
+        "p95": 514.3,
+        "p99": 614.9
+      }
+    },
+    {
+      "calls": 2000,
+      "commands": {
+        "evalsha": {
+          "calls": 2000,
+          "server_usec": 48607,
+          "server_usec_per_logical_call": 24.3035
+        }
+      },
+      "scenario": "read_unchanged",
+      "throughput_per_second": 3622.8418730961967,
+      "wall_usec": {
+        "maximum": 2194.7,
+        "mean": 275.17765,
+        "p50": 262.8,
+        "p95": 395.4,
+        "p99": 489.9
+      }
+    },
+    {
+      "calls": 2000,
+      "commands": {
+        "evalsha": {
+          "calls": 4000,
+          "server_usec": 149445,
+          "server_usec_per_logical_call": 74.7225
+        }
+      },
+      "scenario": "delete_refresh_tombstone",
+      "throughput_per_second": 1567.079545114418,
+      "wall_usec": {
+        "maximum": 3471.6,
+        "mean": 637.18005,
+        "p50": 593.0,
+        "p95": 988.7,
+        "p99": 1182.4
+      }
+    },
+    {
+      "calls": 200,
+      "commands": {
+        "evalsha": {
+          "calls": 400,
+          "server_usec": 140022,
+          "server_usec_per_logical_call": 700.11
+        }
+      },
+      "scenario": "replace_256_field_map",
+      "throughput_per_second": 450.7834616563587,
+      "wall_usec": {
+        "maximum": 4970.9,
+        "mean": 2217.1504999999997,
+        "p50": 2197.7,
+        "p95": 2952.8,
+        "p99": 3375.3
+      }
+    }
+  ],
+  "schema": "verdandi.catalog.benchmark.v1",
+  "timestamp": "2026-08-26T13:26:36.982401+00:00",
+  "wide_fields": 256
+}

@@ -1,0 +1,133 @@
+{
+  "schema": "verdandi.registration.package-migration.v1",
+  "date": "2026-08-26",
+  "scope": "Go registration package and Rust registration module migration",
+  "status": "pass",
+  "source_fingerprint": {
+    "algorithm": "sha256",
+    "files": 88,
+    "value": "3af6405f80a4ef3af123f4ad143b4714bb0a94c50190ac023ce6356ecf346758"
+  },
+  "static_and_local": {
+    "go_test_all": "pass",
+    "go_vet_all": "pass",
+    "go_linux_race_shuffle_repeats": 10,
+    "go_linux_race_shuffle_status": "pass",
+    "go_fuzz_seconds": 30,
+    "go_fuzz_executions": 7342037,
+    "go_fuzz_status": "pass",
+    "registration_lua_generation": "pass",
+    "registration_lua_redis_8_8": "pass",
+    "rust_format": "pass",
+    "rust_unit_tests": 37,
+    "rust_unit_status": "pass",
+    "rust_clippy_denied_warnings": "pass",
+    "rust_doc": "pass"
+  },
+  "go_benchmarks_linux_i7_13700f": {
+    "samples": 5,
+    "event_decode_ns_range": [843.3, 873.4],
+    "pending_32_updates_ns_range": [5821, 5901],
+    "pending_32_updates_bytes": 112,
+    "pending_32_updates_allocations": 1,
+    "record_validation_ns_range": [1143, 1162],
+    "record_validation_allocations": 0,
+    "redis_clock_ns_range": [23.11, 23.34],
+    "apply_update_ns_range": [1336, 1399],
+    "apply_update_bytes": 2888,
+    "apply_update_allocations": 5,
+    "typed_selector_one_500_ns_range": [20980, 21352],
+    "typed_selector_one_500_bytes": 3881,
+    "typed_selector_one_500_allocations": 43
+  },
+  "final_fault_gate": {
+    "result_file": "testkit/results/registration-package-migration-final-90s-20260826.json",
+    "sample_file": "testkit/results/registration-package-migration-final-90s-20260826-samples.jsonl",
+    "redis_version": "8.8.0",
+    "duration_seconds": 90,
+    "registrations": 500,
+    "selectors": 8,
+    "updates": 45000,
+    "update_retries": 1,
+    "unexpected_async_errors": 0,
+    "update_p50_ns": 668451,
+    "update_p95_ns": 1095796,
+    "update_p99_ns": 1415052,
+    "selection_transactions": 7152,
+    "selection_p99_ns": 1156327,
+    "expiry_cycles": 3,
+    "churn_cycles": 9,
+    "final_revision": 91,
+    "final_generation": 3,
+    "goroutines": [2, 528, 2],
+    "redis_memory_growth_bytes": -3784,
+    "redis_evictions": 0,
+    "redis_rejected_connections": 0,
+    "final_dbsize": 0,
+    "faults": [
+      "script_flush",
+      "kill_pubsub",
+      "pause",
+      "kill_normal",
+      "aof_restart",
+      "script_flush"
+    ],
+    "rust_post_checks": "pass"
+  },
+  "rust_release_load": {
+    "registrations": 500,
+    "selectors": 8,
+    "update_target_per_second": 500,
+    "update_completed_per_second": 500.0,
+    "update_p50_us": 766.5,
+    "update_p95_us": 1140.2,
+    "update_p99_us": 1423.3,
+    "renew_completed_per_second": 471.7,
+    "scale_registrations": 5000,
+    "scale_sync_ms": 132.8847,
+    "redis_memory_bytes_for_500": 144419,
+    "tokio_tasks": [2, 519, 1],
+    "status": "pass"
+  },
+  "sentinel": {
+    "result_file": "testkit/results/registration-package-migration-sentinel-20260826.json",
+    "redis_version": "8.8.0",
+    "elapsed_seconds": 33.42,
+    "initial_master_port": 16381,
+    "acknowledged_loss_master_port": 16382,
+    "recovered_master_port": 16383,
+    "go_selector_generations": [1, 2, 3],
+    "rust_selector_generations": [1, 2, 3],
+    "uuid_preservation": "pass",
+    "cross_language_convergence": "pass",
+    "status": "pass"
+  },
+  "diagnostic_runs": [
+    {
+      "name": "rust_load_default_parallel_execution",
+      "result": "failed_before_test_serialization",
+      "cause": "endpoint-wide CONFIG RESETSTAT statistics from concurrent profiles overlapped",
+      "correction": "an internal async mutex now serializes all three profiles",
+      "final_rerun": "pass"
+    },
+    {
+      "name": "sentinel_first_full_rerun",
+      "result": "failed",
+      "cause": "Sentinel continued to report excluded primary 16382 until the topology timeout",
+      "cleanup": "pass",
+      "next_complete_rerun": "pass"
+    },
+    {
+      "name": "final_30_second_fault_gate",
+      "result_file": "testkit/results/registration-package-migration-final-30s-expiry-gate-failed-20260826.json",
+      "result": "rejected_by_qualification_gate",
+      "cause": "one natural expiry cycle completed but the unchanged gate requires at least two",
+      "replacement": "the final 90-second gate completed three expiry cycles and passed"
+    }
+  ],
+  "scope_notes": [
+    "The pre-existing two-hour Registration evidence predates only the package/module relocation and remains historical endurance evidence.",
+    "The final 90-second result fingerprints the exact post-migration source tree.",
+    "The combined Registration/Catalog interop peers await the concurrent Catalog child-API migration; Registration cross-language behavior passed the Sentinel matrix."
+  ]
+}

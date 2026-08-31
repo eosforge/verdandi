@@ -1,0 +1,25 @@
+{
+  "status": "infrastructure_failure",
+  "date": "2026-08-28",
+  "source_fingerprint": "05874222ecae71f6469039e89f6b745a58402cea53171e2fc74d470a7641e867",
+  "source_fingerprint_files": 88,
+  "topology": "three Redis 8.8 nodes and three Sentinels with independent ACL credentials",
+  "passed_before_gate": [
+    "Go Sentinel integration",
+    "Rust Sentinel integration",
+    "first primary promotion and cross-language convergence",
+    "UUID preservation",
+    "Go and Rust Selector generation 1 to 2",
+    "total-Sentinel-loss unavailable state without a half-synchronized view"
+  ],
+  "blocking_gate": "Sentinel still reported excluded primary 16383 before the bounded second-promotion deadline",
+  "sdk_assertion_failed_before_gate": false,
+  "complete_sentinel_pass": false,
+  "test_source_changes": "necessary API identifier replacements only; no test logic or comment cleanup",
+  "cleanup": {
+    "dedicated_ports_closed": [16381, 16382, 16383, 26381, 26382, 26383],
+    "owned_containers_remaining": 0,
+    "owned_remote_directories_remaining": 0
+  },
+  "qualification_policy": "full Sentinel qualification deferred until maintainer review is complete"
+}

@@ -1,0 +1,537 @@
+{
+  "numeric_safe_integer_arguments": {
+    "field_expire_at_ms": 70368744177663,
+    "hash_field_expire_at_max_ms": 70368744177663,
+    "hsetex_ceiling_plus_one_rejected": true,
+    "hsetex_field_expire_at_ms": 70368744177663,
+    "key_expire_at_ms": 9007199254740991,
+    "safe_integer": 9007199254740991,
+    "safe_integer_rejected_for_hash_field_expiry": true,
+    "status": "pass",
+    "stored_hash": 9007199254740991
+  },
+  "persistence": "fixture-disabled",
+  "redis_version": "8.8.0",
+  "registrations": {
+    "default_max": 1000,
+    "small": 4000
+  },
+  "results": [
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 50.12,
+      "server_total_microseconds": 200477,
+      "shape": "small",
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 12858.734581724679,
+      "wall_seconds": 0.3110726000741124
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 42.08,
+      "server_total_microseconds": 168314,
+      "shape": "small",
+      "trial": 1,
+      "variant": "candidate",
+      "wall_operations_per_second": 13422.47197446789,
+      "wall_seconds": 0.2980076998937875
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 236.29,
+      "server_total_microseconds": 236294,
+      "shape": "default_max",
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 2142.3102419103425,
+      "wall_seconds": 0.4667857999447733
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 162.66,
+      "server_total_microseconds": 162656,
+      "shape": "default_max",
+      "trial": 1,
+      "variant": "candidate",
+      "wall_operations_per_second": 2085.9094319542373,
+      "wall_seconds": 0.4794071998912841
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 155.05,
+      "server_total_microseconds": 155050,
+      "shape": "default_max",
+      "trial": 2,
+      "variant": "candidate",
+      "wall_operations_per_second": 2229.891065144844,
+      "wall_seconds": 0.44845240004360676
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 170.1,
+      "server_total_microseconds": 170102,
+      "shape": "default_max",
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 2717.4282260843347,
+      "wall_seconds": 0.36799499997869134
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 48.6,
+      "server_total_microseconds": 194406,
+      "shape": "small",
+      "trial": 2,
+      "variant": "candidate",
+      "wall_operations_per_second": 13772.188722373976,
+      "wall_seconds": 0.29044039989821613
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 47.0,
+      "server_total_microseconds": 188007,
+      "shape": "small",
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 11055.645551533731,
+      "wall_seconds": 0.36180610000155866
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 41.09,
+      "server_total_microseconds": 164350,
+      "shape": "small",
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 10082.972783318497,
+      "wall_seconds": 0.3967083999887109
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 48.71,
+      "server_total_microseconds": 194831,
+      "shape": "small",
+      "trial": 3,
+      "variant": "candidate",
+      "wall_operations_per_second": 10589.941829789437,
+      "wall_seconds": 0.3777169000823051
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 125.28,
+      "server_total_microseconds": 125278,
+      "shape": "default_max",
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 1888.2717181491362,
+      "wall_seconds": 0.5295847998932004
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 125.51,
+      "server_total_microseconds": 125507,
+      "shape": "default_max",
+      "trial": 3,
+      "variant": "candidate",
+      "wall_operations_per_second": 1607.2333214122489,
+      "wall_seconds": 0.6221872000023723
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 141.96,
+      "server_total_microseconds": 141958,
+      "shape": "default_max",
+      "trial": 4,
+      "variant": "candidate",
+      "wall_operations_per_second": 1867.3948011106784,
+      "wall_seconds": 0.5355054000392556
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 140.11,
+      "server_total_microseconds": 140108,
+      "shape": "default_max",
+      "trial": 4,
+      "variant": "baseline",
+      "wall_operations_per_second": 2224.449143474385,
+      "wall_seconds": 0.44954949989914894
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 46.9,
+      "server_total_microseconds": 187617,
+      "shape": "small",
+      "trial": 4,
+      "variant": "candidate",
+      "wall_operations_per_second": 12856.449071642252,
+      "wall_seconds": 0.3111278999131173
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 45.03,
+      "server_total_microseconds": 180103,
+      "shape": "small",
+      "trial": 4,
+      "variant": "baseline",
+      "wall_operations_per_second": 13000.769323734112,
+      "wall_seconds": 0.3076740999240428
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 44.86,
+      "server_total_microseconds": 179421,
+      "shape": "small",
+      "trial": 5,
+      "variant": "baseline",
+      "wall_operations_per_second": 12641.789517417188,
+      "wall_seconds": 0.31641090009361506
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 42.14,
+      "server_total_microseconds": 168557,
+      "shape": "small",
+      "trial": 5,
+      "variant": "candidate",
+      "wall_operations_per_second": 12943.894694457804,
+      "wall_seconds": 0.30902599985711277
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 157.62,
+      "server_total_microseconds": 157617,
+      "shape": "default_max",
+      "trial": 5,
+      "variant": "baseline",
+      "wall_operations_per_second": 2646.412786063465,
+      "wall_seconds": 0.3778700002003461
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 146.01,
+      "server_total_microseconds": 146007,
+      "shape": "default_max",
+      "trial": 5,
+      "variant": "candidate",
+      "wall_operations_per_second": 2821.651319948515,
+      "wall_seconds": 0.3544024000875652
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 180.82,
+      "server_total_microseconds": 180825,
+      "shape": "default_max",
+      "trial": 6,
+      "variant": "candidate",
+      "wall_operations_per_second": 2844.7851103902462,
+      "wall_seconds": 0.3515204000286758
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 130.12,
+      "server_total_microseconds": 130121,
+      "shape": "default_max",
+      "trial": 6,
+      "variant": "baseline",
+      "wall_operations_per_second": 2759.4824102936163,
+      "wall_seconds": 0.3623867998830974
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 44.61,
+      "server_total_microseconds": 178442,
+      "shape": "small",
+      "trial": 6,
+      "variant": "candidate",
+      "wall_operations_per_second": 12398.349035106763,
+      "wall_seconds": 0.32262360001914203
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 42.48,
+      "server_total_microseconds": 169924,
+      "shape": "small",
+      "trial": 6,
+      "variant": "baseline",
+      "wall_operations_per_second": 13432.356668026141,
+      "wall_seconds": 0.29778839997015893
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 47.03,
+      "server_total_microseconds": 188114,
+      "shape": "small",
+      "trial": 7,
+      "variant": "baseline",
+      "wall_operations_per_second": 13043.634216308452,
+      "wall_seconds": 0.30666300002485514
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 41.81,
+      "server_total_microseconds": 167226,
+      "shape": "small",
+      "trial": 7,
+      "variant": "candidate",
+      "wall_operations_per_second": 9684.32490321144,
+      "wall_seconds": 0.4130386000033468
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 153.19,
+      "server_total_microseconds": 153193,
+      "shape": "default_max",
+      "trial": 7,
+      "variant": "baseline",
+      "wall_operations_per_second": 1844.976580417072,
+      "wall_seconds": 0.5420123001094908
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 179.35,
+      "server_total_microseconds": 179346,
+      "shape": "default_max",
+      "trial": 7,
+      "variant": "candidate",
+      "wall_operations_per_second": 2002.811547274353,
+      "wall_seconds": 0.4992980998940766
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 134.05,
+      "server_total_microseconds": 134048,
+      "shape": "default_max",
+      "trial": 8,
+      "variant": "candidate",
+      "wall_operations_per_second": 2648.8536548308393,
+      "wall_seconds": 0.3775218001101166
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 151.3,
+      "server_total_microseconds": 151304,
+      "shape": "default_max",
+      "trial": 8,
+      "variant": "baseline",
+      "wall_operations_per_second": 2301.737005954844,
+      "wall_seconds": 0.4344544999767095
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 46.71,
+      "server_total_microseconds": 186833,
+      "shape": "small",
+      "trial": 8,
+      "variant": "candidate",
+      "wall_operations_per_second": 13881.59622862439,
+      "wall_seconds": 0.28815130004659295
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 43.05,
+      "server_total_microseconds": 172189,
+      "shape": "small",
+      "trial": 8,
+      "variant": "baseline",
+      "wall_operations_per_second": 11145.985664680557,
+      "wall_seconds": 0.3588735999073833
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 38.05,
+      "server_total_microseconds": 152184,
+      "shape": "small",
+      "trial": 9,
+      "variant": "baseline",
+      "wall_operations_per_second": 13650.269849853532,
+      "wall_seconds": 0.293034499976784
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 42.53,
+      "server_total_microseconds": 170140,
+      "shape": "small",
+      "trial": 9,
+      "variant": "candidate",
+      "wall_operations_per_second": 13039.539471958431,
+      "wall_seconds": 0.3067592999432236
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 190.67,
+      "server_total_microseconds": 190672,
+      "shape": "default_max",
+      "trial": 9,
+      "variant": "baseline",
+      "wall_operations_per_second": 2724.204036162467,
+      "wall_seconds": 0.36707969987764955
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 138.91,
+      "server_total_microseconds": 138915,
+      "shape": "default_max",
+      "trial": 9,
+      "variant": "candidate",
+      "wall_operations_per_second": 2553.753315472649,
+      "wall_seconds": 0.39158049994148314
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 189.71,
+      "server_total_microseconds": 189715,
+      "shape": "default_max",
+      "trial": 10,
+      "variant": "candidate",
+      "wall_operations_per_second": 1974.8744625853788,
+      "wall_seconds": 0.5063612998928875
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 175.39,
+      "server_total_microseconds": 175394,
+      "shape": "default_max",
+      "trial": 10,
+      "variant": "baseline",
+      "wall_operations_per_second": 1840.6511490459216,
+      "wall_seconds": 0.5432859999127686
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 45.47,
+      "server_total_microseconds": 181893,
+      "shape": "small",
+      "trial": 10,
+      "variant": "candidate",
+      "wall_operations_per_second": 9279.72621112013,
+      "wall_seconds": 0.431047199992463
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 46.6,
+      "server_total_microseconds": 186412,
+      "shape": "small",
+      "trial": 10,
+      "variant": "baseline",
+      "wall_operations_per_second": 9368.780742558169,
+      "wall_seconds": 0.42694989987649024
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 51.17,
+      "server_total_microseconds": 204669,
+      "shape": "small",
+      "trial": 11,
+      "variant": "baseline",
+      "wall_operations_per_second": 9196.410731968866,
+      "wall_seconds": 0.434952300041914
+    },
+    {
+      "calls": 4000,
+      "server_microseconds_per_call": 44.41,
+      "server_total_microseconds": 177649,
+      "shape": "small",
+      "trial": 11,
+      "variant": "candidate",
+      "wall_operations_per_second": 8920.25448338143,
+      "wall_seconds": 0.4484177001286298
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 166.96,
+      "server_total_microseconds": 166956,
+      "shape": "default_max",
+      "trial": 11,
+      "variant": "baseline",
+      "wall_operations_per_second": 1839.0280370539815,
+      "wall_seconds": 0.5437654999550432
+    },
+    {
+      "calls": 1000,
+      "server_microseconds_per_call": 155.43,
+      "server_total_microseconds": 155425,
+      "shape": "default_max",
+      "trial": 11,
+      "variant": "candidate",
+      "wall_operations_per_second": 2281.8192848757485,
+      "wall_seconds": 0.4382468000985682
+    }
+  ],
+  "subscribers": 0,
+  "summary": [
+    {
+      "median_server_microseconds_per_call": 45.03,
+      "median_wall_operations_per_second": 12641.789517417188,
+      "paired_parent_improvement_median_percent": 0.0,
+      "paired_parent_improvement_positive_trials": 0,
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "parent_variant": null,
+      "server_improvement_percent": 0.0,
+      "shape": "small",
+      "source_bytes": 3358,
+      "trials": 11,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 44.61,
+      "median_wall_operations_per_second": 12856.449071642252,
+      "paired_parent_improvement_median_percent": -3.404255319148939,
+      "paired_parent_improvement_positive_trials": 5,
+      "paired_server_improvement_max_percent": 16.041500399042295,
+      "paired_server_improvement_median_percent": -3.404255319148939,
+      "paired_server_improvement_min_percent": -18.544658067656357,
+      "paired_server_improvement_positive_trials": 5,
+      "parent_variant": "baseline",
+      "server_improvement_percent": 0.9327115256495707,
+      "shape": "small",
+      "source_bytes": 3337,
+      "trials": 11,
+      "variant": "candidate",
+      "wall_improvement_percent": 1.6980155691511678
+    },
+    {
+      "median_server_microseconds_per_call": 157.62,
+      "median_wall_operations_per_second": 2224.449143474385,
+      "paired_parent_improvement_median_percent": 0.0,
+      "paired_parent_improvement_positive_trials": 0,
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "parent_variant": null,
+      "server_improvement_percent": 0.0,
+      "shape": "default_max",
+      "source_bytes": 3358,
+      "trials": 11,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 155.05,
+      "median_wall_operations_per_second": 2229.891065144844,
+      "paired_parent_improvement_median_percent": 6.905845711547677,
+      "paired_parent_improvement_positive_trials": 6,
+      "paired_server_improvement_max_percent": 31.160861653053452,
+      "paired_server_improvement_median_percent": 6.905845711547677,
+      "paired_server_improvement_min_percent": -38.964033200122955,
+      "paired_server_improvement_positive_trials": 6,
+      "parent_variant": "baseline",
+      "server_improvement_percent": 1.6305037431797953,
+      "shape": "default_max",
+      "source_bytes": 3337,
+      "trials": 11,
+      "variant": "candidate",
+      "wall_improvement_percent": 0.24464131654451382
+    }
+  ],
+  "trials": 11,
+  "variants": [
+    "baseline",
+    "candidate"
+  ]
+}

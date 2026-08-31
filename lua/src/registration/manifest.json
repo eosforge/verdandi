@@ -1,0 +1,16 @@
+{
+  "register": [
+    "common/bindings.lua.inc",
+    "actions/register.lua.inc"
+  ],
+  "update": [
+    "common/bindings.lua.inc",
+    "actions/update.lua.inc"
+  ],
+  "renew": [
+    "actions/renew.lua.inc"
+  ],
+  "unregister": [
+    "actions/unregister.lua.inc"
+  ]
+}

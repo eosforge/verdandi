@@ -1,0 +1,93 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "gcc-debug",
+      "displayName": "GCC Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/gcc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "g++",
+        "VERDANDI_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "gcc-asan-ubsan",
+      "displayName": "GCC ASan and UBSan",
+      "inherits": "gcc-debug",
+      "binaryDir": "${sourceDir}/build/gcc-asan-ubsan",
+      "cacheVariables": {
+        "VERDANDI_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
+      "name": "gcc-shared-debug",
+      "displayName": "GCC Shared Debug",
+      "inherits": "gcc-debug",
+      "binaryDir": "${sourceDir}/build/gcc-shared-debug",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "ON"
+      }
+    },
+    {
+      "name": "gcc-shared-release",
+      "displayName": "GCC Shared Release",
+      "inherits": "gcc-debug",
+      "binaryDir": "${sourceDir}/build/gcc-shared-release",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "ON",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "gcc-debug",
+      "configurePreset": "gcc-debug",
+      "jobs": 4
+    },
+    {
+      "name": "gcc-asan-ubsan",
+      "configurePreset": "gcc-asan-ubsan",
+      "jobs": 4
+    },
+    {
+      "name": "gcc-shared-debug",
+      "configurePreset": "gcc-shared-debug",
+      "jobs": 4
+    },
+    {
+      "name": "gcc-shared-release",
+      "configurePreset": "gcc-shared-release",
+      "jobs": 4
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "gcc-debug",
+      "configurePreset": "gcc-debug"
+    },
+    {
+      "name": "gcc-asan-ubsan",
+      "configurePreset": "gcc-asan-ubsan",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+        "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      }
+    },
+    {
+      "name": "gcc-shared-debug",
+      "configurePreset": "gcc-shared-debug"
+    },
+    {
+      "name": "gcc-shared-release",
+      "configurePreset": "gcc-shared-release"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "status": "pass_on_current_source",
+  "date": "2026-08-28",
+  "source_fingerprints": {
+    "qualified_run": "bf703e372f259100a2332533c15d299eb22db43b411880afb2b19abce29987c8",
+    "comment_freeze": "a5323e162ef7778b4cb19847f56214ece0dd8e0634a7180e872df8db8e586739",
+    "direct_client_intermediate": "a1927fed5b7cc929bd197b98abced831d98515211216c0965e12bd80a56372e2",
+    "current_source": "e709ae4ce1149377c2276e41e053c7b264f64cacda13da29b85559261dd628f9",
+    "current_source_change": "Rust private Transport/Owner removal; domain clients now retain the root Client directly"
+  },
+  "redis_version": "8.8.0",
+  "topology": "three Redis primaries/replicas and three Sentinels with independent ACL credentials",
+  "first_attempt": {
+    "status": "infrastructure_failure",
+    "reason": "Sentinel still reported excluded primary 16383 before the bounded second-promotion deadline",
+    "sdk_observation": "Go and Rust Selectors became unavailable as required; no half-synchronized view was published",
+    "source_or_test_change_before_retry": false,
+    "cleanup_completed": true
+  },
+  "clean_retry": {
+    "status": "pass",
+    "elapsed_seconds": 33.094,
+    "initial_master_port": 16381,
+    "acknowledged_loss_master_port": 16383,
+    "recovered_master_port": 16382,
+    "go_uuid_preserved": "cc73dedec3491f659cc8e5ae65b5cc3f",
+    "rust_uuid_preserved": "98e4fe7e3e9c22eaff90bda463136f40",
+    "go_selector_generations": [1, 2, 3],
+    "rust_selector_generations": [1, 2, 3]
+  },
+  "comment_freeze_attempts": [
+    {
+      "status": "infrastructure_failure",
+      "excluded_primary_port": 16383,
+      "reason": "Sentinel still reported the excluded primary before the bounded second-promotion deadline",
+      "sdk_stage_reached": "integration, first-promotion recovery, and total-Sentinel-loss unavailable state",
+      "half_synchronized_view_published": false,
+      "source_or_test_change_before_next_attempt": false,
+      "cleanup_completed": true
+    },
+    {
+      "status": "infrastructure_failure",
+      "excluded_primary_port": 16382,
+      "reason": "Sentinel still reported the excluded primary before the bounded second-promotion deadline",
+      "sdk_stage_reached": "integration, first-promotion recovery, and total-Sentinel-loss unavailable state",
+      "half_synchronized_view_published": false,
+      "source_or_test_change_before_next_attempt": false,
+      "cleanup_completed": true
+    }
+  ],
+  "comment_freeze_interpretation": {
+    "complete_sentinel_pass": false,
+    "blocking_gate": "Redis/Sentinel topology did not publish a usable second primary",
+    "sdk_assertion_failed_before_gate": false
+  },
+  "direct_client_intermediate_attempt": {
+    "status": "infrastructure_failure",
+    "excluded_primary_port": 16382,
+    "reason": "Sentinel still reported the excluded primary before the bounded second-promotion deadline",
+    "sdk_stage_reached": "integration, first-promotion recovery, and total-Sentinel-loss unavailable state",
+    "half_synchronized_view_published": false,
+    "sdk_assertion_failed_before_gate": false,
+    "test_source_modified": false,
+    "cleanup_completed": true
+  },
+  "current_source_run": {
+    "status": "pass",
+    "elapsed_seconds": 40.327,
+    "initial_master_port": 16381,
+    "acknowledged_loss_master_port": 16382,
+    "recovered_master_port": 16383,
+    "go_uuid_preserved": "cece36853bbead2911011026d740e55a",
+    "rust_uuid_preserved": "2ab7942896f6716e7c54e03924227bed",
+    "go_selector_generations": [1, 2, 3],
+    "rust_selector_generations": [1, 2, 3],
+    "test_source_modified": false,
+    "cleanup_completed": true
+  },
+  "scenarios": [
+    "Go and Rust SDK Sentinel integration tests",
+    "minority Sentinel unavailable with stale configuration",
+    "forced acknowledged-write loss and complete-state republish",
+    "Pub/Sub generation recovery",
+    "SCRIPT FLUSH reload",
+    "all Sentinels unavailable",
+    "primary loss while all Sentinels were unavailable",
+    "Sentinel restart and second promotion",
+    "Go/Rust cross-language convergence"
+  ],
+  "cleanup": {
+    "dedicated_ports_closed": [16381, 16382, 16383, 26381, 26382, 26383],
+    "owned_containers_remaining": 0,
+    "owned_remote_directories_remaining": 0,
+    "current_source_ports_verified_closed": true
+  }
+}

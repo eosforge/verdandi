@@ -1,0 +1,32 @@
+{
+  "acknowledged_loss_master": 16382,
+  "elapsed_seconds": 39.608,
+  "go_selector_generations": [
+    1,
+    2,
+    3
+  ],
+  "go_uuid_preserved": "4f63c2f5747ba659b974fcb57210c25e",
+  "initial_master": 16381,
+  "recovered_master": 16383,
+  "redis_version": "8.8.0",
+  "rust_selector_generations": [
+    1,
+    2,
+    3
+  ],
+  "rust_uuid_preserved": "e7780e016e0a3dce9cf79cec1be890bc",
+  "scenarios": [
+    "Go and Rust SDK Sentinel integration suites",
+    "three Sentinels with separate ACL credentials",
+    "minority Sentinel unavailable and stale configuration",
+    "forced acknowledged write loss and full-state republish",
+    "Pub/Sub generation recovery",
+    "SCRIPT FLUSH reload",
+    "all Sentinels unavailable",
+    "primary loss while all Sentinels are unavailable",
+    "Sentinel restart and second promotion",
+    "Go/Rust cross-language convergence"
+  ],
+  "status": "pass"
+}

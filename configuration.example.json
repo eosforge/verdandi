@@ -1,0 +1,91 @@
+{
+  "version": "v1",
+  "redis": {
+    "mode": "standalone",
+    "addresses": [
+      "127.0.0.1:6379"
+    ],
+    "master_name": "",
+    "auth": {
+      "username": "",
+      "password": ""
+    },
+    "sentinel_auth": {
+      "username": "",
+      "password": ""
+    },
+    "database": 0,
+    "tls": {
+      "enabled": false,
+      "system_roots": true,
+      "server_name": "",
+      "ca_file": "",
+      "cert_file": "",
+      "key_file": ""
+    },
+    "timeout_ms": 2000,
+    "connect_timeout_ms": 5000,
+    "pool": {
+      "min_connections": 1,
+      "max_connections": 4,
+      "idle_timeout_ms": 10000
+    },
+    "reconnect": {
+      "initial_delay_ms": 100,
+      "max_delay_ms": 5000,
+      "multiplier": 2,
+      "jitter_percent": 10
+    }
+  },
+  "registration": {
+    "zone": "Alpha",
+    "buffer_capacity": 8,
+    "error_buffer_capacity": 16,
+    "min_renew_interval_ms": 100,
+    "renew_jitter_percent": 10,
+    "policy_refresh_jitter_percent": 10,
+    "policy": {
+      "attr_max_fields": 16,
+      "data_max_fields": 32,
+      "field_name_max_bytes": 64,
+      "attr_value_max_bytes": 128,
+      "data_value_max_bytes": 128,
+      "record_max_bytes": 16384,
+      "refresh_ms": 30000
+    },
+    "selector": {
+      "scan_page_size": 256,
+      "max_pending_entries": 4096,
+      "max_pending_bytes": 67108864,
+      "view_publish_interval_ms": 10,
+      "sync_timeout_ms": 30000,
+      "max_active_bytes": 268435456,
+      "max_retained_bytes": 67108864,
+      "clock_refresh_interval_ms": 30000,
+      "clock_uncertainty_ms": 1,
+      "error_buffer_capacity": 16,
+      "recovery": {
+        "initial_delay_ms": 100,
+        "max_delay_ms": 5000,
+        "multiplier": 2,
+        "jitter_percent": 50
+      }
+    }
+  },
+  "catalog": {
+    "zone": "Alpha",
+    "sync_timeout_ms": 30000,
+    "scan_page_size": 256,
+    "max_inflight_reads": 32,
+    "event_buffer_capacity": 256,
+    "error_buffer_capacity": 64,
+    "max_view_bytes": 0,
+    "max_record_bytes": 524288,
+    "recovery": {
+      "initial_delay_ms": 250,
+      "max_delay_ms": 5000,
+      "multiplier": 2,
+      "jitter_percent": 10
+    }
+  }
+}

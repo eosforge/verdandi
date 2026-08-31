@@ -1,0 +1,164 @@
+{
+  "completed_date": "2026-08-27",
+  "status": "pass",
+  "scope": "Complete Registration/Selector regression and two-hour Redis qualification",
+  "source_fingerprint": {
+    "files": 88,
+    "sha256": "feb767345b8b09323d53dea9c3ead5427be21ece7de668c55e9577eedf5173b0"
+  },
+  "pre_regression": {
+    "lua_generation": "pass",
+    "python_harness_compile": "pass",
+    "go_unit_shuffle_count_10": "pass",
+    "go_vet": "pass",
+    "go_linux_race_shuffle_count_10": "pass",
+    "go_fuzz_30_seconds": {
+      "status": "pass",
+      "executions": 8063945,
+      "new_interesting": 1,
+      "total_interesting": 130
+    },
+    "rust_registration_unit_tests": {
+      "status": "pass",
+      "passed": 28
+    },
+    "rust_all_test_targets_compile": "pass",
+    "rust_format": "pass",
+    "rust_clippy_deny_warnings": "pass",
+    "rust_doc": "pass"
+  },
+  "sentinel": {
+    "rejected_attempts_before_harness_fix": 2,
+    "rejected_excluded_primaries": [16382, 16383],
+    "harness_fix": "Wait for the surviving Redis ROLE attachment and visibility through SENTINEL REPLICAS on all three Sentinels before the total-outage phase.",
+    "final_status": "pass",
+    "elapsed_seconds": 34.503,
+    "initial_master": 16381,
+    "acknowledged_loss_master": 16383,
+    "recovered_master": 16382,
+    "go_selector_generations": [1, 2, 3],
+    "rust_selector_generations": [1, 2, 3],
+    "go_uuid_preserved": true,
+    "rust_uuid_preserved": true
+  },
+  "rejected_endurance_attempt": {
+    "status": "failed",
+    "duration_seconds": 7200,
+    "minimum_redis_seconds": 7200,
+    "measured_redis_seconds": 6984.007,
+    "reason": "Redis server elapsed time did not reach the qualification floor after fault and restart boundaries.",
+    "updates": 3600000,
+    "selection_transactions": 575731,
+    "passed_faults": 34,
+    "unexpected_async_errors": 0,
+    "go_goroutines": [2, 528, 2]
+  },
+  "formal_endurance": {
+    "status": "pass",
+    "duration_seconds": 8000,
+    "minimum_redis_seconds": 7200,
+    "measured_redis_seconds": 7759.124,
+    "registrations": 500,
+    "selectors": 8,
+    "updates": 4000000,
+    "update_retries": 4,
+    "update_latency_ms": {
+      "p50": 0.672099,
+      "p95": 1.037280,
+      "p99": 1.404046,
+      "maximum": 3292.105329
+    },
+    "selection_transactions": 639743,
+    "selection_mutations": 703730,
+    "selection_retries": 257,
+    "selection_latency_ms": {
+      "p50": 0.217584,
+      "p95": 0.415297,
+      "p99": 0.671065,
+      "maximum": 4.352764
+    },
+    "expiry_cycles": 25,
+    "expiry_registrations": 3200,
+    "churn_cycles": 27,
+    "churn_registrations": 432,
+    "peak_retained_records": 33,
+    "expected_async_errors": 202,
+    "unexpected_async_errors": 0,
+    "final_revision": 8001,
+    "final_generation": 15,
+    "passed_faults": 34,
+    "go_process": {
+      "initial_goroutines": 2,
+      "peak_goroutines": 528,
+      "final_goroutines": 2,
+      "initial_heap_bytes": 625160,
+      "peak_heap_bytes": 178315192,
+      "final_heap_bytes": 71806472
+    },
+    "redis": {
+      "version": "8.8.0",
+      "early_used_memory_median_bytes": 2399208,
+      "late_used_memory_median_bytes": 2386984,
+      "stable_memory_change_bytes": -12224,
+      "used_memory_peak_bytes": 3699672,
+      "used_memory_rss_peak_bytes": 25530368,
+      "expired_keys": 896,
+      "expired_subkeys": 896,
+      "evictions": 0,
+      "rejected_connections": 0,
+      "blocked_clients_peak": 0,
+      "final_dbsize": 0
+    },
+    "post_checks": {
+      "canonical_lua_contract": "pass",
+      "rust_raw_convergence": "pass",
+      "rust_typed_registration_selector": "pass"
+    }
+  },
+  "post_regression": {
+    "lua_generation": "pass",
+    "go_unit_shuffle_count_10": "pass",
+    "go_vet": "pass",
+    "go_linux_race_shuffle_count_10": "pass",
+    "go_fuzz_30_seconds": {
+      "status": "pass",
+      "executions": 6179348,
+      "new_interesting": 4,
+      "total_interesting": 134
+    },
+    "rust_registration_unit_tests": {
+      "status": "pass",
+      "passed": 28
+    },
+    "rust_all_test_targets_compile": "pass",
+    "rust_format": "pass",
+    "rust_clippy_deny_warnings": "pass",
+    "rust_doc": "pass"
+  },
+  "cleanup": {
+    "run_id": "8d84a2f3",
+    "owned_container": "absent",
+    "owned_directory": "absent",
+    "port_16440_open": false,
+    "final_dbsize": 0,
+    "unrelated_port_36440_test_modified": false
+  },
+  "scores": {
+    "lua": 10.0,
+    "go": 9.8,
+    "rust": 9.7
+  },
+  "evidence_files": [
+    "registration/full-regression-2h-20260827.md",
+    "testkit/results/registration-production-optimization-final-2h-qualified-20260826.json",
+    "testkit/results/registration-production-optimization-final-2h-qualified-20260826-samples.jsonl",
+    "testkit/results/registration-production-optimization-2h-floor-failed-20260826.json",
+    "testkit/results/registration-production-optimization-2h-floor-failed-20260826-samples.jsonl",
+    "testkit/results/registration-production-optimization-full-regression-sentinel-20260826.json",
+    "testkit/results/registration-production-optimization-full-regression-sentinel-failed-20260826.json"
+  ],
+  "git": {
+    "commit_created": false,
+    "push_created": false
+  }
+}

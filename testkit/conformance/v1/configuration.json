@@ -1,0 +1,128 @@
+{
+  "schema": "verdandi.conformance.configuration.v1",
+  "cases": [
+    {
+      "name": "minimal-standalone",
+      "valid": true,
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "auth": {},
+          "sentinel_auth": {},
+          "tls": {},
+          "pool": {},
+          "reconnect": {}
+        }
+      }
+    },
+    {
+      "name": "explicit-supported-zero-values",
+      "valid": true,
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "auth": {},
+          "sentinel_auth": {},
+          "tls": {},
+          "pool": {},
+          "reconnect": { "jitter_percent": 0 }
+        },
+        "registration": {
+          "zone": "Alpha",
+          "renew_jitter_percent": 0,
+          "policy_refresh_jitter_percent": 0,
+          "policy": {},
+          "selector": {
+            "max_retained_bytes": 0,
+            "view_publish_interval_ms": 0,
+            "clock_uncertainty_ms": 0,
+            "recovery": { "jitter_percent": 0 }
+          }
+        },
+        "catalog": {
+          "zone": "Alpha",
+          "max_view_bytes": 0,
+          "recovery": { "jitter_percent": 0 }
+        }
+      }
+    },
+    {
+      "name": "unsupported-version",
+      "valid": false,
+      "field": "version",
+      "document": {
+        "version": "v2",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "auth": {},
+          "sentinel_auth": {},
+          "tls": {},
+          "pool": {},
+          "reconnect": {}
+        }
+      }
+    },
+    {
+      "name": "cluster-is-not-supported",
+      "valid": false,
+      "field": "redis.mode",
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "cluster",
+          "addresses": ["127.0.0.1:6379"],
+          "auth": {},
+          "sentinel_auth": {},
+          "tls": {},
+          "pool": {},
+          "reconnect": {}
+        }
+      }
+    },
+    {
+      "name": "zero-command-timeout-is-not-default",
+      "valid": false,
+      "field": "redis.timeout_ms",
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "auth": {},
+          "sentinel_auth": {},
+          "tls": {},
+          "timeout_ms": 0,
+          "pool": {},
+          "reconnect": {}
+        }
+      }
+    },
+    {
+      "name": "removed-catalog-lock-object-is-rejected",
+      "valid": false,
+      "field": "json",
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "auth": {},
+          "sentinel_auth": {},
+          "tls": {},
+          "pool": {},
+          "reconnect": {}
+        },
+        "catalog": {
+          "zone": "Alpha",
+          "recovery": {},
+          "lock": { "ttl_multiplier": 3 }
+        }
+      }
+    }
+  ]
+}

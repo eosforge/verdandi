@@ -1,0 +1,43 @@
+{
+  "schema": "verdandi.conformance.catalog-events.v1",
+  "events": [
+    {
+      "name": "replace-map-binary-fields",
+      "payload_hex": "97c4027631c4077265706c616365c40e726f7574696e673a7075626c6963c4023432c4036d6170c402313594c405706f776572c40200ffc4047a6f6e65c40465617374",
+      "path": { "part": "routing", "id": "public" },
+      "operation": "replace",
+      "revision": 42,
+      "base_revision": 0,
+      "kind": "map",
+      "encoded_bytes": 15,
+      "fields": [
+        { "name": "power", "value_hex": "00ff" },
+        { "name": "zone", "value_hex": "65617374" }
+      ]
+    },
+    {
+      "name": "patch-map-binary-field",
+      "payload_hex": "98c4027631c4057061746368c40e726f7574696e673a7075626c6963c4023432c4023433c4036d6170c402313592c405706f776572c40201ff",
+      "path": { "part": "routing", "id": "public" },
+      "operation": "patch",
+      "revision": 43,
+      "base_revision": 42,
+      "kind": "map",
+      "encoded_bytes": 15,
+      "fields": [
+        { "name": "power", "value_hex": "01ff" }
+      ]
+    },
+    {
+      "name": "delete-record",
+      "payload_hex": "94c4027631c40664656c657465c40e726f7574696e673a7075626c6963c4023434",
+      "path": { "part": "routing", "id": "public" },
+      "operation": "delete",
+      "revision": 44,
+      "base_revision": 0,
+      "kind": "",
+      "encoded_bytes": 0,
+      "fields": []
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "date": "2026-08-26",
+  "status": "fail",
+  "phase": "second promotion after complete Sentinel outage",
+  "attempts": 2,
+  "excluded_primaries": [16382, 16383],
+  "reason": "Both attempts timed out because Sentinel continued to report the just-killed promoted primary before the surviving replica topology had converged.",
+  "source_fingerprint": {
+    "files": 88,
+    "sha256": "79e5a4aae09bd01005becca57848087bcc17a39405b0ea5966e440fbbc39ba5d"
+  },
+  "sdk_observation": "Go and Rust entered unavailable/unsynchronized state during the injected complete outage as required.",
+  "cleanup": {
+    "labeled_containers": 0,
+    "closed_ports": [16381, 16382, 16383, 26381, 26382, 26383]
+  },
+  "source_changed_between_failed_attempts": false,
+  "follow_up": "The harness now waits for Redis ROLE attachment and SENTINEL REPLICAS visibility on all three Sentinels before total outage. The corrected full matrix passed."
+}

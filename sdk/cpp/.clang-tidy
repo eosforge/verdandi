@@ -1,0 +1,15 @@
+Checks: >-
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  concurrency-*,
+  performance-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-unchecked-optional-access,
+  -bugprone-unused-return-value,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
+  -clang-analyzer-optin.core.EnumCastOutOfRange,
+  -concurrency-mt-unsafe
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(^|/)sdk/cpp/(include|src)/'

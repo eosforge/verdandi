@@ -1,0 +1,366 @@
+{
+  "calls": {
+    "small": 500,
+    "wide": 100
+  },
+  "persistence": "fixture-disabled",
+  "redis_version": "8.8.0",
+  "results": [
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "absent_one_change",
+      "server_microseconds_per_call": 9.93,
+      "server_total_microseconds": 4965,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 56900.94626397995,
+      "wall_seconds": 0.008787200087681413
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "present_one_change",
+      "server_microseconds_per_call": 8.41,
+      "server_total_microseconds": 4204,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 56914.54878663486,
+      "wall_seconds": 0.008785099955275655
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "present_one_noop",
+      "server_microseconds_per_call": 5.38,
+      "server_total_microseconds": 2689,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 75978.60383767931,
+      "wall_seconds": 0.006580800050869584
+    },
+    {
+      "calls": 100,
+      "operation": "patch",
+      "scenario": "present_wide_change_last",
+      "server_microseconds_per_call": 86.59,
+      "server_total_microseconds": 8659,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 5758.511085198135,
+      "wall_seconds": 0.01736559998244047
+    },
+    {
+      "calls": 100,
+      "operation": "patch",
+      "scenario": "present_wide_noop",
+      "server_microseconds_per_call": 48.04,
+      "server_total_microseconds": 4804,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 7604.215766830272,
+      "wall_seconds": 0.013150600017979741
+    },
+    {
+      "calls": 500,
+      "operation": "delete",
+      "scenario": "present_delete",
+      "server_microseconds_per_call": 7.12,
+      "server_total_microseconds": 3558,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 78224.00071219898,
+      "wall_seconds": 0.00639190012589097
+    },
+    {
+      "calls": 500,
+      "operation": "compact",
+      "scenario": "advance_floor",
+      "server_microseconds_per_call": 5.69,
+      "server_total_microseconds": 2844,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 16697.501345879395,
+      "wall_seconds": 0.029944600071758032
+    },
+    {
+      "calls": 500,
+      "operation": "compact",
+      "scenario": "advance_floor",
+      "server_microseconds_per_call": 10.07,
+      "server_total_microseconds": 5034,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 59550.748175230554,
+      "wall_seconds": 0.008396200137212873
+    },
+    {
+      "calls": 500,
+      "operation": "delete",
+      "scenario": "present_delete",
+      "server_microseconds_per_call": 12.09,
+      "server_total_microseconds": 6046,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 53218.09872229497,
+      "wall_seconds": 0.009395299945026636
+    },
+    {
+      "calls": 100,
+      "operation": "patch",
+      "scenario": "present_wide_noop",
+      "server_microseconds_per_call": 40.64,
+      "server_total_microseconds": 4064,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 7374.685658713055,
+      "wall_seconds": 0.013559899991378188
+    },
+    {
+      "calls": 100,
+      "operation": "patch",
+      "scenario": "present_wide_change_last",
+      "server_microseconds_per_call": 84.72,
+      "server_total_microseconds": 8472,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 5817.200282489189,
+      "wall_seconds": 0.017190400045365095
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "present_one_noop",
+      "server_microseconds_per_call": 7.14,
+      "server_total_microseconds": 3569,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 59255.04481564215,
+      "wall_seconds": 0.00843810010701418
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "present_one_change",
+      "server_microseconds_per_call": 8.61,
+      "server_total_microseconds": 4307,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 63645.62132721588,
+      "wall_seconds": 0.007855999981984496
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "absent_one_change",
+      "server_microseconds_per_call": 8.17,
+      "server_total_microseconds": 4083,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 64636.22734174471,
+      "wall_seconds": 0.007735599996522069
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "absent_one_change",
+      "server_microseconds_per_call": 8.79,
+      "server_total_microseconds": 4396,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 58332.84750778447,
+      "wall_seconds": 0.008571499958634377
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "present_one_change",
+      "server_microseconds_per_call": 8.68,
+      "server_total_microseconds": 4342,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 62872.51952847037,
+      "wall_seconds": 0.007952600019052625
+    },
+    {
+      "calls": 500,
+      "operation": "patch",
+      "scenario": "present_one_noop",
+      "server_microseconds_per_call": 5.65,
+      "server_total_microseconds": 2826,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 75022.13031703528,
+      "wall_seconds": 0.006664700107648969
+    },
+    {
+      "calls": 100,
+      "operation": "patch",
+      "scenario": "present_wide_change_last",
+      "server_microseconds_per_call": 80.93,
+      "server_total_microseconds": 8093,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 5888.6572382719405,
+      "wall_seconds": 0.016981800086796284
+    },
+    {
+      "calls": 100,
+      "operation": "patch",
+      "scenario": "present_wide_noop",
+      "server_microseconds_per_call": 39.91,
+      "server_total_microseconds": 3991,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 7667.359279946113,
+      "wall_seconds": 0.013042300008237362
+    },
+    {
+      "calls": 500,
+      "operation": "delete",
+      "scenario": "present_delete",
+      "server_microseconds_per_call": 7.26,
+      "server_total_microseconds": 3630,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 77522.98715761924,
+      "wall_seconds": 0.006449699867516756
+    },
+    {
+      "calls": 500,
+      "operation": "compact",
+      "scenario": "advance_floor",
+      "server_microseconds_per_call": 6.69,
+      "server_total_microseconds": 3346,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 75097.62758930548,
+      "wall_seconds": 0.006657999940216541
+    }
+  ],
+  "script_shas": {
+    "baseline": {
+      "compact": "33e82e0d4609f7e498de77ed2431ed40ca03db7d",
+      "delete": "44a1e1fb81a512aeea5f1944b62f91404fbbe8dd",
+      "patch": "99b2c8c7d73a276b29efddc27d37098450ad5dbc"
+    }
+  },
+  "source_bytes": {
+    "baseline": {
+      "compact": 4233,
+      "delete": 4444,
+      "patch": 7783
+    }
+  },
+  "summary": [
+    {
+      "median_server_microseconds_per_call": 8.79,
+      "median_wall_operations_per_second": 58332.84750778447,
+      "operation": "patch",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "scenario": "absent_one_change",
+      "server_improvement_percent": 0.0,
+      "source_bytes": 7783,
+      "trials": 3,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 8.61,
+      "median_wall_operations_per_second": 62872.51952847037,
+      "operation": "patch",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "scenario": "present_one_change",
+      "server_improvement_percent": 0.0,
+      "source_bytes": 7783,
+      "trials": 3,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 5.65,
+      "median_wall_operations_per_second": 75022.13031703528,
+      "operation": "patch",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "scenario": "present_one_noop",
+      "server_improvement_percent": 0.0,
+      "source_bytes": 7783,
+      "trials": 3,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 84.72,
+      "median_wall_operations_per_second": 5817.200282489189,
+      "operation": "patch",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "scenario": "present_wide_change_last",
+      "server_improvement_percent": 0.0,
+      "source_bytes": 7783,
+      "trials": 3,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 40.64,
+      "median_wall_operations_per_second": 7604.215766830272,
+      "operation": "patch",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "scenario": "present_wide_noop",
+      "server_improvement_percent": 0.0,
+      "source_bytes": 7783,
+      "trials": 3,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 7.26,
+      "median_wall_operations_per_second": 77522.98715761924,
+      "operation": "delete",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "scenario": "present_delete",
+      "server_improvement_percent": 0.0,
+      "source_bytes": 4444,
+      "trials": 3,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 6.69,
+      "median_wall_operations_per_second": 59550.748175230554,
+      "operation": "compact",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "scenario": "advance_floor",
+      "server_improvement_percent": 0.0,
+      "source_bytes": 4233,
+      "trials": 3,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    }
+  ],
+  "trials": 3,
+  "variants": [
+    "baseline"
+  ]
+}

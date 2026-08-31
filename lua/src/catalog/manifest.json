@@ -1,0 +1,25 @@
+{
+  "read": [
+    "common/bindings.lua.inc",
+    "common/integer.lua.inc",
+    "actions/read.lua.inc"
+  ],
+  "replace": [
+    "common/bindings.lua.inc",
+    "common/integer.lua.inc",
+    "common/state.lua.inc",
+    "actions/replace.lua.inc"
+  ],
+  "patch": [
+    "common/bindings.lua.inc",
+    "common/integer.lua.inc",
+    "common/state.lua.inc",
+    "actions/patch.lua.inc"
+  ],
+  "delete": [
+    "common/bindings.lua.inc",
+    "common/integer.lua.inc",
+    "common/state.lua.inc",
+    "actions/delete.lua.inc"
+  ]
+}

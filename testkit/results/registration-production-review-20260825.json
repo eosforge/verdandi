@@ -1,0 +1,139 @@
+{
+  "date": "2026-08-25",
+  "scope": "Lua, Go, and Rust Register/Selector production optimization review",
+  "status": "pass_with_isolation_deferred_gates",
+  "commit_created": false,
+  "push_performed": false,
+  "implementation_files": [
+    "sdk/go/field.go",
+    "sdk/go/registration.go",
+    "sdk/go/selector.go",
+    "sdk/go/event.go",
+    "sdk/go/benchmark_test.go",
+    "sdk/go/selector_retained_test.go",
+    "sdk/rust/src/registration.rs",
+    "sdk/rust/src/selector.rs"
+  ],
+  "catalog_isolation": {
+    "active_port": 36440,
+    "source_fingerprint_sha256": "e1afff94990d79b91f9d89fc35f14f94a15bedbe70e859faa4fb2cc1695a5afd",
+    "source_files": 75,
+    "catalog_specific_source_changed": false,
+    "conflicting_heavy_tests_started_after_catalog_soak_visible": false
+  },
+  "lua": {
+    "changed": false,
+    "generator_check": "pass",
+    "embedded_copy_check": "pass",
+    "total_generated_bytes": 11278,
+    "sha256": {
+      "register": "3fe840d6ea01d9c0bdd6141af3d4f3a9ed8b31c68874dc76d6065de739b2739f",
+      "update": "aa908d08fa5f0811756d6e4b785d23e90931528eb7d2a167ce43cd772249e580",
+      "renew": "a58df74f4c371a57ece69b3a485c48008e0c51b594619ff15c3244f4608e2cbd",
+      "unregister": "67bdf6bfdcaf2fe5febc8e42eeed9bac47ba3928462f4d5ce45d965688f8d787"
+    },
+    "implementation_score": 10.0
+  },
+  "go_benchmark": {
+    "environment": {
+      "go": "1.26.4",
+      "os": "linux",
+      "arch": "amd64",
+      "runtime": "WSL",
+      "cpu": "13th Gen Intel(R) Core(TM) i7-13700F",
+      "samples_per_case": 10,
+      "benchtime": "750ms"
+    },
+    "results": [
+      {
+        "name": "ApplyRegistrationUpdate",
+        "before_ns_per_op": 4103,
+        "after_ns_per_op": 1300,
+        "latency_change_percent": -68.32,
+        "before_bytes_per_op": 6984,
+        "after_bytes_per_op": 2888,
+        "bytes_change_percent": -58.65,
+        "before_allocs_per_op": 37,
+        "after_allocs_per_op": 5,
+        "allocs_change_percent": -86.49,
+        "p_value": 0.0
+      },
+      {
+        "name": "ApplyRegistrationRenew",
+        "before_ns_per_op": 3083,
+        "after_ns_per_op": 1236,
+        "latency_change_percent": -59.90,
+        "before_bytes_per_op": 6984,
+        "after_bytes_per_op": 2888,
+        "bytes_change_percent": -58.65,
+        "before_allocs_per_op": 37,
+        "after_allocs_per_op": 5,
+        "allocs_change_percent": -86.49,
+        "p_value": 0.0
+      },
+      {
+        "name": "ApplyPendingWithoutRepair",
+        "before_ns_per_op": 38.25,
+        "after_ns_per_op": 19.18,
+        "latency_change_percent": -49.86,
+        "before_bytes_per_op": 48,
+        "after_bytes_per_op": 0,
+        "bytes_change_percent": -100.0,
+        "before_allocs_per_op": 1,
+        "after_allocs_per_op": 0,
+        "allocs_change_percent": -100.0,
+        "p_value": 0.0
+      }
+    ],
+    "implementation_score": 9.8
+  },
+  "rust": {
+    "formatter": "pass",
+    "clippy_all_targets_all_features_deny_warnings": "pass",
+    "unit_tests_passed": 42,
+    "external_tests_ignored_without_environment": 9,
+    "documentation": "pass",
+    "implementation_score": 9.6
+  },
+  "go_checks": {
+    "unit_all_packages": "pass",
+    "shuffle_count_10": "pass",
+    "vet": "pass",
+    "format": "pass",
+    "linux_race": "pass"
+  },
+  "redis_functional": {
+    "source": "testkit/results/catalog-lua-soak-production-functional-20260825.json",
+    "redis_version": "8.8.0",
+    "port": 36441,
+    "status": "pass",
+    "total_commands_processed": 3657,
+    "registration_lua_contract": "pass",
+    "go_integration": "pass",
+    "go_linux_race_integration": "pass",
+    "rust_registration_selector_cases": "pass",
+    "go_rust_registration_interoperability": "pass"
+  },
+  "non_qualifying_smoke": {
+    "samples": "testkit/results/registration-production-optimization-30s-20260825-samples.jsonl",
+    "port": 36520,
+    "updates": 15000,
+    "unexpected_async_errors": 0,
+    "final_goroutines": 2,
+    "status": "not_qualified",
+    "reason": "three-second pause and AOF restart were compressed into a 30-second schedule; p99 2.933 seconds exceeded the one-second gate",
+    "fixture_closed": true
+  },
+  "deferred_until_catalog_soak_finishes": [
+    "Registration two-hour fault endurance",
+    "Standalone 500-writer Update and Renew load",
+    "Standalone 5000-record scale recovery",
+    "three-node two-promotion Sentinel matrix",
+    "prolonged Go fuzzing",
+    "current-source Go 1.24 and Rust 1.85 reruns"
+  ],
+  "scores": {
+    "implementation_quality": 9.8,
+    "current_source_production_evidence": 9.6
+  }
+}

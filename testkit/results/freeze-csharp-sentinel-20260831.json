@@ -1,0 +1,49 @@
+{
+  "acknowledged_loss_master": 16383,
+  "elapsed_seconds": 63.496,
+  "frameworks": [
+    "net8.0",
+    "net10.0"
+  ],
+  "initial_master": 16381,
+  "language": "C#",
+  "native_suites": [
+    {
+      "elapsed_seconds": 5.735,
+      "name": "C# native Release configure",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000-- Configuring done (5.7s)\n-- Generating done (0.2s)\n-- Build files have been written to: /mnt/d/laconis/verdandi/sdk/cpp/build/gcc-shared-release",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 1.108,
+      "name": "C# native Release build",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000[0/2] Re-checking globbed directories...\nninja: no work to do.",
+      "status": "pass"
+    }
+  ],
+  "recovered_master": 16382,
+  "redis_version": "8.8.0",
+  "scenarios": [
+    "separate Redis and Sentinel ACL credentials",
+    "two managed target frameworks in one topology",
+    "forced acknowledged write loss and desired-state repair",
+    "Pub/Sub generation recovery",
+    "SCRIPT FLUSH reload",
+    "all Sentinels unavailable",
+    "primary loss while all Sentinels are unavailable",
+    "Sentinel restart and second promotion"
+  ],
+  "selector_generations": {
+    "net10.0": [
+      1,
+      2,
+      3
+    ],
+    "net8.0": [
+      1,
+      2,
+      3
+    ]
+  },
+  "status": "pass"
+}

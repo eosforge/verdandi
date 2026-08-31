@@ -1,0 +1,38 @@
+{
+  "cleanup_keys": 3,
+  "elapsed_seconds": 33.377,
+  "events": [
+    {
+      "operation": "go_replace",
+      "revision": 1
+    },
+    {
+      "operation": "rust_patch_after_script_flush",
+      "revision": 2
+    },
+    {
+      "operation": "go_patch_after_script_flush",
+      "revision": 3
+    },
+    {
+      "new_master": 16382,
+      "old_master": 16381,
+      "operation": "first_promotion_recovery",
+      "revision": 5
+    },
+    {
+      "new_master": 16383,
+      "old_master": 16382,
+      "operation": "second_promotion_recovery_and_delete",
+      "revision": 10
+    }
+  ],
+  "final_keys": 0,
+  "final_revision": 10,
+  "first_promotion": 16382,
+  "initial_master": 16381,
+  "redis_version": "8.8.0",
+  "second_promotion": 16383,
+  "status": "pass",
+  "zone": "CatalogSentinelkmwstaak"
+}

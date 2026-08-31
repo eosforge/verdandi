@@ -1,0 +1,76 @@
+{
+  "load_seconds": 120,
+  "port": 16380,
+  "redis_cpu_system_seconds": 0.119084,
+  "redis_cpu_user_seconds": 0.249863,
+  "redis_version": "8.8.0",
+  "scale_registrations": 5000,
+  "selector_fanout": 8,
+  "status": "pass",
+  "suites": [
+    {
+      "elapsed_seconds": 1.179,
+      "name": "Registration Lua contract",
+      "output": "Registration Lua generated files are current\nPASS Registration atomic Lua glue and Selector bootstrap on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.243,
+      "name": "Catalog Lua contract",
+      "output": "Catalog Lua generated files are current\nPASS Catalog Hash, Stream, tomb_version, floor, and INT64 on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 13.451,
+      "name": "Go standalone integration",
+      "output": "ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t12.085s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 14.415,
+      "name": "Go standalone integration with race detector (WSL/Linux)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t13.130s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 2.706,
+      "name": "Rust standalone integration: registration_and_selector_reconcile_on_redis_8",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.66s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest registration_and_selector_reconcile_on_redis_8 ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 1.92s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 3.849,
+      "name": "Rust standalone integration: zone_configuration_refreshes_without_restart",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest zone_configuration_refreshes_without_restart ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 3.54s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.552,
+      "name": "Rust standalone integration: dropping_last_client_handle_stops_owned_workers",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest dropping_last_client_handle_stops_owned_workers ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.10s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.406,
+      "name": "Rust standalone integration: protocol_ceiling_registration_recovery",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\nprotocol-ceiling complete Register recovery fields=256 value_bytes=240\ntest protocol_ceiling_registration_recovery ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.12s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 9.887,
+      "name": "Rust standalone integration: catalog_publisher_mirror_and_checkpoint",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest catalog_publisher_mirror_and_checkpoint ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 9.61s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 17.174,
+      "name": "Go/Rust live interoperability",
+      "output": "PASS Go->Rust and Rust->Go live Registration/Catalog interoperability on Zone Interopvbppoxhbcxgv",
+      "status": "pass"
+    }
+  ],
+  "total_commands_processed": 3935,
+  "total_net_input_bytes": 2580731,
+  "total_net_output_bytes": 630550,
+  "used_memory_peak_bytes": 4102472
+}

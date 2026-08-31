@@ -1,0 +1,106 @@
+{
+  "load_seconds": 30,
+  "port": 16380,
+  "redis_cpu_system_seconds": 2.858369,
+  "redis_cpu_user_seconds": 3.6988,
+  "redis_version": "8.8.0",
+  "scale_registrations": 5000,
+  "selector_fanout": 8,
+  "status": "pass",
+  "suites": [
+    {
+      "elapsed_seconds": 1.194,
+      "name": "Registration Lua contract",
+      "output": "Registration Lua generated files are current\nPASS Registration atomic Lua glue and Selector bootstrap on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.261,
+      "name": "Catalog Lua contract",
+      "output": "Catalog Lua generated files are current\nPASS Catalog Hash, Stream, tomb_version, floor, and INT64 on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 17.048,
+      "name": "Go standalone integration",
+      "output": "ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t15.629s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 18.615,
+      "name": "Go standalone integration with race detector (WSL/Linux)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t16.828s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 2.289,
+      "name": "Rust standalone integration: registration_and_selector_reconcile_on_redis_8",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest registration_and_selector_reconcile_on_redis_8 ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 1.96s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 5.361,
+      "name": "Rust standalone integration: registration_update_resets_automatic_renew",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest registration_update_resets_automatic_renew ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 5.02s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 3.952,
+      "name": "Rust standalone integration: zone_configuration_refreshes_without_restart",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest zone_configuration_refreshes_without_restart ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 3.63s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.392,
+      "name": "Rust standalone integration: dropping_last_client_handle_stops_owned_workers",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest dropping_last_client_handle_stops_owned_workers ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.09s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.375,
+      "name": "Rust standalone integration: protocol_ceiling_registration_recovery",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\nprotocol-ceiling complete Register recovery fields=256 value_bytes=240\ntest protocol_ceiling_registration_recovery ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.13s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 9.541,
+      "name": "Rust standalone integration: catalog_publisher_mirror_and_checkpoint",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-1cfb4385222cf933.exe)\n\nrunning 1 test\ntest catalog_publisher_mirror_and_checkpoint ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 9.34s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 7.098,
+      "name": "Go/Rust live interoperability",
+      "output": "PASS Go->Rust and Rust->Go live Registration/Catalog interoperability on Zone Interoperpjlfbqpfsj",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 66.743,
+      "name": "Go sustained and scale qualification (WSL/Linux)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000=== RUN   TestRegistrationSelectorQualificationLoad\n    load_test.go:149: register: count=500 elapsed=142.444962ms rate=3510.1/s p50=17.87816ms p95=20.297344ms p99=21.080652ms max=34.876808ms\n    load_test.go:151: selector initial HSCAN sync: records=500 page_size=64 first_elapsed=15.761389ms subscriber_fanout=8\n    load_test.go:168: update: count=15000 cadence=500/s duration=29.999476645s completed_rate=500.0/s operation_p50=641.016?s p95=1.053325ms p99=1.437746ms max=4.565438ms schedule_lag_p50=481.4?s p95=1.030322ms p99=1.129552ms max=3.46732ms\n    load_test.go:170: Redis EVALSHA during updates: calls=15000 total=13382us average=0.89us\n    load_test.go:172: graceful unregister: count=500 elapsed=34.403701ms rate=14533.3/s\n    load_test.go:174: Redis MEMORY USAGE for config, Registry, and 500 Registration keys: 144419 bytes\n    load_test.go:175: Go goroutines one-per-Registration: baseline=2 active=513 final=4\n--- PASS: TestRegistrationSelectorQualificationLoad (31.29s)\n=== RUN   TestRegistrationSelectorRenewalLoad\n    load_test.go:274: renew: live=500 duration=30.00019543s calls=14778 rate=492.6/s Redis_EVALSHA_average=0.71us\n--- PASS: TestRegistrationSelectorRenewalLoad (32.19s)\n=== RUN   TestRegistrationSelectorScaleRecovery\n    load_test.go:363: scale recovery: registrations=5000 register_elapsed=1.193446497s register_rate=4189.5/s HSCAN_page_size=64 sync_elapsed=70.15545ms unregister_elapsed=1.018072999s unregister_rate=4911.2/s\n--- PASS: TestRegistrationSelectorScaleRecovery (3.28s)\nPASS\nok  \tgithub.com/LaconisIves/verdandi/sdk/go\t66.771s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 45.085,
+      "name": "Rust load: registration_selector_qualification_load",
+      "output": "Compiling verdandi v1.0.0 (D:\\laconis\\verdandi\\sdk\\rust)\n    Finished `release` profile [optimized] target(s) in 14.50s\n     Running tests\\load.rs (target\\release\\deps\\load-c1d624b1e0fff76b.exe)\n\nrunning 1 test\nregister count=500 elapsed=17.2996ms rate=28902.4/s p50=1.2207ms p95=2.5642ms p99=2.706ms max=5.5875ms\nselector initial HSCAN records=500 page_size=64 first_elapsed=20.6699ms subscriber_fanout=8\nupdate count=15000 cadence=500/s elapsed=30.0107359s completed_rate=499.8/s operation_p50=631.4?s operation_p95=1.0256ms operation_p99=1.4383ms operation_max=3.4109ms schedule_lag_p50=7.7028ms schedule_lag_p95=14.6169ms schedule_lag_p99=15.4666ms schedule_lag_max=16.7182ms\nRedis EVALSHA calls=15000 total=382475us average=25.50us\ngraceful unregister count=500 elapsed=7.4792ms rate=66852.1/s\nRedis MEMORY USAGE for config, Registry, and 500 Registration keys: 144419 bytes\nTokio tasks one-per-Registration: baseline=5 active=521 final=1\ntest registration_selector_qualification_load ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 30.45s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 30.387,
+      "name": "Rust load: registration_selector_renewal_load",
+      "output": "Finished `release` profile [optimized] target(s) in 0.20s\n     Running tests\\load.rs (target\\release\\deps\\load-c1d624b1e0fff76b.exe)\n\nrunning 1 test\nrenew live=500 duration=30.012391s calls=14626 rate=487.3/s Redis_EVALSHA_average=20.81us\ntest registration_selector_renewal_load ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 30.09s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.72,
+      "name": "Rust load: registration_selector_scale_recovery",
+      "output": "Finished `release` profile [optimized] target(s) in 0.20s\n     Running tests\\load.rs (target\\release\\deps\\load-c1d624b1e0fff76b.exe)\n\nrunning 1 test\nscale recovery registrations=5000 register_elapsed=109.3596ms register_rate=45720.7/s HSCAN_page_size=64 sync_elapsed=120.419ms unregister_elapsed=66.2765ms unregister_rate=75441.5/s\ntest registration_selector_scale_recovery ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.36s",
+      "status": "pass"
+    }
+  ],
+  "total_commands_processed": 169568,
+  "total_net_input_bytes": 8824741,
+  "total_net_output_bytes": 6542536,
+  "used_memory_peak_bytes": 4613512
+}

@@ -1,0 +1,84 @@
+{
+  "status": "interrupted",
+  "qualification": "not_passed",
+  "interruption": "user_requested",
+  "run_id": "3fdde1c5",
+  "duration_seconds": 28800,
+  "minimum_redis_seconds": 28800,
+  "redis_elapsed_seconds_lower_bound": 4384.824,
+  "redis_version": "8.8.0",
+  "redis_persistence": "AOF everysec on an owned bind directory",
+  "catalogs": 16,
+  "fields": 256,
+  "subscriber_fanout": 2,
+  "persistent_subscribers": 2,
+  "rate": 128,
+  "source_fingerprint_at_start": {
+    "sha256": "6a5cb5a59b6a251ad5c83b8062e10df8f1cb665651dabc218e38fad3be1f90ec",
+    "files": 72,
+    "scope": "Catalog Lua, Go/Rust Catalog SDK, and Catalog soak harness"
+  },
+  "source_fingerprint_after_stop": {
+    "sha256": "6a5cb5a59b6a251ad5c83b8062e10df8f1cb665651dabc218e38fad3be1f90ec",
+    "files": 72,
+    "scope": "Catalog Lua, Go/Rust Catalog SDK, and Catalog soak harness"
+  },
+  "latest_heartbeat": {
+    "accepted": 597754,
+    "attempts": 597760,
+    "expected_async_errors": 18,
+    "goroutines": 12,
+    "maximum_revision": 597770,
+    "mutation_p95_ns": 8388607,
+    "peak_heap_bytes": 9043544,
+    "stale_retries": 5,
+    "transient_errors": 1
+  },
+  "faults_planned": 75,
+  "faults_passed_before_stop": 10,
+  "faults": [
+    {"scheduled_seconds": 900, "kind": "script_flush", "status": "pass"},
+    {"scheduled_seconds": 1200, "kind": "kill_pubsub", "status": "pass"},
+    {"scheduled_seconds": 1500, "kind": "kill_normal", "status": "pass"},
+    {"scheduled_seconds": 1800, "kind": "script_flush", "status": "pass"},
+    {"scheduled_seconds": 2100, "kind": "pause", "status": "pass"},
+    {"scheduled_seconds": 2700, "kind": "script_flush", "status": "pass"},
+    {"scheduled_seconds": 3000, "kind": "kill_pubsub", "status": "pass"},
+    {"scheduled_seconds": 3300, "kind": "kill_normal", "status": "pass"},
+    {"scheduled_seconds": 3600, "kind": "script_flush", "status": "pass"},
+    {"scheduled_seconds": 3900, "kind": "restart", "status": "pass"}
+  ],
+  "redis_analysis": {
+    "blocked_clients_peak": 0,
+    "commands_during_samples": 19549803,
+    "connected_clients_peak": 7,
+    "early_used_memory_median_bytes": 4030328.0,
+    "evalsha_during_samples": 1775889,
+    "evicted_keys": 0,
+    "instantaneous_ops_peak": 4776,
+    "late_used_memory_median_bytes": 4054836.0,
+    "rejected_connections": 0,
+    "samples": 147,
+    "stable_samples": 146,
+    "used_memory_growth_bytes": 24508.0,
+    "used_memory_growth_gate_bytes": 4194304,
+    "used_memory_growth_pass": true,
+    "used_memory_peak_bytes": 8789000,
+    "used_memory_rss_peak_bytes": 32198656
+  },
+  "final_validation": {
+    "authoritative_convergence": "not_run",
+    "lua_contract": "not_run",
+    "rust_catalog_v2": "not_run",
+    "go_rust_interoperability": "not_run",
+    "final_dbsize": null
+  },
+  "cleanup": {
+    "automatic_cleanup_completed": false,
+    "owned_container_removed_after_stop": true,
+    "owned_data_directory_removed_after_stop": true,
+    "port_36440_closed": true
+  },
+  "sample_file": "catalog-soak-8h-redis-clock-20260827-rerun-samples.jsonl",
+  "note": "Derived after an outer terminal interrupt prevented the harness from writing its normal interrupted result. Both historical Subscribers shared the persistent Client, so disk pressure is not representative of the corrected one-persistent-Subscriber default. The 8-hour qualification is intentionally not claimed."
+}

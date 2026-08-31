@@ -1,0 +1,147 @@
+{
+  "date": "2026-08-26",
+  "scope": "Registration/Selector Lua, Go, and Rust production optimization review",
+  "source_fingerprint": {
+    "files": 88,
+    "sha256": "79e5a4aae09bd01005becca57848087bcc17a39405b0ea5966e440fbbc39ba5d"
+  },
+  "changes": {
+    "lua": "No byte change after audit; retained the accepted four specialized positional scripts.",
+    "go": [
+      "Skip overlay reconciliation for the identical immutable Selector view.",
+      "Store sorted shared record pointers instead of copied UUIDs plus candidate map lookups.",
+      "Reuse uint64 generation marks for Any duplicate detection."
+    ],
+    "rust": [
+      "Skip reconciliation with Arc::ptr_eq for the identical immutable Selector view.",
+      "Store sorted shared Arc records instead of copied UUIDs plus candidate map lookups.",
+      "Reuse u64 generation marks for Any duplicate detection."
+    ]
+  },
+  "go_benchmarks": {
+    "environment": {
+      "cpu": "Intel Core i7-13700F",
+      "go": "go1.26.4 linux/amd64",
+      "os": "WSL/Linux",
+      "samples": 10,
+      "benchtime": "1s"
+    },
+    "publish_selector_view_500": {
+      "baseline_median_ns": 105680,
+      "final_median_ns": 54080,
+      "time_change_percent": -48.83,
+      "p_value": 0.000,
+      "baseline_bytes_per_op": 35624,
+      "final_bytes_per_op": 31528,
+      "bytes_change_percent": -11.50,
+      "final_allocations_per_op": 6
+    },
+    "typed_selector_one_500": {
+      "baseline_median_ns": 26540,
+      "final_median_ns": 15920,
+      "time_change_percent": -40.02,
+      "p_value": 0.000,
+      "final_bytes_per_op": 3880,
+      "final_allocations_per_op": 43
+    },
+    "typed_selector_any_8_of_500": {
+      "final_median_ns": 19690,
+      "final_bytes_per_op": 14721,
+      "final_allocations_per_op": 154,
+      "comparison": "No accepted baseline comparison because the initial sample was host-load contaminated."
+    }
+  },
+  "verification": {
+    "lua_generation": "pass",
+    "go_unit": "pass",
+    "go_vet": "pass",
+    "go_linux_race_shuffle_count_10": "pass",
+    "go_fuzz_30_seconds": {
+      "status": "pass",
+      "executions": 7658786,
+      "new_interesting_cache_inputs": 7,
+      "persistent_corpus_cases": 2
+    },
+    "rust_registration_unit_tests": {
+      "status": "pass",
+      "passed": 28
+    },
+    "rust_format": "pass",
+    "rust_clippy_deny_warnings": "pass",
+    "rust_doc": "pass",
+    "redis_8_aof_fault_gate": "pass",
+    "sentinel_two_promotion_gate": "pass",
+    "remote_cleanup": {
+      "labeled_containers": 0,
+      "soak_directory": "absent",
+      "ports_closed": [16431, 16381, 16382, 16383, 26381, 26382, 26383]
+    }
+  },
+  "redis_8_aof_gate": {
+    "duration_seconds": 90,
+    "registrations": 500,
+    "selectors": 8,
+    "updates": 45000,
+    "update_retries": 0,
+    "update_latency_ms": {
+      "p50": 0.702465,
+      "p95": 1.226828,
+      "p99": 1.701207
+    },
+    "selection_transactions": 7137,
+    "selection_mutations": 7851,
+    "selection_retries": 63,
+    "selection_latency_ms": {
+      "p50": 0.186891,
+      "p95": 0.482176,
+      "p99": 1.094378,
+      "maximum": 2.941460
+    },
+    "expiry_cycles": 3,
+    "expiry_registrations": 384,
+    "churn_cycles": 9,
+    "churn_registrations": 144,
+    "final_revision": 91,
+    "final_generation": 3,
+    "go_goroutines": [2, 528, 2],
+    "unexpected_async_errors": 0,
+    "redis_stable_memory_change_bytes": -170648,
+    "evictions": 0,
+    "rejected_connections": 0,
+    "final_dbsize": 0,
+    "faults": [
+      "script_flush",
+      "kill_pubsub",
+      "pause_3_seconds",
+      "kill_normal_connections",
+      "aof_restart",
+      "script_flush"
+    ]
+  },
+  "sentinel_gate": {
+    "status": "pass",
+    "elapsed_seconds": 47.545,
+    "redis_version": "8.8.0",
+    "masters": [16381, 16382, 16383],
+    "go_selector_generations": [1, 2, 3],
+    "rust_selector_generations": [1, 2, 3],
+    "go_uuid_preserved": true,
+    "rust_uuid_preserved": true
+  },
+  "scores": {
+    "lua": 10.0,
+    "go": 9.8,
+    "rust": 9.7
+  },
+  "evidence_files": [
+    "registration/optimization-review-20260826.md",
+    "registration/lua-optimization.md",
+    "testkit/results/registration-production-optimization-final-90s-20260826.json",
+    "testkit/results/registration-production-optimization-final-90s-20260826-samples.jsonl",
+    "testkit/results/registration-production-optimization-sentinel-20260826.json"
+  ],
+  "git": {
+    "commit_created": false,
+    "push_created": false
+  }
+}

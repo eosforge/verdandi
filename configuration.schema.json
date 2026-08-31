@@ -1,0 +1,599 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/LaconisIves/verdandi/configuration.schema.json",
+  "title": "Verdandi v1 configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "redis"
+  ],
+  "properties": {
+    "version": {
+      "const": "v1"
+    },
+    "redis": {
+      "$ref": "#/$defs/redis"
+    },
+    "registration": {
+      "$ref": "#/$defs/registration"
+    },
+    "catalog": {
+      "$ref": "#/$defs/catalog"
+    }
+  },
+  "$defs": {
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "username": {
+          "type": "string",
+          "default": ""
+        },
+        "password": {
+          "type": "string",
+          "default": ""
+        }
+      }
+    },
+    "empty_auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "username": {
+          "const": ""
+        },
+        "password": {
+          "const": ""
+        }
+      }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "system_roots": {
+          "type": "boolean",
+          "default": true
+        },
+        "server_name": {
+          "type": "string",
+          "maxLength": 253,
+          "default": ""
+        },
+        "ca_file": {
+          "type": "string",
+          "maxLength": 4096,
+          "default": ""
+        },
+        "cert_file": {
+          "type": "string",
+          "maxLength": 4096,
+          "default": ""
+        },
+        "key_file": {
+          "type": "string",
+          "maxLength": 4096,
+          "default": ""
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "enabled": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "system_roots": {
+                "const": true
+              },
+              "server_name": {
+                "const": ""
+              },
+              "ca_file": {
+                "const": ""
+              },
+              "cert_file": {
+                "const": ""
+              },
+              "key_file": {
+                "const": ""
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "system_roots"
+            ],
+            "properties": {
+              "enabled": {
+                "const": true
+              },
+              "system_roots": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "ca_file"
+            ],
+            "properties": {
+              "ca_file": {
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "cert_file"
+            ],
+            "properties": {
+              "cert_file": {
+                "minLength": 1
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "key_file"
+            ],
+            "properties": {
+              "key_file": {
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "key_file"
+            ],
+            "properties": {
+              "key_file": {
+                "minLength": 1
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "cert_file"
+            ],
+            "properties": {
+              "cert_file": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_connections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 1
+        },
+        "max_connections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 4
+        },
+        "idle_timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000,
+          "default": 10000
+        }
+      }
+    },
+    "reconnect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "initial_delay_ms": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 5000,
+          "default": 100
+        },
+        "max_delay_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000,
+          "default": 5000
+        },
+        "multiplier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 2
+        },
+        "jitter_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 10
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "addresses"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "standalone",
+            "sentinel"
+          ]
+        },
+        "addresses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 3
+          }
+        },
+        "master_name": {
+          "type": "string",
+          "default": ""
+        },
+        "auth": {
+          "$ref": "#/$defs/auth"
+        },
+        "sentinel_auth": {
+          "$ref": "#/$defs/auth"
+        },
+        "database": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 0
+        },
+        "tls": {
+          "$ref": "#/$defs/tls"
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 15000,
+          "default": 2000
+        },
+        "connect_timeout_ms": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 30000,
+          "default": 5000
+        },
+        "pool": {
+          "$ref": "#/$defs/pool"
+        },
+        "reconnect": {
+          "$ref": "#/$defs/reconnect"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "standalone"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "addresses": {
+                "maxItems": 1
+              },
+              "master_name": {
+                "const": ""
+              },
+              "sentinel_auth": {
+                "$ref": "#/$defs/empty_auth"
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "master_name"
+            ],
+            "properties": {
+              "master_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "tls": {
+                "properties": {
+                  "server_name": {
+                    "const": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "initial_delay_ms": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 5000
+        },
+        "max_delay_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000,
+          "default": 5000
+        },
+        "multiplier": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 2
+        },
+        "jitter_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50
+        }
+      }
+    },
+    "registration_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "attr_max_fields": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "default": 16
+        },
+        "data_max_fields": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128,
+          "default": 32
+        },
+        "field_name_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64,
+          "default": 64
+        },
+        "attr_value_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384,
+          "default": 128
+        },
+        "data_value_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384,
+          "default": 128
+        },
+        "record_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536,
+          "default": 16384
+        },
+        "refresh_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 86400000,
+          "default": 30000
+        }
+      }
+    },
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scan_page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 256
+        },
+        "max_pending_entries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536,
+          "default": 4096
+        },
+        "max_pending_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824,
+          "default": 67108864
+        },
+        "view_publish_interval_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 10
+        },
+        "sync_timeout_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 3600000,
+          "default": 30000
+        },
+        "max_active_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1073741824,
+          "default": 268435456
+        },
+        "max_retained_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1073741824,
+          "default": 67108864
+        },
+        "clock_refresh_interval_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000,
+          "default": 30000
+        },
+        "clock_uncertainty_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 1
+        },
+        "error_buffer_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 16
+        },
+        "recovery": {
+          "$ref": "#/$defs/recovery"
+        }
+      }
+    },
+    "registration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone"
+      ],
+      "properties": {
+        "zone": {
+          "type": "string",
+          "pattern": "^[A-Za-z]{1,32}$"
+        },
+        "buffer_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 8
+        },
+        "error_buffer_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 16
+        },
+        "min_renew_interval_ms": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 60000,
+          "default": 100
+        },
+        "renew_jitter_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 10
+        },
+        "policy_refresh_jitter_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 10
+        },
+        "policy": {
+          "$ref": "#/$defs/registration_policy"
+        },
+        "selector": {
+          "$ref": "#/$defs/selector"
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone"
+      ],
+      "properties": {
+        "zone": {
+          "type": "string",
+          "pattern": "^[A-Za-z]{1,32}$"
+        },
+        "sync_timeout_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 3600000,
+          "default": 30000
+        },
+        "scan_page_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "default": 256
+        },
+        "max_inflight_reads": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 32
+        },
+        "event_buffer_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536,
+          "default": 256
+        },
+        "error_buffer_capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "default": 64
+        },
+        "max_view_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 68719476736,
+          "default": 0
+        },
+        "max_record_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304,
+          "default": 524288
+        },
+        "recovery": {
+          "$ref": "#/$defs/recovery"
+        },
+        "local_store_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

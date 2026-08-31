@@ -1,0 +1,64 @@
+{
+  "change": "thin Go root Redis client with domain-owned Zone and lifecycle",
+  "date": "2026-08-28",
+  "long_load_run": false,
+  "local_gates": {
+    "all_tags_compile": "pass",
+    "go_peer_modules_test_and_vet": "pass",
+    "go_sdk_gofmt": "pass",
+    "go_sdk_test_shuffle_count_3": "pass",
+    "go_sdk_vet": "pass"
+  },
+  "standalone": {
+    "port": 36480,
+    "redis_cpu_system_seconds": 0.083066,
+    "redis_cpu_user_seconds": 0.205535,
+    "redis_version": "8.8.0",
+    "status": "pass",
+    "suites": [
+      "Registration Lua contract",
+      "Catalog Lua contract",
+      "Go standalone integration",
+      "Go standalone integration with race detector on WSL/Linux",
+      "six Rust Registration/Selector integrations",
+      "Rust Catalog integration",
+      "Rust root Redis API integration",
+      "Go/Rust live Registration and Catalog interoperability"
+    ],
+    "total_commands_processed": 4655,
+    "total_net_input_bytes": 2560797,
+    "total_net_output_bytes": 606806,
+    "used_memory_peak_bytes": 2974568
+  },
+  "registration_sentinel": {
+    "acknowledged_loss_master_port": 16382,
+    "elapsed_seconds": 48.404,
+    "go_selector_generations": [
+      1,
+      2,
+      3
+    ],
+    "go_uuid_preserved": "4ffa6531138c814863fe59b8035efa93",
+    "initial_master_port": 16381,
+    "recovered_master_port": 16383,
+    "redis_version": "8.8.0",
+    "rust_selector_generations": [
+      1,
+      2,
+      3
+    ],
+    "rust_uuid_preserved": "911bbb5fbd22fcd3d42811daf654f928",
+    "status": "pass"
+  },
+  "catalog_sentinel": {
+    "cleanup_keys": 3,
+    "elapsed_seconds": 28.112,
+    "final_keys": 0,
+    "final_revision": 10,
+    "first_promotion_master_port": 16382,
+    "initial_master_port": 16381,
+    "redis_version": "8.8.0",
+    "second_promotion_master_port": 16383,
+    "status": "pass"
+  }
+}

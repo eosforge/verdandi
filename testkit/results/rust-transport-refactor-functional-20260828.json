@@ -1,0 +1,100 @@
+{
+  "load_seconds": 120,
+  "port": 16480,
+  "redis_cpu_system_seconds": 0.079527,
+  "redis_cpu_user_seconds": 0.219456,
+  "redis_version": "8.8.0",
+  "scale_registrations": 5000,
+  "selector_fanout": 8,
+  "status": "pass",
+  "suites": [
+    {
+      "elapsed_seconds": 1.418,
+      "name": "Registration Lua contract",
+      "output": "Registration Lua generated files are current\nPASS Registration atomic Lua glue and Selector bootstrap on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.241,
+      "name": "Catalog Lua contract",
+      "output": "Catalog Lua generated files are current\nPASS Catalog Hash/ZSET lease, Replace/Patch/Delete, Pub/Sub, floor, and 2^53-1 on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 12.118,
+      "name": "Go standalone integration",
+      "output": "ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t0.663s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/catalog\t0.767s\n?   \tgithub.com/LaconisIves/verdandi/sdk/go/internal/clientaccess\t[no test files]\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/registration\t11.193s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 12.592,
+      "name": "Go standalone integration with race detector (WSL/Linux)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t1.178s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/catalog\t1.149s\n?   \tgithub.com/LaconisIves/verdandi/sdk/go/internal/clientaccess\t[no test files]\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/registration\t11.555s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 2.084,
+      "name": "Rust standalone integration: registration_and_selector_reconcile_on_redis_8",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest registration_and_selector_reconcile_on_redis_8 ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 1.91s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 4.821,
+      "name": "Rust standalone integration: registration_update_resets_automatic_renew",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest registration_update_resets_automatic_renew ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 4.67s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.25,
+      "name": "Rust standalone integration: typed_registration_and_transactional_selector",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest typed_registration_and_transactional_selector ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.10s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 4.725,
+      "name": "Rust standalone integration: zone_configuration_refreshes_without_restart",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest zone_configuration_refreshes_without_restart ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 4.57s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.215,
+      "name": "Rust standalone integration: dropping_last_registration_client_handle_stops_owned_workers",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest dropping_last_registration_client_handle_stops_owned_workers ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.06s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.22,
+      "name": "Rust standalone integration: protocol_ceiling_registration_recovery",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\nprotocol-ceiling complete Register recovery fields=256 value_bytes=240\ntest protocol_ceiling_registration_recovery ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.07s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.296,
+      "name": "Rust Catalog v1 integration",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s\n     Running tests\\catalog_v2.rs (target\\debug\\deps\\catalog_v2-4514c0ab5ffaa599.exe)\n\nrunning 2 tests\ntest publisher_subscriber_shapes_patch_delete_and_generic_load ... ok\ntest checkpoint_restarts_with_zone_delta_and_field_patch ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.285,
+      "name": "Rust root Redis API integration: root_commands_redis_integration",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\root_redis.rs (target\\debug\\deps\\root_redis-a4521541b0e3aafc.exe)\n\nrunning 1 test\ntest root_commands_redis_integration ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.14s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.161,
+      "name": "Rust root Redis API integration: one_transport_supports_independent_registration_zones",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\root_redis.rs (target\\debug\\deps\\root_redis-a4521541b0e3aafc.exe)\n\nrunning 1 test\ntest one_transport_supports_independent_registration_zones ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 6.748,
+      "name": "Go/Rust live interoperability",
+      "output": "PASS Go->Rust and Rust->Go live Registration/Catalog interoperability on Zone Interopuivhowbpotqu",
+      "status": "pass"
+    }
+  ],
+  "total_commands_processed": 4750,
+  "total_net_input_bytes": 2587562,
+  "total_net_output_bytes": 611199,
+  "used_memory_peak_bytes": 2945264
+}

@@ -1,0 +1,106 @@
+{
+  "source_fingerprint": "05874222ecae71f6469039e89f6b745a58402cea53171e2fc74d470a7641e867",
+  "source_fingerprint_files": 88,
+  "change_scope": "single-word root timeout naming and trivial Rust root/Catalog bootstrap inlining",
+  "test_source_changes": "necessary API identifier replacements only; no test logic or comment cleanup",
+  "final_database_keys": 0,
+  "isolated_container_removed": true,
+  "load_seconds": 120,
+  "port": 18102,
+  "redis_cpu_system_seconds": 0.096988,
+  "redis_cpu_user_seconds": 0.216358,
+  "redis_version": "8.8.0",
+  "scale_registrations": 5000,
+  "selector_fanout": 8,
+  "status": "pass",
+  "suites": [
+    {
+      "elapsed_seconds": 1.174,
+      "name": "Registration Lua contract",
+      "output": "Registration Lua generated files are current\nPASS Registration atomic Lua glue and Selector bootstrap on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.256,
+      "name": "Catalog Lua contract",
+      "output": "Catalog Lua generated files are current\nPASS Catalog Hash/ZSET lease, Replace/Patch/Delete, Pub/Sub, floor, and 2^53-1 on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 12.958,
+      "name": "Go standalone integration",
+      "output": "ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t0.805s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/catalog\t0.912s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/registration\t11.383s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 14.209,
+      "name": "Go standalone integration with race detector (WSL/Linux)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t1.168s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/catalog\t1.158s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/registration\t11.520s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 2.096,
+      "name": "Rust standalone integration: registration_and_selector_reconcile_on_redis_8",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest registration_and_selector_reconcile_on_redis_8 ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 1.92s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 4.732,
+      "name": "Rust standalone integration: registration_update_resets_automatic_renew",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest registration_update_resets_automatic_renew ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 4.57s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.266,
+      "name": "Rust standalone integration: typed_registration_and_transactional_selector",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest typed_registration_and_transactional_selector ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.11s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 4.602,
+      "name": "Rust standalone integration: zone_configuration_refreshes_without_restart",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest zone_configuration_refreshes_without_restart ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 4.44s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.216,
+      "name": "Rust standalone integration: dropping_last_registration_client_handle_stops_owned_workers",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\ntest dropping_last_registration_client_handle_stops_owned_workers ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.06s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.252,
+      "name": "Rust standalone integration: protocol_ceiling_registration_recovery",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-ead1368d1835c3c8.exe)\n\nrunning 1 test\nprotocol-ceiling complete Register recovery fields=256 value_bytes=240\ntest protocol_ceiling_registration_recovery ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.10s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.311,
+      "name": "Rust Catalog v1 integration",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\catalog_v2.rs (target\\debug\\deps\\catalog_v2-4514c0ab5ffaa599.exe)\n\nrunning 2 tests\ntest publisher_subscriber_shapes_patch_delete_and_generic_load ... ok\ntest checkpoint_restarts_with_zone_delta_and_field_patch ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.268,
+      "name": "Rust root Redis API integration: root_commands_redis_integration",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\root_redis.rs (target\\debug\\deps\\root_redis-a4521541b0e3aafc.exe)\n\nrunning 1 test\ntest root_commands_redis_integration ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.12s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.166,
+      "name": "Rust root Redis API integration: one_transport_supports_independent_registration_zones",
+      "output": "warning: linker stdout: \u6b63\u5728\u521b\u5efa\u5e93 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.lib \u548c\u5bf9\u8c61 D:\\laconis\\verdandi\\sdk\\rust\\target\\debug\\deps\\verdandi_derive-9767697a7c7fd052.dll.exp\n  |\n  = note: `#[warn(linker_messages)]` on by default\n\nwarning: `verdandi-derive` (lib) generated 1 warning\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s\n     Running tests\\root_redis.rs (target\\debug\\deps\\root_redis-a4521541b0e3aafc.exe)\n\nrunning 1 test\ntest one_transport_supports_independent_registration_zones ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.01s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 10.862,
+      "name": "Go/Rust live interoperability",
+      "output": "PASS Go->Rust and Rust->Go live Registration/Catalog interoperability on Zone Interopigyffaeduhqq",
+      "status": "pass"
+    }
+  ],
+  "total_commands_processed": 4751,
+  "total_net_input_bytes": 2754618,
+  "total_net_output_bytes": 607325,
+  "used_memory_peak_bytes": 2978384
+}

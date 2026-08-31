@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/Verdandi/Verdandi.csproj" />
+  <Project Path="tests/Verdandi.Tests/Verdandi.Tests.csproj" />
+</Solution>

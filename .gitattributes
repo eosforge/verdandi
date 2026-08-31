@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+# Lua source fragments and generated protocol programs are byte-exact artifacts.
+*.lua text eol=lf whitespace=-blank-at-eof
+*.lua.inc text eol=lf
+
+# TLS fixtures are reviewed text artifacts; keep their PEM framing stable.
+*.pem text eol=lf

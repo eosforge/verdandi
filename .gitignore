@@ -1,0 +1,38 @@
+# Rust build output
+target/
+
+# C++ build and fetched dependency output
+/sdk/cpp/build/
+
+# C# build, publish, and package output
+/sdk/csharp/**/bin/
+/sdk/csharp/**/obj/
+/sdk/csharp/artifacts/
+
+# Python test caches
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Local coverage and profiling output
+coverage.out
+*.prof
+/sdk/go/coverage
+/sdk/go/$cov
+/sdk/go/$coverage
+/sdk/go/$cpu
+/sdk/go/$memory
+/sdk/go/go.test
+/sdk/go/go.test.exe
+*.test
+*.test.exe
+
+# Local IDE metadata
+.idea/
+.vscode/
+.vs/
+
+# Local environment files
+.env
+.env.*
+!.env.example

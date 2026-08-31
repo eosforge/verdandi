@@ -1,0 +1,124 @@
+{
+  "status": "pass",
+  "date": "2026-08-28",
+  "source_fingerprints": {
+    "algorithm": "sha256",
+    "files": 88,
+    "scope": "Go/Rust production source, Rust derive source, Registration Lua canonical/generated copies, and the Registration generator",
+    "load_qualification": "bf703e372f259100a2332533c15d299eb22db43b411880afb2b19abce29987c8",
+    "comment_freeze": "a5323e162ef7778b4cb19847f56214ece0dd8e0634a7180e872df8db8e586739",
+    "final_freeze": "e709ae4ce1149377c2276e41e053c7b264f64cacda13da29b85559261dd628f9",
+    "post_load_deltas": [
+      "production comments, signature wrapping, and generated derive documentation",
+      "Rust private Transport/Owner removal; domain clients now retain the root Client directly"
+    ]
+  },
+  "scope": {
+    "primary": "Go/Rust root Client plus Registration/Selector",
+    "catalog_suites": "Catalog functional, load, and Sentinel suites were excluded to avoid another task's resources",
+    "shared_interop_note": "The existing cross-language peer also ran its small Catalog sanity exchange inside this run's isolated disposable Redis container"
+  },
+  "environment": {
+    "redis": "8.8.0",
+    "remote_host": "192.168.0.90",
+    "isolated_port": 17380,
+    "go_linux": "go1.27.0 linux/amd64 under WSL",
+    "load_seconds_per_update_and_renew_profile": 10,
+    "selector_fanout": 4,
+    "scale_registrations": 1000
+  },
+  "summary": {
+    "suite_count": 17,
+    "total_commands_processed": 48120,
+    "used_memory_peak_bytes": 3707896,
+    "final_database_keys": 0,
+    "isolated_container_removed": true
+  },
+  "comment_freeze": {
+    "status": "pass",
+    "redis_version": "8.8.0",
+    "suite_count": 12,
+    "total_commands_processed": 2264,
+    "used_memory_peak_bytes": 2632832,
+    "final_database_keys": 0,
+    "isolated_container_removed": true,
+    "gates": [
+      "Registration Lua contract",
+      "Go root and Registration integration",
+      "Go root and Registration WSL/Linux race detector",
+      "six Rust Registration integration cases",
+      "two Rust root Redis integration cases"
+    ]
+  },
+  "final_freeze": {
+    "status": "pass",
+    "redis_version": "8.8.0",
+    "isolated_port": 18100,
+    "suite_count": 8,
+    "total_commands_processed": 548,
+    "final_database_keys": 0,
+    "isolated_container_removed": true,
+    "test_source_modified": false,
+    "gates": [
+      "Rust format and all-target/all-feature compile",
+      "52 Rust library tests and four endpoint-free integration/API tests",
+      "strict Rust Clippy and rustdoc",
+      "six live Rust Registration integration cases",
+      "two live Rust root Redis integration cases"
+    ]
+  },
+  "go_update_profile": {
+    "live_registrations": 500,
+    "updates": 5000,
+    "scheduled_rate_per_second": 500,
+    "completed_rate_per_second": 500.0,
+    "operation_p50_microseconds": 571.885,
+    "operation_p95_microseconds": 971.253,
+    "operation_p99_microseconds": 1307.947,
+    "operation_max_microseconds": 2906.03,
+    "goroutines": "2 -> 508 -> 2"
+  },
+  "go_renew_profile": {
+    "live_registrations": 500,
+    "renew_calls": 4826,
+    "completed_rate_per_second": 482.6
+  },
+  "go_scale_profile": {
+    "registrations": 1000,
+    "selector_sync_milliseconds": 24.304771,
+    "register_rate_per_second": 3647.6,
+    "unregister_rate_per_second": 966.2
+  },
+  "rust_update_profile": {
+    "live_registrations": 500,
+    "updates": 5000,
+    "scheduled_rate_per_second": 500,
+    "completed_rate_per_second": 500.0,
+    "operation_p50_microseconds": 615.9,
+    "operation_p95_microseconds": 961.2,
+    "operation_p99_microseconds": 1400.8,
+    "operation_max_microseconds": 3476.6,
+    "tokio_tasks": "2 -> 511 -> 1"
+  },
+  "rust_renew_profile": {
+    "live_registrations": 500,
+    "renew_calls": 4720,
+    "completed_rate_per_second": 471.4
+  },
+  "rust_scale_profile": {
+    "registrations": 1000,
+    "selector_sync_milliseconds": 33.6359,
+    "register_rate_per_second": 39760.3,
+    "unregister_rate_per_second": 32334.1
+  },
+  "gates": [
+    "Registration Lua contract and independent NOSCRIPT reload",
+    "Go root and Registration integration",
+    "Go root and Registration WSL/Linux race detector",
+    "six Rust Registration integration cases",
+    "two Rust root Redis integration cases",
+    "Go/Rust live interoperability",
+    "Go Update/Renew/scale load",
+    "Rust Update/Renew/scale load"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "elapsed_seconds": 40.393,
+  "final_keys": 0,
+  "operations": [
+    {
+      "operation": "replace",
+      "publisher": "go",
+      "revision": 1
+    },
+    {
+      "operation": "patch",
+      "publisher": "rust",
+      "revision": 2
+    },
+    {
+      "operation": "delete",
+      "publisher": "go",
+      "revision": 3
+    },
+    {
+      "operation": "replace",
+      "publisher": "rust",
+      "revision": 4
+    },
+    {
+      "operation": "patch",
+      "publisher": "go",
+      "revision": 5
+    },
+    {
+      "operation": "delete",
+      "publisher": "rust",
+      "revision": 6
+    }
+  ],
+  "status": "pass",
+  "zone": "CatalogInteroprqffshytmqta"
+}

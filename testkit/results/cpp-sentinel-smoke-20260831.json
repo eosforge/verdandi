@@ -1,0 +1,8 @@
+{
+  "elapsed_seconds": 3.424,
+  "master_port": 16381,
+  "redis_version": "8.8.0",
+  "scope": "C++23 root, Registration, Selector, Catalog and checkpoint through Sentinel",
+  "sentinels": 3,
+  "status": "pass"
+}

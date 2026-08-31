@@ -1,0 +1,46 @@
+#include "internal/protocol.hpp"
+
+namespace verdandi::detail {
+
+namespace {
+
+constexpr std::string_view registration_register = R"vreg(@REGISTRATION_REGISTER_LUA@)vreg";
+constexpr std::string_view registration_update = R"vupd(@REGISTRATION_UPDATE_LUA@)vupd";
+constexpr std::string_view registration_renew = R"vren(@REGISTRATION_RENEW_LUA@)vren";
+constexpr std::string_view registration_unregister = R"vung(@REGISTRATION_UNREGISTER_LUA@)vung";
+constexpr std::string_view catalog_read = R"vcre(@CATALOG_READ_LUA@)vcre";
+constexpr std::string_view catalog_replace = R"vcrp(@CATALOG_REPLACE_LUA@)vcrp";
+constexpr std::string_view catalog_patch = R"vcpa(@CATALOG_PATCH_LUA@)vcpa";
+constexpr std::string_view catalog_delete = R"vcde(@CATALOG_DELETE_LUA@)vcde";
+
+} // namespace
+
+std::string_view registration_script(const registration_operation operation) noexcept {
+    switch (operation) {
+    case registration_operation::register_value:
+        return registration_register;
+    case registration_operation::update:
+        return registration_update;
+    case registration_operation::renew:
+        return registration_renew;
+    case registration_operation::unregister:
+        return registration_unregister;
+    }
+    return {};
+}
+
+std::string_view catalog_script(const catalog_operation operation) noexcept {
+    switch (operation) {
+    case catalog_operation::read:
+        return catalog_read;
+    case catalog_operation::replace:
+        return catalog_replace;
+    case catalog_operation::patch:
+        return catalog_patch;
+    case catalog_operation::delete_value:
+        return catalog_delete;
+    }
+    return {};
+}
+
+} // namespace verdandi::detail

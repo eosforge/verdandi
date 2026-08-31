@@ -1,0 +1,64 @@
+{
+  "load_seconds": 120,
+  "port": 16380,
+  "redis_cpu_system_seconds": 0.054496,
+  "redis_cpu_user_seconds": 0.197027,
+  "redis_version": "8.8.0",
+  "scale_registrations": 5000,
+  "selector_fanout": 8,
+  "status": "pass",
+  "suites": [
+    {
+      "elapsed_seconds": 1.208,
+      "name": "canonical Lua contract",
+      "output": "Registration Lua generated files are current\nPASS Registration atomic Lua glue and Selector bootstrap on Redis 8.8.0",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 7.013,
+      "name": "Go standalone integration",
+      "output": "ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t4.946s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/cmd/verdandi-codegen\t0.489s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/internal/codegentest\t0.456s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 7.718,
+      "name": "Go standalone integration with race detector (WSL/Linux)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000ok  \tgithub.com/LaconisIves/verdandi/sdk/go\t5.376s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/cmd/verdandi-codegen\t1.034s\nok  \tgithub.com/LaconisIves/verdandi/sdk/go/internal/codegentest\t1.010s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 2.276,
+      "name": "Rust standalone integration: registration_and_selector_reconcile_on_redis_8",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-f29dc8b8d68f15dc.exe)\n\nrunning 1 test\ntest registration_and_selector_reconcile_on_redis_8 ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 1.93s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 3.921,
+      "name": "Rust standalone integration: zone_configuration_refreshes_without_restart",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-f29dc8b8d68f15dc.exe)\n\nrunning 1 test\ntest zone_configuration_refreshes_without_restart ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 3.58s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.397,
+      "name": "Rust standalone integration: dropping_last_client_handle_stops_owned_workers",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-f29dc8b8d68f15dc.exe)\n\nrunning 1 test\ntest dropping_last_client_handle_stops_owned_workers ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.08s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.327,
+      "name": "Rust standalone integration: protocol_ceiling_registration_recovery",
+      "output": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s\n     Running tests\\integration.rs (target\\debug\\deps\\integration-f29dc8b8d68f15dc.exe)\n\nrunning 1 test\nprotocol-ceiling complete Register recovery fields=256 value_bytes=240\ntest protocol_ceiling_registration_recovery ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.11s",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 9.052,
+      "name": "Go/Rust live interoperability",
+      "output": "PASS Go->Rust and Rust->Go live Pub/Sub interoperability on Zone Interopseziyrjtohit",
+      "status": "pass"
+    }
+  ],
+  "total_commands_processed": 2201,
+  "total_net_input_bytes": 1585720,
+  "total_net_output_bytes": 500580,
+  "used_memory_peak_bytes": 2466664
+}

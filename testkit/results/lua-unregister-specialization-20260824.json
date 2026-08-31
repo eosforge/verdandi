@@ -1,0 +1,1800 @@
+{
+  "persistence": "fixture-disabled",
+  "redis_version": "8.8.0",
+  "registrations": 2000,
+  "results": [
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 8.07,
+      "server_total_microseconds": 16140,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 62711.45495939578,
+      "wall_seconds": 0.031892100116238
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.22,
+      "server_total_microseconds": 16432,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 60023.64944205636,
+      "wall_seconds": 0.033320199931040406
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.69,
+      "server_total_microseconds": 13388,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 73887.98566613773,
+      "wall_seconds": 0.027068000053986907
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.21,
+      "server_total_microseconds": 6416,
+      "trial": 1,
+      "variant": "baseline",
+      "wall_operations_per_second": 118255.72702460612,
+      "wall_seconds": 0.016912500141188502
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.01,
+      "server_total_microseconds": 14022,
+      "trial": 1,
+      "variant": "candidate",
+      "wall_operations_per_second": 68501.3612775507,
+      "wall_seconds": 0.02919650007970631
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.02,
+      "server_total_microseconds": 14031,
+      "trial": 1,
+      "variant": "candidate",
+      "wall_operations_per_second": 66961.520405716,
+      "wall_seconds": 0.029867900069803
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.38,
+      "server_total_microseconds": 12753,
+      "trial": 1,
+      "variant": "candidate",
+      "wall_operations_per_second": 78346.26674049695,
+      "wall_seconds": 0.025527700083330274
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.26,
+      "server_total_microseconds": 6518,
+      "trial": 1,
+      "variant": "candidate",
+      "wall_operations_per_second": 120397.79555143717,
+      "wall_seconds": 0.01661159982904792
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.93,
+      "server_total_microseconds": 13866,
+      "trial": 2,
+      "variant": "candidate",
+      "wall_operations_per_second": 67339.1607733216,
+      "wall_seconds": 0.029700399842113256
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.85,
+      "server_total_microseconds": 13696,
+      "trial": 2,
+      "variant": "candidate",
+      "wall_operations_per_second": 67793.16342490418,
+      "wall_seconds": 0.02950149984098971
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.23,
+      "server_total_microseconds": 12464,
+      "trial": 2,
+      "variant": "candidate",
+      "wall_operations_per_second": 78467.0676781511,
+      "wall_seconds": 0.025488399900496006
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.26,
+      "server_total_microseconds": 6513,
+      "trial": 2,
+      "variant": "candidate",
+      "wall_operations_per_second": 119286.19088657672,
+      "wall_seconds": 0.016766400076448917
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.65,
+      "server_total_microseconds": 15306,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 63822.11483580503,
+      "wall_seconds": 0.03133710008114576
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.02,
+      "server_total_microseconds": 16049,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 63341.85275695928,
+      "wall_seconds": 0.03157470002770424
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 7.09,
+      "server_total_microseconds": 14177,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 73805.91213743945,
+      "wall_seconds": 0.027098100166767836
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.16,
+      "server_total_microseconds": 6329,
+      "trial": 2,
+      "variant": "baseline",
+      "wall_operations_per_second": 120930.68104848909,
+      "wall_seconds": 0.016538400202989578
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 8.8,
+      "server_total_microseconds": 17593,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 59551.45868595801,
+      "wall_seconds": 0.03358439984731376
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.07,
+      "server_total_microseconds": 16133,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 63062.23941707905,
+      "wall_seconds": 0.03171469992958009
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.75,
+      "server_total_microseconds": 13507,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 77266.91467946013,
+      "wall_seconds": 0.025884300004690886
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.19,
+      "server_total_microseconds": 6371,
+      "trial": 3,
+      "variant": "baseline",
+      "wall_operations_per_second": 119941.46800622153,
+      "wall_seconds": 0.016674800077453256
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.86,
+      "server_total_microseconds": 13722,
+      "trial": 3,
+      "variant": "candidate",
+      "wall_operations_per_second": 67524.67992389823,
+      "wall_seconds": 0.029618800152093172
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.2,
+      "server_total_microseconds": 14392,
+      "trial": 3,
+      "variant": "candidate",
+      "wall_operations_per_second": 66193.82181000701,
+      "wall_seconds": 0.030214300146326423
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 5.94,
+      "server_total_microseconds": 11878,
+      "trial": 3,
+      "variant": "candidate",
+      "wall_operations_per_second": 80912.36795088132,
+      "wall_seconds": 0.024718099972233176
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.15,
+      "server_total_microseconds": 6297,
+      "trial": 3,
+      "variant": "candidate",
+      "wall_operations_per_second": 121715.21008488616,
+      "wall_seconds": 0.016431800089776516
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.82,
+      "server_total_microseconds": 13638,
+      "trial": 4,
+      "variant": "candidate",
+      "wall_operations_per_second": 67522.6289547004,
+      "wall_seconds": 0.02961969980970025
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.02,
+      "server_total_microseconds": 14035,
+      "trial": 4,
+      "variant": "candidate",
+      "wall_operations_per_second": 67403.38572687835,
+      "wall_seconds": 0.02967209997586906
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.24,
+      "server_total_microseconds": 12481,
+      "trial": 4,
+      "variant": "candidate",
+      "wall_operations_per_second": 78124.9998419753,
+      "wall_seconds": 0.025600000051781535
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.12,
+      "server_total_microseconds": 6241,
+      "trial": 4,
+      "variant": "candidate",
+      "wall_operations_per_second": 122518.99068800086,
+      "wall_seconds": 0.01632399996742606
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.95,
+      "server_total_microseconds": 15910,
+      "trial": 4,
+      "variant": "baseline",
+      "wall_operations_per_second": 62646.24000566985,
+      "wall_seconds": 0.03192529990337789
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.41,
+      "server_total_microseconds": 16826,
+      "trial": 4,
+      "variant": "baseline",
+      "wall_operations_per_second": 60595.96131685211,
+      "wall_seconds": 0.0330054999794811
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 7.19,
+      "server_total_microseconds": 14387,
+      "trial": 4,
+      "variant": "baseline",
+      "wall_operations_per_second": 74548.14512518547,
+      "wall_seconds": 0.026828299975022674
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.2,
+      "server_total_microseconds": 6400,
+      "trial": 4,
+      "variant": "baseline",
+      "wall_operations_per_second": 117789.79186124756,
+      "wall_seconds": 0.0169794000685215
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.94,
+      "server_total_microseconds": 15877,
+      "trial": 5,
+      "variant": "baseline",
+      "wall_operations_per_second": 62421.19331191425,
+      "wall_seconds": 0.032040399964898825
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.94,
+      "server_total_microseconds": 15880,
+      "trial": 5,
+      "variant": "baseline",
+      "wall_operations_per_second": 62949.10270537224,
+      "wall_seconds": 0.03177169989794493
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 7.13,
+      "server_total_microseconds": 14259,
+      "trial": 5,
+      "variant": "baseline",
+      "wall_operations_per_second": 73265.70892729759,
+      "wall_seconds": 0.027297900058329105
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6447,
+      "trial": 5,
+      "variant": "baseline",
+      "wall_operations_per_second": 114679.556871614,
+      "wall_seconds": 0.01743989996612072
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.92,
+      "server_total_microseconds": 13836,
+      "trial": 5,
+      "variant": "candidate",
+      "wall_operations_per_second": 66876.2121074862,
+      "wall_seconds": 0.02990600001066923
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.18,
+      "server_total_microseconds": 14357,
+      "trial": 5,
+      "variant": "candidate",
+      "wall_operations_per_second": 66075.29310057843,
+      "wall_seconds": 0.030268499860540032
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 5.95,
+      "server_total_microseconds": 11898,
+      "trial": 5,
+      "variant": "candidate",
+      "wall_operations_per_second": 81006.09575040577,
+      "wall_seconds": 0.02468949998728931
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.19,
+      "server_total_microseconds": 6377,
+      "trial": 5,
+      "variant": "candidate",
+      "wall_operations_per_second": 119169.62626941416,
+      "wall_seconds": 0.016782799968495965
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.77,
+      "server_total_microseconds": 13549,
+      "trial": 6,
+      "variant": "candidate",
+      "wall_operations_per_second": 68325.14553764519,
+      "wall_seconds": 0.029271800071001053
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.99,
+      "server_total_microseconds": 13970,
+      "trial": 6,
+      "variant": "candidate",
+      "wall_operations_per_second": 44975.55571452741,
+      "wall_seconds": 0.044468600070104
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.13,
+      "server_total_microseconds": 12252,
+      "trial": 6,
+      "variant": "candidate",
+      "wall_operations_per_second": 79661.59747962511,
+      "wall_seconds": 0.025106200017035007
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.34,
+      "server_total_microseconds": 6688,
+      "trial": 6,
+      "variant": "candidate",
+      "wall_operations_per_second": 116877.04434508021,
+      "wall_seconds": 0.017112000146880746
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.7,
+      "server_total_microseconds": 15397,
+      "trial": 6,
+      "variant": "baseline",
+      "wall_operations_per_second": 64009.21763597777,
+      "wall_seconds": 0.031245499849319458
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.0,
+      "server_total_microseconds": 16001,
+      "trial": 6,
+      "variant": "baseline",
+      "wall_operations_per_second": 62275.612820620714,
+      "wall_seconds": 0.03211530018597841
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.8,
+      "server_total_microseconds": 13604,
+      "trial": 6,
+      "variant": "baseline",
+      "wall_operations_per_second": 76780.1478026418,
+      "wall_seconds": 0.026048399973660707
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.28,
+      "server_total_microseconds": 6552,
+      "trial": 6,
+      "variant": "baseline",
+      "wall_operations_per_second": 118707.04288305921,
+      "wall_seconds": 0.016848200000822544
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.65,
+      "server_total_microseconds": 15302,
+      "trial": 7,
+      "variant": "baseline",
+      "wall_operations_per_second": 63598.46475542817,
+      "wall_seconds": 0.03144729998894036
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.74,
+      "server_total_microseconds": 15483,
+      "trial": 7,
+      "variant": "baseline",
+      "wall_operations_per_second": 64104.208116590366,
+      "wall_seconds": 0.03119919984601438
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.66,
+      "server_total_microseconds": 13327,
+      "trial": 7,
+      "variant": "baseline",
+      "wall_operations_per_second": 77141.14874013356,
+      "wall_seconds": 0.025926500093191862
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6437,
+      "trial": 7,
+      "variant": "baseline",
+      "wall_operations_per_second": 120729.93441264749,
+      "wall_seconds": 0.016565899830311537
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.86,
+      "server_total_microseconds": 13724,
+      "trial": 7,
+      "variant": "candidate",
+      "wall_operations_per_second": 68431.04753491764,
+      "wall_seconds": 0.029226499842479825
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.14,
+      "server_total_microseconds": 14273,
+      "trial": 7,
+      "variant": "candidate",
+      "wall_operations_per_second": 65704.53329087417,
+      "wall_seconds": 0.03043929999694228
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.02,
+      "server_total_microseconds": 12036,
+      "trial": 7,
+      "variant": "candidate",
+      "wall_operations_per_second": 80998.54972831144,
+      "wall_seconds": 0.024691800121217966
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.55,
+      "server_total_microseconds": 7091,
+      "trial": 7,
+      "variant": "candidate",
+      "wall_operations_per_second": 115618.2974038326,
+      "wall_seconds": 0.017298300052061677
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.74,
+      "server_total_microseconds": 13470,
+      "trial": 8,
+      "variant": "candidate",
+      "wall_operations_per_second": 68468.29613578174,
+      "wall_seconds": 0.029210599837824702
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.26,
+      "server_total_microseconds": 14528,
+      "trial": 8,
+      "variant": "candidate",
+      "wall_operations_per_second": 66053.68832378284,
+      "wall_seconds": 0.03027840005233884
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.23,
+      "server_total_microseconds": 12459,
+      "trial": 8,
+      "variant": "candidate",
+      "wall_operations_per_second": 77058.81913054024,
+      "wall_seconds": 0.025954199954867363
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.17,
+      "server_total_microseconds": 6332,
+      "trial": 8,
+      "variant": "candidate",
+      "wall_operations_per_second": 116434.08916259708,
+      "wall_seconds": 0.017177100060507655
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.75,
+      "server_total_microseconds": 15493,
+      "trial": 8,
+      "variant": "baseline",
+      "wall_operations_per_second": 63247.90642313372,
+      "wall_seconds": 0.03162160003557801
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.05,
+      "server_total_microseconds": 16095,
+      "trial": 8,
+      "variant": "baseline",
+      "wall_operations_per_second": 62786.66023143573,
+      "wall_seconds": 0.031853900058194995
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.73,
+      "server_total_microseconds": 13453,
+      "trial": 8,
+      "variant": "baseline",
+      "wall_operations_per_second": 76195.7007539112,
+      "wall_seconds": 0.02624820009805262
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6434,
+      "trial": 8,
+      "variant": "baseline",
+      "wall_operations_per_second": 122697.88086433559,
+      "wall_seconds": 0.016300200019031763
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.68,
+      "server_total_microseconds": 15359,
+      "trial": 9,
+      "variant": "baseline",
+      "wall_operations_per_second": 64082.84645727819,
+      "wall_seconds": 0.03120959992520511
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.39,
+      "server_total_microseconds": 16777,
+      "trial": 9,
+      "variant": "baseline",
+      "wall_operations_per_second": 61520.668226400565,
+      "wall_seconds": 0.03250939981080592
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 8.74,
+      "server_total_microseconds": 17474,
+      "trial": 9,
+      "variant": "baseline",
+      "wall_operations_per_second": 62578.418709996906,
+      "wall_seconds": 0.03195989993400872
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.34,
+      "server_total_microseconds": 6688,
+      "trial": 9,
+      "variant": "baseline",
+      "wall_operations_per_second": 118744.3962067581,
+      "wall_seconds": 0.01684290007688105
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.19,
+      "server_total_microseconds": 14374,
+      "trial": 9,
+      "variant": "candidate",
+      "wall_operations_per_second": 66531.1650576342,
+      "wall_seconds": 0.030061099911108613
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.96,
+      "server_total_microseconds": 13912,
+      "trial": 9,
+      "variant": "candidate",
+      "wall_operations_per_second": 68253.56208637203,
+      "wall_seconds": 0.029302499955520034
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.09,
+      "server_total_microseconds": 12182,
+      "trial": 9,
+      "variant": "candidate",
+      "wall_operations_per_second": 78861.55466814566,
+      "wall_seconds": 0.025360899977385998
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.14,
+      "server_total_microseconds": 6285,
+      "trial": 9,
+      "variant": "candidate",
+      "wall_operations_per_second": 120174.25304242884,
+      "wall_seconds": 0.01664249994792044
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.93,
+      "server_total_microseconds": 13858,
+      "trial": 10,
+      "variant": "candidate",
+      "wall_operations_per_second": 66845.14319879495,
+      "wall_seconds": 0.029919900000095367
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.98,
+      "server_total_microseconds": 13954,
+      "trial": 10,
+      "variant": "candidate",
+      "wall_operations_per_second": 67438.1592630754,
+      "wall_seconds": 0.029656799975782633
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.19,
+      "server_total_microseconds": 12371,
+      "trial": 10,
+      "variant": "candidate",
+      "wall_operations_per_second": 80338.38478569077,
+      "wall_seconds": 0.024894700152799487
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6438,
+      "trial": 10,
+      "variant": "candidate",
+      "wall_operations_per_second": 120420.26729745872,
+      "wall_seconds": 0.01660849992185831
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.69,
+      "server_total_microseconds": 15386,
+      "trial": 10,
+      "variant": "baseline",
+      "wall_operations_per_second": 62384.1995698377,
+      "wall_seconds": 0.032059399876743555
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.95,
+      "server_total_microseconds": 15895,
+      "trial": 10,
+      "variant": "baseline",
+      "wall_operations_per_second": 62670.38479734169,
+      "wall_seconds": 0.03191300015896559
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 7.01,
+      "server_total_microseconds": 14023,
+      "trial": 10,
+      "variant": "baseline",
+      "wall_operations_per_second": 74309.93951540104,
+      "wall_seconds": 0.026914299931377172
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.18,
+      "server_total_microseconds": 6370,
+      "trial": 10,
+      "variant": "baseline",
+      "wall_operations_per_second": 121554.68510983675,
+      "wall_seconds": 0.016453499905765057
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.72,
+      "server_total_microseconds": 15447,
+      "trial": 11,
+      "variant": "baseline",
+      "wall_operations_per_second": 63156.033455042336,
+      "wall_seconds": 0.03166759992018342
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.0,
+      "server_total_microseconds": 16001,
+      "trial": 11,
+      "variant": "baseline",
+      "wall_operations_per_second": 63006.01701775405,
+      "wall_seconds": 0.03174300002865493
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.69,
+      "server_total_microseconds": 13374,
+      "trial": 11,
+      "variant": "baseline",
+      "wall_operations_per_second": 60149.47146838162,
+      "wall_seconds": 0.03325049998238683
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6433,
+      "trial": 11,
+      "variant": "baseline",
+      "wall_operations_per_second": 119072.42611208602,
+      "wall_seconds": 0.016796499956399202
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.84,
+      "server_total_microseconds": 13677,
+      "trial": 11,
+      "variant": "candidate",
+      "wall_operations_per_second": 68793.53324971745,
+      "wall_seconds": 0.029072500066831708
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.91,
+      "server_total_microseconds": 13819,
+      "trial": 11,
+      "variant": "candidate",
+      "wall_operations_per_second": 68702.78855384911,
+      "wall_seconds": 0.029110899893566966
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.04,
+      "server_total_microseconds": 12081,
+      "trial": 11,
+      "variant": "candidate",
+      "wall_operations_per_second": 80931.03042756689,
+      "wall_seconds": 0.024712400045245886
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.27,
+      "server_total_microseconds": 6539,
+      "trial": 11,
+      "variant": "candidate",
+      "wall_operations_per_second": 116459.85474186586,
+      "wall_seconds": 0.017173299798741937
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.04,
+      "server_total_microseconds": 14074,
+      "trial": 12,
+      "variant": "candidate",
+      "wall_operations_per_second": 66040.60205592956,
+      "wall_seconds": 0.030284399865195155
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.9,
+      "server_total_microseconds": 13809,
+      "trial": 12,
+      "variant": "candidate",
+      "wall_operations_per_second": 66756.56509382365,
+      "wall_seconds": 0.029959600185975432
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.33,
+      "server_total_microseconds": 12668,
+      "trial": 12,
+      "variant": "candidate",
+      "wall_operations_per_second": 78553.36154478237,
+      "wall_seconds": 0.025460399920120835
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.21,
+      "server_total_microseconds": 6420,
+      "trial": 12,
+      "variant": "candidate",
+      "wall_operations_per_second": 121681.88698624408,
+      "wall_seconds": 0.016436300007626414
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.53,
+      "server_total_microseconds": 15053,
+      "trial": 12,
+      "variant": "baseline",
+      "wall_operations_per_second": 64849.160549534914,
+      "wall_seconds": 0.030840800143778324
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.87,
+      "server_total_microseconds": 15743,
+      "trial": 12,
+      "variant": "baseline",
+      "wall_operations_per_second": 63142.87343852605,
+      "wall_seconds": 0.031674199970439076
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.94,
+      "server_total_microseconds": 13881,
+      "trial": 12,
+      "variant": "baseline",
+      "wall_operations_per_second": 74718.59052700232,
+      "wall_seconds": 0.02676710020750761
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.23,
+      "server_total_microseconds": 6453,
+      "trial": 12,
+      "variant": "baseline",
+      "wall_operations_per_second": 120530.57531084813,
+      "wall_seconds": 0.016593300038948655
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.74,
+      "server_total_microseconds": 15486,
+      "trial": 13,
+      "variant": "baseline",
+      "wall_operations_per_second": 64010.65145350667,
+      "wall_seconds": 0.031244799960404634
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.14,
+      "server_total_microseconds": 16289,
+      "trial": 13,
+      "variant": "baseline",
+      "wall_operations_per_second": 62953.461888896876,
+      "wall_seconds": 0.03176949988119304
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.97,
+      "server_total_microseconds": 13941,
+      "trial": 13,
+      "variant": "baseline",
+      "wall_operations_per_second": 74968.70091378204,
+      "wall_seconds": 0.026677799876779318
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.46,
+      "server_total_microseconds": 6918,
+      "trial": 13,
+      "variant": "baseline",
+      "wall_operations_per_second": 116761.04821771874,
+      "wall_seconds": 0.01712900004349649
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.88,
+      "server_total_microseconds": 13754,
+      "trial": 13,
+      "variant": "candidate",
+      "wall_operations_per_second": 68940.08058169627,
+      "wall_seconds": 0.029010700061917305
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.97,
+      "server_total_microseconds": 13947,
+      "trial": 13,
+      "variant": "candidate",
+      "wall_operations_per_second": 67187.36876609395,
+      "wall_seconds": 0.029767500003799796
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.41,
+      "server_total_microseconds": 12827,
+      "trial": 13,
+      "variant": "candidate",
+      "wall_operations_per_second": 77730.27560913333,
+      "wall_seconds": 0.0257300001103431
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.38,
+      "server_total_microseconds": 6752,
+      "trial": 13,
+      "variant": "candidate",
+      "wall_operations_per_second": 118271.11200172339,
+      "wall_seconds": 0.016910300124436617
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.78,
+      "server_total_microseconds": 13565,
+      "trial": 14,
+      "variant": "candidate",
+      "wall_operations_per_second": 68339.6205228705,
+      "wall_seconds": 0.029265600023791194
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.94,
+      "server_total_microseconds": 13880,
+      "trial": 14,
+      "variant": "candidate",
+      "wall_operations_per_second": 67638.40507331901,
+      "wall_seconds": 0.029569000005722046
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.14,
+      "server_total_microseconds": 12276,
+      "trial": 14,
+      "variant": "candidate",
+      "wall_operations_per_second": 81339.82957234762,
+      "wall_seconds": 0.024588200030848384
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.27,
+      "server_total_microseconds": 6531,
+      "trial": 14,
+      "variant": "candidate",
+      "wall_operations_per_second": 120452.90288588141,
+      "wall_seconds": 0.016604000004008412
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.97,
+      "server_total_microseconds": 15933,
+      "trial": 14,
+      "variant": "baseline",
+      "wall_operations_per_second": 61957.86879003598,
+      "wall_seconds": 0.03227999992668629
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.97,
+      "server_total_microseconds": 17944,
+      "trial": 14,
+      "variant": "baseline",
+      "wall_operations_per_second": 54564.1554344534,
+      "wall_seconds": 0.03665409982204437
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.69,
+      "server_total_microseconds": 13387,
+      "trial": 14,
+      "variant": "baseline",
+      "wall_operations_per_second": 74517.3142558303,
+      "wall_seconds": 0.026839399943128228
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6447,
+      "trial": 14,
+      "variant": "baseline",
+      "wall_operations_per_second": 122276.29391652727,
+      "wall_seconds": 0.016356400214135647
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.37,
+      "server_total_microseconds": 14735,
+      "trial": 15,
+      "variant": "baseline",
+      "wall_operations_per_second": 65088.69991856197,
+      "wall_seconds": 0.030727299861609936
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.21,
+      "server_total_microseconds": 16412,
+      "trial": 15,
+      "variant": "baseline",
+      "wall_operations_per_second": 57360.33483145112,
+      "wall_seconds": 0.034867299953475595
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.85,
+      "server_total_microseconds": 13691,
+      "trial": 15,
+      "variant": "baseline",
+      "wall_operations_per_second": 75781.68803875048,
+      "wall_seconds": 0.026391600025817752
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.24,
+      "server_total_microseconds": 6480,
+      "trial": 15,
+      "variant": "baseline",
+      "wall_operations_per_second": 122423.74570145435,
+      "wall_seconds": 0.016336699947714806
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.86,
+      "server_total_microseconds": 13727,
+      "trial": 15,
+      "variant": "candidate",
+      "wall_operations_per_second": 68210.7300075111,
+      "wall_seconds": 0.029320900095626712
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.77,
+      "server_total_microseconds": 13535,
+      "trial": 15,
+      "variant": "candidate",
+      "wall_operations_per_second": 68113.62727285962,
+      "wall_seconds": 0.029362699948251247
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.2,
+      "server_total_microseconds": 12397,
+      "trial": 15,
+      "variant": "candidate",
+      "wall_operations_per_second": 79169.98141952102,
+      "wall_seconds": 0.025262100156396627
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.21,
+      "server_total_microseconds": 6412,
+      "trial": 15,
+      "variant": "candidate",
+      "wall_operations_per_second": 124154.96964980473,
+      "wall_seconds": 0.016108900075778365
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.04,
+      "server_total_microseconds": 14087,
+      "trial": 16,
+      "variant": "candidate",
+      "wall_operations_per_second": 66594.07928076979,
+      "wall_seconds": 0.030032699927687645
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.1,
+      "server_total_microseconds": 14191,
+      "trial": 16,
+      "variant": "candidate",
+      "wall_operations_per_second": 65785.79499564183,
+      "wall_seconds": 0.030401699943467975
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.05,
+      "server_total_microseconds": 12096,
+      "trial": 16,
+      "variant": "candidate",
+      "wall_operations_per_second": 79097.65401662096,
+      "wall_seconds": 0.02528519998304546
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.33,
+      "server_total_microseconds": 6653,
+      "trial": 16,
+      "variant": "candidate",
+      "wall_operations_per_second": 119042.6590191639,
+      "wall_seconds": 0.016800699988380075
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.81,
+      "server_total_microseconds": 15624,
+      "trial": 16,
+      "variant": "baseline",
+      "wall_operations_per_second": 63746.442357430555,
+      "wall_seconds": 0.03137429989874363
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.1,
+      "server_total_microseconds": 16194,
+      "trial": 16,
+      "variant": "baseline",
+      "wall_operations_per_second": 62673.52704051309,
+      "wall_seconds": 0.0319114001467824
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 7.03,
+      "server_total_microseconds": 14050,
+      "trial": 16,
+      "variant": "baseline",
+      "wall_operations_per_second": 74244.56159847217,
+      "wall_seconds": 0.026937999995425344
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.17,
+      "server_total_microseconds": 6332,
+      "trial": 16,
+      "variant": "baseline",
+      "wall_operations_per_second": 121320.94219493288,
+      "wall_seconds": 0.016485200030729175
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.86,
+      "server_total_microseconds": 15724,
+      "trial": 17,
+      "variant": "baseline",
+      "wall_operations_per_second": 62333.841436622686,
+      "wall_seconds": 0.03208529995754361
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.85,
+      "server_total_microseconds": 15694,
+      "trial": 17,
+      "variant": "baseline",
+      "wall_operations_per_second": 50684.49394519546,
+      "wall_seconds": 0.03945980011485517
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.72,
+      "server_total_microseconds": 13430,
+      "trial": 17,
+      "variant": "baseline",
+      "wall_operations_per_second": 77318.2927256488,
+      "wall_seconds": 0.0258670998737216
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.2,
+      "server_total_microseconds": 6394,
+      "trial": 17,
+      "variant": "baseline",
+      "wall_operations_per_second": 123902.68611818063,
+      "wall_seconds": 0.016141700092703104
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.83,
+      "server_total_microseconds": 13658,
+      "trial": 17,
+      "variant": "candidate",
+      "wall_operations_per_second": 67372.50630220085,
+      "wall_seconds": 0.029685699846595526
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.06,
+      "server_total_microseconds": 14119,
+      "trial": 17,
+      "variant": "candidate",
+      "wall_operations_per_second": 66650.00423529473,
+      "wall_seconds": 0.030007499968633056
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.09,
+      "server_total_microseconds": 12177,
+      "trial": 17,
+      "variant": "candidate",
+      "wall_operations_per_second": 81699.34672077202,
+      "wall_seconds": 0.024479999905452132
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.15,
+      "server_total_microseconds": 6298,
+      "trial": 17,
+      "variant": "candidate",
+      "wall_operations_per_second": 123087.52860929164,
+      "wall_seconds": 0.01624859985895455
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.74,
+      "server_total_microseconds": 13477,
+      "trial": 18,
+      "variant": "candidate",
+      "wall_operations_per_second": 67392.25633542048,
+      "wall_seconds": 0.0296770001295954
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.17,
+      "server_total_microseconds": 14336,
+      "trial": 18,
+      "variant": "candidate",
+      "wall_operations_per_second": 67254.69687791532,
+      "wall_seconds": 0.029737700009718537
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.46,
+      "server_total_microseconds": 12911,
+      "trial": 18,
+      "variant": "candidate",
+      "wall_operations_per_second": 78614.49807898658,
+      "wall_seconds": 0.02544060000218451
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.23,
+      "server_total_microseconds": 6456,
+      "trial": 18,
+      "variant": "candidate",
+      "wall_operations_per_second": 121823.45361002018,
+      "wall_seconds": 0.016417199978604913
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.9,
+      "server_total_microseconds": 15800,
+      "trial": 18,
+      "variant": "baseline",
+      "wall_operations_per_second": 63840.042360977626,
+      "wall_seconds": 0.03132830001413822
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.65,
+      "server_total_microseconds": 15303,
+      "trial": 18,
+      "variant": "baseline",
+      "wall_operations_per_second": 64312.61096349545,
+      "wall_seconds": 0.031098099891096354
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.89,
+      "server_total_microseconds": 13778,
+      "trial": 18,
+      "variant": "baseline",
+      "wall_operations_per_second": 76681.5297729956,
+      "wall_seconds": 0.026081900112330914
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.28,
+      "server_total_microseconds": 6557,
+      "trial": 18,
+      "variant": "baseline",
+      "wall_operations_per_second": 121730.76665104278,
+      "wall_seconds": 0.0164297001902014
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.91,
+      "server_total_microseconds": 15813,
+      "trial": 19,
+      "variant": "baseline",
+      "wall_operations_per_second": 64421.989895975166,
+      "wall_seconds": 0.03104529995471239
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.38,
+      "server_total_microseconds": 16759,
+      "trial": 19,
+      "variant": "baseline",
+      "wall_operations_per_second": 61947.313646548304,
+      "wall_seconds": 0.03228550008498132
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.77,
+      "server_total_microseconds": 13547,
+      "trial": 19,
+      "variant": "baseline",
+      "wall_operations_per_second": 77017.57172416848,
+      "wall_seconds": 0.0259680999442935
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.12,
+      "server_total_microseconds": 6241,
+      "trial": 19,
+      "variant": "baseline",
+      "wall_operations_per_second": 121439.54589463703,
+      "wall_seconds": 0.01646909979172051
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.62,
+      "server_total_microseconds": 13248,
+      "trial": 19,
+      "variant": "candidate",
+      "wall_operations_per_second": 70073.8929688593,
+      "wall_seconds": 0.028541299980133772
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.26,
+      "server_total_microseconds": 14513,
+      "trial": 19,
+      "variant": "candidate",
+      "wall_operations_per_second": 63040.77159556417,
+      "wall_seconds": 0.03172550001181662
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.2,
+      "server_total_microseconds": 12394,
+      "trial": 19,
+      "variant": "candidate",
+      "wall_operations_per_second": 77147.69517799254,
+      "wall_seconds": 0.025924300076439977
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6444,
+      "trial": 19,
+      "variant": "candidate",
+      "wall_operations_per_second": 121652.28100259407,
+      "wall_seconds": 0.016440300038084388
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.74,
+      "server_total_microseconds": 13490,
+      "trial": 20,
+      "variant": "candidate",
+      "wall_operations_per_second": 68858.6676467812,
+      "wall_seconds": 0.029044999973848462
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.15,
+      "server_total_microseconds": 14291,
+      "trial": 20,
+      "variant": "candidate",
+      "wall_operations_per_second": 65480.16610866697,
+      "wall_seconds": 0.030543599976226687
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 5.98,
+      "server_total_microseconds": 11958,
+      "trial": 20,
+      "variant": "candidate",
+      "wall_operations_per_second": 80805.79543201454,
+      "wall_seconds": 0.024750699987635016
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.35,
+      "server_total_microseconds": 6699,
+      "trial": 20,
+      "variant": "candidate",
+      "wall_operations_per_second": 121166.59225702341,
+      "wall_seconds": 0.01650619995780289
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.45,
+      "server_total_microseconds": 14898,
+      "trial": 20,
+      "variant": "baseline",
+      "wall_operations_per_second": 66061.32441766806,
+      "wall_seconds": 0.030274900142103434
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 8.08,
+      "server_total_microseconds": 16164,
+      "trial": 20,
+      "variant": "baseline",
+      "wall_operations_per_second": 63287.73451968016,
+      "wall_seconds": 0.031601700000464916
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.74,
+      "server_total_microseconds": 13487,
+      "trial": 20,
+      "variant": "baseline",
+      "wall_operations_per_second": 74296.13705667584,
+      "wall_seconds": 0.02691929996944964
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.22,
+      "server_total_microseconds": 6437,
+      "trial": 20,
+      "variant": "baseline",
+      "wall_operations_per_second": 120735.03531955363,
+      "wall_seconds": 0.016565199941396713
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 7.88,
+      "server_total_microseconds": 15750,
+      "trial": 21,
+      "variant": "baseline",
+      "wall_operations_per_second": 64363.11057248493,
+      "wall_seconds": 0.031073700170964003
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 7.91,
+      "server_total_microseconds": 15823,
+      "trial": 21,
+      "variant": "baseline",
+      "wall_operations_per_second": 62745.09829587544,
+      "wall_seconds": 0.03187499986961484
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.87,
+      "server_total_microseconds": 13740,
+      "trial": 21,
+      "variant": "baseline",
+      "wall_operations_per_second": 74699.33542477991,
+      "wall_seconds": 0.02677399991080165
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.2,
+      "server_total_microseconds": 6395,
+      "trial": 21,
+      "variant": "baseline",
+      "wall_operations_per_second": 121251.06691164745,
+      "wall_seconds": 0.016494700219482183
+    },
+    {
+      "calls": 2000,
+      "operation": "update",
+      "server_microseconds_per_call": 6.97,
+      "server_total_microseconds": 13939,
+      "trial": 21,
+      "variant": "candidate",
+      "wall_operations_per_second": 68798.26616156661,
+      "wall_seconds": 0.02907050005160272
+    },
+    {
+      "calls": 2000,
+      "operation": "update_version",
+      "server_microseconds_per_call": 6.84,
+      "server_total_microseconds": 13678,
+      "trial": 21,
+      "variant": "candidate",
+      "wall_operations_per_second": 66955.69239182676,
+      "wall_seconds": 0.02987049985677004
+    },
+    {
+      "calls": 2000,
+      "operation": "renew",
+      "server_microseconds_per_call": 6.18,
+      "server_total_microseconds": 12361,
+      "trial": 21,
+      "variant": "candidate",
+      "wall_operations_per_second": 79833.94591250802,
+      "wall_seconds": 0.02505199983716011
+    },
+    {
+      "calls": 2000,
+      "operation": "unregister",
+      "server_microseconds_per_call": 3.16,
+      "server_total_microseconds": 6330,
+      "trial": 21,
+      "variant": "candidate",
+      "wall_operations_per_second": 122306.20444308364,
+      "wall_seconds": 0.016352400183677673
+    }
+  ],
+  "rounds": 1,
+  "subscribers": 0,
+  "summary": [
+    {
+      "median_server_microseconds_per_call": 7.75,
+      "median_wall_operations_per_second": 63746.442357430555,
+      "operation": "update",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "server_improvement_percent": 0.0,
+      "trials": 21,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 6.86,
+      "median_wall_operations_per_second": 68210.7300075111,
+      "operation": "update",
+      "paired_server_improvement_max_percent": 22.04545454545455,
+      "paired_server_improvement_median_percent": 11.548223350253808,
+      "paired_server_improvement_min_percent": 6.380208333333324,
+      "paired_server_improvement_positive_trials": 21,
+      "server_improvement_percent": 11.48387096774193,
+      "trials": 21,
+      "variant": "candidate",
+      "wall_improvement_percent": 7.003194978394212
+    },
+    {
+      "median_server_microseconds_per_call": 8.05,
+      "median_wall_operations_per_second": 62745.09829587544,
+      "operation": "update_version",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "server_improvement_percent": 0.0,
+      "trials": 21,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 7.02,
+      "median_wall_operations_per_second": 66955.69239182676,
+      "operation": "update_version",
+      "paired_server_improvement_max_percent": 22.63099219620959,
+      "paired_server_improvement_median_percent": 12.624999999999996,
+      "paired_server_improvement_min_percent": 6.274509803921574,
+      "paired_server_improvement_positive_trials": 21,
+      "server_improvement_percent": 12.795031055900635,
+      "trials": 21,
+      "variant": "candidate",
+      "wall_improvement_percent": 6.710634312972452
+    },
+    {
+      "median_server_microseconds_per_call": 6.85,
+      "median_wall_operations_per_second": 74699.33542477991,
+      "operation": "renew",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "server_improvement_percent": 0.0,
+      "trials": 21,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 6.18,
+      "median_wall_operations_per_second": 79169.98141952102,
+      "operation": "renew",
+      "paired_server_improvement_max_percent": 30.320366132723116,
+      "paired_server_improvement_median_percent": 9.715994020926761,
+      "paired_server_improvement_min_percent": 4.633781763826613,
+      "paired_server_improvement_positive_trials": 21,
+      "server_improvement_percent": 9.781021897810218,
+      "trials": 21,
+      "variant": "candidate",
+      "wall_improvement_percent": 5.984853773221199
+    },
+    {
+      "median_server_microseconds_per_call": 3.22,
+      "median_wall_operations_per_second": 120735.03531955363,
+      "operation": "unregister",
+      "paired_server_improvement_max_percent": 0.0,
+      "paired_server_improvement_median_percent": 0.0,
+      "paired_server_improvement_min_percent": 0.0,
+      "paired_server_improvement_positive_trials": 0,
+      "server_improvement_percent": 0.0,
+      "trials": 21,
+      "variant": "baseline",
+      "wall_improvement_percent": 0.0
+    },
+    {
+      "median_server_microseconds_per_call": 3.22,
+      "median_wall_operations_per_second": 120420.26729745872,
+      "operation": "unregister",
+      "paired_server_improvement_max_percent": 5.9880239520958005,
+      "paired_server_improvement_median_percent": 0.6191950464396291,
+      "paired_server_improvement_min_percent": -10.248447204968931,
+      "paired_server_improvement_positive_trials": 11,
+      "server_improvement_percent": 0.0,
+      "trials": 21,
+      "variant": "candidate",
+      "wall_improvement_percent": -0.2607097610580089
+    }
+  ],
+  "trials": 21,
+  "variants": [
+    "baseline",
+    "candidate"
+  ]
+}
