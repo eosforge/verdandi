@@ -1,11 +1,11 @@
 [package]
 name = "verdandi"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 description = "Verdandi distributed registration and discovery SDK"
-repository = "https://github.com/LaconisIves/verdandi"
+repository = "https://github.com/eosforge/verdandi"
 
 [workspace]
 members = ["derive"]
@@ -40,7 +40,7 @@ serde_json = "1.0"
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
 url = "2.5.8"
-verdandi-derive = { version = "1.0.0", path = "derive" }
+verdandi-derive = { version = "0.1.0", path = "derive" }
 
 [dev-dependencies]
 fred = { version = "10.1.0", default-features = false, features = ["i-client"] }

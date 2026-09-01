@@ -3,7 +3,7 @@ package registration
 import (
 	"context"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 type Standalone = verdandi.Standalone

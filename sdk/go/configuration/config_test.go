@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 func TestLoadSharedExample(t *testing.T) {

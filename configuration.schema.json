@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/LaconisIves/verdandi/configuration.schema.json",
+  "$id": "https://github.com/eosforge/verdandi/configuration.schema.json",
   "title": "Verdandi v1 configuration",
   "type": "object",
   "additionalProperties": false,

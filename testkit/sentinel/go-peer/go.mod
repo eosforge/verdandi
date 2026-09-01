@@ -1,8 +1,8 @@
-module github.com/LaconisIves/verdandi/testkit/sentinel/go-peer
+module github.com/eosforge/verdandi/testkit/sentinel/go-peer
 
 go 1.27.0
 
-require github.com/LaconisIves/verdandi/sdk/go v0.0.0
+require github.com/eosforge/verdandi/sdk/go v0.1.0
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -13,4 +13,4 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 )
 
-replace github.com/LaconisIves/verdandi/sdk/go => ../../../sdk/go
+replace github.com/eosforge/verdandi/sdk/go => ../../../sdk/go

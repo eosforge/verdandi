@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
-	"github.com/LaconisIves/verdandi/sdk/go/internal/validate"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 )
 
 const (

@@ -1,6 +1,6 @@
 # Go Root Client API
 
-Status: implemented for version 1.0.0 on 2026-08-28.
+Status: implemented for non-production Alpha version 0.1.0 on 2026-08-28.
 
 ## 1. Boundary
 

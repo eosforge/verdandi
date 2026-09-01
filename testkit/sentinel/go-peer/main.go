@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
-	discovery "github.com/LaconisIves/verdandi/sdk/go/registration"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
+	discovery "github.com/eosforge/verdandi/sdk/go/registration"
 )
 
 func main() {

@@ -1,7 +1,7 @@
 package catalog
 
 import (
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // Snapshot 是 Entry 当前本地状态的一份独立强类型投影。

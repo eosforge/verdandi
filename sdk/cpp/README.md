@@ -2,8 +2,9 @@
 
 ## Status
 
-This directory contains the C++23 implementation of the Verdandi `1.0.0`
-Alpha Registration, Selector, and Catalog contracts. It is one compiled SDK,
+This directory contains the C++23 implementation of the Verdandi `0.1.0`
+non-production Alpha Registration, Selector, and Catalog surfaces. Stable
+`1.0.0` remains reserved for the complete contract, including Leader. It is one compiled SDK,
 not a second header-only protocol implementation: templates are limited to the
 typed `Fields` boundary, while Redis transport, Lua dispatch, synchronization,
 checkpointing, and lifecycle state machines are compiled once.

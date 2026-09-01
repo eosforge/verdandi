@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/LaconisIves/verdandi/sdk/go/internal/validate"
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 )
 
 var zoneConfigFields = [...]string{

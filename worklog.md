@@ -19,17 +19,21 @@ Maintain this file with the work it describes:
 
 ## 2. Current Snapshot
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 - Project: Verdandi, a language-neutral distributed coordination protocol and
   SDK ecosystem.
-- Repository: public `git@github.com:LaconisIves/verdandi.git`.
+- Repository: public `git@github.com:eosforge/verdandi.git`.
 - Local path: `D:\laconis\verdandi`.
 - Git state: the commit containing this entry is the first complete `alpha`
   source freeze and is pushed to the public `alpha` branch for review.
-- Release state: one immutable review commit exists; no tag, package, stable
-  protocol version, or release exists.
-- Target SDK version: `1.0.0`; target protocol version: `1.0`.
+- Release state: the maintainer selected `0.1.0` as the current
+  non-production Alpha version for distributed development and controlled
+  service integration. Its source and documentation are published only on the
+  public `alpha` branch; no version tag, GitHub Release, or language package is
+  published.
+- Current SDK version: `0.1.0`; stable target SDK version: `1.0.0`; intended
+  stable protocol version: `1.0`. The `0.x` protocol remains experimental.
 - Initial backend modes: Redis Standalone and Redis Sentinel.
 - Alpha backend baseline: Redis Open Source 8.0.0 or later in a qualified Redis
   8 line, using Hash field TTL for Campaign readiness.
@@ -148,6 +152,11 @@ Last updated: 2026-08-31
   source 7,759.124-Redis-second/4,000,000-Update/34-fault gate. The corrected
   automatic two-promotion Sentinel matrix waits for the surviving replica to
   converge before total outage and passes both SDK generations `1 -> 2 -> 3`.
+  The exact public freeze subsequently passed a 43,213.948-Redis-second
+  Registration/Selector campaign with 21,600,000 Updates, 3,707,005 selection
+  transactions, and all 214 planned faults, plus a separate
+  43,201.858-Redis-second Catalog campaign with 5,932,160 attempts and all 113
+  planned faults. Both ended at `DBSIZE=0` and removed their exact fixtures.
   Current Catalog qualification includes Lua/Go/Rust functional,
   reconnect, checkpoint, decoder, exact-base writer contention, WSL/Linux race,
   and cross-language interoperability. C++ passes strict static/shared GCC,
@@ -157,8 +166,8 @@ Last updated: 2026-08-31
   through C ABI v1 and C#, while a direct native-API two-promotion harness,
   Windows DLL/MSVC, and TLS remain open. No service, Node, or Campaign ceiling is encoded; each Catalog
   Path is one bounded complete value.
-- License: MIT. The source-freeze commit is public; later review edits and
-  endurance evidence remain separate until explicitly committed.
+- License: MIT. The source-freeze commit is public; the `0.1.0` preparation and
+  post-freeze endurance evidence remain uncommitted until explicitly approved.
 
 ## 3. Active Work
 
@@ -241,10 +250,11 @@ Current progress:
 - Maintainer direction rejects a universal CDDL/deterministic-CBOR envelope for
   ordinary Redis state. SDKs retain the known fields they require; Redis ACLs,
   field contracts, and protocol-owned Lua define supported mutation behavior.
-- Maintainer direction sets both first SDKs to `1.0.0`. Source version metadata
-  remains fixed before formal publication; no mutable `1.0.0` artifact or tag
-  may be published during development. The first protocol is `1.0`; every
-  behavior is mandatory and protocol capability negotiation is absent.
+- The 2026-09-01 maintainer direction supersedes the original start-at-1.0
+  choice: the implemented SDK preview is `0.1.0`, without production or stable
+  compatibility promises. Stable `1.0.0` remains reserved for Leader and the
+  complete release contract. The intended first stable protocol is `1.0`;
+  capability negotiation remains absent.
 - Maintainer direction replaces stable `node_id` plus `generation_id` with one
   SDK-generated UUID per process start. Registrations use
   `verdandi:registration:<zone>:<type>:<uuid>`; crashes expire by TTL and graceful
@@ -526,6 +536,30 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   objectives for the accepted capacity workload.
 
 ## 6. Completed Work
+
+### 2026-09-01: Prepare the bounded 0.1.0 Alpha release identity
+
+- Adopted `0.1.0` as the first non-production Alpha line for distributed SDK
+  development and controlled service integration. This does not claim stable
+  API, ABI, wire compatibility, availability, or production readiness.
+- Reserved stable `1.0.0` for a release that includes qualified Leader
+  election, standard English production-source comments, and the complete
+  stable acceptance matrix. The bounded preview does not weaken those gates.
+- Migrated active repository URLs, Go import/module paths, schema identity, and
+  language package metadata to `github.com/eosforge/verdandi`; set Rust, CMake,
+  C#, and local Go peer dependencies to `0.1.0`.
+- Added `release-0.1.0.md` and retained the exact final Registration/Selector
+  and Catalog twelve-hour result JSON files. Both frozen campaigns passed more
+  than 43,200 Redis seconds, every planned fault and post-check, 1,441
+  monotonic samples without a sampling failure, and final owned-key cleanup.
+- Reverified the metadata-only preparation with Go module verification,
+  formatting, vet, SDK and peer tests; Rust formatting, locked offline tests,
+  and strict Clippy; generated Lua checks; C++23/C ABI/C++11/14/17 offline
+  tests; C# .NET 8/10 formatting, zero-warning Release builds, and offline
+  tests; JSON parsing; repository-reference checks; and `git diff --check`.
+- Authorized this preparation only for the public `alpha` source branch. It
+  deliberately creates no release tag, GitHub Release, or language-package
+  publication.
 
 ### 2026-08-31: Freeze the complete Alpha review tree and start endurance qualification
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LaconisIves/verdandi/sdk/go/internal/validate"
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 )
 
 // PoolConfig 控制根 Redis Client 共享连接池的容量和空闲回收。

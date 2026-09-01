@@ -3,17 +3,21 @@
 ## 1. Document Role
 
 This document defines the required outcome and acceptance criteria for the
-first Verdandi release, version `1.0.0`. It is a version-specific contract, not
-a general project history. Stable architectural decisions belong in
+first production-stable Verdandi release, version `1.0.0`. The current
+`0.1.0` release is a bounded Alpha API and integration preview; publishing it
+does not satisfy or weaken this `1.0.0` contract. This is a version-specific
+contract, not a general project history. Stable architectural decisions belong in
 [`codex.md`](codex.md), detailed mechanics belong in
 [`architecture.md`](architecture.md) and [`protocol.md`](protocol.md), and live
 execution state belongs in [`worklog.md`](worklog.md).
 
-Status: **draft for maintainer review**. `Alpha` names the development phase,
-not a SemVer prerelease suffix. Source metadata remains `1.0.0`, but no package
-or tag is published until the formal immutable `1.0.0` release. No
-implementation may present these requirements as a released guarantee until
-the remaining protocol and trust decisions listed here are resolved.
+Status: **draft for maintainer review**. `Alpha` names the development phase.
+Source and package metadata for the implemented preview is `0.1.0`, without a
+production or stable compatibility promise. The first published `1.0.0`
+artifacts remain immutable and require Leader plus the complete acceptance
+matrix below. No implementation may present these requirements as a released
+guarantee until the remaining protocol and trust decisions listed here are
+resolved.
 
 ## 2. Alpha Outcome
 
@@ -39,6 +43,15 @@ a fourth independent protocol implementation:
 10. publish stable acknowledgements and bounded diagnostics;
 11. recover after Pub/Sub generation loss, reconnects, and primary failover; and
 12. pass the same protocol vectors and cross-language integration matrix.
+
+The `0.1.0` preview intentionally exposes only the implemented root Client and
+configuration surfaces, Registration/Registry/Selector lifecycle, persistent
+Catalog synchronization, and their Standalone/Sentinel recovery paths. It does
+not claim Campaign/Leader, desired configuration, acknowledgements, complete
+load synchronization, production availability, or a stable wire contract.
+Consumers may begin distributed development and controlled integration against
+these APIs with the normal SemVer expectation that a later `0.x` minor release
+may contain breaking changes.
 
 Go and Rust remain the first complete-matrix SDKs required to prove language
 neutrality. C++23 is the third implementation, currently with a narrower
@@ -428,7 +441,7 @@ concrete imperative use case is approved.
 
 ## 11. Security Acceptance
 
-Before Alpha release:
+Before the stable `1.0.0` release:
 
 - Redis and Sentinel authentication are separate in configuration and tests.
 - ACL fixtures prove the configured role/Zone/key scope and command set.

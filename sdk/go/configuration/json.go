@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 const maximumJSONBytes = 1024 * 1024

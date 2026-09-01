@@ -47,9 +47,11 @@ reflected in the owning documents:
   logical publication into bounded independent field Patches; each changed
   Patch or whole Delete changes the Hash revision and appends its exact Stream
   delta atomically.
-- Start the Go and Rust SDKs at `1.0.0`. Keep source version metadata fixed
-  before formal release and publish no mutable `1.0.0` artifact or tag during
-  development. The first protocol version is `1.0`.
+- Publish the implemented SDK preview as non-production `0.1.0`. Reserve
+  `1.0.0` for the complete stable contract, including qualified Leader election
+  and standard English production-source comments. The intended first stable
+  protocol version remains `1.0`, but the `0.x` implementation carries no
+  stable wire-compatibility promise.
 - Generate one fresh Registration UUID in the SDK on every process start. Use
   `verdandi:registration:<zone>:<type>:<uuid>`, let crashes expire by TTL, and
   remove the exact UUID through the Registry mutation on graceful shutdown.
@@ -152,14 +154,18 @@ Review decisions in this order because later choices depend on earlier ones:
 
 ### FND-001: First version
 
-- **Accepted direction:** the first Go and Rust SDK versions are `1.0.0`.
-- **Pre-release rule:** source metadata may remain fixed at `1.0.0` while the
-  repository is unpublished. Do not publish, tag, or overwrite mutable
-  `1.0.0` package artifacts during development; the first published `1.0.0`
-  artifact is immutable.
-- **Reason:** the maintainer wants the first supported SDK release to begin at
-  `1.0.0`. SDK semantic version and protocol compatibility remain separate even
-  though both first versions begin with 1.
+- **Accepted direction, superseding the 2026-08-21 start-at-1.0 decision:** the
+  implemented Registration, Selector, Catalog, configuration, and binding
+  surfaces begin at non-production Alpha version `0.1.0`.
+- **Stable-release rule:** `1.0.0` remains reserved for the complete documented
+  contract, including qualified Leader election and standard English
+  production-source comments. Its first published artifacts are immutable.
+- **Compatibility rule:** `0.1.0` permits distributed development and controlled
+  service integration, but makes no production or stable API/wire guarantee.
+  Consumers pin exact `0.x` releases and coordinate upgrades.
+- **Reason:** the implemented modules have passed their release-quality
+  regression and endurance gates, while SemVer `0.x` accurately communicates
+  the unfinished stable scope.
 
 ### FND-002: Public Markdown policy
 
@@ -221,7 +227,8 @@ Review decisions in this order because later choices depend on earlier ones:
 
 - **Accepted direction:** encode `protocol_major` and `protocol_minor` as bounded
   unsigned integers. The first protocol writes `1.0`; this is
-  independent of the SDK package version `1.0.0`.
+  independent of the current SDK package version `0.1.0` and future stable
+  version `1.0.0`.
 - **Major meaning:** changing `protocol_major` means an incompatible contract,
   such as changing an existing field's type or meaning. A reader rejects an
   unsupported major before interpreting class-specific fields.
@@ -932,7 +939,7 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
 
 ### SDK-002: Go package and Redis driver
 
-- Accepted module: `github.com/LaconisIves/verdandi/sdk/go`; public package:
+- Accepted module: `github.com/eosforge/verdandi/sdk/go`; public package:
   `verdandi`.
 - Accepted driver: `github.com/redis/go-redis/v9`. The original private-only
   adapter boundary is superseded by SDK-012 for the Go root Client; domain APIs
@@ -1039,7 +1046,7 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
 
 - Accepted 2026-08-26: the public domain name is `registration`, not the
   operation name `register`. Go uses the public child package
-  `github.com/LaconisIves/verdandi/sdk/go/registration`; Rust uses
+  `github.com/eosforge/verdandi/sdk/go/registration`; Rust uses
   `verdandi::registration`.
 - Registration and Selector belong to the same child package/module. Selector
   consumes the same Attr/Data types, Registration revisions, leases, retained
@@ -1055,8 +1062,8 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   `lua/src/registration/` and `lua/registration/` ownership.
 - Implemented 2026-08-26: production Registration/Selector sources and tests
   now live in the child package/module, root re-exports are absent, and the Go
-  and Rust testkit peers consume the new typed API. No compatibility shim is
-  required because version `1.0.0` has not been published.
+  and Rust testkit peers consume the new typed API. No compatibility shim was
+  required because the move preceded the first public `0.1.0` API.
 
 ### SDK-008: Shared transport and Go 1.27 generic methods
 
@@ -1201,7 +1208,7 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
 
 ### SDK-013: Name the ordinary root command budget `timeout`
 
-- Accepted 2026-08-28 before 1.0.0: Go exposes `Config.Timeout` and
+- Accepted 2026-08-28 before the first public `0.1.0`: Go exposes `Config.Timeout` and
   `Client.Timeout()`; Rust exposes `Config::timeout` and uses `timeout()` for its
   crate-private accessor. The stable invalid-field name is `timeout`.
 - `timeout` is the conventional single-word name because its containing root
@@ -1209,7 +1216,7 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   a relative `Duration`; `deadline` would incorrectly suggest an absolute time.
 - Domain-specific budgets retain precise names such as `sync_timeout` because
   multiple independent time limits exist in those Configs.
-- No compatibility alias is retained: version 1.0.0 has not been published, and
+- No compatibility alias is retained: the older name was never published, and
   carrying both names would permanently enlarge the API for no compatibility
   benefit.
 

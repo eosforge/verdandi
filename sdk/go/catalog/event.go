@@ -3,7 +3,7 @@ package catalog
 import (
 	"strings"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 type eventKind uint8

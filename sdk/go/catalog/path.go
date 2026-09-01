@@ -3,7 +3,7 @@ package catalog
 import (
 	"strings"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // Path 标识 Client Zone 内的一项 Catalog，包含 part 和 id 两段。

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 func TestConfigurationConformanceCorpus(t *testing.T) {

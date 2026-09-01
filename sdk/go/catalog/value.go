@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // Kind 标识 Catalog 值的规范顶层表示。

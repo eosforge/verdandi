@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 type scriptReply struct {

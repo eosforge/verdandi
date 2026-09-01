@@ -1,7 +1,7 @@
 package catalog
 
 import (
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // parseReadReply 解析只读 Lua 回复，并相对 base 复用或构造完整不可变状态。

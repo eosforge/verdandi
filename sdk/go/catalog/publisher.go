@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 	redis "github.com/redis/go-redis/v9"
 )
 

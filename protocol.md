@@ -2,8 +2,8 @@
 
 ## 1. Status and Authority
 
-Status: **pre-release implementation draft for SDK release `1.0.0` and
-protocol `1.0`**. The Registration Lua programs and initial Go and Rust
+Status: **experimental implementation draft shipped with SDK `0.1.0`, targeting
+the stable SDK `1.0.0` and protocol `1.0` contract**. The Registration Lua programs and initial Go and Rust
 Register/Selector slices exist. Catalog Lua and the Go/Rust Publisher,
 Subscriber, stable Entry, generic Load, and optional checkpoint slices also
 exist; the remaining protocol subsystems
@@ -26,8 +26,8 @@ The canonical release contract will consist of:
 - this protocol's normative state transitions.
 
 Words such as **must**, **must not**, **should**, and **may** describe intended
-requirements but do not constitute a released compatibility promise before the
-Alpha contract is frozen.
+requirements but do not constitute a stable compatibility promise before the
+formal `1.0.0` contract is frozen.
 
 ## 2. Terminology
 
@@ -102,9 +102,12 @@ Every protocol-owned Redis data class identifies or inherits:
 - content type for opaque application payloads; and
 - optional producer SDK identity for diagnostics only.
 
-The Go, Rust, and C++ SDK source/package version remains fixed at `1.0.0`
-during the unpublished Alpha; the first protocol version is `1.0`. These are
-independent domains even if their first numbers match.
+The Go, Rust, C++, and C# SDK source/package version for the current Alpha is
+`0.1.0`; the intended first stable protocol version remains `1.0`. These are
+independent version domains. Before SDK `1.0.0`, the protocol identifier is an
+experimental implementation marker rather than a public compatibility
+guarantee, so distributed consumers must pin an exact `0.x` release and upgrade
+all participants deliberately.
 Package semantic version describes a released SDK API. Protocol major describes
 the compatibility family; a different major is rejected. Protocol minor permits
 only additive optional fields or new independent keys and cannot change an existing

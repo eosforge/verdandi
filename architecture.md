@@ -148,7 +148,7 @@ A valid result commits only process-local predictions and returns detached
 values. Redis publication continues through the owning Registration; selection
 itself performs no Redis I/O.
 
-SDK `1.0.0` deliberately evaluates injected `One`/`Any` policy by scanning the
+SDK `0.1.0` deliberately evaluates injected `One`/`Any` policy by scanning the
 borrowed candidate view in O(N). A detached complete Snapshot is an explicit
 heavy operation and copies O(N) records; callers requesting it accept that
 time and memory cost.

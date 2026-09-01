@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
-	"github.com/LaconisIves/verdandi/sdk/go/catalog"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/catalog"
 	redis "github.com/redis/go-redis/v9"
 )
 

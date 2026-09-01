@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 	"github.com/vmihailenco/msgpack/v5"
 )
 

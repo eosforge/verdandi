@@ -1,4 +1,4 @@
-module github.com/LaconisIves/verdandi/sdk/go
+module github.com/eosforge/verdandi/sdk/go
 
 go 1.27.0
 

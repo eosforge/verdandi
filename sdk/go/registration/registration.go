@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // RegistrationOptions 定义一条尚未发布的本地 Registration。

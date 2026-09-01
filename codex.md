@@ -27,6 +27,8 @@ detail after reading it:
 - [`README.md`](README.md) is the public project introduction.
 - [`freeze-20260831.md`](freeze-20260831.md) records the first complete Alpha
   source freeze, its regression evidence, and its remaining release gates.
+- [`release-0.1.0.md`](release-0.1.0.md) owns the non-production `0.1.0`
+  release scope, compatibility statement, and exact freeze evidence.
 
 When documents disagree, stop implementation and reconcile them explicitly.
 Stable decisions in this file take precedence over stale worklog text. The
@@ -40,7 +42,7 @@ public GitHub repository:
 
 ```text
 Local:  D:\laconis\verdandi
-Remote: git@github.com:LaconisIves/verdandi.git
+Remote: git@github.com:eosforge/verdandi.git
 ```
 
 Its responsibilities are deliberately narrow:
@@ -431,11 +433,18 @@ commit and does not become standing permission for later pushes.
 
 ## 13. Current Repository Snapshot
 
-As of 2026-08-31:
+As of 2026-09-01:
 
-- GitHub repository `LaconisIves/verdandi` exists and is public.
+- GitHub repository `eosforge/verdandi` exists and is public; package and source
+  references use this canonical identity.
 - The commit containing this snapshot is the first public `alpha` source
-  freeze. No tag, package, release, or stable protocol has been published.
+  freeze. Its detached twelve-hour Registration and Catalog campaigns passed.
+- The maintainer selected `0.1.0` as the current non-production Alpha version
+  for distributed development and controlled service integration. No tag or
+  package publication is implied by a working-tree metadata change.
+- `1.0.0` remains reserved for the complete stable scope, including qualified
+  Leader election and standard English production-source comments. No stable
+  protocol has been published.
 - It was cloned to `D:\laconis\verdandi`.
 - This working copy is on the public `alpha` review branch. Later edits remain
   uncommitted and unpushed until separately authorized.
@@ -523,9 +532,27 @@ As of 2026-08-31:
 Keep only decisions that materially constrain future work. Never delete a
 superseded entry; mark it superseded and link to its replacement.
 
+### 2026-09-01: Release the implemented preview as 0.1.0
+
+- **Decision:** Use `0.1.0` for the implemented Registration, Selector,
+  Catalog, configuration, and binding surfaces. It permits distributed
+  development and controlled service integration without a production or
+  stable compatibility promise.
+- **Decision:** Reserve `1.0.0` for the complete stable contract. It must include
+  qualified Leader election and concise standard English production-source
+  comments in addition to the remaining release matrix.
+- **Decision:** Move the canonical repository and package identity to
+  `eosforge/verdandi`. Preserve historical result files as evidence from their
+  original commit rather than rewriting embedded old import paths.
+- **Reason:** The implemented subset has passed broad regression and two exact
+  twelve-hour fault campaigns, while a SemVer `0.x` release accurately signals
+  that the full stable scope and compatibility promise remain unfinished.
+
 ### 2026-08-21: Create Verdandi as an independent repository
 
-- **Decision:** Place the reusable coordination system in
+- **Partially superseded:** The independent-repository boundary remains; its
+  canonical GitHub identity moved to `eosforge/verdandi` on 2026-09-01.
+- **Former decision:** Place the reusable coordination system in
   `LaconisIves/verdandi`, alongside rather than inside Bifrost or Hermes.
 - **Reason:** It has an independent protocol, release lifecycle, test matrix,
   security boundary, and multiple consuming applications.
@@ -654,11 +681,12 @@ superseded entry; mark it superseded and link to its replacement.
 
 ### 2026-08-21: Start SDKs at 1.0.0
 
-- **Decision:** The first Go and Rust SDK version is `1.0.0`; its source version
-  remains fixed until the first formal release. No mutable `1.0.0` package or
-  tag is published during development.
-- **Reason:** SDK semantic version describes the released library API, while
-  protocol compatibility remains a separate decision.
+- **Superseded:** Replaced on 2026-09-01 by the accepted `0.1.0` Alpha preview
+  and reserved full-scope `1.0.0` decision above.
+- **Former decision:** The first Go and Rust SDK version was to be `1.0.0`, with
+  fixed unpublished source metadata during development.
+- **Reason for replacement:** The implemented subset is useful for controlled
+  integration, while `0.x` communicates its unfinished stable scope honestly.
 
 ### 2026-08-21: Use one per-start Registration UUID
 
@@ -1473,7 +1501,7 @@ current; the request-queue representation below is superseded by the
   subscribe-before-scan ordering, the PING/PONG fence, targeted repair, or
   joined shutdown.
 - **Policy boundary:** A detached complete Snapshot is explicitly heavy O(N).
-  SDK `1.0.0` keeps injected `One`/`Any` policy evaluation as a straightforward
+  SDK `0.1.0` keeps injected `One`/`Any` policy evaluation as a straightforward
   O(N) borrowed-view scan. Rust implements the same invariants with its native
   channel, task, cancellation, and borrow model.
 - **Current evidence:** Go/Rust unit, static, strict lint, WSL/Linux race,
@@ -1682,8 +1710,8 @@ current; the request-queue representation below is superseded by the
   command, so `timeout` is clear and conventional in both languages. `deadline`
   would imply an absolute instant; `wait` and `request` are less precise.
 - **Boundary:** Domain-specific budgets such as `sync_timeout` keep their
-  qualified names. Version 1.0.0 is unpublished, so no deprecated aliases are
-  added.
+  qualified names. The first public API is `0.1.0`; no deprecated alias is
+  needed for a name that was never part of a released version.
 - **Maintenance:** In both Go and Rust, root Open now performs its sole `PING`
   directly and Catalog Open directly loads its scripts. Their one-use, one-
   command `bootstrap` wrappers carried no independent invariant. Registration

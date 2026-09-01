@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // Subscription 选择整个 Client Zone、若干 Part、若干精确 Path 或任意非空组合。

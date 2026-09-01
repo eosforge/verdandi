@@ -13,7 +13,7 @@ authoritative Redis state after an acknowledged subscribe/read/PING alignment.
 
 ## Project Status
 
-Verdandi is in Alpha implementation for version `1.0.0`. The four generated,
+Verdandi is at non-production Alpha version `0.1.0`. The four generated,
 operation-specific, positional-ABI Registration Lua programs and the Go, Rust,
 and C++23 Register/Selector SDK slices are implemented. A managed C# facade now
 exposes the same compiled C++23 runtime through C ABI v1 without duplicating the
@@ -52,17 +52,21 @@ reconnect, exact-base writer contention, both-language integration, Linux race,
   GCC, clang-tidy, ASan/UBSan, authenticated Standalone integration, and an
   isolated three-node/three-Sentinel startup/integration smoke; the same compiled
   core also passes two promotions through C ABI v1 and the C# facade. Leader election, desired state, and
-acknowledgements remain unimplemented. The source version stays fixed
-during this unpublished phase, and no mutable `1.0.0` package or tag is
-published before the formal release. No stable wire protocol has been released.
+acknowledgements remain unimplemented. Version `0.1.0` is an API and integration
+preview without a production or stable wire-compatibility promise. The future
+`1.0.0` release remains reserved for the complete documented scope, including
+qualified Leader election and standard English production-source comments.
+No stable wire protocol has been released.
 The repository is not ready for production use. C++ still requires a direct
 native-API two-promotion harness, live TLS, multi-compiler/platform, packaging,
 performance, and soak qualification before release.
 
 The first reviewable Alpha source freeze, its edge-coverage audit, exact short
 regression, and remaining gates are recorded in
-[`freeze-20260831.md`](freeze-20260831.md). Its twelve-hour Registration and
-Catalog endurance campaign runs only after the containing Git commit is fixed.
+[`freeze-20260831.md`](freeze-20260831.md). Both detached twelve-hour
+Registration and Catalog endurance campaigns completed successfully against
+that exact commit. The `0.1.0` release scope and evidence are summarized in
+[`release-0.1.0.md`](release-0.1.0.md).
 
 Go additionally exposes the root's borrowed `*redis.Client`, permanent `Done`
 signal, and normalized operation timeout so child domains and advanced Go
@@ -298,6 +302,12 @@ and loader APIs. C# passes the same strict UTF-8 JSON directly into the C++
 parser through C ABI v1 and therefore owns no duplicate configuration model.
 
 ## Initial Scope
+
+Version `0.1.0` exposes the implemented Registration, Selector, Catalog, root
+Redis client, configuration, and language binding surfaces for distributed
+development and controlled service integration. As a `0.x` release it may make
+breaking API or protocol changes in a later minor version and carries no
+production availability or compatibility guarantee.
 
 Version `1.0.0` is expected to establish:
 

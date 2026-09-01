@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
-	"github.com/LaconisIves/verdandi/sdk/go/registration"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/registration"
 	redis "github.com/redis/go-redis/v9"
 )
 

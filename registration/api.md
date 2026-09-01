@@ -39,8 +39,8 @@ This produces these imports:
 
 ```go
 import (
-    verdandi "github.com/LaconisIves/verdandi/sdk/go"
-    "github.com/LaconisIves/verdandi/sdk/go/registration"
+    verdandi "github.com/eosforge/verdandi/sdk/go"
+    "github.com/eosforge/verdandi/sdk/go/registration"
 )
 ```
 

@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"sync/atomic"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // Status 标识一个 Entry 是否包含权威当前数据，或正处于恢复/终止阶段。

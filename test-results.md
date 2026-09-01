@@ -2,7 +2,7 @@
 
 ## 1. Scope and final result
 
-Date: 2026-08-31
+Date: 2026-09-01
 
 The implemented Go, Rust, and C++23 Registration/Selector and Catalog slices,
 plus the C# facade over C ABI v1, have the evidence boundaries recorded below.
@@ -58,8 +58,30 @@ evidence below; it does not inherit the earlier fingerprint's one-hour label.
   [`freeze-csharp-standalone-20260831.json`](testkit/results/freeze-csharp-standalone-20260831.json)
   and
   [`freeze-csharp-sentinel-20260831.json`](testkit/results/freeze-csharp-sentinel-20260831.json).
-- No twelve-hour result is claimed here. The two endurance workloads begin only
-  after the exact source commit is created and run from its detached worktree.
+- The two twelve-hour workloads subsequently completed from the detached
+  worktree and are recorded in the next section.
+
+### 2026-09-01 exact frozen-source twelve-hour qualification
+
+- Registration/Selector ran for 43,213.948 Redis seconds and 43,262.810 outer
+  seconds. It completed 21,600,000 Updates, 3,707,005 selection transactions,
+  145 expiry cycles, 155 churn cycles, and every one of 214 planned faults.
+- Catalog ran for 43,201.858 Redis seconds and 43,261.458 outer seconds. It
+  attempted 5,932,160 scheduled mutations and completed every one of 113 planned
+  faults, with 5,931,934 accepted mutation-latency samples.
+- Both domains recorded exactly 1,441 monotonic Redis JSONL samples, no sampling
+  failure, no unexpected asynchronous error, no eviction or rejected
+  connection, and no sustained memory-growth violation.
+- All canonical Lua, Rust convergence, typed API, and Catalog interoperability
+  post-checks passed. Independently recomputed source fingerprints matched the
+  frozen commit.
+- Both databases ended at `DBSIZE=0`. Remote ownership checks confirmed both
+  containers and data directories were removed and ports 37380/37440 were
+  closed.
+- Machine evidence is retained in
+  [`registration-soak-12h-freeze-20260901.json`](testkit/results/registration-soak-12h-freeze-20260901.json)
+  and
+  [`catalog-soak-12h-freeze-20260901.json`](testkit/results/catalog-soak-12h-freeze-20260901.json).
 
 ### 2026-08-31 C# independent regression and C++ Release boundary
 
@@ -468,8 +490,8 @@ This result includes:
 - a strict Redis-clock two-hour Catalog run with 960,000 attempts, two
   Subscribers, 18 injected faults, final convergence, and complete cleanup.
 
-The source and SDK versions remain the unpublished `v1`/`1.0.0` development
-targets. Campaign/Leader, desired configuration, acknowledgements,
+The current source and SDK version is the non-production `0.1.0` Alpha. Stable
+`1.0.0` remains reserved for the complete contract. Campaign/Leader, desired configuration, acknowledgements,
 TLS, managed Redis services, and production readiness are outside this result.
 No commit, tag, package publication, or push was created.
 

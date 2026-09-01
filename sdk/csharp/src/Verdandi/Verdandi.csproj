@@ -3,13 +3,13 @@
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <AssemblyName>Verdandi</AssemblyName>
     <RootNamespace>Verdandi</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>0.1.0</Version>
     <Authors>LaconisIves</Authors>
     <Description>Managed C# facade for the Verdandi distributed coordination runtime.</Description>
     <PackageId>Verdandi</PackageId>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/LaconisIves/verdandi</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/LaconisIves/verdandi.git</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/eosforge/verdandi</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/eosforge/verdandi.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

@@ -5,8 +5,9 @@
 The repository currently contains independent Go, Rust, and C++23 implementations of
 the same Alpha `v1` Registration, Registry-Selector, and Catalog protocol, plus
 an idiomatic managed C# facade over C ABI v1 and the existing C++23 core. Package
-manifests use SDK version `1.0.0`, but no package, tag, or stable protocol has
-been released. Registration and Selector now live in the public
+manifests use non-production Alpha SDK version `0.1.0`. This release line is
+intended for distributed development and controlled integration and makes no
+stable protocol promise. Registration and Selector now live in the public
 `registration` child package/module/namespace; shared Client, field codecs, errors, and
 connection configuration remain at the SDK root. Neither SDK re-exports the
 domain declarations from its root namespace. The implemented public surface is
@@ -34,10 +35,10 @@ three-node Redis/three-Sentinel failover topology are qualified for
 Register/Selector. The current evidence includes five-minute update and renewal
 phases in both languages, eight Selectors, and 5,000-record synchronization.
 Catalog additionally passes its current Redis 8.8 functional/reconnect suites
-and a 30-second endurance preflight accepting 960/960 scheduled operations with
-two Subscribers. Its new fault-injected 24-hour interval has not yet been run;
-live TLS topology qualification, managed Redis services, and broader reconnect-
-storm profiles also remain unfinished. The shared JSON and native Go/Rust/C++ TLS
+and an exact-source twelve-hour campaign accepting 5,932,160 attempts through
+113 planned faults with two Subscribers and final zero-key cleanup. Live TLS
+topology qualification, managed Redis services, and broader reconnect-storm
+profiles remain unfinished. The shared JSON and native Go/Rust/C++ TLS
 configuration paths themselves support system/private roots, Standalone SNI,
 and paired PEM client credentials and pass offline parsing tests. C++ passes
 strict GCC, clang-tidy, ASan/UBSan, authenticated Standalone integration, and a
@@ -60,7 +61,8 @@ open.
 Campaign/Leader remains unimplemented and uses its own immutable Campaign
 Version plus private readiness token. It does not read or reinterpret the
 existing Registration Version field, whose current Register/Update behavior is
-unchanged and outside this Leader design.
+unchanged and outside this Leader design. Stable `1.0.0` remains reserved for a
+qualified Leader implementation and the complete release contract.
 
 ## 2. Shared Redis Contract
 
@@ -359,7 +361,7 @@ O(N) scan contract in SDK `1.0.0`.
 Catalog is an independent child package/module:
 
 ```text
-Go:   github.com/LaconisIves/verdandi/sdk/go/catalog
+Go:   github.com/eosforge/verdandi/sdk/go/catalog
 Rust: verdandi::catalog
 C++:  verdandi::catalog
 ```
@@ -526,7 +528,7 @@ endurance, scores, and remaining policy decisions are in
 
 ## 7. Go API
 
-The Go module is `github.com/LaconisIves/verdandi/sdk/go`, targets Go 1.27, and
+The Go module is `github.com/eosforge/verdandi/sdk/go`, targets Go 1.27, and
 uses one concrete `*redis.Client`. `Client.Redis()` exposes that exact pointer
 as a borrowed Go-native capability; `Done()` and `Timeout()` expose
 permanent root shutdown and the normalized immutable timeout. Standalone and
@@ -539,7 +541,7 @@ belong to concrete SDK types; Go interfaces still cannot declare generic
 methods.
 
 Registration and Selector live in
-`github.com/LaconisIves/verdandi/sdk/go/registration`; the root package retains
+`github.com/eosforge/verdandi/sdk/go/registration`; the root package retains
 the shared Client, typed Key/Hash commands, Fields, codecs, configuration, and
 errors. The complete ordinary-command surface is in
 [`sdk/go/client.md`](sdk/go/client.md).

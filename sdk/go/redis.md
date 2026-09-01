@@ -1,6 +1,6 @@
 # Go Typed Redis Hash Contract
 
-Status: implemented for version 1.0.0 on 2026-08-27. The complete root Client,
+Status: implemented for non-production Alpha version 0.1.0 on 2026-08-27. The complete root Client,
 Key, codec, limit, lifecycle, and error inventory is in [`client.md`](client.md).
 
 ## 1. Exact projection

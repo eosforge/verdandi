@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
 )
 
 // SelectorOptions 标识一个需要同步到本地并用于选择的 Registry。

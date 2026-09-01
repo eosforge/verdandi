@@ -188,6 +188,14 @@ source fingerprints in the results must match the frozen worktree, every
 planned fault and post-check must pass, and each fixture must finish with zero
 owned keys and remove only its exact container and remote directory.
 
+The exact 2026-08-31 freeze completed this campaign on 2026-09-01. Registration
+passed 43,213.948 Redis seconds and 214 faults; Catalog passed 43,201.858 Redis
+seconds and 113 faults. The self-contained final results, including all Redis
+samples, are
+[`results/registration-soak-12h-freeze-20260901.json`](results/registration-soak-12h-freeze-20260901.json)
+and
+[`results/catalog-soak-12h-freeze-20260901.json`](results/catalog-soak-12h-freeze-20260901.json).
+
 ## Shared Lua contract
 
 Generate the canonical Registration and Catalog scripts and the byte-identical

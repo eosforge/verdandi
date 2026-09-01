@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
-	"github.com/LaconisIves/verdandi/sdk/go/internal/lifecycle"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/internal/lifecycle"
 	redis "github.com/redis/go-redis/v9"
 )
 

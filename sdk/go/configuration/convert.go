@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	verdandi "github.com/LaconisIves/verdandi/sdk/go"
-	"github.com/LaconisIves/verdandi/sdk/go/catalog"
-	"github.com/LaconisIves/verdandi/sdk/go/registration"
+	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/catalog"
+	"github.com/eosforge/verdandi/sdk/go/registration"
 )
 
 const maximumTLSFileBytes = 1024 * 1024

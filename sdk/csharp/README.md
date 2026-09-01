@@ -10,8 +10,8 @@ subscriber. Those components remain in the C++23 core.
 
 The managed assembly currently targets `net8.0` and `net10.0`, is compiled with
 the pinned .NET 10 SDK and C# 14, and has no third-party managed dependency.
-Version metadata remains `1.0.0`, but no NuGet package, native RID package, tag,
-or stable ABI has been released.
+Version metadata is `0.1.0`. It is a non-production Alpha facade without a
+stable ABI promise; no NuGet or native RID package has been published.
 
 Current qualification covers:
 
