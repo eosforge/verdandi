@@ -1,9 +1,8 @@
 # Verdandi
 
 Verdandi is a language-neutral distributed coordination layer for service
-discovery, leader election, persistent Catalog key/value synchronization,
-runtime-state synchronization, desired-configuration delivery, and application
-acknowledgements.
+discovery, persistent Catalog key/value synchronization, runtime-state
+synchronization, desired-configuration delivery, and application acknowledgements.
 
 The initial transport and active-state implementation requires a qualified
 Redis 8 deployment. Both a fixed standalone Redis primary and a
@@ -38,9 +37,12 @@ self-contained builds, ACL-protected Redis 8.8 Standalone behavior, explicit
   and application-directory native loading, concurrency and capacity boundaries,
   concurrent disposal and finalizer cleanup,
   plus two Sentinel promotions with acknowledged-write-loss repair and Selector
-  generation recovery. Windows/macOS native binaries, NuGet RID packaging,
-  NativeAOT/trimming, TLS, cross-language C# peers, performance, and endurance
-  qualification remain open. The unit,
+  generation recovery. Windows MSVC static and shared builds plus native .NET
+  loading now pass offline, and Windows x64 net8.0/net10.0 passes the same live
+  two-promotion Sentinel TLS matrix. NuGet RID packaging,
+  NativeAOT/trimming, live mutual-TLS, cross-language C# peers,
+  performance, and endurance qualification remain open. macOS is intentionally
+  unsupported and is not a release gate. The unit,
 Redis 8.8 integration, cross-language Pub/Sub,
 disconnect/recovery, bounded per-UUID event coalescing, race, fuzz, lint,
 retained expiry recovery, and current per-Registration two-hour fault plus
@@ -51,15 +53,23 @@ reconnect, exact-base writer contention, both-language integration, Linux race,
   and Go/Rust interoperability tests pass on Redis 8.8. The C++ SDK passes strict
   GCC, clang-tidy, ASan/UBSan, authenticated Standalone integration, and an
   isolated three-node/three-Sentinel startup/integration smoke; the same compiled
-  core also passes two promotions through C ABI v1 and the C# facade. Leader election, desired state, and
-acknowledgements remain unimplemented. Version `0.1.0` is an API and integration
+  core also passes two promotions through C ABI v1 and the C# facade. Desired state and
+acknowledgements remain unimplemented. Generic Campaign/Leader election has been
+withdrawn from the project scope and will not be implemented. Version `0.1.0` is an API and integration
 preview without a production or stable wire-compatibility promise. The future
-`1.0.0` release remains reserved for the complete documented scope, including
-qualified Leader election and standard English production-source comments.
+`1.0.0` release remains reserved for the complete documented scope and standard
+English production-source comments.
 No stable wire protocol has been released.
-The repository is not ready for production use. C++ still requires a direct
-native-API two-promotion harness, live TLS, multi-compiler/platform, packaging,
-performance, and soak qualification before release.
+The repository is not ready for production use. Private-CA Sentinel TLS now
+passes Windows x64 and Linux x64 Go/Rust two-promotion qualification, C++23
+root/domain integration, and C# .NET 8/10 two-promotion qualification through
+the same C++ core. Every
+Sentinel and data-node certificate must share one configured fixed identity;
+the dynamically discovered address never becomes the trust identity. C++ still
+requires a direct native-API two-promotion harness, live mutual-TLS, Linux
+Clang, packaging, performance, and soak
+qualification before production use. Automated native/RID packaging is
+deliberately deferred; macOS is outside the supported platform set.
 
 The first reviewable Alpha source freeze, its edge-coverage audit, exact short
 regression, and remaining gates are recorded in
@@ -74,10 +84,8 @@ integrations can reuse one pool without an internal bridge. The root alone owns
 driver close. Raw operations are controlled by Redis ACLs and sit outside
 Verdandi validation and atomicity guarantees; Rust keeps Fred private.
 
-Leader uses an independent Campaign readiness token and Campaign Version. The
-existing Registration Version field and Register/Update behavior are outside
-the Leader design and remain unchanged. Existing Register/Selector
-qualification is not evidence for Leader.
+Registration Version remains an application-defined positive integer. Verdandi
+stores and synchronizes it but does not use it for a built-in election service.
 
 ## Design Principles
 
@@ -99,17 +107,6 @@ qualification is not evidence for Leader.
   global Redis-owned revision, per-field update revisions, live/deleted ZSET
   indexes, complete Pub/Sub operations, and the same ordered fence. Pub/Sub is
   never the authoritative recovery log.
-- Leader election separates candidate readiness from one private ownership
-  term and is independent from service Registration. Each Campaign owns a fresh
-  private readiness token and immutable positive-integer version; it needs no
-  separate public ID. The SDK maintains the ready view, drives comparison,
-  Claim/retirement/renewal, and exposes application lifetime.
-  Redis only atomically validates readiness and the empty/exact-token ownership
-  transition. Larger versions are preferred and equal versions are
-  first-successful-claim wins. Each domain has zero or one
-  application-active Leader; uncertainty closes admission and may leave it
-  without one. Sentinel activation additionally requires a
-  deployment-provided durable fence acquired by the SDK.
 - Desired state is preferred over imperative commands. Command delivery is
   deferred from `1.0.0` until a concrete use case is approved.
 - Every payload, queue, retry loop, decoder, task set, snapshot, and local
@@ -129,8 +126,6 @@ qualification is not evidence for Leader.
   and observes convergence.
 - **Selector** maintains a validated local Registry view for
   application-owned filtering and load balancing.
-- **Campaign/Leader** coordinates one independently identified, leased,
-  version-aware exclusive term.
 - **Administrator** provisions Zones, credentials, and deployment policy. A
   Registration Client atomically fills missing defaults in the non-expiring
   `verdandi:config:<zone>` Hash during bootstrap; an authorized backend can
@@ -223,8 +218,10 @@ performance record are in
 consolidation, lock-free Catalog qualification, exact scores, and remaining
 weaknesses are recorded in
 [`optimization-review-20260830.md`](optimization-review-20260830.md).
-The C++23 build, native/C ABI/Legacy APIs, qualification, scores, and remaining release gates are in
-[`sdk/cpp/README.md`](sdk/cpp/README.md) and
+The cross-platform native-runtime build entry, C++23/C ABI/Legacy APIs,
+qualification, scores, and remaining release gates are in
+[`sdk/cpp/BUILD.md`](sdk/cpp/BUILD.md),
+[`sdk/cpp/README.md`](sdk/cpp/README.md), and
 [`cpp-review-20260831.md`](cpp-review-20260831.md).
 
 Registration recovery state is never persisted to local disk. A writer keeps
@@ -240,7 +237,10 @@ Selector keeps expired payload for at most one additional TTL in a separate
 bounded, non-selectable process-memory view. It is also discarded when the
 Selector process exits. Go, Rust, C++, and C# expose generic typed Registration/Selector
 values whose application structs directly own field encode/decode behavior;
-there is no Registration code generator or Schema object. Raw `Fields`
+there is no wire-codec or Registration-business-logic generator and no runtime
+Schema object. Go has an optional mechanical generator for callback-scoped
+Selector read accessors and selected-Data setters; it does not define field
+encoding or policy. Raw `Fields`
 implements the same interfaces and remains a first-class binary boundary.
 The implemented SDK APIs and lifecycle are described in
 [`sdk.md`](sdk.md), with the child-package typed API and selection transaction
@@ -285,8 +285,9 @@ limit affects later Registration content writes; existing records remain
 discoverable and lease renewal remains permitted.
 
 Verdandi v1 now defines one strict cross-language JSON configuration structure:
-[`configuration.schema.json`](configuration.schema.json) is the machine-readable
-contract and [`configuration.example.json`](configuration.example.json) is the
+[`configuration.schema.json`](configuration.schema.json) is the structural
+companion, the shared conformance corpus plus SDK validators own executable
+semantics, and [`configuration.example.json`](configuration.example.json) is the
 complete example loaded by the native SDK test suites. Go, Rust, and C++ first
 parse that same DTO, then convert it to their language-native Redis,
 Registration/Selector, and Catalog configuration types. Unknown/duplicate
@@ -313,8 +314,6 @@ Version `1.0.0` is expected to establish:
 
 - per-start UUID Registration Hashes and leased liveness;
 - paginated Registry synchronization and local Selectors;
-- SDK-driven, version-aware zero-or-one Leader election with independent
-  Campaign readiness tokens, private term tokens, and Sentinel fencing;
 - one persistent raw Catalog Value per Path with last-write-wins Replace,
   exact-base Patch, explicit tombstone deletion, Pub/Sub notification, and
   authoritative Hash/ZSET recovery into complete local Subscribers;
@@ -330,7 +329,8 @@ Version `1.0.0` is expected to establish:
 Redis Cluster has no scheduled support horizon and every SDK rejects it rather
 than silently degrading atomicity. Multi-primary merging, globally linearizable
 state across partitions, exactly-once commands, and application-specific
-routing semantics are also outside the first release.
+routing semantics are also outside the first release. Generic Campaign/Leader
+election is an explicit project non-goal rather than deferred work.
 
 ## License
 

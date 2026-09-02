@@ -7,6 +7,7 @@ use url::Url;
 
 use super::model::{Auth, Config, Recovery, RegistrationPolicy, Selector, Tls};
 use crate::catalog;
+use crate::identifier::valid_zone;
 use crate::registration::{self, RegistrationLimits};
 use crate::{Code, Config as RedisConfig, Error, PoolConfig, ReconnectConfig, Result, TlsConfig};
 
@@ -20,11 +21,11 @@ impl Config {
         if u64::try_from(source.len()).unwrap_or(u64::MAX) > MAXIMUM_JSON_BYTES {
             return Err(Error::field(Code::Capacity, "json"));
         }
-        let config: Self = serde_json::from_slice(source).map_err(|error| Error::field_driver(Code::Invalid, "json", error))?;
         let tree: serde_json::Value = serde_json::from_slice(source).map_err(|error| Error::field_driver(Code::Invalid, "json", error))?;
-        if contains_null(&tree) {
+        if contains_null(&tree) || !object_shapes_are_canonical(&tree) {
             return Err(Error::field(Code::Invalid, "json"));
         }
+        let config: Self = serde_json::from_slice(source).map_err(|error| Error::field_driver(Code::Invalid, "json", error))?;
         config.check()?;
         Ok(config)
     }
@@ -57,6 +58,9 @@ impl Config {
     /// 把共享 JSON Redis 设置转换为 Rust 的 URL、Duration 和连接池配置。
     pub fn redis_config(&self) -> Result<RedisConfig> {
         let source = &self.redis;
+        if source.mode != "standalone" && source.mode != "sentinel" {
+            return Err(Error::field(Code::Invalid, "redis.mode"));
+        }
         check_addresses(&source.addresses)?;
         let database = unsigned(source.database, 0, 0, 255, "redis.database")?;
         let timeout = duration(source.timeout_ms, 2000, 10, 15_000, "redis.timeout_ms")?;
@@ -64,21 +68,27 @@ impl Config {
         let pool_min = size(source.pool.min_connections, 1, 1, 1024, "redis.pool.min_connections")?;
         let pool_max = size(source.pool.max_connections, 4, 1, 1024, "redis.pool.max_connections")?;
         let pool_idle = duration(source.pool.idle_timeout_ms, 10_000, 1000, 3_600_000, "redis.pool.idle_timeout_ms")?;
-        let reconnect_initial = duration(source.reconnect.initial_delay_ms, 100, 10, 5000, "redis.reconnect.initial_delay_ms")?;
-        let reconnect_max = duration(source.reconnect.max_delay_ms, 5000, 100, 30_000, "redis.reconnect.max_delay_ms")?;
-        let reconnect_multiplier = u32_value(source.reconnect.multiplier, 2, 1, 8, "redis.reconnect.multiplier")?;
-        let reconnect_jitter = u8_value(source.reconnect.jitter_percent, 10, 0, 50, "redis.reconnect.jitter_percent")?;
+        if pool_min > pool_max {
+            return Err(Error::field(Code::Invalid, "redis.pool.min_connections"));
+        }
+        let reconnect_delay = duration(source.reconnect.delay_ms, 100, 10, 30_000, "redis.reconnect.delay_ms")?;
 
         // 先用 URL 类型完成凭据和查询参数编码，再把稳定文本交给现有 Fred 适配层。
         let endpoint = match source.mode.as_str() {
             "standalone" => {
-                if source.addresses.len() != 1 || !source.master_name.is_empty() || !empty_auth(&source.sentinel_auth) {
-                    return Err(Error::field(Code::Invalid, "redis.topology"));
+                if source.addresses.len() != 1 {
+                    return Err(Error::field(Code::Invalid, "redis.addresses"));
+                }
+                if !source.master_name.is_empty() {
+                    return Err(Error::field(Code::Invalid, "redis.master_name"));
+                }
+                if !empty_auth(&source.sentinel_auth) {
+                    return Err(Error::field(Code::Invalid, "redis.sentinel_auth"));
                 }
                 endpoint("redis", &source.addresses, &source.auth, None)?
             }
             "sentinel" => {
-                if source.master_name.trim().is_empty() || source.master_name.trim() != source.master_name {
+                if source.master_name.trim().is_empty() || source.master_name.trim() != source.master_name || source.master_name.as_bytes().contains(&0) {
                     return Err(Error::field(Code::Invalid, "redis.master_name"));
                 }
                 endpoint(
@@ -102,12 +112,7 @@ impl Config {
                 max_connections: pool_max,
                 idle_timeout: pool_idle,
             },
-            reconnect: ReconnectConfig {
-                initial_delay: reconnect_initial,
-                max_delay: reconnect_max,
-                multiplier: reconnect_multiplier,
-                jitter_percent: reconnect_jitter,
-            },
+            reconnect: ReconnectConfig { delay: reconnect_delay },
         };
         native.check()?;
         Ok(native)
@@ -118,6 +123,9 @@ impl Config {
         let Some(source) = &self.registration else {
             return Ok(None);
         };
+        if !valid_zone(&source.zone) {
+            return Err(Error::field(Code::Invalid, "registration.zone"));
+        }
         let mut native = registration::Config::new(&source.zone);
         native.registration_buffer_capacity = size(source.buffer_capacity, 8, 1, 256, "registration.buffer_capacity")?;
         native.registration_error_buffer_capacity = size(source.error_buffer_capacity, 16, 1, 1024, "registration.error_buffer_capacity")?;
@@ -126,6 +134,9 @@ impl Config {
         native.policy_refresh_jitter_percent = u8_value(source.policy_refresh_jitter_percent, 10, 0, 50, "registration.policy_refresh_jitter_percent")?;
         native.policy = registration_policy(&source.policy)?;
         fill_selector(&mut native, &source.selector)?;
+        if native.selector_recovery_initial_delay > native.selector_recovery_max_delay {
+            return Err(Error::field(Code::Invalid, "registration.selector.recovery.initial_delay_ms"));
+        }
         native.check()?;
         Ok(Some(native))
     }
@@ -135,6 +146,9 @@ impl Config {
         let Some(source) = &self.catalog else {
             return Ok(None);
         };
+        if !valid_zone(&source.zone) {
+            return Err(Error::field(Code::Invalid, "catalog.zone"));
+        }
         let mut native = catalog::Config::new(&source.zone);
         native.sync_timeout = duration(source.sync_timeout_ms, 30_000, 100, 3_600_000, "catalog.sync_timeout_ms")?;
         native.scan_page_size = size(source.scan_page_size, 256, 1, 4096, "catalog.scan_page_size")?;
@@ -144,6 +158,16 @@ impl Config {
         native.max_view_bytes = unsigned(source.max_view_bytes, 0, 0, 64 * 1024 * 1024 * 1024, "catalog.max_view_bytes")?;
         native.max_record_bytes = size(source.max_record_bytes, 512 * 1024, 1, 4 * 1024 * 1024, "catalog.max_record_bytes")?;
         fill_catalog_recovery(&mut native, &source.recovery)?;
+        if native.recovery_initial_delay > native.recovery_max_delay {
+            return Err(Error::field(Code::Invalid, "catalog.recovery.initial_delay_ms"));
+        }
+        if source
+            .local_store_path
+            .as_ref()
+            .is_some_and(|path| path.is_empty() || path.len() > 4096 || path.as_bytes().contains(&0))
+        {
+            return Err(Error::field(Code::Invalid, "catalog.local_store_path"));
+        }
         native.local_store_path = source.local_store_path.as_ref().map(PathBuf::from);
         native.check()?;
         Ok(Some(native))
@@ -162,13 +186,16 @@ fn tls_config(source: &Tls, mode: &str) -> Result<Option<TlsConfig>> {
         return Ok(None);
     }
 
-    // Fred 无法把固定服务名传播到 Sentinel 后续发现的新主节点，因此跨语言契约只在 Standalone 开放覆盖。
+    // Standalone 可省略固定身份并使用连接地址；Sentinel 必须用一个不随动态发现结果变化的共享证书身份。
     if !source.server_name.is_empty()
         && (source.server_name.trim() != source.server_name
+            || source.server_name.bytes().any(|byte| byte.is_ascii_whitespace())
             || source.server_name.len() > 253
-            || source.server_name.as_bytes().contains(&0)
-            || mode != "standalone")
+            || source.server_name.as_bytes().contains(&0))
     {
+        return Err(Error::field(Code::Invalid, "redis.tls.server_name"));
+    }
+    if mode == "sentinel" && source.server_name.is_empty() {
         return Err(Error::field(Code::Invalid, "redis.tls.server_name"));
     }
 
@@ -208,6 +235,43 @@ fn contains_null(value: &serde_json::Value) -> bool {
     }
 }
 
+/// Serde 默认允许把结构体从 JSON 数组按字段顺序解码；外部契约只接受具名对象，因而在类型解码前固定所有对象节点的形状。
+fn object_shapes_are_canonical(root: &serde_json::Value) -> bool {
+    const OBJECT_PATHS: &[&[&str]] = &[
+        &["redis"],
+        &["redis", "auth"],
+        &["redis", "sentinel_auth"],
+        &["redis", "tls"],
+        &["redis", "pool"],
+        &["redis", "reconnect"],
+        &["registration"],
+        &["registration", "policy"],
+        &["registration", "selector"],
+        &["registration", "selector", "recovery"],
+        &["catalog"],
+        &["catalog", "recovery"],
+    ];
+    if !root.is_object() {
+        return false;
+    }
+    OBJECT_PATHS.iter().all(|path| {
+        let mut value = root;
+        for (index, segment) in path.iter().enumerate() {
+            let Some(object) = value.as_object() else {
+                return false;
+            };
+            let Some(next) = object.get(*segment) else {
+                return true;
+            };
+            value = next;
+            if index + 1 == path.len() && !value.is_object() {
+                return false;
+            }
+        }
+        true
+    })
+}
+
 /// 把 Redis 地址和凭据安全编码为 Fred 已有的 Standalone/Sentinel URL 输入。
 fn endpoint(scheme: &str, addresses: &[String], auth: &Auth, sentinel: Option<(&str, &Auth)>) -> Result<String> {
     let mut url = Url::parse(&format!("{scheme}://{}", addresses[0])).map_err(|error| Error::field_driver(Code::Invalid, "redis.addresses", error))?;
@@ -241,7 +305,7 @@ fn check_addresses(addresses: &[String]) -> Result<()> {
         return Err(Error::field(Code::Invalid, "redis.addresses"));
     }
     for address in addresses {
-        if address.is_empty() || address.trim() != address {
+        if address.is_empty() || address.trim() != address || address.as_bytes().contains(&0) {
             return Err(Error::field(Code::Invalid, "redis.addresses"));
         }
         let (host, port) = if let Some(rest) = address.strip_prefix('[') {
@@ -258,7 +322,12 @@ fn check_addresses(addresses: &[String]) -> Result<()> {
             }
             (host, port)
         };
-        if host.is_empty() || port.parse::<u16>().ok().is_none_or(|port| port == 0) {
+        if host.is_empty()
+            || host.bytes().any(|byte| byte <= b' ' || byte == 0x7f)
+            || port.is_empty()
+            || !port.bytes().all(|byte| byte.is_ascii_digit())
+            || port.parse::<u16>().ok().is_none_or(|port| port == 0)
+        {
             return Err(Error::field(Code::Invalid, "redis.addresses"));
         }
     }

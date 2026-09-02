@@ -1,13 +1,17 @@
 # Verdandi JSON Configuration Reference
 
-Verdandi v1 uses one canonical external JSON structure. The machine-readable
-contract is [`configuration.schema.json`](configuration.schema.json), and
+Verdandi v1 uses one canonical external JSON structure.
+[`configuration.schema.json`](configuration.schema.json) is its structural
+companion; byte-count limits, endpoint grammar, exact error fields and
+cross-field relationships are authoritative in the SDK validators plus
+[`testkit/conformance/v1/configuration.json`](testkit/conformance/v1/configuration.json).
 [`configuration.example.json`](configuration.example.json) contains every v1
 field. Go, Rust, and C++ load that same example in their unit suites before
 converting it into their own language-native Redis, Registration/Selector, and
 Catalog configuration types. C# strictly encodes the same JSON as UTF-8 and
 passes it through C ABI v1 to the C++ loader; it intentionally owns no fourth
-configuration DTO, defaults table, or validator.
+configuration DTO or defaults table. `Configuration.Validate` exposes the same
+native parser as a connection-free C# validation API.
 
 Go exposes `configuration.LoadFile`, `configuration.LoadJSON`, and
 `configuration.ParseJSON`; Rust exposes `configuration::Config::load_json` and
@@ -16,8 +20,9 @@ Go exposes `configuration.LoadFile`, `configuration.LoadJSON`, and
 
 - accept at most 1 MiB of UTF-8 JSON;
 - require `version: "v1"` and one Redis topology;
-- reject unknown or duplicate fields, JSON `null`, trailing values, fractional
-  numbers, and values outside the documented ranges;
+- reject unknown or duplicate fields, JSON `null`, trailing values,
+  non-canonical negative zero, fractional numbers, wrong JSON shapes, and
+  values outside the documented ranges;
 - distinguish an omitted optional number from an explicit zero;
 - validate all enabled domains before returning, without opening Redis, a
   local checkpoint, or a TLS certificate file.
@@ -32,10 +37,9 @@ code generator is introduced.
 
 `redis.tls` is an object rather than a boolean. Structural validation is pure:
 it checks enablement, trust-source relationships, path bounds, mTLS pairing,
-and Standalone-only fixed SNI without reading files. Go reads at most 1 MiB
-from each PEM file while producing `*tls.Config`; Rust stores native `PathBuf`
-values and reads the same bounded files immediately before Fred opens its
-driver. All require TLS 1.2 or newer, always verify the peer certificate, and
+and the fixed certificate identity without reading files. Go, Rust, and C++ each
+read at most 1 MiB from one PEM file while constructing the native TLS driver;
+all require TLS 1.2 or newer, always verify the peer certificate, and
 support an optional private CA bundle plus an unencrypted PEM client
 certificate/private-key pair. No insecure skip-verification option exists.
 
@@ -54,11 +58,31 @@ configs directly may still use the package's documented zero-value defaults;
 Rust applications normally begin with its constructors; C++ native structs
 carry their documented member initializers and expose `check()`.
 
-C++ currently rejects opening a TLS-enabled Sentinel transport even when the
-shared JSON shape is valid. Boost.Redis does not expose a secure way for this
-implementation to apply hostname verification to each dynamically discovered
-data-node target. The explicit rejection preserves the shared no-insecure-
-verification rule; Standalone TLS and plain Sentinel remain supported.
+Redis physical reconnection intentionally has one portable setting:
+`redis.reconnect.delay_ms`. It is a fixed delay, defaults to 100 ms, accepts
+10..30,000 ms, and never authorizes replaying a command whose result is
+unknown. Go maps it to `DialerRetryTimeout` without a callback, Rust uses a
+constant Fred policy with driver jitter disabled, and C++ maps it to the
+Boost.Redis reconnect interval. Selector and Catalog recovery are separate
+business-level authoritative repairs; their `recovery` objects retain
+initial/max delay, multiplier, and jitter.
+
+Sentinel TLS requires a non-empty `redis.tls.server_name`. This name is a fixed
+deployment identity, not an address returned by Sentinel: every configured
+Sentinel and every Redis primary or replica that Sentinel may select must
+present a certificate whose SAN contains that same DNS name or IP identity.
+Certificate chain, validity, handshake signature, and identity verification
+remain mandatory during initial discovery, reconnect, and promotion. This
+prevents a compromised or misconfigured Sentinel response from changing the
+certificate identity that the SDK trusts.
+
+Go and C++ send a configured DNS identity as SNI on every Sentinel and data
+connection. Rust's current Fred transport cannot propagate one fixed SNI value
+to all dynamically discovered nodes, so Sentinel mode suppresses address-
+derived SNI while rustls still verifies every peer against the configured fixed
+identity. Redis and Sentinel must therefore terminate TLS directly rather than
+depend on DNS-SNI virtual-host routing in front of dynamically announced
+addresses. An IP `server_name` is verified as an IP SAN and is not sent as SNI.
 
 Catalog has no external Path lock or lock-related configuration. Replace and
 Delete are atomic Redis-order last-write-wins operations. Patch performs an
@@ -73,19 +97,19 @@ Non-numeric JSON fields are fixed as follows:
 | --- | --- | --- | --- |
 | `version` | string | required, exactly `v1` | JSON contract version |
 | `redis.mode` | string | required, `standalone` or `sentinel` | Redis topology; Cluster is rejected |
-| `redis.addresses` | string array | required, at least one `host:port`; Standalone exactly one | Redis or Sentinel endpoints; IPv6 uses `[address]:port` |
+| `redis.addresses` | string array | required, at least one `host:port`; Standalone exactly one | Valid UTF-8 Redis or Sentinel endpoints; IPv6 uses `[address]:port`, host rejects whitespace/control bytes, port is ASCII digits in 1..65535 |
 | `redis.master_name` | string | Sentinel required; Standalone empty | Sentinel monitored service name |
 | `redis.auth.username/password` | string | empty | Redis data-node ACL identity |
 | `redis.sentinel_auth.username/password` | string | empty; Standalone must remain empty | Sentinel's independent ACL identity |
 | `redis.tls.enabled` | boolean | false | Enables TLS 1.2+ with mandatory peer verification |
 | `redis.tls.system_roots` | boolean | true | Includes operating-system trust roots; false requires a non-empty `ca_file` |
-| `redis.tls.server_name` | string | empty, at most 253 UTF-8 bytes | Overrides certificate/SNI service name for Standalone only; empty uses the connection host |
+| `redis.tls.server_name` | string | Standalone empty; Sentinel TLS required; at most 253 UTF-8 bytes | Fixed certificate identity; Standalone empty uses its configured host, while every Sentinel/data-node certificate must contain the configured Sentinel identity |
 | `redis.tls.ca_file` | string | empty, at most 4096 UTF-8 bytes | PEM CA bundle appended to the selected trust set; each file is capped at 1 MiB |
 | `redis.tls.cert_file` | string | empty, at most 4096 UTF-8 bytes | PEM client certificate chain; must be configured together with `key_file` |
 | `redis.tls.key_file` | string | empty, at most 4096 UTF-8 bytes | Unencrypted PEM client private key; must be configured together with `cert_file` |
 | `registration.zone` | string | required when object exists; `[A-Za-z]{1,32}` | Registration/Selector management isolation |
 | `catalog.zone` | string | required when object exists; `[A-Za-z]{1,32}` | Catalog management isolation |
-| `catalog.local_store_path` | string | omitted disables; explicit empty rejected | Disposable local Catalog checkpoint path |
+| `catalog.local_store_path` | string | omitted disables; explicit empty rejected; 1..4096 UTF-8 bytes, no NUL | Disposable local Catalog checkpoint path |
 
 When changing a value, update this table together with the owning Go, Rust, and
 C++ configuration structure methods and their tests, then rerun the C# facade
@@ -100,10 +124,7 @@ exposes no separate defaults/ranges constants API.
 | `redis.pool.min_connections` | `count` | 1 | 1 | 1024 | `default` | 连接池保持的最少连接数 |
 | `redis.pool.max_connections` | `count` | 4 | 1 | 1024 | `default` | 连接池允许的最多连接数 |
 | `redis.pool.idle_timeout_ms` | `duration_ms` | 10000 | 1000 | 3600000 | `default` | 空闲连接被回收前允许保持的时长 |
-| `redis.reconnect.initial_delay_ms` | `duration_ms` | 100 | 10 | 5000 | `default` | 连接建立或恢复连续失败后的基础延迟 |
-| `redis.reconnect.max_delay_ms` | `duration_ms` | 5000 | 100 | 30000 | `default` | 连接建立或恢复退避的最大延迟 |
-| `redis.reconnect.multiplier` | `multiplier` | 2 | 1 | 8 | `default` | 连接建立或恢复延迟的指数增长倍数 |
-| `redis.reconnect.jitter_percent` | `percent` | 10 | 0 | 50 | `value` | 连接建立或恢复延迟的随机抖动百分比 |
+| `redis.reconnect.delay_ms` | `duration_ms` | 100 | 10 | 30000 | `default` | Redis驱动重新建立物理连接前的固定等待，不重放业务命令 |
 | `registration.error_buffer_capacity` | `count` | 16 | 1 | 1024 | `default` | Registration领域异步诊断缓冲容量 |
 | `registration.buffer_capacity` | `count` | 8 | 1 | 256 | `default` | 单个Registration Fields邮箱同时接纳的最多结果等待者 |
 | `registration.min_renew_interval_ms` | `duration_ms` | 100 | 10 | 60000 | `default` | 允许配置的最短显式或自动续期间隔 |

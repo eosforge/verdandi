@@ -16,6 +16,16 @@ internal static unsafe partial class NativeMethods
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     internal static partial uint AbiVersion();
 
+    /// <summary>查询当前原生运行库是否实现指定的稳定字符串能力。</summary>
+    [LibraryImport(LibraryName, EntryPoint = "verdandi_c_has_capability")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int HasCapability(NativeStringView capability);
+
+    /// <summary>离线校验严格 v1 JSON，不读取 TLS 文件或建立连接。</summary>
+    [LibraryImport(LibraryName, EntryPoint = "verdandi_configuration_validate_json")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    internal static partial int ConfigurationValidateJson(NativeBytesView json, NativeError* error);
+
     /// <summary>从严格 JSON 打开根 Client，并通过输出地址转移一个句柄。</summary>
     [LibraryImport(LibraryName, EntryPoint = "verdandi_client_open_json")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

@@ -115,9 +115,14 @@ impl Config {
             return Err(Error::field(Code::Invalid, "catalog.recovery.jitter_percent"));
         }
 
-        // 检查点路径检查：None 禁用本地检查点；Some 必须包含非空路径。
-        if self.local_store_path.as_ref().is_some_and(|path| path.as_os_str().is_empty()) {
-            return Err(Error::field(Code::Invalid, "catalog.local_store_path"));
+        // 检查点路径检查：None 禁用；Some 必须是 1..4096 字节 UTF-8 且不含 NUL。
+        if let Some(path) = &self.local_store_path {
+            let Some(text) = path.to_str() else {
+                return Err(Error::field(Code::Invalid, "catalog.local_store_path"));
+            };
+            if text.is_empty() || text.len() > 4096 || text.as_bytes().contains(&0) {
+                return Err(Error::field(Code::Invalid, "catalog.local_store_path"));
+            }
         }
         Ok(())
     }

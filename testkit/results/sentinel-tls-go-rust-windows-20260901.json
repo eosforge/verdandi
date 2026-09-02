@@ -1,0 +1,41 @@
+{
+  "acknowledged_loss_master": 16382,
+  "client_runtime": "win-x64",
+  "elapsed_seconds": 33.435,
+  "go_selector_generations": [
+    1,
+    2,
+    3
+  ],
+  "go_uuid_preserved": "96fad68dcfa33d42949f9f03e3ea3e01",
+  "initial_master": 16381,
+  "recovered_master": 16383,
+  "redis_version": "8.8.0",
+  "rust_selector_generations": [
+    1,
+    2,
+    3
+  ],
+  "rust_uuid_preserved": "d84c43d57f40f2c85a8351f151731200",
+  "scenarios": [
+    "TLS 1.2+ with a private CA and one fixed cluster certificate identity",
+    "wrong fixed TLS certificate identity rejected by Go and Rust",
+    "Go and Rust SDK Sentinel integration suites",
+    "three Sentinels with separate ACL credentials",
+    "minority Sentinel unavailable and stale configuration",
+    "forced acknowledged write loss and full-state republish",
+    "Pub/Sub generation recovery",
+    "SCRIPT FLUSH reload",
+    "all Sentinels unavailable",
+    "primary loss while all Sentinels are unavailable",
+    "Sentinel restart and second promotion",
+    "Go/Rust cross-language convergence"
+  ],
+  "status": "pass",
+  "tls": {
+    "certificate_san_excludes_node_addresses": true,
+    "enabled": true,
+    "fixed_server_name": "verdandi.test",
+    "sentinel_and_data_planes": true
+  }
+}

@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/eosforge/verdandi/configuration.schema.json",
   "title": "Verdandi v1 configuration",
+  "$comment": "Structural contract only. UTF-8 byte ceilings, endpoint syntax, NUL rejection and cross-field numeric relationships are enforced by each SDK loader and the shared conformance corpus.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -210,29 +211,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "initial_delay_ms": {
+        "delay_ms": {
           "type": "integer",
           "minimum": 10,
-          "maximum": 5000,
-          "default": 100
-        },
-        "max_delay_ms": {
-          "type": "integer",
-          "minimum": 100,
           "maximum": 30000,
-          "default": 5000
-        },
-        "multiplier": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 8,
-          "default": 2
-        },
-        "jitter_percent": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 50,
-          "default": 10
+          "default": 100
         }
       }
     },
@@ -328,11 +311,31 @@
                 "minLength": 1
               },
               "tls": {
-                "properties": {
-                  "server_name": {
-                    "const": ""
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "enabled": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ]
+                    },
+                    "then": {
+                      "required": [
+                        "server_name"
+                      ],
+                      "properties": {
+                        "server_name": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
                   }
-                }
+                ]
               }
             }
           }
@@ -591,7 +594,8 @@
         },
         "local_store_path": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 4096
         }
       }
     }

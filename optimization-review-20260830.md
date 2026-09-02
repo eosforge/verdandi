@@ -2,13 +2,17 @@
 
 Date: 2026-08-30
 
+Scope update, 2026-09-02: generic Campaign/Leader election was withdrawn from
+every release target. References to deferred or future Leader work below are
+historical and no longer describe the roadmap.
+
 ## 1. Outcome
 
 The current Go, Rust, Lua, configuration, and shared testkit implementation has
 been consolidated, rebuilt, and qualified without adding C++ or Leader. C++ is
 explicitly deferred until the Redis driver, codec boundary, asynchronous
-runtime, and public ownership model are selected. Leader remains a separate
-future module.
+runtime, and public ownership model are selected. Leader was a separate future
+module at this checkpoint and was withdrawn on 2026-09-02.
 
 The accepted implementation has these principal changes:
 

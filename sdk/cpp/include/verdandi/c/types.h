@@ -77,6 +77,10 @@ typedef int(VERDANDI_C_CALL* verdandi_field_visitor)(void* context, verdandi_str
 /// 返回当前库实现的稳定 C ABI 版本。
 VERDANDI_C_API uint32_t VERDANDI_C_CALL verdandi_c_abi_version(void);
 
+/// 查询当前运行库是否实现一项稳定字符串能力；未知、空值或无效视图返回零。
+/// 成功只说明代码能力存在，不代表当前 Redis、证书、ACL 或网络部署已经可用。
+VERDANDI_C_API int VERDANDI_C_CALL verdandi_c_has_capability(verdandi_string_view capability);
+
 /// 把错误结构重置为没有错误；允许传入空指针。
 VERDANDI_C_API void VERDANDI_C_CALL verdandi_error_reset(verdandi_error* value);
 

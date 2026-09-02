@@ -19,14 +19,16 @@ Maintain this file with the work it describes:
 
 ## 2. Current Snapshot
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 - Project: Verdandi, a language-neutral distributed coordination protocol and
   SDK ecosystem.
 - Repository: public `git@github.com:eosforge/verdandi.git`.
 - Local path: `D:\laconis\verdandi`.
-- Git state: the commit containing this entry is the first complete `alpha`
-  source freeze and is pushed to the public `alpha` branch for review.
+- Git state: the public `alpha` branch contains the first complete source
+  freeze; the configuration normalization and cross-platform Sentinel TLS
+  qualification recorded on 2026-09-01 remain local uncommitted review changes
+  and have not been pushed.
 - Release state: the maintainer selected `0.1.0` as the current
   non-production Alpha version for distributed development and controlled
   service integration. Its source and documentation are published only on the
@@ -36,7 +38,7 @@ Last updated: 2026-09-01
   stable protocol version: `1.0`. The `0.x` protocol remains experimental.
 - Initial backend modes: Redis Standalone and Redis Sentinel.
 - Alpha backend baseline: Redis Open Source 8.0.0 or later in a qualified Redis
-  8 line, using Hash field TTL for Campaign readiness.
+  8 line, using Hash field TTL for Registry membership.
 - Explicitly unsupported with no scheduled support horizon: Redis Cluster;
   multi-primary merging is also outside Alpha.
 - Implemented native SDKs: Go, Rust, and C++23, while protocol and repository
@@ -48,8 +50,9 @@ Last updated: 2026-09-01
   source-generated P/Invoke, SafeHandle ownership, strong field types,
   transactional Selector policies, and typed Catalog APIs; it likewise owns no
   duplicate runtime or state machine. Its independent .NET 8/10 Linux x64 ACL
-  Standalone and two-promotion Sentinel regressions pass; remaining C# release
-  gates are platform/RID packaging, NativeAOT/trimming, TLS, direct
+  Standalone regression and Windows/Linux x64 two-promotion Sentinel TLS
+  regressions pass; remaining C# release
+  gates are platform/RID packaging, NativeAOT/trimming, live mutual TLS, direct
   cross-language peers, performance, and endurance. Concurrent root disposal
   and forced finalizer cleanup now have direct Standalone regressions.
   The C++ driver and codec/runtime model are fixed for Alpha; release
@@ -116,6 +119,12 @@ Last updated: 2026-09-01
   Selector, and Entry loading; static generic codec function instances remove
   retained closures. Registration construction is 240 B/three allocations in
   the current smoke benchmark, down from 288 B/five allocations.
+- Go Selector now has an optional `verdandi-refgen` callback-only reference
+  facade. Generated read views contain copied scalar values and opaque
+  read-only slice wrappers rather than Attr/Data pointers; generated Editors
+  stage Data fields under the existing transaction token. `WithOne`/`WithAny`
+  return no detached values and commit only edits attached to final selected
+  values. The ordinary detached APIs remain unchanged.
 - The coding standard now requires language-native SDK implementations rather
   than source-shape symmetry. Go operation Contexts remain explicit parameters
   and are not stored in long-lived Clients; Rust uses owner-held hierarchical
@@ -125,6 +134,13 @@ Last updated: 2026-09-01
   phase, production source uses detailed Chinese declaration/block comments;
   test source is explicitly excluded and release readiness triggers conversion
   back to concise standard English.
+- Windows x64 and Linux x64 now use `sdk/cpp/build.ps1` and
+  `sdk/cpp/build.sh` as the normal C++/C ABI/Legacy developer entry points.
+  They detect but never install toolchains, isolate all generated content under
+  ignored repository-level `build/`, support verified offline dependency
+  caches, and emit detailed standard-English console output while retaining
+  temporary Chinese source comments for maintainer review. Go, Rust, and C#
+  remain outside these native build scripts; C# only loads a shared DLL/SO.
 - Go Registration and Catalog now share the root `Encoder.Encode() (Fields,
   error)` and `Decoder.Decode(Fields) error` contracts. Encoders transfer one
   complete field map to Verdandi; raw `Fields` deep-clones caller storage. No
@@ -134,14 +150,14 @@ Last updated: 2026-09-01
   Go's raw Registration compatibility surface into tests, and fixes empty-value
   field comparison. A clean isolated Redis 8.8 regression passes all 13 suites
   with 4,579 processed commands and no background-thread exception.
-- Accepted coordination scope now includes paginated service discovery,
-  strict zero-or-one Leader election, and persistent Catalog KV
-  synchronization. Campaign readiness token and immutable Version are
-  independent from Registration; Sentinel Leader activation requires a
-  deployment-provided durable fence.
-- Campaign/Leader remains unimplemented. Existing Registration Version fields,
-  Register/Update behavior, and their qualification remain unchanged and are
-  outside the Leader task.
+- Accepted coordination scope includes paginated service discovery and
+  persistent Catalog KV synchronization. Generic Campaign/Leader election is
+  explicitly excluded from every target, including `1.0.0`. Redis Sentinel
+  primary failover remains backend recovery and does not expose application
+  leadership.
+- Existing Registration Version fields, Register/Update behavior, and their
+  qualification remain unchanged. Version is application metadata and has no
+  built-in election semantics.
 - Registration scale history includes separate five-minute profiles with 500
   live Registrations renewing or updating once per second, the earlier raw-core
   7,263.649-second/3,750,000-Update fault soak, the direct typed 7,608.409-
@@ -161,10 +177,11 @@ Last updated: 2026-09-01
   reconnect, checkpoint, decoder, exact-base writer contention, WSL/Linux race,
   and cross-language interoperability. C++ passes strict static/shared GCC,
   C11 and C++11/14/17 C-ABI consumers, clang-tidy, ASan/UBSan, authenticated
-  Standalone native/C-ABI integration, and an isolated plain Sentinel
-  startup/integration smoke. The same compiled core passes two promotions
-  through C ABI v1 and C#, while a direct native-API two-promotion harness,
-  Windows DLL/MSVC, and TLS remain open. No service, Node, or Campaign ceiling is encoded; each Catalog
+  Standalone native/C-ABI integration, and isolated plain/TLS Sentinel
+  startup/integration smoke. The same compiled core passes two TLS promotions
+  through C ABI v1 and C# on Windows and Linux, while a direct native-API
+  two-promotion harness, live mutual TLS, and automated packaging remain open.
+  No service or Node ceiling is encoded; each Catalog
   Path is one bounded complete value.
 - License: MIT. The source-freeze commit is public; the `0.1.0` preparation and
   post-freeze endurance evidence remain uncommitted until explicitly approved.
@@ -215,8 +232,6 @@ Acceptance criteria:
   mutation rules without a service-count ceiling.
 - Freeze Catalog raw Value fields, independent LWW Patch, explicit tombstone,
   Hash/ZSET/Read floor recovery, optional checkpoint, and Subscriber state rules.
-- Freeze Campaign readiness, Leader term, version retirement, local validity,
-  and exact-token release rules.
 - Freeze configuration chunk, manifest, and current-pointer schemas.
 - Freeze the Redis ACL trust boundary and supported raw-write behavior.
 - Define the ACK transition table and stable string error taxonomy.
@@ -229,20 +244,19 @@ Current progress:
 
 - Drafted PRT-001 through PRT-015 in `decisions.md`, covering Redis-native field
   contracts, versioning, identifier encoding, ACL trust boundaries, Redis
-  keys, version-aware Leader terms, scalable registry synchronization, Catalog
+  keys, the withdrawn election proposal, scalable registry synchronization, Catalog
   KV, lease math, ACK transitions, stable errors, resource limits, Command
   deferral, the Redis qualification baseline, and executable artifacts.
 - Reviewed the current Hermes Redis Service, Primary, and KV design sources.
-  Verdandi now adopts their subscribe-before-snapshot, revision recovery,
-  immutable local view, readiness/ownership token, version retirement, and
-  exact-release invariants, while replacing the Hermes 100-instance atomic
+  Verdandi adopts the discovery-relevant subscribe-before-snapshot, revision
+  recovery, and immutable local-view invariants, while replacing the Hermes 100-instance atomic
   snapshot boundary with pagination, per-Registration event coalescing, and a
   subscribed-connection PING/PONG fence. Catalog uses Hash/ZSET/Read recovery
   with an explicit tombstone floor and full-operation Pub/Sub.
-- Maintainer direction now fixes three architectural points: include Leader
-  election, include Catalog KV synchronization, and encode no maximum service,
-  Node, or Campaign count. Catalog is one complete Value.
-- Maintainer direction now also fixes Redis 8 Hash-field readiness and Catalog
+- Maintainer direction fixes persistent Catalog KV synchronization, no maximum
+  service or Node count, and explicit exclusion of generic Leader election.
+  Catalog is one complete Value.
+- Maintainer direction also fixes Redis 8 Hash-field Registry membership and Catalog
   Replace/Patch/Delete with strict Patch bases, complete deletion, and no TTL.
 - Maintainer direction calls one Node's leased record a `Registration`, calls
   the Zone/Type collection a `Registry`, and stores every Registration
@@ -252,8 +266,8 @@ Current progress:
   field contracts, and protocol-owned Lua define supported mutation behavior.
 - The 2026-09-01 maintainer direction supersedes the original start-at-1.0
   choice: the implemented SDK preview is `0.1.0`, without production or stable
-  compatibility promises. Stable `1.0.0` remains reserved for Leader and the
-  complete release contract. The intended first stable protocol is `1.0`;
+  compatibility promises. Stable `1.0.0` remains reserved for the complete
+  supported release contract. The intended first stable protocol is `1.0`;
   capability negotiation remains absent.
 - Maintainer direction replaces stable `node_id` plus `generation_id` with one
   SDK-generated UUID per process start. Registrations use
@@ -265,7 +279,7 @@ Current progress:
   Every changed shared-state mutation advances its Redis-owned scope revision;
   Catalog publishes the complete operation and retains authoritative field and
   delete revision indexes. Publisher restart does not
-  reset the revision. Generic election remains independent from publication.
+  reset the revision.
 - Redis key names, data types, and meanings are forward-compatible and
   unversioned. Compatible evolution adds optional fields or new keys.
 - Maintainer direction rejects end-to-end signatures for desired state,
@@ -275,7 +289,7 @@ Current progress:
 - Zone is application-supplied SDK configuration validated as 1 through
   32 case-sensitive ASCII letters. The SDK generates each Registration UUID as
   exactly 32 lowercase hexadecimal characters.
-- Type and election-domain IDs use the accepted common ASCII form. Catalog uses
+- Type IDs use the accepted common ASCII form. Catalog uses
   one bounded Part/ID Path; no opaque business-key token remains.
 - A Registration is one Hash exposed as `Meta`, `Attr`, and `Data`. Meta is
   exactly `@uuid`, `@revision`, `@timestamp`, `@ttl`, and `@version`; immutable
@@ -283,12 +297,7 @@ Current progress:
   patchable. Registration revision is a content version; Attr and TTL are
   immutable for the UUID lifetime. Catalog live Hashes reserve revision,
   Replace revision, shape, and encoded bytes around opaque application fields.
-- Each Campaign owns a fresh private readiness token and positive safe-integer election
-  Version independently from Registration. Every SDK uses the same numeric
-  comparison; Redis validates exact Campaign readiness/ownership and equal
-  versions are first-successful-claim wins. Changing Version requires a new
-  Campaign; there is no version revision or comparator contract ID.
-- Registry membership and Campaign readiness use Redis 8 per-field TTL. The
+- Registry membership uses Redis 8 per-field TTL. The
   separate version/expiry index proposals are removed.
 - Registration SDK operations, Lua mutations, and Registry Pub/Sub use aligned
   `register`, `update`, `renew`, and `unregister` string kinds. Register is
@@ -312,12 +321,6 @@ Current progress:
   only on the current healthy generation, and never reuses that UUID.
 - Desired targets are typed partition, service-within-partition, or exact
   Registration scopes. Multiple Publishers use Redis-revision last-write-wins.
-- Exact Leader release emits one latency-only wake. One domain has zero or one
-  application-active Leader; uncertainty immediately closes admission and
-  handoff may leave the domain without a Leader. Standalone uses its configured
-  Redis primary as term authority. Sentinel requires a deployment-provided
-  durable fence after Redis claim and before callback admission; missing or
-  failed fencing remains unavailable.
 - Catalog snapshots expose synchronized health, revision, tomb version, floor,
   deleted state, and the complete Value. Last-known data is labeled
   unsynchronized; optional local storage is a disposable checkpoint.
@@ -373,7 +376,7 @@ Acceptance criteria:
 
 - Add valid and invalid Redis field/scalar vectors.
 - Add exact hashes, Registration identity, revision, Registry
-  scan/PING/event, Catalog LWW/mirror, Leader term, manifest, lease, ACK,
+  scan/PING/event, Catalog LWW/mirror, manifest, lease, ACK,
   and error vectors.
 - Add real Redis Standalone fixtures for Lua, TTL, and Pub/Sub loss.
 - Add a reproducible Sentinel primary/replica/failover harness.
@@ -414,19 +417,14 @@ Current progress:
 
 ### P3: Complete remaining Standalone coordination in the first SDKs
 
-Outcome: extend the completed Client/Register/Selector slice so Go and Rust also
-implement the remaining Publisher, Campaign/Leader, desired state,
-load policy, and acknowledgements against one Standalone protocol.
+Outcome: extend the completed Client/Register/Selector/Catalog slice so the
+supported SDKs also complete observed-load synchronization, desired state, and
+acknowledgements against one Standalone protocol.
 
 Acceptance criteria:
 
 - Keep the completed Catalog Hash/ZSET/Pub/Sub and checkpoint qualification passing as
   later Publisher capabilities are added.
-- Concurrent Campaigns produce one exact Leader term, version handoff does not
-  overlap callbacks, and stale tokens cannot renew or release a later term.
-- Sentinel Campaigns never invoke application callbacks without acquiring the
-  same durable fence, and primary-generation changes produce zero overlapping
-  application-active terms.
 - Cross-language tests extend beyond Registration/Selector to every new data
   class.
 
@@ -505,11 +503,13 @@ Acceptance criteria:
 - Pass the complete protocol vector corpus.
 - Pass production/consumption tests with at least one existing SDK.
 - Add no new protocol behavior solely to imitate a language-specific library.
-- For C#, retain qualified per-RID native packages, Windows/macOS coverage,
-  NativeAOT/trimming checks, TLS, performance, cross-language peers, and
-  endurance before release claims. Concurrent disposal/finalizer pressure and the
-  independent Linux x64 Standalone and two-promotion Sentinel gates are
-  complete.
+- For C#, retain the qualified Windows/Linux Redis/Sentinel TLS matrix and add
+  qualified per-RID native packages, NativeAOT/trimming checks, live mutual
+  TLS, performance, cross-language peers, and endurance before production
+  release claims. Windows DLL offline loading, concurrent disposal/finalizer
+  pressure, the independent Linux x64 Standalone gate, and both platform
+  server-authenticated TLS two-promotion Sentinel gates are complete. macOS is
+  intentionally unsupported.
 
 ## 5. Blockers and Open Decisions
 
@@ -521,9 +521,6 @@ Acceptance criteria:
   Register/reset fan-out above eight subscribers, sustained driver-ingress
   pressure, and connection-generation RedisClock under delayed responses and
   clock steps.
-- Freeze the cross-language mandatory Sentinel fence-adapter API and qualify at
-  least one durable advisory-lock implementation. The strict zero-or-one policy
-  itself is accepted.
 - Add application-owned Catalog codec vectors as consumers select concrete
   scalar, array, map, or schema types. The raw Value contract deliberately does
   not impose one codec.
@@ -532,19 +529,246 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 
 - Validate Registry subscribe/scan/PING buffers and Catalog ZSET pages, floor,
   checkpoint, timeout, and complete-value limits under the accepted workload.
-- Establish and pass p95/p99 latency, failover-time, recovery-time, and resource
-  objectives for the accepted capacity workload.
 
 ## 6. Completed Work
+
+### 2026-09-02: Add reproducible Windows and Linux native build entry points
+
+- Added C++-owned PowerShell and Bash entry points with explicit `doctor`,
+  `configure`, `build`, `test`, and `all` stages; dev/check/release profiles;
+  static/shared linkage; system/auto/managed dependency policy; bounded
+  parallelism; offline operation; and dry-run plans.
+- Added exact existing-toolchain discovery and compile/link probes. Windows
+  selects the generator matching the installed Visual Studio major and finds
+  vcpkg through explicit settings, environment/PATH, bounded common locations,
+  or Visual Studio. Linux selects native GCC/Clang and Ninja/Make and never
+  consumes a Windows `vcpkg.exe` through WSL. Neither script installs tools.
+- Kept OpenSSL 3.0+ system/vcpkg-owned. Added a pinned vcpkg manifest and
+  checksum-locked Boost 1.92, SQLite 3.53.4, and yyjson source fallbacks with
+  bounded downloads, verified shared archives, isolated extraction/object
+  trees, and network-forbidden offline configuration.
+- Standardized all script-owned help, selected-environment diagnostics,
+  commands, warnings, errors, elapsed-time results, and completion summaries in
+  detailed English. Windows requests English MSBuild output and Linux uses the
+  C locale. Both script sources retain detailed Chinese parameter,
+  function, lifecycle, and non-obvious-block comments for current review.
+- Added `sdk/cpp/BUILD.md`, C++23/OpenSSL probe sources, deterministic output
+  layout documentation, and an atomic non-secret `build/environment.json`
+  diagnostic manifest. Shared builds print and record the exact DLL/SO path;
+  C# compiles independently and loads that file from its environment, RID
+  native directory, or application directory. Generated content is ignored at
+  repository level.
+- Passed PowerShell 5.1/current parser and execution, Bash syntax/help/dry-run,
+  Windows and Linux native doctor probes, cold offline configuration, online/
+  offline cache switching, invalid-vcpkg and missing-cache negative cases,
+  and Windows/Linux Release C++/C ABI/Legacy tests. Each native run reported
+  six passes and three endpoint-owned skips. After removing the unnecessary
+  managed orchestration, the final Windows shared library separately passed
+  the existing C# net8/net10 tests; native scripts neither detect nor invoke
+  .NET.
+- Recorded the machine-readable matrix in
+  `testkit/results/native-build-entry-20260902.json`. No commit or push was
+  performed.
+
+### 2026-09-02: Add the generated Go Selector reference API
+
+- Added `ReferenceSelector.WithOne/WithAny`, callback-scoped Candidates,
+  Candidate/Selection handles, token-fenced Editors, and delayed read-only
+  slice wrappers on top of the existing Selector operation gate, synchronized
+  view, field-granular overlay, and remote reconciliation.
+- Preserved `One`, `Any`, `Find`, and `Snapshot` as the detached safe surface.
+  The new path builds no complete legacy Candidate slice, returns no detached
+  result, and encodes only edited final selections. Unselected edits and every
+  callback/context/foreign/duplicate/encoding/shape/limit failure roll back
+  atomically.
+- Added `cmd/verdandi-refgen`. It reads application Attr/Data structs and emits
+  only strongly typed read accessors, setters, slice cloning, aliases, and a
+  wrapper constructor. It generates no wire codec, Redis logic, or business
+  policy, rejects field forms whose alias safety cannot be proven, and checks
+  the committed compile fixture byte-for-byte with `-check`.
+- Added unit coverage for selected-only commit, all rollback paths, stale and
+  foreign values, token wrap, unavailable/closed/nil boundaries, panic cleanup,
+  mutable slice ownership, atomic multi-selection failure, concurrent
+  serialization, generator rejection/check mode, and generated public API
+  compilation. Added a random-Zone live Redis 8.8 integration covering service
+  discovery, local `Power++`, remote correction, and final zero owned keys.
+- Passed `go generate ./...`, all Go tests shuffled ten times, `go vet ./...`,
+  complete WSL/Linux `go test -race ./...`, and 100 shuffled targeted reference
+  race repetitions. The isolated live reference integration passed on Redis
+  8.8 without global flush or Catalog operations.
+- Ten one-second WSL/Linux samples over 500 candidates measured ordinary versus
+  reference `One` medians of 11.460 versus 10.178 microseconds with allocations
+  reduced from 28 to four. Eight-of-500 `Any` medians were 13.875 versus 5.587
+  microseconds, with the reference path at zero steady-state allocations. The
+  reference operations intentionally do not construct detached return values.
+- Updated API, SDK, coding, decision, README, and durable project documents. No
+  commit or push was performed.
+
+### 2026-09-02: Withdraw generic Campaign and Leader election
+
+- Removed generic Campaign readiness, Leader election, distributed locking,
+  ownership terms, election keys/actions/roles, and Sentinel fencing adapters
+  from every project and release target, including `1.0.0`.
+- Kept Redis Sentinel primary discovery and failover as supported transport
+  recovery. It does not expose an application Leader API or an exclusivity
+  guarantee.
+- Kept Registration `@version` as application-defined metadata with no built-in
+  election semantics.
+- Updated the current architecture, protocol, release, SDK, decision, and work
+  documents. Historical entries remain only as superseded design history.
+- This was a documentation and comment correction. No runtime behavior was
+  changed, no test campaign was required, and no commit or push was performed.
+
+### 2026-09-01: Re-audit and regress the complete multilingual Alpha tree
+
+- Reviewed the current Lua, Go, Rust, C++23, C ABI/Legacy, C#, configuration,
+  and testkit production surfaces under their language-native ownership rules.
+  Unchanged Go and Lua hot paths were retained where current measurement did
+  not justify speculative rewrites.
+- Made the C++ reactor runtime independently shared so last-reference release
+  on the I/O thread cannot leave `io_context::run()` referring to a destroyed
+  Driver implementation. Command connections that exceed the completion
+  fallback are now removed from the pool before cancellation and can never be
+  reused while a handler remains pending.
+- Made Rust Catalog internal Mutex/RwLock poison recovery consistent for
+  no-callback exception-safe critical sections, added a deliberate poison
+  regression, and made checkpoint restoration publish complete view/byte state
+  before its cursor.
+- Removed avoidable C# Fields construction objects and copies, made raw Key
+  writes borrow and pin their synchronous Span directly, and added a live empty-
+  value regression. The independent harness now selects the exact host native
+  runtime rather than inheriting an accidental library path.
+- Made Windows C++ shared builds copy transitive runtime DLLs next to the target,
+  so clean CTest and managed consumers do not depend on a preconfigured PATH.
+- Passed final Go format/vet/unit/Linux-race gates; Rust format, strict Clippy,
+  warning-denied rustdoc, current tests and Rust 1.85 check; C++ GCC/MSVC static/
+  shared, C++11/14/17, format, clang-tidy and ASan/UBSan gates; and C# net8/net10
+  format/analyzer/zero-warning Release gates.
+- Passed the complete isolated Redis 8.8 Standalone matrix, C# independent
+  Standalone matrix, direct C++ Windows/Linux TLS smokes, C# Windows/Linux TLS
+  two-promotion matrices, Go/Rust Linux TLS two-promotion matrix, and Catalog
+  two-promotion matrix. All structured results report `pass`; the Catalog run
+  ended at revision 10 with zero keys.
+- Recorded current Linux Go benchmark ranges and the detailed scores,
+  strengths, deductions, and release boundary in
+  `optimization-review-20260901.md`; the machine summary is
+  `testkit/results/optimization-regression-20260901.json`.
+- The changed working tree does not inherit the earlier frozen source's
+  twelve-hour qualification. No commit or push was performed.
+
+### 2026-09-01: Complete Windows and Linux Sentinel TLS qualification
+
+- Extended the isolated Go/Rust, direct C++23, and C# Sentinel harnesses with
+  explicit `win-x64`/`linux-x64` client-runtime selection while retaining the
+  same remote Redis 8.8 fixture, private CA, fixed `verdandi.test` identity,
+  separate Redis/Sentinel ACL users, and run-owned cleanup.
+- Qualified native Windows x64 Go and Rust through the complete two-promotion
+  matrix: wrong identity rejection, acknowledged-write-loss repair,
+  `SCRIPT FLUSH`, total Sentinel loss, primary loss, recovery, UUID
+  preservation, and Selector generations `1 -> 2 -> 3` all passed.
+- Qualified WSL/Ubuntu 24.04 Linux x64 Go 1.27 and Rust 1.98 through the same
+  complete matrix. Go was already present; with explicit maintainer approval,
+  Rust was installed for the WSL user through the official minimal rustup
+  profile. No system-wide package or Windows toolchain was installed.
+- Qualified direct C++23 root/Registration/Selector/Catalog/checkpoint TLS
+  integration on both MSVC shared Release and GCC shared Release. Both runtimes
+  rejected the wrong certificate identity and ended at `DBSIZE=0`; the direct
+  C++23 two-promotion campaign remains a separate open gate.
+- Qualified C# net8.0/net10.0 self-contained peers on Windows x64 and Linux x64
+  through the full two-promotion TLS matrix. The Windows run loaded the
+  generated MSVC DLL plus its yyjson/OpenSSL runtime dependencies; both
+  platforms ended at `DBSIZE=0`.
+- Hardened cross-runtime orchestration by shell-quoting WSL environment values,
+  mapping the CA path, isolating the Linux Rust target cache, and resolving the
+  Windows yyjson DLL directory. The remote-Sentinel Go leak gate ignores only
+  named standard-library DNS resolver frames left by canceled go-redis
+  discovery; SDK-owned goroutines remain fully checked.
+- Wrote six platform-qualified result files under `testkit/results/` and
+  retained the three unsuffixed Linux files only as historical evidence.
+  A final read-only host audit found no labeled containers or networks, no
+  `verdandi-sentinel-it-*` directory, and no listener on the six fixture ports.
+  Created no commit and performed no push.
+
+### 2026-09-01: Qualify the existing Windows toolchain and exclude macOS
+
+- Confirmed the existing machine provides Visual Studio Community 2026, MSVC
+  19.51, Windows SDK 26100, CMake 4.4, VS Ninja/LLVM, Go 1.27, Rust 1.98,
+  .NET 10, and vcpkg OpenSSL 3.6.0. No toolchain or dependency was installed.
+- Added explicit MSVC UTF-8 compilation and a Windows 10 minimum so temporary
+  Chinese source comments and Boost.Asio platform selection remain deterministic
+  under `/W4 /WX /permissive-`.
+- Fixed one production local-shadow warning, one compile-time unreachable path,
+  one test shadow, and Windows-only CRT warnings without weakening production
+  diagnostics.
+- Built and tested x64 static Debug and shared Release. Both CTest matrices
+  accepted 9/9 tests; the Release DLL exports `verdandi_c_abi_version` and
+  `verdandi_c_has_capability`. Windows .NET 8 and .NET 10 directly loaded the
+  generated DLL and passed offline configuration/capability tests.
+- Reran Linux GCC Debug, shared Release, ASan/UBSan, and format gates after the
+  portability changes. At this checkpoint live Windows Redis/Sentinel TLS and
+  automated packaging remained open; the later cross-platform TLS entry above
+  closes the former. macOS is explicitly unsupported and is not a release gate.
+- Created no commit and performed no push.
+
+### 2026-09-01: Implement fixed-identity Sentinel TLS and C ABI capability discovery
+
+- Replaced the C++ Sentinel+TLS rejection with a fixed certificate-identity
+  contract shared by Go, Rust, C++23, C ABI, Legacy, and C#. TLS-enabled
+  Sentinel requires non-empty `server_name`, and every Sentinel/data-node
+  certificate must contain that same identity.
+- Kept full certificate-chain, validity, handshake-signature, and identity
+  verification. C++ reapplies DNS SNI from `SSL_CTX` at every OpenSSL handshake
+  so Boost.Redis discovery/reconnect streams inherit it. Rust delegates normal
+  validation to WebPKI with the configured identity and disables Fred's
+  address-derived Sentinel SNI; SNI virtual-host routing is outside that path.
+- Added optional private-CA TLS mode to the isolated Sentinel fixture. Its leaf
+  SAN contains only `verdandi.test`, never the announced IP; Sentinel, Redis,
+  and replication links all use TLS.
+- Go and Rust rejected a deliberately wrong identity and passed two promotions,
+  acknowledged-write-loss repair, `SCRIPT FLUSH`, total Sentinel loss and
+  recovery with UUID preservation and Selector generations `1 -> 2 -> 3`.
+- C++ shared Release rejected the wrong identity and passed Root,
+  Registration, Selector, Catalog and checkpoint integration. C# net8.0 and
+  net10.0 then passed the full two-promotion TLS matrix through the same core;
+  every fixture cleaned its keys, containers, directories and ports.
+- Added `verdandi_c_has_capability` plus C++11 Legacy `has_capability` and C#
+  `Runtime.Supports`. Seven string capabilities are currently published;
+  known, unknown, empty and invalid inputs are covered. The shared library now
+  exports 90 `verdandi_*` symbols.
+- Updated the schema, shared conformance corpus, API/configuration docs, review,
+  and machine results. Automated native/NuGet RID packaging is explicitly
+  deferred; no commit or push was performed.
+
+### 2026-09-01: Normalize and harden every configuration boundary
+
+- Reduced root Redis reconnect to one portable fixed delay while preserving
+  independent Selector/Catalog business-recovery backoff and the no-command-
+  retry rule.
+- Normalized endpoint, Unicode, strict JSON shape, required-field, numeric,
+  TLS, bounded-file and path semantics across Go, Rust and C++23.
+- Kept each native API idiomatic: Go topology/TLS structs, Rust Duration/PathBuf
+  with isolated Fred URL mapping, and direct C++23 chrono/filesystem values.
+- Added a C ABI offline configuration validator and used it from C# after
+  strict UTF-16 and 1-MiB preflight, avoiding a second managed DTO/validator.
+- Expanded the shared configuration corpus to 41 semantic and six raw cases.
+- Passed Go test/vet/race, Rust current/MSRV tests and strict Clippy, C++ static/
+  shared/sanitizer tests plus format/tidy, and C# net8/net10 build and Linux
+  offline execution. External Redis tests were intentionally not run in this
+  focused pass and remain recorded as skipped, not passed.
+- Recorded the full audit, scores and limitations in
+  `configuration-review-20260901.md` and the structured evidence in
+  `testkit/results/configuration-normalization-20260901.json`.
+- Created no commit and performed no push.
 
 ### 2026-09-01: Prepare the bounded 0.1.0 Alpha release identity
 
 - Adopted `0.1.0` as the first non-production Alpha line for distributed SDK
   development and controlled service integration. This does not claim stable
   API, ABI, wire compatibility, availability, or production readiness.
-- Reserved stable `1.0.0` for a release that includes qualified Leader
-  election, standard English production-source comments, and the complete
-  stable acceptance matrix. The bounded preview does not weaken those gates.
+- At that checkpoint, stable `1.0.0` was reserved for qualified Leader election,
+  standard English production-source comments, and the complete acceptance
+  matrix. The Leader portion was superseded by the 2026-09-02 scope decision;
+  the comment and remaining acceptance gates still apply.
 - Migrated active repository URLs, Go import/module paths, schema identity, and
   language package metadata to `github.com/eosforge/verdandi`; set Rust, CMake,
   C#, and local Go peer dependencies to `0.1.0`.
@@ -625,6 +849,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   to **9.3/10**, and left platform binaries, NuGet/RID packaging,
   NativeAOT/trimming, TLS, direct C# cross-language peers, performance,
   concurrent disposal/finalizer pressure, and soak as explicit release gates.
+  The 2026-09-01 fixed-identity TLS entry supersedes only the TLS gate.
   Created no commit and performed no push.
 
 ### 2026-08-31: Add the managed C# facade over C ABI v1
@@ -1853,7 +2078,10 @@ by the 2026-08-28 single-slot Fields mailbox entry above.
   parity follow-up supersedes its typed-Rust limitation.
 - Created no commit and performed no push.
 
-### 2026-08-24: Decouple Campaign and election Version from Registration
+### 2026-08-24: Decouple Campaign and election Version from Registration (superseded)
+
+- Superseded on 2026-09-02 when generic Campaign/Leader election was withdrawn
+  from every release target. The following bullets are historical only.
 
 - Audited the inherited Hermes Primary dependency. Hermes needs a live service
   registration because its Primary is a routable service snapshot; Verdandi's
@@ -1892,7 +2120,10 @@ by the 2026-08-28 single-slot Fields mailbox entry above.
   fixture verified empty state and removed only its random container.
 - Created no commit and performed no push.
 
-### 2026-08-24: Freeze SDK-driven strict Leader policy
+### 2026-08-24: Freeze SDK-driven strict Leader policy (superseded)
+
+- Superseded on 2026-09-02 when generic Campaign/Leader election was withdrawn
+  from every release target. The following bullets are historical only.
 
 - **Partially superseded:** strict zero-or-one activation, SDK-driven selection,
   and Sentinel fencing remain accepted. The Registration Version conclusions
@@ -2352,6 +2583,6 @@ by the 2026-08-28 single-slot Fields mailbox entry above.
 - Recorded the current physical source inventory, detailed regression evidence,
   scores, strengths, deductions, and follow-up direction in
   `optimization-review-20260830.md`. C++ was deferred at this historical
-  checkpoint and is superseded by the 2026-08-31 entry; Leader remains outside
-  this completed scope.
+  checkpoint and is superseded by the 2026-08-31 entry; Leader was outside this
+  completed scope and was withdrawn on 2026-09-02.
 - Created no commit and performed no push.

@@ -370,25 +370,35 @@ func (selector *Selector[A, D]) Close(ctx context.Context) error {
 	return selector.core.Close(ctx)
 }
 
-// begin 取得当前已同步不可变视图，并初始化一个可供回调使用的选择事务。
+// begin 取得当前已同步不可变视图，并初始化旧版安全拷贝选择 API 使用的借用列表。
 func (selector *Selector[A, D]) begin() (*selectionTransaction[A, D], Candidates[A, D], error) {
+	transaction, err := selector.beginTransaction()
+	if err != nil {
+		return nil, nil, err
+	}
+	return transaction, selector.borrowCandidates(transaction), nil
+}
+
+// beginTransaction 取得当前已同步不可变视图，并复用内部条目缓冲初始化一次选择事务。
+// 它不构造 Candidate 列表，供生成的引用型热路径按需访问条目。
+func (selector *Selector[A, D]) beginTransaction() (*selectionTransaction[A, D], error) {
 	if selector.closed.Load() || selector.core == nil {
-		return nil, nil, protocolError(codeClosed, "", 0)
+		return nil, protocolError(codeClosed, "", 0)
 	}
 	view := selector.core.view.Load()
 	if view == nil || !view.synchronized {
-		return nil, nil, protocolError(codeUnavailable, "selector", 0)
+		return nil, protocolError(codeUnavailable, "selector", 0)
 	}
-	return selector.beginView(view)
+	return selector.beginTransactionView(view)
 }
 
-// beginView 对 view 先对账本地 overlay，再复用内部切片构造借用 Candidate 列表。
+// beginTransactionView 对 view 先对账本地 overlay，再复用内部切片构造强类型事务条目。
 // 调用方必须已持有 selector.operation；返回事务只在下一次 begin 前有效。
-func (selector *Selector[A, D]) beginView(view *selectorView) (*selectionTransaction[A, D], Candidates[A, D], error) {
+func (selector *Selector[A, D]) beginTransactionView(view *selectorView) (*selectionTransaction[A, D], error) {
 	if err := selector.reconcileOverlays(view); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	// 递增 token 使上一次回调保留的 Candidate 立即失效；溢出时清空去重代号后从一重新开始。
+	// 递增 token 使上一次回调保留的借用值立即失效；溢出时清空去重代号后从一重新开始。
 	transaction := &selector.transaction
 	transaction.view = view
 	transaction.token++
@@ -402,21 +412,15 @@ func (selector *Selector[A, D]) beginView(view *selectorView) (*selectionTransac
 		transaction.entries = make([]selectionEntry[A, D], 0, len(view.orderedRecords))
 		previousEntries = 0
 	}
-	previousCandidates := len(selector.candidates)
-	candidates := selector.candidates[:0]
-	if cap(candidates) < len(view.orderedRecords) {
-		candidates = make(Candidates[A, D], 0, len(view.orderedRecords))
-		previousCandidates = 0
-	}
 	// 记录中的强类型投影在同步发布前已构造；这里仅断言类型并叠加本地预测 overlay。
 	for _, record := range view.orderedRecords {
 		attr, ok := record.projectedAttr.(A)
 		if !ok {
-			return nil, nil, protocolError(codeCorrupt, "attr", record.meta.Revision)
+			return nil, protocolError(codeCorrupt, "attr", record.meta.Revision)
 		}
 		data, ok := record.projectedData.(D)
 		if !ok {
-			return nil, nil, protocolError(codeCorrupt, "data", record.meta.Revision)
+			return nil, protocolError(codeCorrupt, "data", record.meta.Revision)
 		}
 		dataFields := record.data
 		if overlay, exists := selector.overlays[record.meta.UUID]; exists {
@@ -429,10 +433,26 @@ func (selector *Selector[A, D]) beginView(view *selectorView) (*selectionTransac
 			data:       data,
 			dataFields: dataFields,
 		})
-		index := len(transaction.entries) - 1
+	}
+	// 只在视图缩小时清除复用数组尾部，避免已删除记录被旧指针长期保活；稳定视图不增加清零遍历。
+	if len(transaction.entries) < previousEntries {
+		clear(transaction.entries[len(transaction.entries):previousEntries])
+	}
+	return transaction, nil
+}
+
+// borrowCandidates 为旧版 One/Any/Snapshot 构造完整借用切片；生成的引用型 API 不走此步骤。
+func (selector *Selector[A, D]) borrowCandidates(transaction *selectionTransaction[A, D]) Candidates[A, D] {
+	previousCandidates := len(selector.candidates)
+	candidates := selector.candidates[:0]
+	if cap(candidates) < len(transaction.entries) {
+		candidates = make(Candidates[A, D], 0, len(transaction.entries))
+		previousCandidates = 0
+	}
+	for index := range transaction.entries {
 		entry := &transaction.entries[index]
 		candidates = append(candidates, Candidate[A, D]{
-			Meta:        record.meta,
+			Meta:        entry.record.meta,
 			Attr:        &entry.attr,
 			Data:        &entry.data,
 			transaction: transaction,
@@ -440,15 +460,11 @@ func (selector *Selector[A, D]) beginView(view *selectorView) (*selectionTransac
 			index:       index,
 		})
 	}
-	// 只在视图缩小时清除复用数组尾部，避免已删除记录被旧指针长期保活；稳定视图不增加清零遍历。
-	if len(transaction.entries) < previousEntries {
-		clear(transaction.entries[len(transaction.entries):previousEntries])
-	}
 	if len(candidates) < previousCandidates {
 		clear(candidates[len(candidates):previousCandidates])
 	}
 	selector.candidates = candidates
-	return transaction, candidates, nil
+	return candidates
 }
 
 // prepareSelected 调整 Any 去重代号切片长度，尽量复用已分配容量。

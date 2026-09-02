@@ -72,7 +72,9 @@ Include the complete boundary with:
 
 The modules are:
 
-- `types.h`: string/byte/Fields views, owned results, errors, and ABI version;
+- `types.h`: string/byte/Fields views, owned results, errors, ABI version, and
+  runtime capability query;
+- `configuration.h`: connection-free strict JSON validation;
 - `client.h`: strict JSON configuration, root Client, and raw Key/Hash access;
 - `registration.h`: Registration domain and delayed publish/update lifecycle;
 - `selector.h`: borrowed transactional candidates, One/Any, detached results,
@@ -85,10 +87,39 @@ not maintain another configuration structure or another default/range table;
 the C++23 implementation parses JSON and constructs the same native validated
 configuration used by the native API.
 
+`verdandi_configuration_validate_json` performs the complete version, shape,
+range, topology, TLS-relationship, Registration, Selector, and Catalog checks
+without reading certificate files, opening a checkpoint, connecting to Redis,
+or allocating an opaque handle. It is also the single validator used by the
+C# `Configuration.Validate` facade.
+
 Attr, Data, and Catalog records cross the boundary as flattened binary
 `verdandi_fields_view` values. Verdandi copies input before returning. The C
 caller owns its application structures and scalar codecs; Redis never parses a
 JSON record value.
+
+## Runtime capabilities
+
+`verdandi_c_has_capability` performs an allocation-free exact lookup against
+the loaded native runtime. Unknown and empty names return zero. A nonzero result
+means that code path exists; it does not probe Redis, certificates, ACLs,
+network reachability, or deployment correctness.
+
+The current stable names are:
+
+- `catalog`;
+- `client`;
+- `configuration.json`;
+- `redis.commands`;
+- `redis.sentinel_tls`;
+- `registration`;
+- `selector`.
+
+Names are strings so additive modules do not consume numeric enum values or
+change public structure layouts. This is local library feature detection, not
+Redis wire-protocol capability negotiation. Bindings should treat an unknown
+name as unsupported and a missing function symbol as an incompatible older
+runtime.
 
 ## Ownership and lifetimes
 
@@ -150,7 +181,12 @@ The following rules apply to v1:
   version and an explicit compatibility plan.
 
 Current qualification covers strict GCC static and shared builds, C11 and
-C++11/14/17 consumers, exported Linux shared-library symbols, Redis 8.8 live
-Registration/Selector/Catalog behavior, and ASan/UBSan/leak checks. Windows
-DLL/MSVC, Clang, macOS, install/export packages, and an automated binary-ABI
-checker remain release gates.
+C++11/14/17 consumers, runtime capability queries, exported Linux shared-
+library symbols, Redis 8.8 live Registration/Selector/Catalog behavior,
+private-CA Sentinel TLS, and ASan/UBSan/leak checks. Windows MSVC static Debug
+and shared Release builds, C11/C++11 consumers, DLL exports, and .NET 8/10
+loading also pass offline. The Windows DLL additionally passes live private-CA
+Sentinel TLS directly through C++23 and the complete two-promotion matrix
+through C# net8.0/net10.0. Linux Clang, install/export packages, and an
+automated binary-ABI checker remain release gates. Automated package production
+is intentionally deferred. macOS is not a supported target.

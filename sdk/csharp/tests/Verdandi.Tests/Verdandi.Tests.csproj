@@ -8,5 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Verdandi/Verdandi.csproj" />
+    <None Include="../../../../testkit/conformance/v1/configuration.json"
+          Link="configuration-conformance.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

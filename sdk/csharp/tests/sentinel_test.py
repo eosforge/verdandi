@@ -21,15 +21,17 @@ CSHARP = REPOSITORY / "sdk" / "csharp"
 CPP = REPOSITORY / "sdk" / "cpp"
 sys.path.insert(0, str(REPOSITORY))
 
-from sdk.csharp.tests.standalone_test import build_native  # noqa: E402
+from sdk.csharp.tests.standalone_test import build_native as build_linux_native  # noqa: E402
 from testkit.sentinel.sentinel_test import (  # noqa: E402
     MASTER_NAME,
     REDIS_PORTS,
     SENTINEL_PORTS,
+    TLS_SERVER_NAME,
     Credentials,
     Peer,
     QualificationError,
     Remote,
+    TLSMaterial,
     Topology,
     parse_ready,
 )
@@ -41,8 +43,11 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--host", default="192.168.0.90")
     parser.add_argument("--ssh-user", default="ubuntu")
     parser.add_argument("--ssh-password-env", default="VERDANDI_TEST_SSH_PASSWORD")
+    parser.add_argument("--runtime", choices=("linux-x64", "win-x64"), default="linux-x64")
+    parser.add_argument("--vcpkg-root")
     parser.add_argument("--result-file")
     parser.add_argument("--keep-topology", action="store_true")
+    parser.add_argument("--tls", action="store_true")
     return parser.parse_args()
 
 
@@ -51,28 +56,31 @@ def alphabetic_zone() -> str:
     return "CSharpSentinel" + "".join(alphabet[value & 15] for value in secrets.token_bytes(10))
 
 
-def configuration(host: str, credentials: Credentials, zone: str) -> str:
+def configuration(host: str, credentials: Credentials, zone: str, tls: bool) -> str:
+    redis = {
+        "mode": "sentinel",
+        "addresses": [f"{host}:{port}" for port in SENTINEL_PORTS],
+        "master_name": MASTER_NAME,
+        "auth": {"username": "verdandi", "password": credentials.app},
+        "sentinel_auth": {
+            "username": "sentinel-client",
+            "password": credentials.sentinel_client,
+        },
+        "timeout_ms": 1_000,
+        "connect_timeout_ms": 250,
+        "reconnect": {"delay_ms": 10},
+    }
+    if tls:
+        redis["tls"] = {
+            "enabled": True,
+            "system_roots": False,
+            "server_name": TLS_SERVER_NAME,
+            "ca_file": "ca.crt",
+        }
     return json.dumps(
         {
             "version": "v1",
-            "redis": {
-                "mode": "sentinel",
-                "addresses": [f"{host}:{port}" for port in SENTINEL_PORTS],
-                "master_name": MASTER_NAME,
-                "auth": {"username": "verdandi", "password": credentials.app},
-                "sentinel_auth": {
-                    "username": "sentinel-client",
-                    "password": credentials.sentinel_client,
-                },
-                "timeout_ms": 1_000,
-                "connect_timeout_ms": 250,
-                "reconnect": {
-                    "initial_delay_ms": 10,
-                    "max_delay_ms": 100,
-                    "multiplier": 2,
-                    "jitter_percent": 0,
-                },
-            },
+            "redis": redis,
             "registration": {
                 "zone": zone,
                 "selector": {"sync_timeout_ms": 5_000},
@@ -87,10 +95,58 @@ def configuration(host: str, credentials: Credentials, zone: str) -> str:
     )
 
 
-def publish_peers(root: Path, config: str) -> dict[str, Path]:
-    native = CPP / "build" / "gcc-shared-release" / "libverdandi_cpp.so"
-    if not native.is_file():
-        raise QualificationError(f"native Release runtime is missing: {native}")
+def build_native(runtime: str, vcpkg_root: str | None) -> list[dict[str, object]]:
+    if runtime == "linux-x64":
+        return build_linux_native()
+    if os.name != "nt":
+        raise QualificationError("win-x64 C# Sentinel tests require a Windows host")
+
+    root = Path(vcpkg_root or os.environ.get("VCPKG_ROOT", ""))
+    toolchain = root / "scripts" / "buildsystems" / "vcpkg.cmake"
+    if not toolchain.is_file():
+        raise QualificationError("--vcpkg-root must identify an existing vcpkg checkout for win-x64")
+
+    build = CPP / "build" / "msvc-shared-release"
+    commands = (
+        (
+            "C# native Windows Release configure",
+            [
+                "cmake",
+                "-S",
+                str(CPP),
+                "-B",
+                str(build),
+                "-G",
+                "Visual Studio 18 2026",
+                "-A",
+                "x64",
+                f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
+                "-DBUILD_SHARED_LIBS=ON",
+                "-DVERDANDI_BUILD_TESTS=ON",
+            ],
+        ),
+        (
+            "C# native Windows Release build",
+            ["cmake", "--build", str(build), "--config", "Release"],
+        ),
+    )
+    return [run_command(name, command, CPP, os.environ.copy()) for name, command in commands]
+
+
+def publish_peers(root: Path, config: str, tls: TLSMaterial | None, runtime: str) -> dict[str, Path]:
+    if runtime == "win-x64":
+        native_directory = CPP / "build" / "msvc-shared-release" / "Release"
+        native_libraries = (
+            native_directory / "verdandi_cpp.dll",
+            CPP / "build" / "msvc-shared-release" / "_deps" / "yyjson-build" / "Release" / "yyjson.dll",
+            native_directory / "libssl-3-x64.dll",
+            native_directory / "libcrypto-3-x64.dll",
+        )
+    else:
+        native_libraries = (CPP / "build" / "gcc-shared-release" / "libverdandi_cpp.so",)
+    for native in native_libraries:
+        if not native.is_file():
+            raise QualificationError(f"native Release runtime is missing: {native}")
 
     outputs: dict[str, Path] = {}
     for framework in ("net8.0", "net10.0"):
@@ -106,7 +162,7 @@ def publish_peers(root: Path, config: str) -> dict[str, Path]:
                 "--framework",
                 framework,
                 "--runtime",
-                "linux-x64",
+                runtime,
                 "--self-contained",
                 "true",
                 "--output",
@@ -115,15 +171,28 @@ def publish_peers(root: Path, config: str) -> dict[str, Path]:
             CSHARP,
             os.environ.copy(),
         )
-        shutil.copy2(native, output / native.name)
+        for native in native_libraries:
+            shutil.copy2(native, output / native.name)
         (output / "configuration.json").write_text(config, encoding="utf-8")
+        if tls is not None:
+            (output / "ca.crt").write_text(tls.ca_certificate, encoding="ascii")
         outputs[framework] = output
     return outputs
 
 
-def peer_command(output: Path) -> tuple[list[str], Path, dict[str, str]]:
+def peer_command(output: Path, runtime: str, configuration_file: str = "configuration.json") -> tuple[list[str], Path, dict[str, str]]:
     environment = os.environ.copy()
     environment.pop("VERDANDI_TEST_SSH_PASSWORD", None)
+    if runtime == "win-x64":
+        if os.name != "nt":
+            raise QualificationError("win-x64 C# Sentinel peers require a Windows host")
+        environment["VERDANDI_NATIVE_LIBRARY"] = "./verdandi_cpp.dll"
+        environment["PATH"] = os.pathsep.join((str(output), environment.get("PATH", "")))
+        return (
+            [str(output / "Verdandi.Tests.exe"), "--peer", "--configuration-file", configuration_file],
+            output,
+            environment,
+        )
     if os.name == "nt":
         return (
             [
@@ -137,7 +206,7 @@ def peer_command(output: Path) -> tuple[list[str], Path, dict[str, str]]:
                 "./Verdandi.Tests",
                 "--peer",
                 "--configuration-file",
-                "configuration.json",
+                configuration_file,
             ],
             REPOSITORY,
             environment,
@@ -149,7 +218,7 @@ def peer_command(output: Path) -> tuple[list[str], Path, dict[str, str]]:
         }
     )
     return (
-        ["./Verdandi.Tests", "--peer", "--configuration-file", "configuration.json"],
+        ["./Verdandi.Tests", "--peer", "--configuration-file", configuration_file],
         output,
         environment,
     )
@@ -182,10 +251,33 @@ def close_peers(peers: list[Peer]) -> None:
         peer.close()
 
 
+def reject_wrong_identity(output: Path, runtime: str, config: str) -> None:
+    document = json.loads(config)
+    document["redis"]["tls"]["server_name"] = "wrong.verdandi.test"
+    (output / "wrong-configuration.json").write_text(
+        json.dumps(document, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    command, directory, environment = peer_command(output, runtime, "wrong-configuration.json")
+    completed = subprocess.run(
+        command,
+        cwd=directory,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=30,
+    )
+    if completed.returncode == 0:
+        raise QualificationError("C# Sentinel peer accepted the wrong fixed TLS certificate identity")
+
+
 def widen_sentinel_replica_window(topology: Topology) -> None:
     for name, port in zip(topology.sentinels, SENTINEL_PORTS, strict=True):
         command = (
-            f"docker exec {shlex.quote(name)} redis-cli -p {port} "
+            f"docker exec {shlex.quote(name)} redis-cli {topology.cli_tls_arguments()} -p {port} "
             f"--user sentinel-admin --pass {shlex.quote(topology.credentials.sentinel_admin)} "
             f"--no-auth-warning --raw SENTINEL SET {MASTER_NAME} down-after-milliseconds 5000"
         )
@@ -200,7 +292,7 @@ def print_topology_diagnostics(topology: Topology) -> None:
             print(f"{name}: stopped", file=sys.stderr)
             continue
         prefix = (
-            f"docker exec {shlex.quote(name)} redis-cli -p {port} "
+            f"docker exec {shlex.quote(name)} redis-cli {topology.cli_tls_arguments()} -p {port} "
             f"--user sentinel-client --pass {shlex.quote(topology.credentials.sentinel_client)} "
             "--no-auth-warning --raw"
         )
@@ -227,18 +319,22 @@ def main() -> int:
     credentials = Credentials.generate()
     zone = alphabetic_zone()
     remote = Remote(options.host, options.ssh_user, password)
-    topology = Topology(remote, run_id, credentials)
+    tls = TLSMaterial.generate() if options.tls else None
+    topology = Topology(remote, run_id, credentials, tls=tls)
     peers: list[Peer] = []
     try:
-        native_suites = build_native()
+        native_suites = build_native(options.runtime, options.vcpkg_root)
         with contextlib.ExitStack() as resources:
             temporary = resources.enter_context(tempfile.TemporaryDirectory(prefix="verdandi-csharp-sentinel-", ignore_cleanup_errors=True))
             resources.callback(close_peers, peers)
-            outputs = publish_peers(Path(temporary), configuration(options.host, credentials, zone))
+            config = configuration(options.host, credentials, zone, options.tls)
+            outputs = publish_peers(Path(temporary), config, tls, options.runtime)
             topology.deploy()
             widen_sentinel_replica_window(topology)
+            if options.tls:
+                reject_wrong_identity(next(iter(outputs.values())), options.runtime, config)
             for framework, output in outputs.items():
-                command, directory, environment = peer_command(output)
+                command, directory, environment = peer_command(output, options.runtime)
                 peers.append(Peer(framework, command, directory, environment))
 
             uuids = [parse_ready(peer.read("READY")) for peer in peers]
@@ -307,7 +403,11 @@ def main() -> int:
                 "status": "pass",
                 "language": "C#",
                 "frameworks": list(outputs),
+                "client_runtime": options.runtime,
                 "redis_version": "8.8.0",
+                "tls": options.tls,
+                "fixed_server_name": TLS_SERVER_NAME if options.tls else None,
+                "wrong_identity_rejected": options.tls,
                 "initial_master": old_master,
                 "acknowledged_loss_master": new_master,
                 "recovered_master": final_master,
@@ -322,6 +422,7 @@ def main() -> int:
                     )
                 },
                 "scenarios": [
+                    "private-CA Sentinel and data-plane TLS with one fixed certificate identity" if options.tls else "plain Sentinel transport",
                     "separate Redis and Sentinel ACL credentials",
                     "two managed target frameworks in one topology",
                     "forced acknowledged write loss and desired-state repair",
@@ -331,7 +432,14 @@ def main() -> int:
                     "primary loss while all Sentinels are unavailable",
                     "Sentinel restart and second promotion",
                 ],
-                "native_suites": native_suites,
+                "native_suites": [
+                    {
+                        "name": suite["name"],
+                        "status": suite["status"],
+                        "elapsed_seconds": suite["elapsed_seconds"],
+                    }
+                    for suite in native_suites
+                ],
                 "elapsed_seconds": round(time.monotonic() - started, 3),
             }
             serialized = json.dumps(result, indent=2, sort_keys=True)

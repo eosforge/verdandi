@@ -4,8 +4,8 @@
 
 Verdandi separates reusable distributed coordination from the business logic
 of Bifrost, Hermes, and future consumers. It supplies leased discovery,
-observed-state synchronization, version-aware leadership, persistent Catalog
-KV synchronization, desired-state distribution, acknowledgement, and local-view
+observed-state synchronization, persistent Catalog KV synchronization,
+desired-state distribution, acknowledgement, and local-view
 mechanics. Consuming systems retain their own configuration schemas, routing
 rules, admission policy, and traffic behavior.
 
@@ -22,7 +22,7 @@ of the protocol, not the protocol's source of truth.
                                |  Publisher  |
                                +-------------+
                                       |
-                  Catalog/desired/Leader state + wake signals
+                     Catalog/desired state + wake signals
                                       |
                                       v
       +-----------+           +---------------+           +-----------+
@@ -42,7 +42,7 @@ of the protocol, not the protocol's source of truth.
                              consuming application
 ```
 
-Publisher, Node, Selector, Campaign/Leader, and Catalog Subscriber are
+Publisher, Node, Selector, and Catalog Subscriber are
 logical roles. One process may hold more than one role, but each role retains
 separate permissions and ownership. For example, a Bifrost Dispatcher can
 publish its own Registration while using a Selector to consume eligible Proxy
@@ -161,24 +161,7 @@ expiry, or authoritative absence removes the prediction with the Registration.
 This mechanism reduces short-term load skew but is not a distributed capacity
 reservation.
 
-### 4.4 Campaign and Leader
-
-The Campaign owns one immutable positive safe-integer version and one private
-readiness token/lease. The token is its internal lifetime identity; no separate
-public Campaign ID is required. It does not create or require a Registration.
-Each ownership attempt creates a different private Leader token. The Leader
-term owns synchronous admission validity, renewal, callback cancellation,
-joined cleanup, and exact-token release. Readiness and ownership tokens remain
-distinct from each other and from routing identity.
-
-Every SDK uses the same numeric comparison and claims only when its local ready
-view considers the Campaign best. Changing priority requires closing that
-Campaign and creating another readiness-token/version pair. A larger Campaign
-version causes cooperative retirement; it never deletes a live owner before
-that owner's application cleanup completes. Equal versions use the first
-successful Redis claim.
-
-### 4.5 Catalog Publisher and Subscriber
+### 4.4 Catalog Publisher and Subscriber
 
 A Catalog Publisher encodes an application-owned Value, Array, or Map and uses
 one atomic last-write-wins Replace, one exact-base Patch, or complete Delete.
@@ -188,7 +171,7 @@ covered values in memory, applies full Pub/Sub operations when safe, repairs
 from authoritative Hash/ZSET state, and labels retained data non-synchronized
 as soon as continuity becomes uncertain.
 
-### 4.6 Administrator
+### 4.5 Administrator
 
 The Administrator owns Zone creation, identities, Redis/Sentinel ACLs,
 credential rotation, and later changes to the non-expiring Zone capacity
@@ -202,8 +185,6 @@ administrative mutation remains outside ordinary Register/Selector APIs.
 | Registration | owning process UUID | Publisher, authorized Selectors | exact Registration UUID plus lease |
 | Registry | owning Registrations | Publisher, authorized Selectors | atomic Registration, membership, expiry, and event mutation |
 | Catalog Value | authorized Publishers | Catalog Subscribers and authorized Nodes | raw Hash plus global/field revisions and live/deleted ZSET indexes |
-| Campaign readiness | owning Campaign | election Lua | immutable version plus readiness token and lease |
-| Leader term | winning Campaign token | Leader Selector and authorized consumers | private ownership token and lease |
 | Desired configuration | Publisher | targeted Nodes | Redis ACL, target, and revision |
 | Acknowledgement | owning Registration | Publisher | exact Registration UUID |
 | Zone configuration | Registration Client, Administrator | Registration Clients | Redis Hash plus last-valid local snapshot |
@@ -410,8 +391,8 @@ Each process owns one small Registration Hash at
 `@name`, immutable SDK-supplied Attr uses `.name`, and mutable fixed-structure
 Data is unprefixed. The complete Meta set is UUID, per-Registration revision,
 Redis timestamp, TTL, and positive integer Registration Version. No absolute
-expiry field is stored. Leader election uses its separate Campaign Version and
-does not inspect Registration Version.
+expiry field is stored. Registration Version is application-defined metadata;
+Verdandi stores and synchronizes it without applying election semantics.
 
 The Registry Hash and Pub/Sub channel are both
 `verdandi:registry:<zone>:<type>`. Its UUID field stores the current
@@ -544,51 +525,13 @@ application-owned field codecs. A Subscriber may therefore hold unrelated
 configuration types at different Paths. Delete changes a stable Entry to
 Deleted; later Replace reuses the same Entry identity.
 
-## 11. Leadership
+## 11. Excluded Leader Election
 
-Leadership follows the hardened Hermes separation of concerns:
-
-1. A fresh private readiness token identifies one in-process Campaign lifetime
-   independently from service discovery.
-2. Its readiness lease proves that Campaign worker is actively eligible.
-3. A different private ownership token identifies one exact Leader term.
-4. The SDK applies the protocol-defined immutable positive-integer version
-   comparison and attempts claim only when its local ready view considers the
-   candidate best.
-5. Redis atomically verifies the exact readiness token/version and empty
-   ownership; equal versions are first-successful-claim wins.
-6. A live owner is never preempted. When its SDK observes a preferred ready
-   version, local admission closes, cleanup joins, then
-   exact-token release permits replacement.
-7. Exact release emits one latency-only wake, while bounded retry and lease expiry
-   remain authoritative.
-8. Every election domain has zero or one application-active Leader; handoff,
-   cleanup, uncertainty, and fence acquisition may leave it without one.
-
-Redis 8 stores Campaign readiness as one independently expiring Hash field per
-private token. SDKs page it with `HSCAN` and maintain an immutable local ready
-view. Redis keeps no version-order index and has no stale index to sweep; a
-stale SDK view can therefore elect a lower version temporarily before
-converging. No candidate-count limit is encoded into the election contract.
-
-`LeaderTerm.Valid()` or its language equivalent checks both cancellation and a
-conservative monotonic deadline before every new application operation. Any
-uncertain renewal invalidates the term immediately. The SDK closes admission,
-cancels term-owned work, and joins application cleanup before releasing exact
-ownership or activating another local term. Verdandi has no availability mode
-that admits work through ownership uncertainty.
-
-Standalone uses its one configured Redis primary as the term authority.
-Sentinel is asynchronously replicated and can expose divergent old and promoted
-primary histories. A Sentinel Campaign therefore acquires one
-deployment-provided durable fence or advisory lock after Redis claim and before
-the application callback begins. The SDK keeps the claimed Redis term renewed
-while fence acquisition is pending, then exact-token confirms Redis ownership
-again after acquisition. Only that confirmed pair starts the callback; failed
-confirmation releases the fence without activating application work. The SDK
-holds an active fence through invalidation and joined cleanup. A replacement
-Redis claimant is not application-active while waiting for the same fence.
-Missing or failed fencing leaves the election domain without an active Leader.
+Verdandi does not provide generic Campaign readiness, Leader election,
+distributed locking, or application-term admission. Redis Sentinel promotion
+is only backend primary recovery. Applications requiring an exclusive leader
+must use a separately selected system and must not place its ownership token in
+Verdandi Registration or Catalog protocol fields.
 
 ## 12. Desired-State Reconciliation
 
@@ -688,12 +631,7 @@ That repair uses the bounded volatile cache of the same still-running process;
 it is not disk recovery and cannot resurrect a process after restart.
 Publisher applications must read the new primary and decide whether to issue a
 new semantic write; the core SDK does not retain a second durable source.
-Applications must not claim zero acknowledged-write loss. A primary-generation
-change immediately invalidates local Leader admission. A promoted primary that
-lost the Redis term may grant another claim, but a Sentinel claimant cannot
-become application-active until it acquires the same deployment-provided
-durable fence previously held by the old generation. Fence failure preserves
-safety by leaving the domain without an active Leader.
+Applications must not claim zero acknowledged-write loss.
 Every Redis primary change also invalidates subscriber revision watermarks and
 forces an authoritative reload, which may establish a lower revision when the
 promoted primary lost acknowledged state.
@@ -725,8 +663,8 @@ and publish a rejection ACK when authorized.
 
 ## 16. Scale and Partitioning
 
-No library-wide constant defines the maximum number of services, Nodes, or
-Campaigns. Each Catalog Path is one bounded complete value. Every Redis
+No library-wide constant defines the maximum number of services or Nodes. Each
+Catalog Path is one bounded complete value. Every Redis
 mutation, index page, fetch group, event buffer, queue, and decoder remains
 bounded independently. Complete local Subscriber state is bounded by covered
 Path count times the per-Path byte limit.
@@ -820,7 +758,7 @@ test vectors.
 The intended mapping is:
 
 ```text
-Bifrost Controller  -> Verdandi Publisher + Campaign + Catalog Writer
+Bifrost Controller  -> Verdandi Publisher + Catalog Writer
 Bifrost Proxy       -> Verdandi Node
 Bifrost Dispatcher  -> Verdandi Node + Selector<ProxyRegistration>
 ```

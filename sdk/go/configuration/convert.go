@@ -9,9 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	verdandi "github.com/eosforge/verdandi/sdk/go"
 	"github.com/eosforge/verdandi/sdk/go/catalog"
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 	"github.com/eosforge/verdandi/sdk/go/registration"
 )
 
@@ -38,6 +40,9 @@ func (config Config) RedisConfig() (verdandi.Config, error) {
 // redisConfig 根据 loadTLS 决定只校验 TLS 文件关系，还是同时读取文件并构造完整 tls.Config。
 func (config Config) redisConfig(loadTLS bool) (verdandi.Config, error) {
 	redis := config.Redis
+	if redis.Mode != "standalone" && redis.Mode != "sentinel" {
+		return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.mode", nil)
+	}
 	if err := checkAddresses(redis.Addresses); err != nil {
 		return verdandi.Config{}, err
 	}
@@ -65,19 +70,10 @@ func (config Config) redisConfig(loadTLS bool) (verdandi.Config, error) {
 	if err != nil {
 		return verdandi.Config{}, err
 	}
-	reconnectInitial, err := optionalDuration(redis.Reconnect.InitialDelayMS, 100, "redis.reconnect.initial_delay_ms", 10, 5000)
-	if err != nil {
-		return verdandi.Config{}, err
+	if poolMin > poolMax {
+		return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.pool.min_connections", nil)
 	}
-	reconnectMax, err := optionalDuration(redis.Reconnect.MaxDelayMS, 5000, "redis.reconnect.max_delay_ms", 100, 30_000)
-	if err != nil {
-		return verdandi.Config{}, err
-	}
-	reconnectMultiplier, err := optionalInt(redis.Reconnect.Multiplier, 2, "redis.reconnect.multiplier", 1, 8)
-	if err != nil {
-		return verdandi.Config{}, err
-	}
-	reconnectJitter, err := optionalIntPointer(redis.Reconnect.JitterPercent, 10, "redis.reconnect.jitter_percent", 0, 50)
+	reconnectDelay, err := optionalDuration(redis.Reconnect.DelayMS, 100, "redis.reconnect.delay_ms", 10, 30_000)
 	if err != nil {
 		return verdandi.Config{}, err
 	}
@@ -95,17 +91,20 @@ func (config Config) redisConfig(loadTLS bool) (verdandi.Config, error) {
 			IdleTimeout:    poolIdle,
 		},
 		Reconnect: verdandi.ReconnectConfig{
-			InitialDelay:  reconnectInitial,
-			MaxDelay:      reconnectMax,
-			Multiplier:    reconnectMultiplier,
-			JitterPercent: reconnectJitter,
+			Delay: reconnectDelay,
 		},
 	}
 	// 拓扑检查同时拒绝无意义的另一模式字段，避免不同语言静默忽略同一 JSON 的不同部分。
 	switch redis.Mode {
 	case "standalone":
-		if len(redis.Addresses) != 1 || redis.MasterName != "" || !emptyAuth(redis.SentinelAuth) {
-			return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.topology", nil)
+		if len(redis.Addresses) != 1 {
+			return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.addresses", nil)
+		}
+		if redis.MasterName != "" {
+			return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.master_name", nil)
+		}
+		if !emptyAuth(redis.SentinelAuth) {
+			return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.sentinel_auth", nil)
 		}
 		native.Standalone = &verdandi.Standalone{
 			Address:  redis.Addresses[0],
@@ -115,7 +114,7 @@ func (config Config) redisConfig(loadTLS bool) (verdandi.Config, error) {
 			TLS:      tlsConfig,
 		}
 	case "sentinel":
-		if strings.TrimSpace(redis.MasterName) == "" || strings.TrimSpace(redis.MasterName) != redis.MasterName {
+		if !utf8.ValidString(redis.MasterName) || strings.TrimSpace(redis.MasterName) == "" || strings.TrimSpace(redis.MasterName) != redis.MasterName || strings.IndexByte(redis.MasterName, 0) >= 0 {
 			return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.master_name", nil)
 		}
 		native.Sentinel = &verdandi.Sentinel{
@@ -128,8 +127,6 @@ func (config Config) redisConfig(loadTLS bool) (verdandi.Config, error) {
 			Database:         database,
 			TLS:              tlsConfig,
 		}
-	default:
-		return verdandi.Config{}, configError(verdandi.CodeInvalid, "redis.mode", nil)
 	}
 	if err := native.Check(); err != nil {
 		return verdandi.Config{}, err
@@ -152,14 +149,14 @@ func buildTLSConfig(source TLS, mode string, load bool) (*tls.Config, error) {
 		return nil, nil
 	}
 
-	// 固定 SNI 覆盖只适用于 Standalone；Sentinel 新主节点由驱动动态发现，跨语言无法保证同一覆盖语义。
+	// Standalone 可省略固定身份并使用连接地址；Sentinel 必须用一个不随动态发现结果变化的共享证书身份。
 	if source.ServerName != "" {
-		if strings.TrimSpace(source.ServerName) != source.ServerName || len(source.ServerName) > 253 || strings.IndexByte(source.ServerName, 0) >= 0 {
+		if !utf8.ValidString(source.ServerName) || strings.TrimSpace(source.ServerName) != source.ServerName || containsASCIIWhitespace(source.ServerName) || len(source.ServerName) > 253 || strings.IndexByte(source.ServerName, 0) >= 0 {
 			return nil, configError(verdandi.CodeInvalid, "redis.tls.server_name", nil)
 		}
-		if mode != "standalone" {
-			return nil, configError(verdandi.CodeInvalid, "redis.tls.server_name", nil)
-		}
+	}
+	if mode == "sentinel" && source.ServerName == "" {
+		return nil, configError(verdandi.CodeInvalid, "redis.tls.server_name", nil)
 	}
 
 	// 私有根文件可以补充或替代系统根；客户端证书链与私钥必须成对出现。
@@ -230,7 +227,7 @@ func buildTLSConfig(source TLS, mode string, load bool) (*tls.Config, error) {
 
 // checkTLSPath 要求非空 JSON 路径不超过 4096 个 UTF-8 字节且不含操作系统无法接受的 NUL。
 func checkTLSPath(path, field string) error {
-	if path != "" && (len(path) > 4096 || strings.IndexByte(path, 0) >= 0) {
+	if path != "" && (!utf8.ValidString(path) || len(path) > 4096 || strings.IndexByte(path, 0) >= 0) {
 		return configError(verdandi.CodeInvalid, field, nil)
 	}
 	return nil
@@ -260,6 +257,9 @@ func (config Config) RegistrationConfig() (*registration.Config, error) {
 		return nil, nil
 	}
 	source := config.Registration
+	if !validate.Zone(source.Zone) {
+		return nil, configError(verdandi.CodeInvalid, "registration.zone", nil)
+	}
 	native := &registration.Config{Zone: source.Zone}
 	var err error
 	if native.BufferCapacity, err = optionalInt(source.BufferCapacity, 8, "registration.buffer_capacity", 1, 256); err != nil {
@@ -289,6 +289,9 @@ func (config Config) RegistrationConfig() (*registration.Config, error) {
 	if err := fillSelector(native, source.Selector); err != nil {
 		return nil, err
 	}
+	if native.SelectorRecoveryInitialDelay > native.SelectorRecoveryMaxDelay {
+		return nil, configError(verdandi.CodeInvalid, "registration.selector.recovery.initial_delay_ms", nil)
+	}
 	if err := native.Check(); err != nil {
 		return nil, err
 	}
@@ -302,6 +305,9 @@ func (config Config) CatalogConfig() (*catalog.Config, error) {
 		return nil, nil
 	}
 	source := config.Catalog
+	if !validate.Zone(source.Zone) {
+		return nil, configError(verdandi.CodeInvalid, "catalog.zone", nil)
+	}
 	native := &catalog.Config{Zone: source.Zone}
 	var err error
 	if native.SyncTimeout, err = optionalDuration(source.SyncTimeoutMS, 30_000, "catalog.sync_timeout_ms", 100, 3_600_000); err != nil {
@@ -337,8 +343,11 @@ func (config Config) CatalogConfig() (*catalog.Config, error) {
 	if native.RecoveryJitterPercent, err = optionalIntPointer(source.Recovery.JitterPercent, 10, "catalog.recovery.jitter_percent", 0, 50); err != nil {
 		return nil, err
 	}
+	if native.RecoveryInitialDelay > native.RecoveryMaxDelay {
+		return nil, configError(verdandi.CodeInvalid, "catalog.recovery.initial_delay_ms", nil)
+	}
 	if source.LocalStorePath != nil {
-		if *source.LocalStorePath == "" {
+		if *source.LocalStorePath == "" || !utf8.ValidString(*source.LocalStorePath) || len(*source.LocalStorePath) > 4096 || strings.IndexByte(*source.LocalStorePath, 0) >= 0 {
 			return nil, configError(verdandi.CodeInvalid, "catalog.local_store_path", nil)
 		}
 		native.LocalStorePath = *source.LocalStorePath
@@ -471,19 +480,56 @@ func checkAddresses(addresses []string) error {
 		return configError(verdandi.CodeInvalid, "redis.addresses", nil)
 	}
 	for _, address := range addresses {
-		if strings.TrimSpace(address) != address || address == "" {
+		if !utf8.ValidString(address) || strings.TrimSpace(address) != address || address == "" || strings.IndexByte(address, 0) >= 0 {
 			return configError(verdandi.CodeInvalid, "redis.addresses", nil)
 		}
 		host, portText, err := net.SplitHostPort(address)
-		if err != nil || host == "" {
+		if err != nil || invalidEndpointHost(host) {
 			return configError(verdandi.CodeInvalid, "redis.addresses", err)
 		}
 		port, err := strconv.ParseUint(portText, 10, 16)
-		if err != nil || port == 0 {
+		if err != nil || port == 0 || !asciiDigits(portText) {
 			return configError(verdandi.CodeInvalid, "redis.addresses", err)
 		}
 	}
 	return nil
+}
+
+// asciiDigits 要求端口只含十进制数字，拒绝不同标准库可能接受的前导正号。
+func asciiDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index := range len(value) {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// invalidEndpointHost 统一拒绝主机部分中的 ASCII 空白和控制字符。
+func invalidEndpointHost(host string) bool {
+	if host == "" {
+		return true
+	}
+	for index := range len(host) {
+		if host[index] <= ' ' || host[index] == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+// containsASCIIWhitespace 判断文本是否含驱动可能各自处理的 ASCII 空白。
+func containsASCIIWhitespace(value string) bool {
+	for index := range len(value) {
+		switch value[index] {
+		case ' ', '\t', '\n', '\r', '\v', '\f':
+			return true
+		}
+	}
+	return false
 }
 
 // emptyAuth 判断一个 Sentinel 身份是否确实未配置。

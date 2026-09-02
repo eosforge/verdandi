@@ -40,6 +40,43 @@ fn synchronization_slot_does_not_lose_requests() {
 }
 
 #[test]
+fn internal_catalog_locks_recover_after_poison() {
+    let mutex = std::sync::Arc::new(std::sync::Mutex::new(1_u8));
+    let poisoned_mutex = std::sync::Arc::clone(&mutex);
+    assert!(
+        std::thread::spawn(move || {
+            let mut value = match poisoned_mutex.lock() {
+                Ok(value) => value,
+                Err(error) => error.into_inner(),
+            };
+            *value = 2;
+            panic!("poison mutex");
+        })
+        .join()
+        .is_err()
+    );
+    *mutex_lock(&mutex) = 3;
+    assert_eq!(*mutex_lock(&mutex), 3);
+
+    let rwlock = std::sync::Arc::new(std::sync::RwLock::new(4_u8));
+    let poisoned_rwlock = std::sync::Arc::clone(&rwlock);
+    assert!(
+        std::thread::spawn(move || {
+            let mut value = match poisoned_rwlock.write() {
+                Ok(value) => value,
+                Err(error) => error.into_inner(),
+            };
+            *value = 5;
+            panic!("poison rwlock");
+        })
+        .join()
+        .is_err()
+    );
+    *write_lock(&rwlock) = 6;
+    assert_eq!(*read_lock(&rwlock), 6);
+}
+
+#[test]
 fn notification_parser_is_bounded_and_rejects_trailing_data() {
     let path = match Path::new("routing", "parser") {
         Ok(path) => path,

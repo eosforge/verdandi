@@ -5,6 +5,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/address.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/host_name_verification.hpp>
@@ -18,9 +19,11 @@
 #include <openssl/ssl.h>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <chrono>
 #include <exception>
+#include <fstream>
 #include <future>
 #include <limits>
 #include <memory>
@@ -40,11 +43,48 @@ using boost::system::error_code;
 namespace {
 
 constexpr std::uint64_t protocol_integer_max = (std::uint64_t{1} << 53U) - 1U;
+constexpr std::size_t maximum_tls_file_bytes = std::size_t{1'024} * 1'024;
+constexpr std::size_t tls_read_chunk_bytes = std::size_t{16} * 1'024;
 
 struct endpoint {
     std::string host;
     std::string port;
 };
+
+/// SSL_CTX 级固定身份会被每个新 SSL 流继承，覆盖 Boost.Redis 在 Sentinel 发现和重连时重建的流。
+struct tls_identity {
+    std::string name;
+    bool send_sni;
+};
+
+void release_tls_identity(void*, void* value, CRYPTO_EX_DATA*, int, long, void*) noexcept {
+    delete static_cast<tls_identity*>(value);
+}
+
+[[nodiscard]] int tls_identity_index() noexcept {
+    static const int value = SSL_CTX_get_ex_new_index(0, nullptr, nullptr, nullptr, release_tls_identity);
+    return value;
+}
+
+/// OpenSSL 在构造 ClientHello 前发送 HANDSHAKE_START；在这里为每个重建的 SSL 对象重新设置固定 SNI。
+void apply_tls_identity(const SSL* stream, const int where, int) noexcept {
+    if ((where & SSL_CB_HANDSHAKE_START) == 0) {
+        return;
+    }
+    const auto index = tls_identity_index();
+    const auto* identity = index < 0 ? nullptr : static_cast<const tls_identity*>(SSL_CTX_get_ex_data(SSL_get_SSL_CTX(stream), index));
+    if (identity == nullptr || !identity->send_sni) {
+        return;
+    }
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    static_cast<void>(SSL_set_tlsext_host_name(const_cast<SSL*>(stream), identity->name.c_str()));
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
+}
 
 [[nodiscard]] endpoint split_endpoint(const std::string_view value) {
     if (value.front() == '[') {
@@ -67,6 +107,39 @@ void append_setup(redis::request& output, const auth_configuration& auth, const 
     }
 }
 
+/// 有界分块读取一份 PEM 文件；常见的小证书不预分配完整上限，超限时也不会继续增长缓冲。
+[[nodiscard]] result<std::vector<char>> read_tls_file(const std::filesystem::path& path, const std::string_view field) {
+    try {
+        std::ifstream input(path, std::ios::binary);
+        if (!input) {
+            return std::unexpected(error(code::unavailable, std::string(field)));
+        }
+
+        std::vector<char> content;
+        content.reserve(tls_read_chunk_bytes);
+        std::array<char, tls_read_chunk_bytes> buffer{};
+        while (input) {
+            input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+            const auto count = input.gcount();
+            if (count > 0) {
+                const auto amount = static_cast<std::size_t>(count);
+                if (amount > maximum_tls_file_bytes - content.size()) {
+                    return std::unexpected(error(code::capacity, std::string(field)));
+                }
+                content.insert(content.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(amount));
+            }
+        }
+        if (!input.eof()) {
+            return std::unexpected(error(code::unavailable, std::string(field)));
+        }
+        return content;
+    } catch (const std::bad_alloc&) {
+        return std::unexpected(error(code::capacity, std::string(field)));
+    } catch (const std::exception& exception) {
+        return std::unexpected(error(code::unavailable, std::string(field)).with_detail(exception.what()));
+    }
+}
+
 [[nodiscard]] redis::config make_wire_configuration(const redis_configuration& source) {
     redis::config output;
     const auto primary = split_endpoint(source.addresses.front());
@@ -77,7 +150,7 @@ void append_setup(redis::request& output, const auth_configuration& auth, const 
     output.connect_timeout = source.connect_timeout;
     output.ssl_handshake_timeout = source.connect_timeout;
     output.health_check_interval = source.timeout;
-    output.reconnect_wait_interval = source.reconnect.initial_delay;
+    output.reconnect_wait_interval = source.reconnect.delay;
     output.max_read_size = 256ULL * 1'024ULL * 1'024ULL;
     output.use_setup = true;
     append_setup(output.setup, source.auth, source.database);
@@ -110,20 +183,57 @@ void append_setup(redis::request& output, const auth_configuration& auth, const 
         }
 
         if (source.tls.system_roots) {
-            output.set_default_verify_paths();
+            try {
+                output.set_default_verify_paths();
+            } catch (const std::exception& exception) {
+                return std::unexpected(error(code::unavailable, "redis.tls.system_roots").with_detail(exception.what()));
+            }
         }
         if (!source.tls.ca_file.empty()) {
-            output.load_verify_file(source.tls.ca_file.string());
+            auto content = read_tls_file(source.tls.ca_file, "redis.tls.ca_file");
+            if (!content) {
+                return std::unexpected(content.error());
+            }
+            try {
+                output.add_certificate_authority(asio::buffer(*content));
+            } catch (const std::exception& exception) {
+                return std::unexpected(error(code::invalid, "redis.tls.ca_file").with_detail(exception.what()));
+            }
         }
         if (!source.tls.cert_file.empty()) {
-            output.use_certificate_chain_file(source.tls.cert_file.string());
-            output.use_private_key_file(source.tls.key_file.string(), asio::ssl::context::pem);
+            auto certificate = read_tls_file(source.tls.cert_file, "redis.tls.cert_file");
+            if (!certificate) {
+                return std::unexpected(certificate.error());
+            }
+            auto key = read_tls_file(source.tls.key_file, "redis.tls.key_file");
+            if (!key) {
+                return std::unexpected(key.error());
+            }
+            try {
+                output.use_certificate_chain(asio::buffer(*certificate));
+                output.use_private_key(asio::buffer(*key), asio::ssl::context::pem);
+            } catch (const std::exception& exception) {
+                return std::unexpected(error(code::invalid, "redis.tls.cert_file").with_detail(exception.what()));
+            }
         }
 
         const auto parsed = split_endpoint(source.addresses.front());
         const auto name = source.tls.server_name.empty() ? parsed.host : source.tls.server_name;
         output.set_verify_mode(asio::ssl::verify_peer);
         output.set_verify_callback(asio::ssl::host_name_verification(name));
+
+        // Sentinel TLS 始终提供固定 server_name；Standalone 缺省时使用唯一配置地址。
+        // IP 身份仍进行 SAN 校验，但不放入只允许主机名的 TLS SNI 扩展。
+        error_code address_error;
+        static_cast<void>(asio::ip::make_address(name, address_error));
+        auto identity = std::make_unique<tls_identity>(tls_identity{name, static_cast<bool>(address_error)});
+        const auto index = tls_identity_index();
+        auto* native = output.native_handle();
+        if (index < 0 || SSL_CTX_set_ex_data(native, index, identity.get()) != 1) {
+            return std::unexpected(error(code::unavailable, "redis.tls.server_name"));
+        }
+        identity.release();
+        SSL_CTX_set_info_callback(native, apply_tls_identity);
         return output;
     } catch (const std::exception& exception) {
         return std::unexpected(error(code::invalid, "redis.tls").with_detail(exception.what()));
@@ -138,20 +248,6 @@ void append_setup(redis::request& output, const auth_configuration& auth, const 
 
     try {
         auto output = std::make_shared<redis::connection>(io, std::move(*context), redis::logger(redis::logger::level::disabled));
-        if (source.tls.enabled) {
-            const auto parsed = split_endpoint(source.addresses.front());
-            const auto& name = source.tls.server_name.empty() ? parsed.host : source.tls.server_name;
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-            if (SSL_set_tlsext_host_name(output->next_layer().native_handle(), name.c_str()) != 1) {
-                return std::unexpected(error(code::invalid, "redis.tls.server_name"));
-            }
-#if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
-#endif
-        }
         return output;
     } catch (const std::exception& exception) {
         return std::unexpected(error(code::unavailable, "redis.connection").with_detail(exception.what()));
@@ -261,6 +357,13 @@ struct execution {
     std::promise<error_code> completed;
 };
 
+/// 独立拥有 reactor 运行期，使最后一个 driver 引用即使在 I/O 线程上释放，
+/// 当前 `io_context::run` 栈也不会引用已经析构的 implementation。
+struct reactor_context {
+    asio::io_context io{1};
+    asio::executor_work_guard<asio::io_context::executor_type> work{asio::make_work_guard(io)};
+};
+
 } // namespace
 
 command::command(const std::string_view name) {
@@ -300,7 +403,9 @@ struct driver::implementation {
         std::chrono::steady_clock::time_point idle_since{std::chrono::steady_clock::now()};
     };
 
-    explicit implementation(redis_configuration source) : configuration(std::move(source)), work(asio::make_work_guard(io)), reactor([this] { io.run(); }) {}
+    explicit implementation(redis_configuration source)
+        : configuration(std::move(source)), context(std::make_shared<reactor_context>()), io(context->io),
+          reactor([lifetime = context] { lifetime->io.run(); }) {}
 
     ~implementation() noexcept {
         shutdown();
@@ -383,6 +488,20 @@ struct driver::implementation {
         pool_changed.notify_one();
     }
 
+    /// 从池中永久移除一条结果不确定的连接，再异步取消其进行中操作。
+    /// 该连接可能仍在执行完成处理器，因此不能先标为空闲交给下一位调用方。
+    void retire(const std::shared_ptr<connection_slot>& slot) {
+        {
+            std::lock_guard lock(pool_mutex);
+            const auto position = std::ranges::find(slots, slot);
+            if (position != slots.end()) {
+                slots.erase(position);
+            }
+        }
+        asio::post(io, [connection = slot->connection] { connection->cancel(); });
+        pool_changed.notify_one();
+    }
+
     [[nodiscard]] result<std::vector<response>> execute(const std::span<const command> values, const bool mutation) {
         if (values.empty()) {
             return std::unexpected(error(code::invalid, "redis.commands"));
@@ -418,8 +537,7 @@ struct driver::implementation {
         });
 
         if (completed.wait_until(deadline + std::chrono::milliseconds{100}) != std::future_status::ready) {
-            asio::post(io, [connection = slot->connection] { connection->cancel(); });
-            release(slot);
+            retire(slot);
             return std::unexpected(error(mutation ? code::ambiguous : code::deadline, "redis.command"));
         }
         const auto status = completed.get();
@@ -452,12 +570,13 @@ struct driver::implementation {
             } else {
                 auto cancelled = std::make_shared<std::promise<void>>();
                 auto completed = cancelled->get_future();
-                asio::post(io, [this, connections = std::move(connections), cancelled] {
+                auto lifetime = context;
+                asio::post(io, [lifetime, connections = std::move(connections), cancelled] {
                     for (const auto& connection : connections) {
                         connection->cancel();
                     }
                     // 再排入一个 reactor 标记，让 cancel 触发的完成处理器先获得一次执行机会。
-                    asio::post(io, [cancelled] { cancelled->set_value(); });
+                    asio::post(lifetime->io, [cancelled] { cancelled->set_value(); });
                 });
                 static_cast<void>(completed.wait_for(configuration.timeout));
             }
@@ -467,7 +586,7 @@ struct driver::implementation {
             io.stop();
         }
 
-        work.reset();
+        context->work.reset();
         io.stop();
         if (reactor.joinable()) {
             try {
@@ -484,8 +603,8 @@ struct driver::implementation {
     }
 
     redis_configuration configuration;
-    asio::io_context io{1};
-    asio::executor_work_guard<asio::io_context::executor_type> work;
+    std::shared_ptr<reactor_context> context;
+    asio::io_context& io;
     std::thread reactor;
     std::atomic_bool closing{false};
     std::mutex pool_mutex;
@@ -661,10 +780,6 @@ result<std::shared_ptr<driver>> driver::open(const redis_configuration& configur
     if (const auto status = configuration.check(); !status) {
         return std::unexpected(status.error());
     }
-    if (configuration.mode == redis_mode::sentinel && configuration.tls.enabled) {
-        return std::unexpected(error(code::unavailable, "redis.tls").with_detail("Boost.Redis cannot securely verify dynamic Sentinel targets"));
-    }
-
     try {
         auto state = std::make_unique<implementation>(configuration);
         for (std::size_t index = 0; index < configuration.pool.min_connections; ++index) {

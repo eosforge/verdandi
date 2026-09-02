@@ -5,4 +5,5 @@
 #include "verdandi/legacy/error.hpp"
 #include "verdandi/legacy/fields.hpp"
 #include "verdandi/legacy/registration.hpp"
+#include "verdandi/legacy/runtime.hpp"
 #include "verdandi/legacy/selector.hpp"

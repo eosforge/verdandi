@@ -1,10 +1,15 @@
 #include "c/internal.hpp"
 
+#include <array>
 #include <cstring>
 
 namespace verdandi::c_api {
 
 namespace {
+
+constexpr std::array<std::string_view, 7> capabilities{
+    "catalog", "client", "configuration.json", "redis.commands", "redis.sentinel_tls", "registration", "selector",
+};
 
 template <std::size_t Size>
 void copy_text(char (&output)[Size], const std::string_view value) noexcept {
@@ -149,6 +154,14 @@ extern "C" {
 
 std::uint32_t VERDANDI_C_CALL verdandi_c_abi_version(void) {
     return VERDANDI_C_ABI_VERSION;
+}
+
+int VERDANDI_C_CALL verdandi_c_has_capability(const verdandi_string_view capability) {
+    if (capability.size != 0 && capability.data == nullptr) {
+        return 0;
+    }
+    const std::string_view requested(capability.data == nullptr ? "" : capability.data, capability.size);
+    return std::ranges::find(verdandi::c_api::capabilities, requested) != verdandi::c_api::capabilities.end();
 }
 
 void VERDANDI_C_CALL verdandi_error_reset(verdandi_error* value) {

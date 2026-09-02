@@ -2,9 +2,6 @@ package verdandi
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	mathrand "math/rand/v2"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,8 +12,8 @@ import (
 // Client 持有一个可共享的 Redis 传输实例。
 // Registration 与 Catalog 客户端借用该传输，但分别管理自己的脚本、策略、工作协程和数据。
 type Client struct {
-	// config 是 Open 校验后的连接配置，生命周期内不可变。
-	config runtimeConfig
+	// timeout 是 Open 展开后的普通命令超时，生命周期内不可变。
+	timeout time.Duration
 	// redis 是唯一底层驱动实例，由 Close 统一释放。
 	redis *redis.Client
 
@@ -50,9 +47,9 @@ func Open(ctx context.Context, config Config) (*Client, error) {
 
 	driver := newRedisClient(runtime)
 	client := &Client{
-		config: runtime,
-		redis:  driver,
-		done:   make(chan struct{}),
+		timeout: runtime.timeout,
+		redis:   driver,
+		done:    make(chan struct{}),
 	}
 	// 首次 PING 可能包含 TCP/TLS 建连，使用独立连接上限；普通命令随后使用 timeout。
 	commandCtx, cancel := context.WithTimeout(ctx, runtime.connectTimeout)
@@ -109,140 +106,5 @@ func (client *Client) Timeout() time.Duration {
 	if client == nil {
 		return 0
 	}
-	return client.config.timeout
-}
-
-// newRedisClient 根据已校验的 config 构造具体的 *redis.Client。
-// Standalone 与 Sentinel 都返回同一具体类型；TLS 和 Sentinel 地址会复制，避免调用方后续修改。
-func newRedisClient(config runtimeConfig) *redis.Client {
-	// go-redis 不重放业务命令；连接池在需要新连接时可进行固定次数的拨号重试。
-	// 自定义退避只作用于建立连接，后续独立命令仍可再次触发连接恢复。
-	backoff := func(attempt int) time.Duration {
-		return reconnectDelay(
-			attempt,
-			config.reconnectInitial,
-			config.reconnectMax,
-			config.reconnectFactor,
-			config.reconnectJitter,
-		)
-	}
-	if config.Standalone != nil {
-		standalone := config.Standalone
-		var tlsConfig = standalone.TLS
-		if tlsConfig != nil {
-			tlsConfig = tlsConfig.Clone()
-		}
-		// 独立拓扑只需要固定数据节点地址，不启用任何服务发现任务。
-		return redis.NewClient(&redis.Options{
-			Addr:                  standalone.Address,
-			Username:              standalone.Username,
-			Password:              standalone.Password,
-			DB:                    standalone.Database,
-			TLSConfig:             tlsConfig,
-			MaxRetries:            -1,
-			MinRetryBackoff:       -1,
-			MaxRetryBackoff:       -1,
-			DialTimeout:           config.connectTimeout,
-			DialerRetries:         5,
-			DialerRetryTimeout:    config.reconnectInitial,
-			DialerRetryBackoff:    backoff,
-			ReadTimeout:           config.timeout,
-			WriteTimeout:          config.timeout,
-			PoolSize:              config.poolMax,
-			PoolTimeout:           config.timeout,
-			MinIdleConns:          config.poolMin,
-			MaxIdleConns:          config.poolMax,
-			MaxActiveConns:        config.poolMax,
-			ConnMaxIdleTime:       config.poolIdle,
-			ContextTimeoutEnabled: true,
-		})
-	}
-	sentinel := config.Sentinel
-	var tlsConfig = sentinel.TLS
-	if tlsConfig != nil {
-		tlsConfig = tlsConfig.Clone()
-	}
-	// FailoverClient 内部通过 Sentinel 解析当前主节点，并在连接错误后重新解析。
-	return redis.NewFailoverClient(&redis.FailoverOptions{
-		MasterName:            sentinel.MasterName,
-		SentinelAddrs:         append([]string(nil), sentinel.Addresses...),
-		Username:              sentinel.Username,
-		Password:              sentinel.Password,
-		SentinelUsername:      sentinel.SentinelUsername,
-		SentinelPassword:      sentinel.SentinelPassword,
-		DB:                    sentinel.Database,
-		TLSConfig:             tlsConfig,
-		MaxRetries:            -1,
-		MinRetryBackoff:       -1,
-		MaxRetryBackoff:       -1,
-		DialTimeout:           config.connectTimeout,
-		DialerRetries:         5,
-		DialerRetryTimeout:    config.reconnectInitial,
-		DialerRetryBackoff:    backoff,
-		ReadTimeout:           config.timeout,
-		WriteTimeout:          config.timeout,
-		PoolSize:              config.poolMax,
-		PoolTimeout:           config.timeout,
-		MinIdleConns:          config.poolMin,
-		MaxIdleConns:          config.poolMax,
-		MaxActiveConns:        config.poolMax,
-		ConnMaxIdleTime:       config.poolIdle,
-		ContextTimeoutEnabled: true,
-	})
-}
-
-// reconnectDelay 计算不超过 max 的指数退避，并从结果中扣除有界随机抖动。
-// attempt 从零开始；饱和乘法避免极端连续失败发生整数溢出。
-func reconnectDelay(attempt int, initial, maximum time.Duration, multiplier, jitterPercent int) time.Duration {
-	delay := initial
-	for range attempt {
-		if delay >= maximum || multiplier <= 1 {
-			break
-		}
-		if delay > maximum/time.Duration(multiplier) {
-			delay = maximum
-			break
-		}
-		delay *= time.Duration(multiplier)
-	}
-	if delay > maximum {
-		delay = maximum
-	}
-	span := delay * time.Duration(jitterPercent) / 100
-	if span <= 0 {
-		return delay
-	}
-	return delay - time.Duration(mathrand.Int64N(int64(span)+1))
-}
-
-// wrapContext 把标准 Context 结束原因映射为稳定 Verdandi 错误类别。
-// 未知 Context 错误保守地归类为 unavailable，同时保留原始错误链。
-func wrapContext(err error) error {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return wrapError(CodeDeadline, err)
-	}
-	if errors.Is(err, context.Canceled) {
-		return wrapError(CodeClosed, err)
-	}
-	return wrapError(CodeUnavailable, err)
-}
-
-// wrapDriver 把 go-redis 和 Context 错误映射为稳定类别，并保留 cause。
-// code 由调用方表示该操作在未知传输结果下应视为 unavailable 还是 ambiguous。
-func wrapDriver(code Code, err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, redis.ErrClosed) {
-		return &Error{Code: CodeClosed, Cause: fmt.Errorf("redis operation: %w", err)}
-	}
-	if code == CodeAmbiguous {
-		return &Error{Code: code, Cause: fmt.Errorf("redis operation: %w", err)}
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		code = CodeDeadline
-	} else if errors.Is(err, context.Canceled) {
-		code = CodeClosed
-	}
-	return &Error{Code: code, Cause: fmt.Errorf("redis operation: %w", err)}
+	return client.timeout
 }

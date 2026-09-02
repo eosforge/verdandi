@@ -54,16 +54,18 @@ Sentinel regressions. It does not award release evidence that has not been run.
 
 ## Remaining deductions
 
-- No qualified Windows DLL or macOS dylib is currently available, so the C#
-  source is multi-targeted but the native deployment matrix is Linux-only.
+- A Windows x64 MSVC DLL now passes direct .NET 8/10 offline loading and the
+  complete server-authenticated Sentinel TLS two-promotion matrix. Automated
+  RID packaging remains unqualified; macOS is intentionally unsupported.
 - The current C ABI is synchronous. The binding correctly avoids fake
   `Task.Run` APIs, but high-concurrency ASP.NET callers do not yet receive true
   cancellation-aware async I/O.
 - A formal NuGet package still needs reproducible per-RID native builds,
   symbols, package layout, license notices, and automated load tests. The source
   project intentionally does not package a local Debug `.so`.
-- NativeAOT, trimming, single-file extraction, ARM64, and TLS have not been
-  qualified from a C# consumer.
+- NativeAOT, trimming, single-file extraction, and ARM64 have not been
+  qualified from a C# consumer. Server-authenticated Sentinel TLS is qualified;
+  live mutual TLS remains separate and unqualified.
 - Selector candidate decoding necessarily crosses the C ABI and builds managed
   Attr/Data on first access in each policy callback. It is cached within the
   callback, but no allocation/latency benchmark yet compares it with the native
@@ -77,13 +79,49 @@ Sentinel regressions. It does not award release evidence that has not been run.
 
 ## Recommended next gates
 
-1. Produce a Release C++ shared runtime for `win-x64` and `linux-x64`, then run
-   the same managed executable on both platforms.
+1. Preserve the completed `win-x64` and `linux-x64` Release-runtime Sentinel
+   TLS matrix as a regression gate.
 2. Add cancellation-storm and bounded endurance ownership gates before package
    publication.
 3. Measure One/Any candidate decode allocations and Registration call overhead;
    optimize only from those results.
-4. Add TLS and one direct Go/Rust-to-C# compatibility case by reusing the
-   existing isolated protocol fixtures.
+4. Add live mutual TLS and one direct Go/Rust-to-C# compatibility case by
+   reusing the existing isolated protocol fixtures.
 5. Build a private NuGet with RID assets and verify clean-project restore,
    application-directory/RID resolution, trimming, and NativeAOT where claimed.
+
+## 2026-09-01 Sentinel TLS and capability addendum
+
+The managed-scope score is now **9.6/10**. Net8.0 and net10.0 self-contained
+Linux x64 and Windows x64 peers passed the complete two-promotion matrix over
+private-CA Sentinel/data/replication TLS through their platform-native C++ core,
+with every Selector generation advancing `1 -> 2 -> 3` and final `DBSIZE=0`.
+`Runtime.Supports` also exposes the loaded native runtime's stable string
+capabilities and reports a missing query symbol as incompatible.
+
+The earlier generic and Windows TLS deductions are superseded by this
+server-authenticated Sentinel TLS evidence. Remaining deductions are live
+mutual TLS, NuGet/RID automation,
+NativeAOT/trimming/single-file/ARM64, direct managed cross-language peers,
+allocation benchmarks, cancellation storms, and endurance. Automated
+packaging remains deliberately deferred; macOS is unsupported.
+
+## 2026-09-01 allocation and hermetic-regression addendum
+
+The managed-scope score remains **9.6/10**. `Fields.Create` now pre-sizes when
+possible, retains each input only for the synchronous call, sorts value-type
+descriptors, detects adjacent duplicate names, and writes names and values once
+into final continuous storage. It no longer allocates a PendingField object,
+UTF-8 name array, copied value array, and HashSet entry for every field. Raw Key
+store likewise pins the borrowed Span for the synchronous C ABI call instead of
+copying the complete value first; a live empty-value case covers the null/zero
+native view.
+
+The independent Standalone harness now supplies an explicit matching host
+runtime for offline tests and records a skip when none exists, while both Linux
+self-contained integrations remain mandatory. Windows runtime dependencies are
+copied beside the shared C++ target. The final net8/net10 Standalone and
+Windows/Linux TLS two-promotion matrices pass. The score does not increase
+because native package automation, true asynchronous I/O, NativeAOT/trimming,
+allocation benchmarks, direct managed cross-language peers, mTLS and current-
+source endurance remain open.

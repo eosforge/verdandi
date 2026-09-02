@@ -95,6 +95,27 @@ def build_native() -> list[dict[str, object]]:
     return [run_linux(name, command, CPP, {}) for name, command in commands]
 
 
+def host_runtime_environment() -> dict[str, str] | None:
+    if os.name == "nt":
+        runtime = CPP / "build" / "msvc-shared-release" / "Release" / "verdandi_cpp.dll"
+        if not runtime.is_file():
+            return None
+        return {
+            **os.environ,
+            "VERDANDI_NATIVE_LIBRARY": str(runtime),
+            "PATH": str(runtime.parent) + os.pathsep + os.environ.get("PATH", ""),
+        }
+
+    runtime = CPP / "build" / "gcc-shared-release" / "libverdandi_cpp.so"
+    if not runtime.is_file():
+        return None
+    return {
+        **os.environ,
+        "VERDANDI_NATIVE_LIBRARY": str(runtime),
+        "LD_LIBRARY_PATH": str(runtime.parent) + os.pathsep + os.environ.get("LD_LIBRARY_PATH", ""),
+    }
+
+
 def run_managed(fixture: Fixture) -> list[dict[str, object]]:
     results = [
         run_command(
@@ -117,26 +138,40 @@ def run_managed(fixture: Fixture) -> list[dict[str, object]]:
         ),
     ]
 
-    for framework in ("net8.0", "net10.0"):
+    host_environment = host_runtime_environment()
+    if host_environment is None:
         results.append(
-            run_command(
-                f"C# {framework} offline regression",
-                [
-                    "dotnet",
-                    "run",
-                    "--project",
-                    "tests/Verdandi.Tests",
-                    "--framework",
-                    framework,
-                    "--configuration",
-                    "Release",
-                    "--no-build",
-                ],
-                CSHARP,
-                os.environ.copy(),
-                required_output="Verdandi C# offline tests passed.",
-            )
+            {
+                "name": "C# host offline regression",
+                "status": "skipped",
+                "elapsed_seconds": 0.0,
+                "output": (
+                    "No matching host native runtime; both Linux self-contained "
+                    "integrations still run the offline suite."
+                ),
+            }
         )
+    else:
+        for framework in ("net8.0", "net10.0"):
+            results.append(
+                run_command(
+                    f"C# {framework} offline regression",
+                    [
+                        "dotnet",
+                        "run",
+                        "--project",
+                        "tests/Verdandi.Tests",
+                        "--framework",
+                        framework,
+                        "--configuration",
+                        "Release",
+                        "--no-build",
+                    ],
+                    CSHARP,
+                    host_environment,
+                    required_output="Verdandi C# offline tests passed.",
+                )
+            )
 
     native = CPP / "build" / "gcc-shared-release" / "libverdandi_cpp.so"
     if not native.is_file():

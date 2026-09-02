@@ -4,6 +4,8 @@ package registration
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"os"
 	"strings"
 	"testing"
@@ -26,6 +28,19 @@ func TestSentinelRegistrationAndSelectorIntegration(t *testing.T) {
 		Password:         os.Getenv("VERDANDI_REDIS_PASSWORD"),
 		SentinelUsername: os.Getenv("VERDANDI_SENTINEL_USERNAME"),
 		SentinelPassword: os.Getenv("VERDANDI_SENTINEL_PASSWORD"),
+		TLS:              sentinelTestTLS(t),
+	}
+	if sentinel.TLS != nil {
+		wrong := *sentinel
+		wrong.TLS = sentinel.TLS.Clone()
+		wrong.TLS.ServerName = "wrong.verdandi.test"
+		operation, operationCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		rejected, openErr := verdandi.Open(operation, verdandi.Config{Sentinel: &wrong})
+		operationCancel()
+		if openErr == nil {
+			_ = rejected.Close()
+			t.Fatal("Sentinel TLS accepted a certificate for the wrong fixed identity")
+		}
 	}
 	zone := integrationZone(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -87,10 +102,36 @@ func TestSentinelRegistrationAndSelectorIntegration(t *testing.T) {
 		Password:         sentinel.Password,
 		SentinelUsername: sentinel.SentinelUsername,
 		SentinelPassword: sentinel.SentinelPassword,
+		TLSConfig:        sentinel.TLS,
 	})
 	defer func() { _ = raw.Close() }()
 	if err := raw.Del(closeCtx, configKey(zone)).Err(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func sentinelTestTLS(t *testing.T) *tls.Config {
+	t.Helper()
+	path := os.Getenv("VERDANDI_TLS_CA_FILE")
+	if path == "" {
+		return nil
+	}
+	serverName := os.Getenv("VERDANDI_TLS_SERVER_NAME")
+	if serverName == "" {
+		t.Fatal("VERDANDI_TLS_SERVER_NAME is required with VERDANDI_TLS_CA_FILE")
+	}
+	certificate, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(certificate) {
+		t.Fatal("VERDANDI_TLS_CA_FILE contains no certificate")
+	}
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    roots,
+		ServerName: serverName,
 	}
 }
 

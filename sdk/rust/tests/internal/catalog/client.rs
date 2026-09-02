@@ -94,6 +94,12 @@ fn catalog_config_reports_exact_invalid_field() {
         ("local store path", "catalog.local_store_path", |config| {
             config.local_store_path = Some(PathBuf::new());
         }),
+        ("local store path too long", "catalog.local_store_path", |config| {
+            config.local_store_path = Some(PathBuf::from("x".repeat(4097)));
+        }),
+        ("local store path NUL", "catalog.local_store_path", |config| {
+            config.local_store_path = Some(PathBuf::from("catalog\0.db"));
+        }),
     ];
     for (_name, field, mutate) in cases {
         let mut config = Config::new("Alpha");

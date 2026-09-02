@@ -1,0 +1,52 @@
+{
+  "acknowledged_loss_master": 16383,
+  "client_runtime": "win-x64",
+  "elapsed_seconds": 63.054,
+  "fixed_server_name": "verdandi.test",
+  "frameworks": [
+    "net8.0",
+    "net10.0"
+  ],
+  "initial_master": 16381,
+  "language": "C#",
+  "native_suites": [
+    {
+      "elapsed_seconds": 0.888,
+      "name": "C# native Windows Release configure",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 7.409,
+      "name": "C# native Windows Release build",
+      "status": "pass"
+    }
+  ],
+  "recovered_master": 16382,
+  "redis_version": "8.8.0",
+  "scenarios": [
+    "private-CA Sentinel and data-plane TLS with one fixed certificate identity",
+    "separate Redis and Sentinel ACL credentials",
+    "two managed target frameworks in one topology",
+    "forced acknowledged write loss and desired-state repair",
+    "Pub/Sub generation recovery",
+    "SCRIPT FLUSH reload",
+    "all Sentinels unavailable",
+    "primary loss while all Sentinels are unavailable",
+    "Sentinel restart and second promotion"
+  ],
+  "selector_generations": {
+    "net10.0": [
+      1,
+      2,
+      3
+    ],
+    "net8.0": [
+      1,
+      2,
+      3
+    ]
+  },
+  "status": "pass",
+  "tls": true,
+  "wrong_identity_rejected": true
+}

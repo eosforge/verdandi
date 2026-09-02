@@ -1,7 +1,6 @@
 #include "verdandi/configuration.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <charconv>
 #include <limits>
 #include <string_view>
@@ -18,6 +17,59 @@ template <class T>
     return {};
 }
 
+/// 与 Go strings.TrimSpace 和 Rust str::trim 对齐的 Unicode White_Space 集合。
+[[nodiscard]] bool unicode_whitespace(const std::uint32_t value) noexcept {
+    return (value >= 0x09U && value <= 0x0dU) || value == 0x20U || value == 0x85U || value == 0xa0U || value == 0x1680U ||
+           (value >= 0x2000U && value <= 0x200aU) || value == 0x2028U || value == 0x2029U || value == 0x202fU || value == 0x205fU || value == 0x3000U;
+}
+
+/// 校验标准 UTF-8，拒绝截断、过长编码、代理项和超过 Unicode 上限的码点，并可返回首尾码点。
+[[nodiscard]] bool valid_utf8(const std::string_view value, std::uint32_t* first_codepoint = nullptr, std::uint32_t* last_codepoint = nullptr) noexcept {
+    bool has_first = false;
+    for (std::size_t index = 0; index < value.size();) {
+        const auto first = static_cast<unsigned char>(value[index]);
+        std::size_t width{1};
+        std::uint32_t codepoint{first};
+        if (first <= 0x7fU) {
+            // ASCII 已经是完整码点。
+        } else if (first >= 0xc2U && first <= 0xdfU) {
+            width = 2;
+            codepoint = first & 0x1fU;
+        } else if (first >= 0xe0U && first <= 0xefU) {
+            width = 3;
+            codepoint = first & 0x0fU;
+        } else if (first >= 0xf0U && first <= 0xf4U) {
+            width = 4;
+            codepoint = first & 0x07U;
+        } else {
+            return false;
+        }
+        if (index + width > value.size()) {
+            return false;
+        }
+        for (std::size_t offset = 1; offset < width; ++offset) {
+            const auto next = static_cast<unsigned char>(value[index + offset]);
+            if ((next & 0xc0U) != 0x80U) {
+                return false;
+            }
+            codepoint = (codepoint << 6U) | (next & 0x3fU);
+        }
+        if ((width == 3 && codepoint < 0x800U) || (width == 4 && codepoint < 0x1'0000U) || (codepoint >= 0xd800U && codepoint <= 0xdfffU) ||
+            codepoint > 0x10'ffffU) {
+            return false;
+        }
+        if (!has_first && first_codepoint != nullptr) {
+            *first_codepoint = codepoint;
+        }
+        has_first = true;
+        if (last_codepoint != nullptr) {
+            *last_codepoint = codepoint;
+        }
+        index += width;
+    }
+    return true;
+}
+
 [[nodiscard]] bool valid_zone(const std::string_view value) noexcept {
     return !value.empty() && value.size() <= 32 && std::ranges::all_of(value, [](const char raw) {
         const auto character = static_cast<unsigned char>(raw);
@@ -27,7 +79,9 @@ template <class T>
 }
 
 [[nodiscard]] bool canonical_text(const std::string_view value) noexcept {
-    if (value.empty() || std::isspace(static_cast<unsigned char>(value.front())) != 0 || std::isspace(static_cast<unsigned char>(value.back())) != 0) {
+    std::uint32_t first{};
+    std::uint32_t last{};
+    if (value.empty() || !valid_utf8(value, &first, &last) || unicode_whitespace(first) || unicode_whitespace(last)) {
         return false;
     }
     return value.find('\0') == std::string_view::npos;
@@ -57,6 +111,12 @@ template <class T>
     if (host.empty() || port.empty()) {
         return false;
     }
+    if (std::ranges::any_of(host, [](const char raw) {
+            const auto character = static_cast<unsigned char>(raw);
+            return character <= static_cast<unsigned char>(' ') || character == 0x7fU;
+        })) {
+        return false;
+    }
     std::uint32_t number{};
     const auto [end, status] = std::from_chars(port.data(), port.data() + port.size(), number);
     return status == std::errc{} && end == port.data() + port.size() && number >= 1 && number <= 65'535;
@@ -64,14 +124,15 @@ template <class T>
 
 [[nodiscard]] result<void> check_path(const std::filesystem::path& value, const std::string_view field, const bool allow_empty) {
     try {
-        const auto text = value.string();
+        const auto native = value.generic_u8string();
+        const std::string_view text(reinterpret_cast<const char*>(native.data()), native.size());
         if (text.empty()) {
             if (allow_empty) {
                 return {};
             }
             return std::unexpected(error(code::invalid, std::string(field)));
         }
-        if (text.size() > 4'096 || text.find('\0') != std::string::npos) {
+        if (!valid_utf8(text) || text.size() > 4'096 || text.find('\0') != std::string::npos) {
             return std::unexpected(error(code::invalid, std::string(field)));
         }
         return {};
@@ -83,7 +144,19 @@ template <class T>
 } // namespace
 
 result<void> tls_configuration::check() const {
-    if (server_name.size() > 253 || server_name.find('\0') != std::string::npos) {
+    if (!server_name.empty() && (!canonical_text(server_name) || server_name.size() > 253 || std::ranges::any_of(server_name, [](const char raw) {
+            switch (raw) {
+            case ' ':
+            case '\t':
+            case '\n':
+            case '\r':
+            case '\v':
+            case '\f':
+                return true;
+            default:
+                return false;
+            }
+        }))) {
         return std::unexpected(error(code::invalid, "redis.tls.server_name"));
     }
     if (const auto status = check_path(ca_file, "redis.tls.ca_file", true); !status) {
@@ -97,7 +170,7 @@ result<void> tls_configuration::check() const {
     }
     if (!enabled) {
         if (!system_roots || !server_name.empty() || !ca_file.empty() || !cert_file.empty() || !key_file.empty()) {
-            return std::unexpected(error(code::invalid, "redis.tls.enabled"));
+            return std::unexpected(error(code::invalid, "redis.tls"));
         }
         return {};
     }
@@ -105,7 +178,7 @@ result<void> tls_configuration::check() const {
         return std::unexpected(error(code::invalid, "redis.tls.ca_file"));
     }
     if (cert_file.empty() != key_file.empty()) {
-        return std::unexpected(error(code::invalid, cert_file.empty() ? "redis.tls.cert_file" : "redis.tls.key_file"));
+        return std::unexpected(error(code::invalid, "redis.tls.cert_file"));
     }
     return {};
 }
@@ -118,9 +191,13 @@ result<void> pool_configuration::check() const {
         return status;
     }
     if (max_connections < min_connections) {
-        return std::unexpected(error(code::invalid, "redis.pool.max_connections"));
+        return std::unexpected(error(code::invalid, "redis.pool.min_connections"));
     }
     return check_range(idle_timeout, std::chrono::milliseconds{1'000}, std::chrono::milliseconds{3'600'000}, "redis.pool.idle_timeout_ms");
+}
+
+result<void> redis_reconnect_configuration::check() const {
+    return check_range(delay, std::chrono::milliseconds{10}, std::chrono::milliseconds{30'000}, "redis.reconnect.delay_ms");
 }
 
 result<void> reconnect_configuration::check(const std::string_view prefix) const {
@@ -137,7 +214,7 @@ result<void> reconnect_configuration::check(const std::string_view prefix) const
         return status;
     }
     if (max_delay < initial_delay) {
-        return std::unexpected(error(code::invalid, field("max_delay_ms")));
+        return std::unexpected(error(code::invalid, field("initial_delay_ms")));
     }
     if (const auto status = check_range(multiplier, std::uint32_t{1}, std::uint32_t{8}, field("multiplier")); !status) {
         return status;
@@ -146,26 +223,34 @@ result<void> reconnect_configuration::check(const std::string_view prefix) const
 }
 
 result<void> redis_configuration::check() const {
-    if (addresses.empty() || (mode == redis_mode::standalone && addresses.size() != 1)) {
+    if (addresses.empty()) {
         return std::unexpected(error(code::invalid, "redis.addresses"));
     }
     if (!std::ranges::all_of(addresses, valid_endpoint)) {
         return std::unexpected(error(code::invalid, "redis.addresses"));
     }
-    if (mode == redis_mode::standalone) {
+    switch (mode) {
+    case redis_mode::standalone:
+        if (addresses.size() != 1) {
+            return std::unexpected(error(code::invalid, "redis.addresses"));
+        }
         if (!master_name.empty()) {
             return std::unexpected(error(code::invalid, "redis.master_name"));
         }
         if (!sentinel_auth.username.empty() || !sentinel_auth.password.empty()) {
             return std::unexpected(error(code::invalid, "redis.sentinel_auth"));
         }
-    } else {
+        break;
+    case redis_mode::sentinel:
         if (!canonical_text(master_name)) {
             return std::unexpected(error(code::invalid, "redis.master_name"));
         }
-        if (!tls.server_name.empty()) {
+        if (tls.enabled && tls.server_name.empty()) {
             return std::unexpected(error(code::invalid, "redis.tls.server_name"));
         }
+        break;
+    default:
+        return std::unexpected(error(code::invalid, "redis.mode"));
     }
     if (database > 255) {
         return std::unexpected(error(code::invalid, "redis.database"));
@@ -312,7 +397,7 @@ result<void> catalog_configuration::check() const {
 
 result<void> configuration::check() const {
     if (version != "v1") {
-        return std::unexpected(error(code::protocol, "version"));
+        return std::unexpected(error(code::invalid, "version"));
     }
     if (const auto status = redis.check(); !status) {
         return status;

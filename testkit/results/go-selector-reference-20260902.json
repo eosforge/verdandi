@@ -1,0 +1,140 @@
+{
+  "schema": "verdandi.test-result.v1",
+  "name": "go-selector-reference",
+  "date": "2026-09-02",
+  "status": "pass",
+  "source_state": "uncommitted-working-tree",
+  "scope": {
+    "language": "go1.27.0",
+    "module": "github.com/eosforge/verdandi/sdk/go",
+    "feature": "generated callback-scoped Selector references",
+    "redis_protocol_changed": false,
+    "redis_io_added_to_selection": false
+  },
+  "source_sha256": {
+    "sdk/go/registration/reference.go": "433be66d02c50d22a631d3cced8a10bf2042ae66daa1f97c014ea7d9fe50f3c6",
+    "sdk/go/registration/selector.go": "6e54ef2bd25ef9fed4c135a33b3f3bda817350e97adb0491b7ef47020382462e",
+    "sdk/go/cmd/verdandi-refgen/main.go": "d9f2ccb3bd5d8886354b8c2fec03e3bc6cc6122e80f87eb011965b6f1c9e6251",
+    "sdk/go/internal/refexample/reference_generated.go": "f22a911a3acb2991439955eadd919458789e85f2f704dc55f361795a123fa094"
+  },
+  "verification": [
+    {
+      "gate": "generation",
+      "command": "go generate ./...",
+      "status": "pass",
+      "details": "The committed compile fixture also passes the generator's exact -check mode."
+    },
+    {
+      "gate": "static",
+      "command": "go vet ./...",
+      "status": "pass"
+    },
+    {
+      "gate": "repeat-unit",
+      "command": "go test -shuffle=on -count=10 ./...",
+      "status": "pass"
+    },
+    {
+      "gate": "linux-race",
+      "command": "go test -race -count=1 ./...",
+      "status": "pass",
+      "environment": "WSL Ubuntu 24.04 linux/amd64"
+    },
+    {
+      "gate": "reference-race-repeat",
+      "command": "go test -race ./registration -run 'TestReferenceSelector|TestNewReferenceSelector' -shuffle=on -count=100",
+      "status": "pass",
+      "environment": "WSL Ubuntu 24.04 linux/amd64"
+    },
+    {
+      "gate": "redis-8.8-integration",
+      "command": "go test -tags=integration ./registration -run '^TestReferenceSelectorIntegration$' -count=1 -timeout=60s -v",
+      "status": "pass",
+      "environment": "isolated random Zone on Redis 8.8.0",
+      "coverage": [
+        "typed Registration publication",
+        "Selector discovery",
+        "generated-reference-compatible WithOne",
+        "selected local Power increment",
+        "remote Update replacement of the local prediction",
+        "joined close and exact Zone cleanup"
+      ],
+      "global_flush": false,
+      "catalog_operations": 0,
+      "final_owned_keys": 0
+    }
+  ],
+  "reference_tests": {
+    "selected_only_commit": "pass",
+    "unselected_edit_rollback": "pass",
+    "callback_error_rollback": "pass",
+    "empty_selection_rollback": "pass",
+    "context_cancellation_rollback": "pass",
+    "duplicate_and_foreign_rejection": "pass",
+    "multi_selection_atomic_encode_failure": "pass",
+    "field_structure_rejection": "pass",
+    "unavailable_closed_nil_boundaries": "pass",
+    "token_wrap": "pass",
+    "panic_cleanup": "pass",
+    "post_callback_editor_fence": "pass",
+    "mutable_slice_ownership": "pass",
+    "concurrent_transaction_serialization": "pass",
+    "generator_rejection_and_stale_check": "pass",
+    "generated_api_compile_fixture": "pass"
+  },
+  "benchmark": {
+    "environment": {
+      "os": "linux",
+      "arch": "amd64",
+      "go": "go1.27.0",
+      "cpu": "13th Gen Intel(R) Core(TM) i7-13700F",
+      "samples": 10,
+      "benchtime": "1s",
+      "candidates": 500
+    },
+    "typed_one": {
+      "ns_per_op": [11456, 11519, 11416, 11714, 11483, 11489, 11428, 11461, 11387, 11458],
+      "median_ns_per_op": 11459.5,
+      "bytes_per_op": 2225,
+      "allocations_per_op": 28
+    },
+    "reference_with_one": {
+      "ns_per_op": [10298, 10293, 10143, 10179, 10177, 10118, 10136, 10249, 10144, 10189],
+      "median_ns_per_op": 10178,
+      "bytes_per_op": 425,
+      "allocations_per_op": 4,
+      "median_reduction_percent": 11.18,
+      "byte_reduction_percent": 80.9,
+      "allocation_reduction_percent": 85.71
+    },
+    "typed_any_eight": {
+      "ns_per_op": [13826, 13869, 14202, 14140, 13880, 13869, 14076, 14009, 13820, 13837],
+      "median_ns_per_op": 13874.5,
+      "bytes_per_op": 8065,
+      "allocations_per_op": 97
+    },
+    "reference_with_any_eight": {
+      "ns_per_op": [5590, 5597, 5628, 5561, 5533, 5627, 5584, 5525, 5617, 5555],
+      "median_ns_per_op": 5587,
+      "bytes_per_op": 0,
+      "allocations_per_op": 0,
+      "median_reduction_percent": 59.73,
+      "byte_reduction_percent": 100,
+      "allocation_reduction_percent": 100
+    },
+    "comparison_boundary": "Ordinary One/Any return detached values; WithOne/WithAny intentionally return only found/count and require copying needed route values inside the callback."
+  },
+  "discarded_attempts": [
+    {
+      "reason": "The supplied host login credentials were incorrectly tried against an unrelated Redis 3 port and failed during AUTH before creating data."
+    },
+    {
+      "reason": "The first Redis 8.8 pass exposed test-cleanup ordering that could recreate the Zone config before Client close. The cleanup was reordered, the exact owned config key was deleted, and the complete test was rerun from zero with final owned keys equal to zero."
+    }
+  ],
+  "release_boundary": "This local Selector-only change does not inherit prior frozen-source endurance qualification and does not replace final exact-source release testing.",
+  "git": {
+    "commit_created": false,
+    "push_performed": false
+  }
+}

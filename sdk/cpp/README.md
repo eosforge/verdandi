@@ -4,17 +4,15 @@
 
 This directory contains the C++23 implementation of the Verdandi `0.1.0`
 non-production Alpha Registration, Selector, and Catalog surfaces. Stable
-`1.0.0` remains reserved for the complete contract, including Leader. It is one compiled SDK,
+`1.0.0` remains reserved for the complete remaining contract; generic Campaign/Leader election is explicitly out of scope. It is one compiled SDK,
 not a second header-only protocol implementation: templates are limited to the
 typed `Fields` boundary, while Redis transport, Lua dispatch, synchronization,
 checkpointing, and lifecycle state machines are compiled once.
 
-The current implementation supports Redis 8 Standalone, plain Sentinel, ACLs,
-Standalone TLS, strict v1 JSON configuration, raw Key/Hash commands,
-Registration, Selector, Catalog Publisher/Subscriber, and optional SQLite
-Catalog checkpoints. Redis Cluster is rejected. Sentinel plus TLS is rejected
-because the current Boost.Redis discovery path cannot preserve hostname
-verification when Sentinel returns a dynamic data-node address.
+The current implementation supports Redis 8 Standalone, Sentinel, ACLs,
+Standalone and Sentinel TLS, strict v1 JSON configuration, raw Key/Hash
+commands, Registration, Selector, Catalog Publisher/Subscriber, and optional
+SQLite Catalog checkpoints. Redis Cluster is rejected.
 
 No C++ package or stable wire protocol has been released. The implemented
 Alpha C ABI v1 exposes the same compiled core to C11 and C++11/14/17 callers.
@@ -25,22 +23,46 @@ protocol state machine, or per-standard runtime.
 ## Requirements and dependencies
 
 - CMake 3.28 or newer;
-- a C++23 compiler and Ninja for the supplied presets;
-- OpenSSL;
+- a C++23 compiler and either Ninja, GNU Make, or a Visual Studio generator;
+- OpenSSL 3.0 or newer, from the system or an existing vcpkg;
 - Boost.Redis 1.92 or newer;
 - yyjson 0.12 or newer;
 - SQLite 3.37 or newer.
 
 When compatible Boost.Redis, yyjson, or SQLite targets are unavailable and
-`VERDANDI_FETCH_DEPENDENCIES=ON`, CMake fetches the reviewed dependency
-revisions into the active build tree's `_deps` directory. Dependency build
-artifacts remain isolated between Debug/Release, static/shared, and sanitizer
-trees. Public headers expose only the C++ standard library and Verdandi types;
-third-party types remain private.
+`VERDANDI_FETCH_DEPENDENCIES=ON`, CMake fetches checksum-locked dependency
+revisions. The unified scripts share immutable download archives while keeping
+extracted sources and dependency objects isolated between Debug/Release,
+static/shared, and sanitizer trees. Public headers expose only the C++ standard
+library and Verdandi types; third-party types remain private.
 
 ## Build and verification
 
-From `sdk/cpp`:
+The normal cross-platform entry points live in this directory. From the
+repository root:
+
+```text
+./sdk/cpp/build.ps1 doctor
+./sdk/cpp/build.ps1 all -Profile dev
+./sdk/cpp/build.ps1 all -Profile release -Linkage shared
+
+bash sdk/cpp/build.sh doctor
+bash sdk/cpp/build.sh all --profile dev
+bash sdk/cpp/build.sh all --profile release --linkage shared
+```
+
+They detect but never install toolchains, use bounded dependency discovery,
+cache generated content under the repository-level `build/`, and emit stable
+English console diagnostics. Detailed command, option, dependency, cache, and
+offline contracts are in [`BUILD.md`](BUILD.md).
+
+The scripts compile only the native C++23/C ABI/Legacy tree. Select shared
+linkage to produce the DLL/SO consumed by C# or another foreign-language
+binding; those language projects compile independently with their own normal
+toolchains.
+
+The existing presets remain the focused sanitizer and qualification path. From
+`sdk/cpp`:
 
 ```text
 cmake --preset gcc-debug
@@ -293,20 +315,29 @@ failure does not stop in-memory recovery.
 
 ## Current qualification limits
 
-The optimized source currently passes strict GCC compilation, unit and live
-Redis 8.8 Standalone integration, clang-tidy, and ASan/UBSan/leak checks. The
-initial implementation checkpoint additionally passed an isolated
-ACL-protected three-node/three-Sentinel startup/integration smoke; the focused
-source-expansion regression did not relabel that earlier smoke as a current
-rerun. The following release gates remain open:
+The optimized source currently passes strict Linux GCC static/shared builds,
+unit and live Redis 8.8 integration, private-CA Sentinel TLS, clang-tidy,
+format, and ASan/UBSan/leak checks. Windows x64 passes MSVC 19.51 static Debug
+and shared Release builds under `/W4 /WX /permissive-`, C ABI and C++11/14/17
+offline tests, DLL export inspection, .NET 8/10 loading of that DLL, and a live
+private-CA Sentinel TLS root/Registration/Selector/Catalog/checkpoint run.
 
-- two consecutive C++ Sentinel promotions with acknowledged-write-loss repair;
-- a live TLS topology, including private CA and mTLS cases;
-- MSVC, Clang, and macOS build matrices;
+Windows builds require Windows 10 or newer. A system OpenSSL 3.0+ package may
+be provided explicitly; otherwise the qualified setup uses an existing vcpkg
+installation and the pinned `vcpkg.json` manifest. The repository may ask that
+vcpkg to obtain OpenSSL and may fetch its locked Boost, SQLite, and yyjson
+sources, but it never installs a compiler, SDK, CMake, .NET, or vcpkg.
+
+The following release gates remain open:
+
+- two consecutive direct C++ Sentinel promotions with acknowledged-write-loss repair;
+- live mutual TLS;
+- Linux Clang qualification;
 - long soak and dedicated C++ performance/regression benchmarks;
-- CMake install/export/package artifacts;
-- Windows DLL/MSVC, Clang, and macOS qualification of C ABI v1;
+- CMake install/export/package artifacts; and
 - an automated binary-ABI compatibility gate.
+
+macOS is intentionally unsupported and is not a deferred release gate.
 
 The complete evidence and scoring are recorded in
 [`../../cpp-review-20260831.md`](../../cpp-review-20260831.md) and

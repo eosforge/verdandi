@@ -241,6 +241,66 @@ func BenchmarkTypedSelectorAnyEightOf500(b *testing.B) {
 	}
 }
 
+func BenchmarkReferenceSelectorWithOne500(b *testing.B) {
+	data := make([]apiData, 500)
+	for index := range data {
+		data[index].Power = int64(index)
+	}
+	selector := newAPISelector(b, data)
+	reference := newAPIReferenceSelector(b, selector)
+	ctx := context.Background()
+	b.ReportAllocs()
+	for b.Loop() {
+		selected, err := reference.WithOne(ctx, func(candidates apiReferenceCandidates) (apiReferenceSelection, bool, error) {
+			best, ok := candidates.At(0)
+			if !ok {
+				return apiReferenceSelection{}, false, nil
+			}
+			power := best.Data().Power()
+			for index := 1; index < candidates.Len(); index++ {
+				candidate, _ := candidates.At(index)
+				candidatePower := candidate.Data().Power()
+				if candidatePower < power {
+					best = candidate
+					power = candidatePower
+				}
+			}
+			selection := best.Select()
+			if err := selection.Edit().SetPower(power + 1); err != nil {
+				return apiReferenceSelection{}, false, err
+			}
+			return selection, true, nil
+		})
+		if err != nil || !selected {
+			b.Fatalf("WithOne selected=%v error=%v", selected, err)
+		}
+	}
+}
+
+func BenchmarkReferenceSelectorWithAnyEightOf500(b *testing.B) {
+	data := make([]apiData, 500)
+	for index := range data {
+		data[index].Power = int64(index)
+	}
+	selector := newAPISelector(b, data)
+	reference := newAPIReferenceSelector(b, selector)
+	ctx := context.Background()
+	selected := make([]apiReferenceSelection, 8)
+	b.ReportAllocs()
+	for b.Loop() {
+		count, err := reference.WithAny(ctx, func(candidates apiReferenceCandidates) ([]apiReferenceSelection, error) {
+			for index := range selected {
+				candidate, _ := candidates.At(index)
+				selected[index] = candidate.Select()
+			}
+			return selected, nil
+		})
+		if err != nil || count != len(selected) {
+			b.Fatalf("WithAny selected=%d error=%v", count, err)
+		}
+	}
+}
+
 func benchmarkSelectorState() (*selectorCore, selectorState, redisClock) {
 	data := make(Fields, 32)
 	for index := range 32 {

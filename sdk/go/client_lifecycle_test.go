@@ -9,9 +9,9 @@ import (
 
 func TestClientCloseBroadcastsAndIsIdempotent(t *testing.T) {
 	client := &Client{
-		config: runtimeConfig{timeout: time.Second},
-		redis:  redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}),
-		done:   make(chan struct{}),
+		timeout: time.Second,
+		redis:   redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}),
+		done:    make(chan struct{}),
 	}
 	if client.Redis() == nil || client.Done() == nil || client.Timeout() != time.Second {
 		t.Fatal("unexpected transport capability")

@@ -59,6 +59,10 @@ struct raw_one_policy {
 int main() {
     using namespace verdandi::legacy;
 
+    if (!has_capability("redis.sentinel_tls") || has_capability("future.capability") || has_capability(std::string())) {
+        return 1;
+    }
+
     test_attr attr;
     attr.region = "cn-east";
     test_data data;
@@ -68,23 +72,23 @@ int main() {
     result<fields> encoded_attr = codec<test_attr>::encode(attr);
     result<fields> encoded_data = codec<test_data>::encode(data);
     if (!encoded_attr || !encoded_data || encoded_attr->size() != 1U || encoded_data->size() != 2U) {
-        return 1;
+        return 2;
     }
     result<test_data> decoded = codec<test_data>::decode(*encoded_data);
     if (!decoded || decoded->power != data.power || !decoded->ready) {
-        return 2;
+        return 3;
     }
 
     bytes negative_zero;
     negative_zero.push_back('-');
     negative_zero.push_back('0');
     if (value_codec<std::int64_t>::decode(negative_zero)) {
-        return 3;
+        return 4;
     }
 
     result<bytes> maximum_unsigned = value_codec<std::uint64_t>::encode(std::numeric_limits<std::uint64_t>::max());
     if (!maximum_unsigned || value_codec<std::uint64_t>::decode(*maximum_unsigned).value() != std::numeric_limits<std::uint64_t>::max()) {
-        return 4;
+        return 5;
     }
     bytes leading_zero;
     leading_zero.push_back('0');
@@ -95,16 +99,16 @@ int main() {
     bytes overflow = *maximum_unsigned;
     overflow.push_back('0');
     if (value_codec<std::uint64_t>::decode(leading_zero) || value_codec<std::uint64_t>::decode(positive_sign) || value_codec<std::uint64_t>::decode(overflow)) {
-        return 5;
+        return 6;
     }
 
     fields duplicate;
     if (!duplicate.insert("power", static_cast<std::int64_t>(1)) || duplicate.insert("power", static_cast<std::int64_t>(2))) {
-        return 6;
+        return 7;
     }
     result<test_data> missing = codec<test_data>::decode(duplicate);
     if (missing || missing.failure().code() != "missing" || missing.failure().field() != "ready") {
-        return 7;
+        return 8;
     }
 
     optional<std::string> optional_value;
@@ -112,7 +116,7 @@ int main() {
     optional<std::string> optional_copy(optional_value);
     optional_value = optional<std::string>("second");
     if (!optional_copy || *optional_copy != "first" || !optional_value || *optional_value != "second") {
-        return 8;
+        return 9;
     }
 
     result<void> successful;
@@ -120,12 +124,12 @@ int main() {
     result<void> copied_failure(failed);
     failed = successful;
     if (!successful || !failed || copied_failure || copied_failure.failure().field() != "test") {
-        return 9;
+        return 10;
     }
 
     result<client> root = client::open(std::string());
-    if (root || root.failure().code() != "capacity") {
-        return 10;
+    if (root || root.failure().code() != "invalid" || root.failure().field() != "json") {
+        return 11;
     }
 
     registration_client registration_domain;
@@ -134,32 +138,32 @@ int main() {
     options.ttl = std::chrono::milliseconds(15000);
     result<registration<test_attr, test_data>> registration_value = registration<test_attr, test_data>::create(registration_domain, options);
     if (registration_value || registration_value.failure().code() != "invalid") {
-        return 11;
+        return 12;
     }
     registration<fields, fields> raw_registration;
     if (raw_registration.publish(duplicate, duplicate)) {
-        return 12;
+        return 13;
     }
 
     selector<test_attr, test_data> selector_value;
     if (selector_value.one(one_policy()) || selector_value.any(any_policy()) || selector_value.snapshot()) {
-        return 13;
+        return 14;
     }
     selector<fields, fields> raw_selector;
     if (raw_selector.one(raw_one_policy())) {
-        return 14;
+        return 15;
     }
 
     catalog_publisher publisher;
     catalog_path path("routing", "primary");
     if (publisher.replace(path, catalog_kind::map, data) || publisher.replace(path, catalog_kind::map, duplicate) || publisher.patch(path, 1U, data) ||
         publisher.erase(path)) {
-        return 15;
+        return 16;
     }
 
     catalog_entry entry;
     if (entry.load<test_data>() || entry.load<fields>()) {
-        return 16;
+        return 17;
     }
     return 0;
 }

@@ -13,16 +13,15 @@ fn assert_invalid_field(config: &Config, field: &str) {
 }
 
 #[test]
-fn reconnect_backoff_is_bounded_and_uses_exact_milliseconds() {
+fn reconnect_delay_uses_exact_milliseconds() {
     let mut config = Config::new("redis://127.0.0.1:6379/0");
     assert!(config.validate().is_ok());
-    config.reconnect.initial_delay = Duration::from_nanos(1);
+    config.reconnect.delay = Duration::from_nanos(1);
     assert!(matches!(
         config.validate(),
         Err(error) if error.code() == Code::Invalid
     ));
-    config.reconnect.initial_delay = Duration::from_secs(6);
-    config.reconnect.max_delay = Duration::from_secs(5);
+    config.reconnect.delay = Duration::from_secs(31);
     assert!(matches!(
         config.validate(),
         Err(error) if error.code() == Code::Invalid
@@ -35,10 +34,7 @@ fn reconnect_backoff_is_bounded_and_uses_exact_milliseconds() {
     assert_eq!(defaults.pool.min_connections, 1);
     assert_eq!(defaults.pool.max_connections, 4);
     assert_eq!(defaults.pool.idle_timeout, Duration::from_secs(10));
-    assert_eq!(defaults.reconnect.initial_delay, Duration::from_millis(100));
-    assert_eq!(defaults.reconnect.max_delay, Duration::from_secs(5));
-    assert_eq!(defaults.reconnect.multiplier, 2);
-    assert_eq!(defaults.reconnect.jitter_percent, 10);
+    assert_eq!(defaults.reconnect.delay, Duration::from_millis(100));
 }
 
 #[test]
@@ -66,7 +62,7 @@ fn tls_builds_private_roots_client_certificate_and_sni() {
 }
 
 #[test]
-fn tls_rejects_invalid_native_relationships_and_sentinel_sni() {
+fn tls_rejects_invalid_native_relationships_and_requires_sentinel_identity() {
     let mut config = Config::new("redis://127.0.0.1:6379");
     config.tls = Some(TlsConfig {
         system_roots: false,
@@ -75,14 +71,46 @@ fn tls_rejects_invalid_native_relationships_and_sentinel_sni() {
     assert_invalid_field(&config, "tls.ca_file");
 
     let mut sentinel = Config::new("redis-sentinel://127.0.0.1:26379?sentinelServiceName=primary");
+    sentinel.tls = Some(TlsConfig::default());
+    assert_invalid_field(&sentinel, "tls.server_name");
+
     sentinel.tls = Some(TlsConfig {
         server_name: Some("redis.test".to_owned()),
         ..TlsConfig::default()
     });
-    sentinel.validate().unwrap_or_else(|error| panic!("{error}"));
-    let error = sentinel.fred_config().err().unwrap_or_else(|| panic!("Sentinel SNI succeeded"));
-    assert_eq!(error.code(), Code::Invalid);
-    assert_eq!(error.field_name(), Some("tls.server_name"));
+    sentinel.validate().unwrap_or_else(|error| panic!("Sentinel fixed identity failed: {error}"));
+    let native = sentinel
+        .fred_config()
+        .unwrap_or_else(|error| panic!("Sentinel TLS construction failed: {error}"));
+    assert!(native.tls.is_some());
+    assert!(
+        native
+            .server
+            .hosts()
+            .iter()
+            .all(|server| server.tls_server_name.as_deref() == Some("redis.test"))
+    );
+
+    let mut whitespace = Config::new("redis://127.0.0.1:6379");
+    whitespace.tls = Some(TlsConfig {
+        server_name: Some("redis test".to_owned()),
+        ..TlsConfig::default()
+    });
+    assert_invalid_field(&whitespace, "tls.server_name");
+}
+
+#[cfg(unix)]
+#[test]
+fn tls_rejects_non_utf8_native_paths() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let mut config = Config::new("redis://127.0.0.1:6379");
+    config.tls = Some(TlsConfig {
+        ca_file: Some(PathBuf::from(OsString::from_vec(vec![0xff]))),
+        ..TlsConfig::default()
+    });
+    assert_invalid_field(&config, "tls.ca_file");
 }
 
 #[test]
@@ -110,10 +138,7 @@ fn transport_config_accepts_inclusive_boundaries() {
     minimum.pool.min_connections = 1;
     minimum.pool.max_connections = 1;
     minimum.pool.idle_timeout = Duration::from_secs(1);
-    minimum.reconnect.initial_delay = Duration::from_millis(10);
-    minimum.reconnect.max_delay = Duration::from_millis(100);
-    minimum.reconnect.multiplier = 1;
-    minimum.reconnect.jitter_percent = 0;
+    minimum.reconnect.delay = Duration::from_millis(10);
     assert!(minimum.validate().is_ok());
 
     let mut maximum = Config::new("redis://127.0.0.1:6379");
@@ -123,16 +148,13 @@ fn transport_config_accepts_inclusive_boundaries() {
     maximum.pool.min_connections = 1024;
     maximum.pool.max_connections = 1024;
     maximum.pool.idle_timeout = Duration::from_secs(3600);
-    maximum.reconnect.initial_delay = Duration::from_secs(5);
-    maximum.reconnect.max_delay = Duration::from_secs(30);
-    maximum.reconnect.multiplier = 8;
-    maximum.reconnect.jitter_percent = 50;
+    maximum.reconnect.delay = Duration::from_secs(30);
     assert!(maximum.validate().is_ok());
 }
 
 #[test]
 fn transport_config_reports_exact_invalid_field() {
-    let cases: [InvalidCase; 14] = [
+    let cases: [InvalidCase; 10] = [
         ("endpoint", "endpoint", |config| config.endpoint = " ".into()),
         ("timeout below range", "timeout", |config| config.timeout = Duration::from_millis(9)),
         ("timeout precision", "timeout", |config| config.timeout = Duration::from_nanos(10_000_001)),
@@ -148,20 +170,11 @@ fn transport_config_reports_exact_invalid_field() {
             config.pool.min_connections = 5;
             config.pool.max_connections = 4;
         }),
-        ("reconnect initial", "reconnect.initial_delay", |config| {
-            config.reconnect.initial_delay = Duration::from_millis(9);
+        ("reconnect delay", "reconnect.delay", |config| {
+            config.reconnect.delay = Duration::from_millis(9);
         }),
-        ("reconnect maximum", "reconnect.max_delay", |config| {
-            config.reconnect.max_delay = Duration::from_millis(99);
-        }),
-        ("reconnect multiplier", "reconnect.multiplier", |config| config.reconnect.multiplier = 9),
-        ("reconnect jitter", "reconnect.jitter_percent", |config| config.reconnect.jitter_percent = 51),
-        ("reconnect relation", "reconnect.initial_delay", |config| {
-            config.reconnect.initial_delay = Duration::from_secs(2);
-            config.reconnect.max_delay = Duration::from_secs(1);
-        }),
-        ("reconnect precision", "reconnect.initial_delay", |config| {
-            config.reconnect.initial_delay = Duration::from_nanos(10_000_001);
+        ("reconnect precision", "reconnect.delay", |config| {
+            config.reconnect.delay = Duration::from_nanos(10_000_001);
         }),
     ];
     for (_name, field, mutate) in cases {

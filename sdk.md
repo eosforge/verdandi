@@ -29,8 +29,9 @@ deliberately narrow:
   and
 - stable string error categories shared by all SDKs.
 
-Campaign/Leader, desired configuration, acknowledgements, and Command are not
-implemented by these SDK slices. Standalone Redis 8.8 and a real
+Desired configuration, acknowledgements, and Command are not implemented by
+these SDK slices. Generic Campaign/Leader election has been withdrawn from the
+SDK scope. Standalone Redis 8.8 and a real
 three-node Redis/three-Sentinel failover topology are qualified for
 Register/Selector. The current evidence includes five-minute update and renewal
 phases in both languages, eight Selectors, and 5,000-record synchronization.
@@ -58,11 +59,10 @@ behavior. Windows/macOS native runtimes, NuGet RID packaging,
 NativeAOT/trimming, TLS, cross-language C# peers, performance, and soak remain
 open.
 
-Campaign/Leader remains unimplemented and uses its own immutable Campaign
-Version plus private readiness token. It does not read or reinterpret the
-existing Registration Version field, whose current Register/Update behavior is
-unchanged and outside this Leader design. Stable `1.0.0` remains reserved for a
-qualified Leader implementation and the complete release contract.
+Registration Version remains an application-defined positive integer whose
+Register/Update behavior is unchanged. No SDK interprets it as a built-in
+election priority. Stable `1.0.0` is reserved for the complete remaining release
+contract, not for a Leader implementation.
 
 ## 2. Shared Redis Contract
 
@@ -678,14 +678,33 @@ if err := handle.Update(ctx, next); err != nil {
 }
 ```
 
-The SDK does not generate these methods and does not accept a Schema or codec
-argument. Application code may use JSON, MessagePack, protobuf, fixed-width
-binary values, or any other stable per-field representation. The complete
-contract, `One`/`Any` selection transactions, local prediction reconciliation,
-and raw `Fields` examples are in
+The SDK does not generate these wire methods and does not accept a runtime
+Schema or codec argument. Application code may use JSON, MessagePack, protobuf,
+fixed-width binary values, or any other stable per-field representation. The
+complete contract and raw `Fields` examples are in
 [`registration/api.md`](registration/api.md).
 
-### 7.2 Go lifecycle and local configuration
+### 7.2 Optional generated Selector references
+
+Go additionally provides `cmd/verdandi-refgen` for policies where detached
+selected-value copies are measurable overhead. It reads application-owned
+`Attr` and `Data` structs and emits only callback-scoped read accessors, Data
+field setters, mutable-slice clone logic, concrete aliases, and a
+`ReferenceSelector` wrapper. It never invents wire names, generates
+`Encode`/`Decode`, interprets a weighting field, or owns selection policy.
+
+Generated `WithOne`/`WithAny` reuse the ordinary Selector's synchronized view,
+transaction gate, and field-granular local overlay. They return only a found
+flag or selected count, so the caller copies a route value inside the callback.
+Only finally selected edits are encoded and committed; all error, cancellation,
+empty, duplicate, foreign, structure-change, and capacity failures roll back.
+No raw `*Data` is exposed. Borrowed views must not escape the synchronous
+callback, while a generated Editor is runtime-token-fenced against later use.
+The exact generator command, supported struct field forms, example, lifecycle
+rules, tests, and Linux measurements are in
+[`registration/api.md`](registration/api.md).
+
+### 7.3 Go lifecycle and local configuration
 
 `registration.Client.Errors`, `Registration.Errors`, `Selector.Errors`, and
 `catalog.Subscriber.Errors` return bounded asynchronous diagnostics.

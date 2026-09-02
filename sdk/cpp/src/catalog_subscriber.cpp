@@ -1263,8 +1263,8 @@ struct subscriber_core::implementation {
                         } else {
                             cursor = std::max(cursor, event->revision);
                             if (*applied) {
-                                const std::set<path> target{event->target};
-                                persist(target, cursor);
+                                const std::set<path> changed_target{event->target};
+                                persist(changed_target, cursor);
                             } else {
                                 persist({}, cursor);
                             }

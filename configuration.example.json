@@ -31,10 +31,7 @@
       "idle_timeout_ms": 10000
     },
     "reconnect": {
-      "initial_delay_ms": 100,
-      "max_delay_ms": 5000,
-      "multiplier": 2,
-      "jitter_percent": 10
+      "delay_ms": 100
     }
   },
   "registration": {
@@ -86,6 +83,7 @@
       "max_delay_ms": 5000,
       "multiplier": 2,
       "jitter_percent": 10
-    }
+    },
+    "local_store_path": "verdandi-catalog.db"
   }
 }

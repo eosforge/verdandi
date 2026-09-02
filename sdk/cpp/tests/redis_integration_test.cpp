@@ -376,6 +376,12 @@ int main() {
     } else {
         configuration.addresses = {standalone};
     }
+    if (const auto ca_file = environment("VERDANDI_TLS_CA_FILE"); !ca_file.empty()) {
+        configuration.tls.enabled = true;
+        configuration.tls.system_roots = false;
+        configuration.tls.server_name = environment("VERDANDI_TLS_SERVER_NAME");
+        configuration.tls.ca_file = ca_file;
+    }
     auto client = verdandi::client::open(configuration);
     if (!client) {
         return fail("client.open", client.error());

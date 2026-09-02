@@ -1,0 +1,55 @@
+{
+  "base_commit": "d5ea35567a990f89a4aea6a667e9f08277249b93",
+  "branch": "alpha",
+  "current_source_endurance_qualified": false,
+  "notes": [
+    "The working tree is uncommitted and was not pushed.",
+    "The earlier frozen-source twelve-hour evidence does not qualify this changed working tree.",
+    "All endpoint fixtures used by this regression reported successful owned cleanup."
+  ],
+  "scores": {
+    "c_abi_legacy": 9.6,
+    "cpp23": 9.6,
+    "csharp": 9.6,
+    "go": 9.7,
+    "lua": 9.8,
+    "overall_alpha_scope": 9.7,
+    "rust": 9.7,
+    "shared_configuration": 9.7,
+    "test_release_engineering": 9.6
+  },
+  "structured_evidence": [
+    "full-project-regression-20260901.json",
+    "csharp-standalone-full-review-20260901.json",
+    "cpp-sentinel-tls-windows-full-review-20260901.json",
+    "cpp-sentinel-tls-linux-full-review-20260901.json",
+    "csharp-sentinel-tls-windows-full-review-20260901.json",
+    "csharp-sentinel-tls-linux-full-review-20260901.json",
+    "sentinel-tls-go-rust-linux-final-review-20260901.json",
+    "catalog-sentinel-final-review-20260901.json"
+  ],
+  "suites": {
+    "cpp_asan_ubsan": "pass",
+    "cpp_clang_format": "pass",
+    "cpp_clang_tidy": "pass",
+    "cpp_gcc_debug": "pass",
+    "cpp_msvc_debug": "pass",
+    "cpp_msvc_shared_release": "pass",
+    "csharp_net8_release": "pass",
+    "csharp_net10_release": "pass",
+    "go_race_linux": "pass",
+    "go_test": "pass",
+    "go_vet": "pass",
+    "redis_8_8_catalog_sentinel": "pass",
+    "redis_8_8_csharp_standalone": "pass",
+    "redis_8_8_csharp_tls_sentinel_linux": "pass",
+    "redis_8_8_csharp_tls_sentinel_windows": "pass",
+    "redis_8_8_full_standalone": "pass",
+    "redis_8_8_go_rust_tls_sentinel_linux": "pass",
+    "rust_1_85_check": "pass",
+    "rust_clippy": "pass",
+    "rust_doc": "pass",
+    "rust_test": "pass"
+  },
+  "status": "pass"
+}

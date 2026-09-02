@@ -386,6 +386,115 @@ Selection behavior:
 The callback must not call `One`, `Any`, `Snapshot`, or `Find` recursively on
 the same Selector and must not retain borrowed candidates after return.
 
+### 5.1 Optional generated Go reference path
+
+The detached `One`/`Any` API remains the safe default when a selected value must
+leave the callback. A high-frequency policy that only needs to copy one route
+identifier and update process-local weighting may opt into the generated
+reference path. The generator emits only strongly typed read-only accessors,
+field setters, mutable-slice cloning, aliases, and the wrapper constructor. It
+does not generate `Encode`/`Decode`, wire field names, Redis logic, or business
+selection policy.
+
+Place the directive beside the application structs and commit its deterministic
+output:
+
+```go
+//go:generate go run github.com/eosforge/verdandi/sdk/go/cmd/verdandi-refgen -attr ProxyAttr -data ProxyData -name Proxy -output proxy_reference_generated.go
+
+type ProxyAttr struct {
+    Region string
+}
+
+type ProxyData struct {
+    Address string
+    Power   int64
+    Queued  int64
+}
+```
+
+The generated API is used without exposing `*ProxyAttr` or `*ProxyData`:
+
+```go
+reference, err := NewProxyReferenceSelector(selector)
+if err != nil {
+    return err
+}
+
+var address string
+found, err := reference.WithOne(ctx,
+    func(candidates ProxyReferenceCandidates) (
+        ProxyReferenceSelection, bool, error,
+    ) {
+        if candidates.Len() == 0 {
+            return ProxyReferenceSelection{}, false, nil
+        }
+        best, _ := candidates.At(0)
+        power := best.Data().Power()
+        for index, count := 1, candidates.Len(); index < count; index++ {
+            candidate, _ := candidates.At(index)
+            candidatePower := candidate.Data().Power()
+            if candidatePower < power {
+                best = candidate
+                power = candidatePower
+            }
+        }
+
+        selected := best.Select()
+        address = selected.Data().Address()
+        if err := selected.Edit().SetPower(power + 1); err != nil {
+            return ProxyReferenceSelection{}, false, err
+        }
+        return selected, true, nil
+    },
+)
+if err != nil {
+    return err
+}
+if !found {
+    return errNoProxy
+}
+return dial(address)
+```
+
+`WithOne` returns only `(bool, error)` and `WithAny` returns only
+`(selectedCount, error)`. The application copies any route value it needs while
+the callback is active. Neither operation creates detached Candidate results.
+Both reuse the same Selector transaction gate and overlay as the ordinary API,
+perform no Redis I/O, and remain unavailable while synchronization is
+incomplete.
+
+Reference-path rules:
+
+- `ReferenceCandidates`, Candidate, Selection, AttrRef, and DataRef are borrowed
+  for exactly one synchronous callback. Go has no lifetime types, so retaining
+  them or invoking them asynchronously is a caller contract violation.
+- generated read views expose no mutable pointer. Scalar, string, value-safe
+  local struct, and fixed-array getters copy by value; slice getters return an
+  independent copy only when that field is read.
+- generated slice setters copy their input. The first setter on a candidate
+  also applies the generated deep clone before changing the transaction value.
+- only edits belonging to the Selection values finally returned by
+  `WithOne`/`WithAny` are encoded and committed. Edits to examined but
+  unselected candidates are discarded.
+- callback error, false/empty selection, context cancellation, invalid or
+  foreign Selection, duplicate `WithAny` Selection, encoding failure, field-
+  structure change, or limit failure rolls back the complete operation.
+- a selected Data value is encoded once after the callback; the reference path
+  does not perform the old defensive re-encode/decode needed for public
+  `*Data` and detached results.
+- generated setters remain token-fenced after callback return. They fail with
+  `CodeContract` instead of mutating a reused transaction buffer.
+
+The generator accepts exported fields whose types can be proven safe from the
+current package source: predeclared scalars, local scalar aliases, fixed arrays,
+local value-only structs, and slices of value-safe scalar elements. It rejects
+embedded or unexported top-level fields, generic structs, maps, pointers,
+interfaces, functions, nested reference-bearing values, and opaque external
+types. These restrictions affect only the optional reference facade; the
+application-owned `Encoder`/`Decoder` remains the wire authority. CI can invoke
+the same command with `-check` to reject a stale generated file.
+
 ## 6. Local prediction and remote reconciliation
 
 Local mutation is a process-local soft prediction, not distributed capacity
@@ -627,21 +736,29 @@ tasks without closing the Registration Client or root transport.
 
 ## 11. Performance reference
 
-The Go WSL/Linux reference benchmark scans 500 typed candidates, chooses the
-lowest Power, stages `Power++`, validates the selected value, commits the local
-overlay, and returns a detached result. Ten `b.Loop` samples on the current
-development machine measured 19.945-21.726 microseconds per operation with a
-21.313-microsecond median, 3,881 bytes, and 43 allocations using the deliberately
-simple decimal test codec. Candidate view buffers are reused; codec work is
-limited to the mutated and returned candidate.
+Go 1.27 WSL/Linux benchmarks on the current 13th Gen Intel Core i7-13700F use
+500 cached typed candidates and ten one-second `b.Loop` samples. The ordinary
+safe `One` scans for minimum Power, stages `Power++`, validates the borrowed
+value, commits the overlay, and returns a detached Candidate. It measured
+11.387-11.714 microseconds/op with an 11.460-microsecond median, 2,225 B/op, and
+28 allocations/op. Generated `WithOne` performs the same scan and local
+`Power++` but intentionally returns no detached Candidate. It measured
+10.118-10.298 microseconds/op with a 10.178-microsecond median, 425 B/op, and
+four allocations/op: 11.18% lower median time, 80.90% fewer bytes, and 85.71%
+fewer allocations in this workload.
 
-The codec destination belongs to the encoder for that call, and the encoder is
-contractually forbidden from retaining it. Removing a redundant post-encode
-clone reduced the same benchmark median by 4.57%, bytes by 24.21%, and
-allocations by 20.37% in ten-sample `benchstat` comparisons. The remaining
-transaction cost is dominated by building and scanning the borrowed ordered
-view; it is intentionally not hidden behind an unsafe long-lived view cache.
+The ordinary safe `Any` selects eight of 500 candidates and returns eight
+detached values. It measured 13.820-14.202 microseconds/op with a
+13.875-microsecond median, 8,065 B/op, and 97 allocations/op. Generated
+`WithAny` selects the same eight into a caller-reused Selection slice and
+returns only the count. It measured 5.525-5.628 microseconds/op with a
+5.587-microsecond median and zero bytes/allocations per steady-state operation,
+a 59.73% lower median. These pairs intentionally compare the safe detached
+contract with the optional callback-only contract; they are not claims that
+identical return semantics became free.
 
-Codec encoding choices still matter. Applications that require lower
-allocation counts should use fixed-width or reusable byte encodings inside
-their own `FieldValue` methods, without changing the Verdandi API.
+The remaining four `WithOne` allocations come from encoding and retaining the
+one changed Data value with the deliberately simple decimal test codec. Codec
+choices still matter. Applications may use fixed-width or reusable byte
+encodings inside their own `Encoder` implementations without changing the
+reference API or its selected-only transaction rules.

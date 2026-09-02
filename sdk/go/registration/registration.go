@@ -17,7 +17,7 @@ type RegistrationOptions struct {
 	TTL time.Duration
 	// RenewInterval 控制自动续期；零值使用 TTL/3，显式值必须在 100ms 至 TTL/3 之间。
 	RenewInterval time.Duration
-	// Version 是应用定义的正整数版本，可由选主策略比较；不得超过 maxSafeInteger。
+	// Version 是应用定义的正整数版本，可供路由或兼容性策略使用；不得超过 maxSafeInteger。
 	Version uint64
 }
 

@@ -6,14 +6,34 @@
       "valid": true,
       "document": {
         "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] }
+      }
+    },
+    {
+      "name": "sentinel-with-ipv6-node",
+      "valid": true,
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "sentinel",
+          "addresses": ["sentinel-a:26379", "[::1]:26379"],
+          "master_name": "primary"
+        }
+      }
+    },
+    {
+      "name": "inclusive-root-boundaries",
+      "valid": true,
+      "document": {
+        "version": "v1",
         "redis": {
           "mode": "standalone",
-          "addresses": ["127.0.0.1:6379"],
-          "auth": {},
-          "sentinel_auth": {},
-          "tls": {},
-          "pool": {},
-          "reconnect": {}
+          "addresses": ["[::1]:65535"],
+          "database": 255,
+          "timeout_ms": 15000,
+          "connect_timeout_ms": 30000,
+          "pool": { "min_connections": 1024, "max_connections": 1024, "idle_timeout_ms": 3600000 },
+          "reconnect": { "delay_ms": 30000 }
         }
       }
     },
@@ -22,20 +42,11 @@
       "valid": true,
       "document": {
         "version": "v1",
-        "redis": {
-          "mode": "standalone",
-          "addresses": ["127.0.0.1:6379"],
-          "auth": {},
-          "sentinel_auth": {},
-          "tls": {},
-          "pool": {},
-          "reconnect": { "jitter_percent": 0 }
-        },
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
         "registration": {
           "zone": "Alpha",
           "renew_jitter_percent": 0,
           "policy_refresh_jitter_percent": 0,
-          "policy": {},
           "selector": {
             "max_retained_bytes": 0,
             "view_publish_interval_ms": 0,
@@ -43,86 +54,399 @@
             "recovery": { "jitter_percent": 0 }
           }
         },
-        "catalog": {
-          "zone": "Alpha",
-          "max_view_bytes": 0,
-          "recovery": { "jitter_percent": 0 }
-        }
+        "catalog": { "zone": "Alpha", "max_view_bytes": 0, "recovery": { "jitter_percent": 0 } }
       }
     },
     {
       "name": "unsupported-version",
       "valid": false,
+      "code": "invalid",
       "field": "version",
-      "document": {
-        "version": "v2",
-        "redis": {
-          "mode": "standalone",
-          "addresses": ["127.0.0.1:6379"],
-          "auth": {},
-          "sentinel_auth": {},
-          "tls": {},
-          "pool": {},
-          "reconnect": {}
-        }
-      }
+      "document": { "version": "v2", "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] } }
+    },
+    {
+      "name": "missing-version",
+      "valid": false,
+      "code": "invalid",
+      "field": "version",
+      "document": { "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] } }
+    },
+    {
+      "name": "missing-redis-object",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.mode",
+      "document": { "version": "v1" }
+    },
+    {
+      "name": "missing-redis-mode",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.mode",
+      "document": { "version": "v1", "redis": { "addresses": ["127.0.0.1:6379"] } }
+    },
+    {
+      "name": "empty-redis-object",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.mode",
+      "document": { "version": "v1", "redis": {} }
+    },
+    {
+      "name": "missing-redis-addresses",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.addresses",
+      "document": { "version": "v1", "redis": { "mode": "standalone" } }
     },
     {
       "name": "cluster-is-not-supported",
       "valid": false,
+      "code": "invalid",
       "field": "redis.mode",
-      "document": {
-        "version": "v1",
-        "redis": {
-          "mode": "cluster",
-          "addresses": ["127.0.0.1:6379"],
-          "auth": {},
-          "sentinel_auth": {},
-          "tls": {},
-          "pool": {},
-          "reconnect": {}
-        }
-      }
+      "document": { "version": "v1", "redis": { "mode": "cluster", "addresses": ["127.0.0.1:6379"] } }
     },
     {
       "name": "zero-command-timeout-is-not-default",
       "valid": false,
+      "code": "invalid",
       "field": "redis.timeout_ms",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "timeout_ms": 0 } }
+    },
+    {
+      "name": "malformed-endpoint",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.addresses",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["127.0.0.1"] } }
+    },
+    {
+      "name": "endpoint-containing-nul",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.addresses",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["redis\u0000:6379"] } }
+    },
+    {
+      "name": "endpoint-containing-space",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.addresses",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["redis host:6379"] } }
+    },
+    {
+      "name": "endpoint-boundary-unicode-space",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.addresses",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["\u00a0redis:6379"] } }
+    },
+    {
+      "name": "endpoint-port-leading-plus",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.addresses",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["redis:+6379"] } }
+    },
+    {
+      "name": "address-element-has-wrong-type",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": [6379] } }
+    },
+    {
+      "name": "standalone-has-multiple-addresses",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.addresses",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379", "127.0.0.1:6380"] }
+      }
+    },
+    {
+      "name": "standalone-has-master-name",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.master_name",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "master_name": "primary" }
+      }
+    },
+    {
+      "name": "standalone-has-sentinel-auth",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.sentinel_auth",
       "document": {
         "version": "v1",
         "redis": {
           "mode": "standalone",
           "addresses": ["127.0.0.1:6379"],
-          "auth": {},
-          "sentinel_auth": {},
-          "tls": {},
-          "timeout_ms": 0,
-          "pool": {},
-          "reconnect": {}
+          "sentinel_auth": { "username": "sentinel" }
         }
+      }
+    },
+    {
+      "name": "sentinel-missing-master-name",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.master_name",
+      "document": { "version": "v1", "redis": { "mode": "sentinel", "addresses": ["127.0.0.1:26379"] } }
+    },
+    {
+      "name": "sentinel-master-boundary-unicode-space",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.master_name",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "sentinel", "addresses": ["127.0.0.1:26379"], "master_name": "primary\u3000" }
+      }
+    },
+    {
+      "name": "numeric-field-has-wrong-type",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "timeout_ms": "2000" } }
+    },
+    {
+      "name": "duration-is-fractional",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "timeout_ms": 10.5 } }
+    },
+    {
+      "name": "nested-object-has-wrong-type",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "document": { "version": "v1", "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "pool": [] } }
+    },
+    {
+      "name": "pool-minimum-exceeds-maximum",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.pool.min_connections",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "pool": { "min_connections": 5, "max_connections": 4 } }
+      }
+    },
+    {
+      "name": "reconnect-delay-below-range",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.reconnect.delay_ms",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "reconnect": { "delay_ms": 9 } }
+      }
+    },
+    {
+      "name": "removed-root-reconnect-field",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"], "reconnect": { "multiplier": 2 } }
+      }
+    },
+    {
+      "name": "sentinel-fixed-server-name",
+      "valid": true,
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "sentinel",
+          "addresses": ["127.0.0.1:26379"],
+          "master_name": "primary",
+          "tls": { "enabled": true, "server_name": "redis.test" }
+        }
+      }
+    },
+    {
+      "name": "sentinel-tls-without-fixed-server-name",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.tls.server_name",
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "sentinel",
+          "addresses": ["127.0.0.1:26379"],
+          "master_name": "primary",
+          "tls": { "enabled": true }
+        }
+      }
+    },
+    {
+      "name": "disabled-tls-has-custom-state",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.tls",
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "tls": { "enabled": false, "ca_file": "roots.pem" }
+        }
+      }
+    },
+    {
+      "name": "tls-client-certificate-is-not-paired",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.tls.cert_file",
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "tls": { "enabled": true, "cert_file": "client.pem" }
+        }
+      }
+    },
+    {
+      "name": "tls-server-name-containing-space",
+      "valid": false,
+      "code": "invalid",
+      "field": "redis.tls.server_name",
+      "document": {
+        "version": "v1",
+        "redis": {
+          "mode": "standalone",
+          "addresses": ["127.0.0.1:6379"],
+          "tls": { "enabled": true, "server_name": "redis host" }
+        }
+      }
+    },
+    {
+      "name": "invalid-registration-zone",
+      "valid": false,
+      "code": "invalid",
+      "field": "registration.zone",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
+        "registration": { "zone": "zone-1" }
+      }
+    },
+    {
+      "name": "invalid-catalog-zone",
+      "valid": false,
+      "code": "invalid",
+      "field": "catalog.zone",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
+        "catalog": { "zone": "zone-1" }
+      }
+    },
+    {
+      "name": "selector-recovery-relation",
+      "valid": false,
+      "code": "invalid",
+      "field": "registration.selector.recovery.initial_delay_ms",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
+        "registration": { "zone": "Alpha", "selector": { "recovery": { "initial_delay_ms": 2000, "max_delay_ms": 1000 } } }
+      }
+    },
+    {
+      "name": "catalog-recovery-relation",
+      "valid": false,
+      "code": "invalid",
+      "field": "catalog.recovery.initial_delay_ms",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
+        "catalog": { "zone": "Alpha", "recovery": { "initial_delay_ms": 2000, "max_delay_ms": 1000 } }
+      }
+    },
+    {
+      "name": "empty-catalog-store-path",
+      "valid": false,
+      "code": "invalid",
+      "field": "catalog.local_store_path",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
+        "catalog": { "zone": "Alpha", "local_store_path": "" }
+      }
+    },
+    {
+      "name": "catalog-store-path-containing-nul",
+      "valid": false,
+      "code": "invalid",
+      "field": "catalog.local_store_path",
+      "document": {
+        "version": "v1",
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
+        "catalog": { "zone": "Alpha", "local_store_path": "catalog\u0000.db" }
       }
     },
     {
       "name": "removed-catalog-lock-object-is-rejected",
       "valid": false,
+      "code": "invalid",
       "field": "json",
       "document": {
         "version": "v1",
-        "redis": {
-          "mode": "standalone",
-          "addresses": ["127.0.0.1:6379"],
-          "auth": {},
-          "sentinel_auth": {},
-          "tls": {},
-          "pool": {},
-          "reconnect": {}
-        },
-        "catalog": {
-          "zone": "Alpha",
-          "recovery": {},
-          "lock": { "ttl_multiplier": 3 }
-        }
+        "redis": { "mode": "standalone", "addresses": ["127.0.0.1:6379"] },
+        "catalog": { "zone": "Alpha", "lock": { "ttl_multiplier": 3 } }
       }
+    }
+  ],
+  "raw_cases": [
+    {
+      "name": "duplicate-field",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "source": "{\"version\":\"v1\",\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"127.0.0.1:6379\"]}}"
+    },
+    {
+      "name": "trailing-document",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "source": "{\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"127.0.0.1:6379\"]}} {}"
+    },
+    {
+      "name": "explicit-null",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "source": "{\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"127.0.0.1:6379\"],\"timeout_ms\":null}}"
+    },
+    {
+      "name": "negative-zero-is-rejected",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "source": "{\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"127.0.0.1:6379\"],\"database\":-0}}"
+    },
+    {
+      "name": "unpaired-surrogate",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "source": "{\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"127.0.0.1:6379\"],\"auth\":{\"username\":\"\\ud800\"}}}"
+    },
+    {
+      "name": "invalid-utf8",
+      "valid": false,
+      "code": "invalid",
+      "field": "json",
+      "source_hex": "7b2276657273696f6e223a227631222c227265646973223a7b226d6f6465223a227374616e64616c6f6e65222c22616464726573736573223a5b223132372e302e302e313a36333739225d2c2261757468223a7b22757365726e616d65223a22ff227d7d7d"
     }
   ]
 }

@@ -1,0 +1,86 @@
+{
+  "base_revision": "d5ea35567a990f89a4aea6a667e9f08277249b93",
+  "branch": "alpha",
+  "date": "2026-09-01",
+  "scope": "shared v1 JSON plus Go, Rust, C++23, C ABI and C# configuration layers",
+  "source_state": "uncommitted working tree",
+  "status": "pass",
+  "conformance": {
+    "raw_cases": 6,
+    "semantic_cases": 40,
+    "total_cases": 46
+  },
+  "suites": [
+    {
+      "name": "Go all packages",
+      "status": "pass",
+      "commands": [
+        "go test ./...",
+        "go vet ./...",
+        "WSL/Linux go test -race ./..."
+      ]
+    },
+    {
+      "name": "Rust current and MSRV",
+      "status": "pass",
+      "commands": [
+        "cargo fmt --check",
+        "cargo test --all-targets",
+        "cargo clippy --all-targets --all-features -- -D warnings",
+        "cargo +1.85.0 test --all-targets"
+      ],
+      "ignored_external_tests": 12
+    },
+    {
+      "name": "C++23 static Debug",
+      "status": "pass",
+      "ctest_passed": 6,
+      "ctest_skipped_without_redis_address": 3,
+      "ctest_total": 9
+    },
+    {
+      "name": "C++23 shared Release",
+      "status": "pass",
+      "ctest_passed": 6,
+      "ctest_skipped_without_redis_address": 3,
+      "ctest_total": 9,
+      "exported_verdandi_symbols": 89
+    },
+    {
+      "name": "C++23 ASan and UBSan",
+      "status": "pass",
+      "ctest_passed": 6,
+      "ctest_skipped_without_redis_address": 3,
+      "ctest_total": 9
+    },
+    {
+      "name": "C++ formatting and static analysis",
+      "status": "pass",
+      "commands": [
+        "verdandi_cpp_format_check",
+        "verdandi_cpp_clang_tidy"
+      ]
+    },
+    {
+      "name": "C# net8.0 and net10.0",
+      "status": "pass",
+      "build_warnings": 0,
+      "build_errors": 0,
+      "linux_self_contained_offline_targets": 2,
+      "semantic_configuration_cases": 40,
+      "string_representable_raw_cases": 5,
+      "invalid_utf16_cases": 1,
+      "invalid_raw_utf8_covered_by_native_boundary": true
+    }
+  ],
+  "not_run": [
+    "live Redis integration",
+    "live TLS integration",
+    "live Sentinel failover",
+    "long-duration soak"
+  ],
+  "git": {
+    "commit_created": false,
+    "push_performed": false
+  }
+}

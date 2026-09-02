@@ -1,6 +1,7 @@
 package verdandi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 )
@@ -85,4 +86,16 @@ func wrapError(code Code, cause error) error {
 		return nil
 	}
 	return &Error{Code: code, Cause: cause}
+}
+
+// wrapContext 把标准 Context 结束原因映射为稳定 Verdandi 错误类别。
+// 未知 Context 错误保守地归类为 unavailable，同时保留原始错误链。
+func wrapContext(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return wrapError(CodeDeadline, err)
+	}
+	if errors.Is(err, context.Canceled) {
+		return wrapError(CodeClosed, err)
+	}
+	return wrapError(CodeUnavailable, err)
 }

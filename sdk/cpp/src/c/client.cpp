@@ -13,6 +13,20 @@ namespace {
 
 extern "C" {
 
+int VERDANDI_C_CALL verdandi_configuration_validate_json(const verdandi_bytes_view json, verdandi_error* error) {
+    return verdandi::c_api::boundary(error, [&]() -> verdandi::result<void> {
+        auto source = verdandi::c_api::read_bytes(json, "json");
+        if (!source) {
+            return std::unexpected(source.error());
+        }
+        auto configuration = verdandi::configuration::from_json(*source);
+        if (!configuration) {
+            return std::unexpected(configuration.error());
+        }
+        return {};
+    });
+}
+
 int VERDANDI_C_CALL verdandi_client_open_json(const verdandi_bytes_view json, verdandi_client** output, verdandi_error* error) {
     if (output != nullptr) {
         *output = nullptr;
@@ -21,7 +35,7 @@ int VERDANDI_C_CALL verdandi_client_open_json(const verdandi_bytes_view json, ve
         if (output == nullptr) {
             return std::unexpected(verdandi::error(verdandi::code::invalid, "output"));
         }
-        auto source = verdandi::c_api::read_bytes(json, "configuration");
+        auto source = verdandi::c_api::read_bytes(json, "json");
         if (!source) {
             return std::unexpected(source.error());
         }

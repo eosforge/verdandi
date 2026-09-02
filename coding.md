@@ -198,8 +198,6 @@ Comment information that code cannot express clearly:
 - paginated Registry subscribe/scan/PING and Catalog Hash/ZSET/Read/floor
   reconciliation invariants;
 - Registration identity and revision fencing invariants;
-- Campaign readiness, Leader ownership-token, retirement, and local term
-  validity invariants;
 - why a retry is safe or requires reconciliation;
 - lease-deadline and clock-skew reasoning;
 - task, connection, timer, buffer, permit, and callback ownership;
@@ -295,12 +293,19 @@ Go-specific rules:
   trailing field comments.
 - Avoid `init` and package-global mutable state unless the lifecycle genuinely
   requires it and tests can isolate it.
-- Generated Attr/Data codecs accept only explicitly tagged, stable-width flat
-  fields. Reject ambiguous aliases, machine-width integers, implicit field
-  names, unsupported nesting, and duplicate wire names during generation.
-- Generated encode/decode paths use emitted code rather than reflection, clone
-  caller-visible byte slices, use canonical byte order, and include a test that
-  regenerates the committed fixture and compares exact bytes.
+- `verdandi-refgen` is an optional mechanical Selector facade generator, not a
+  codec or policy generator. It emits callback-scoped read accessors, Data
+  setters, mutable-slice clones, concrete type aliases, and the wrapper
+  constructor; application `Encoder`/`Decoder` methods remain the sole wire
+  authority.
+- Generated reference paths use emitted code rather than reflection, never
+  expose a mutable Attr/Data pointer, copy slice getters/setters at the public
+  ownership boundary, reject field forms whose alias safety cannot be proven,
+  and include exact regeneration plus stale-output tests.
+- Reference Candidates and their generated views are synchronous callback
+  borrows. Go cannot enforce their lifetime statically; runtime transaction
+  tokens fence Selection validation and generated Editors, while the read hot
+  path relies on the documented no-retention/no-asynchronous-use contract.
 - A typed full Data value may be the ergonomic Update input, but the shared
   writer must still compare canonical fields and transmit only changed
   top-level values.
@@ -349,7 +354,14 @@ Rust-specific rules:
 
 ## 11. C++23 Requirements
 
-The minimum verification baseline is run from `sdk/cpp`:
+The normal Windows/Linux developer entry points are `sdk/cpp/build.ps1` and
+`sdk/cpp/build.sh`; their complete contract is documented in
+[`sdk/cpp/BUILD.md`](sdk/cpp/BUILD.md). They build only the C++23 core, C ABI,
+and Legacy consumers. Go, Rust, and C# remain independent source SDKs and use
+their own language-native commands; C# loads the separately produced shared
+runtime from its application output.
+
+The focused CMake preset baseline is run from `sdk/cpp`:
 
 ```text
 cmake --preset gcc-debug
@@ -363,6 +375,11 @@ ctest --preset gcc-asan-ubsan --output-on-failure
 
 C++-specific rules:
 
+- The Windows/Linux build entry scripts treat console text as an operator and
+  CI contract. Every script-owned help line, selected setting, tool path and
+  version, command, warning, error, elapsed-time result, and final summary uses
+  detailed standard English. Temporary Chinese maintainer comments remain
+  source-only and must never leak into runtime output.
 - The official SDK requires C++23. Public failure-returning operations use
   `std::expected` and do not require callers to catch implementation-driver
   exceptions. Exceptions raised by Boost, allocation, or application codecs
@@ -509,10 +526,10 @@ Python-specific rules:
 - Every decoder has boundary, malformed, oversized, and fuzz/property coverage
   appropriate to the language.
 - Concurrency tests include cancellation, reconnect, shutdown, generation
-  fencing, paginated mutation/replay races, concurrent Leader claims,
-  retirement/cleanup ordering, and stale completion/token races.
+  fencing, paginated mutation/replay races, cleanup ordering, and stale
+  completion/token races.
 - Integration tests use real Redis for Lua, TTL, Pub/Sub, replication, and
-  Sentinel claims.
+  Sentinel failover.
 - Cross-language tests prove producer/consumer combinations, not only
   same-SDK round trips.
 - Benchmarks record environment and measure CPU, allocations, memory, latency,

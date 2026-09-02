@@ -82,7 +82,7 @@ func TestJSONDefaultsAndExplicitZero(t *testing.T) {
 	t.Parallel()
 	config, err := ParseJSON([]byte(`{
 		"version":"v1",
-		"redis":{"mode":"standalone","addresses":["localhost:6379"],"reconnect":{"jitter_percent":0}},
+		"redis":{"mode":"standalone","addresses":["localhost:6379"],"reconnect":{"delay_ms":10}},
 		"registration":{"zone":"Alpha","selector":{"view_publish_interval_ms":0,"max_retained_bytes":0,"clock_uncertainty_ms":0}}
 	}`))
 	if err != nil {
@@ -92,8 +92,8 @@ func TestJSONDefaultsAndExplicitZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if redis.Reconnect.JitterPercent == nil || *redis.Reconnect.JitterPercent != 0 {
-		t.Fatalf("explicit jitter zero was not preserved: %#v", redis.Reconnect.JitterPercent)
+	if redis.Reconnect.Delay != 10*time.Millisecond {
+		t.Fatalf("explicit reconnect delay was not preserved: %v", redis.Reconnect.Delay)
 	}
 	if redis.Timeout != 2*time.Second || redis.Pool.MinConnections != 1 || redis.Pool.MaxConnections != 4 {
 		t.Fatalf("JSON defaults were not materialized: %#v", redis)
@@ -113,6 +113,24 @@ func TestJSONDefaultsAndExplicitZero(t *testing.T) {
 	}
 	if registration.ClockUncertainty == nil || *registration.ClockUncertainty != 0 {
 		t.Fatalf("explicit clock zero was not preserved: %#v", registration.ClockUncertainty)
+	}
+}
+
+func TestParseJSONRejectsInvalidUnicode(t *testing.T) {
+	t.Parallel()
+	validPrefix := []byte(`{"version":"v1","redis":{"mode":"standalone","addresses":["localhost:6379"],"auth":{"username":"`)
+	validSuffix := []byte(`"}}}`)
+	tests := [][]byte{
+		append(append(append([]byte(nil), validPrefix...), 0xff), validSuffix...),
+		[]byte(`{"version":"v1","redis":{"mode":"standalone","addresses":["localhost:6379"],"auth":{"username":"\ud800"}}}`),
+		[]byte(`{"version":"v1","redis":{"mode":"standalone","addresses":["localhost:6379"],"auth":{"username":"\udc00"}}}`),
+	}
+	for _, source := range tests {
+		_, err := ParseJSON(source)
+		var actual *verdandi.Error
+		if !errors.As(err, &actual) || actual.Code != verdandi.CodeInvalid || actual.Field != "json" {
+			t.Fatalf("got %v, want invalid json", err)
+		}
 	}
 }
 
@@ -242,9 +260,9 @@ func TestTLSObjectRejectsInvalidRelationships(t *testing.T) {
 			field:  "redis.tls.cert_file",
 		},
 		{
-			name: "sentinel fixed server name",
+			name: "sentinel missing fixed server name",
 			source: `{"version":"v1","redis":{"mode":"sentinel","addresses":["localhost:26379"],"master_name":"primary",` +
-				`"tls":{"enabled":true,"server_name":"redis.test"}}}`,
+				`"tls":{"enabled":true}}}`,
 			field: "redis.tls.server_name",
 		},
 	}

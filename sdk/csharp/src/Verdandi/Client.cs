@@ -32,7 +32,7 @@ public sealed unsafe class Client : IDisposable
             return Result<Client>.Failure(abi.Error!);
         }
 
-        var encoded = Interop.EncodeUtf8(configurationJson, "configuration");
+        var encoded = Configuration.Encode(configurationJson);
         if (!encoded.IsSuccess)
         {
             return Result<Client>.Failure(encoded.Error!);
@@ -459,23 +459,18 @@ public sealed unsafe class Client : IDisposable
             return Result.Failure(encodedKey.Error!);
         }
 
-        byte[] bytes;
-        try
-        {
-            bytes = value.ToArray();
-        }
-        catch (OutOfMemoryException exception)
-        {
-            return Result.Failure(new VerdandiError("capacity", "value", exception.Message));
-        }
-
         using var nativeKey = new NativeBufferLease(encodedKey.Value);
-        using var nativeValue = new NativeBufferLease(bytes);
-        NativeError error = default;
-        var succeeded = ttl is null
-            ? NativeMethods.KeyStore(_handle, nativeKey.StringView, nativeValue.BytesView, &error)
-            : NativeMethods.KeyStoreTtl(_handle, nativeKey.StringView, nativeValue.BytesView, milliseconds.Value, &error);
-        return Interop.Status(succeeded, error);
+        fixed (byte* data = value)
+        {
+            // C ABI 在同步返回前已把命令参数复制进原生拥有型存储，借用调用方 Span
+            // 可以避免每次原始 Key 写入额外分配并复制一份完整值。
+            var nativeValue = new NativeBytesView(data, checked((nuint)value.Length));
+            NativeError error = default;
+            var succeeded = ttl is null
+                ? NativeMethods.KeyStore(_handle, nativeKey.StringView, nativeValue, &error)
+                : NativeMethods.KeyStoreTtl(_handle, nativeKey.StringView, nativeValue, milliseconds.Value, &error);
+            return Interop.Status(succeeded, error);
+        }
     }
 
     /// <summary>构造根 Client 无效状态的无载荷失败。</summary>

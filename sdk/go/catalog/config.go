@@ -3,7 +3,9 @@ package catalog
 import (
 	mathrand "math/rand/v2"
 	"path/filepath"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	verdandi "github.com/eosforge/verdandi/sdk/go"
 	"github.com/eosforge/verdandi/sdk/go/internal/validate"
@@ -228,8 +230,11 @@ func (config Config) normalize(timeout time.Duration) (runtimeConfig, error) {
 		return runtimeConfig{}, newError(verdandi.CodeInvalid, "catalog.recovery.initial_delay", 0, nil)
 	}
 
-	// 检查点路径检查：空字符串禁用；非空值必须能转换为清理后的绝对路径。
+	// 检查点路径检查：空字符串禁用；非空 UTF-8 路径最多 4096 字节、不得含 NUL，并须能转换为绝对路径。
 	if config.LocalStorePath != "" {
+		if !utf8.ValidString(config.LocalStorePath) || len(config.LocalStorePath) > 4096 || strings.IndexByte(config.LocalStorePath, 0) >= 0 {
+			return runtimeConfig{}, newError(verdandi.CodeInvalid, "catalog.local_store_path", 0, nil)
+		}
 		path, err := filepath.Abs(config.LocalStorePath)
 		if err != nil {
 			return runtimeConfig{}, newError(verdandi.CodeInvalid, "catalog.local_store_path", 0, err)

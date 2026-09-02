@@ -27,7 +27,8 @@ struct tls_configuration {
     bool enabled{false};
     /// 是否包含操作系统信任根；默认 true。关闭时必须提供 `ca_file`。
     bool system_roots{true};
-    /// Standalone 证书/SNI 名称覆盖；默认空，最多 253 个 UTF-8 字节；Sentinel 模式不允许设置。
+    /// 固定证书身份；Standalone 默认空并使用连接地址，Sentinel TLS 必须非空且由所有 Sentinel/数据节点证书共同包含。
+    /// 最多 253 个 UTF-8 字节；DNS 身份同时作为 SNI，IP 身份只用于证书 SAN 校验。
     std::string server_name;
     /// 附加 PEM CA 文件；默认空，路径最多 4096 个 UTF-8 字节，读取上限为 1 MiB。
     std::filesystem::path ca_file;
@@ -53,7 +54,16 @@ struct pool_configuration {
     [[nodiscard]] result<void> check() const;
 };
 
-/// Redis 建连与故障恢复退避配置。
+/// Redis 驱动重新建立物理连接前的固定等待配置。
+struct redis_reconnect_configuration {
+    /// 每次重新建连前的固定等待；默认 100ms，范围 10..30,000ms。
+    std::chrono::milliseconds delay{100};
+
+    /// 校验固定等待范围。
+    [[nodiscard]] result<void> check() const;
+};
+
+/// Selector/Catalog 权威恢复使用的指数退避配置。
 struct reconnect_configuration {
     /// 首次恢复失败后的基础延迟；默认 100ms，范围 10..5,000ms。
     std::chrono::milliseconds initial_delay{100};
@@ -65,7 +75,7 @@ struct reconnect_configuration {
     std::uint8_t jitter_percent{10};
 
     /// 校验退避字段范围及延迟关系。
-    [[nodiscard]] result<void> check(std::string_view prefix = "redis.reconnect") const;
+    [[nodiscard]] result<void> check(std::string_view prefix) const;
 };
 
 /// 根传输支持的 Redis 拓扑；Cluster 在 v1 中没有支持计划。
@@ -96,8 +106,8 @@ struct redis_configuration {
     std::chrono::milliseconds connect_timeout{5'000};
     /// 跨语言一致的连接池控制。
     pool_configuration pool;
-    /// 建连与恢复退避控制。
-    reconnect_configuration reconnect;
+    /// 驱动重新建立连接前的固定等待。
+    redis_reconnect_configuration reconnect;
 
     /// 校验完整拓扑、地址、ACL/TLS 关系以及所有数值边界。
     [[nodiscard]] result<void> check() const;

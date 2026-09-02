@@ -314,8 +314,9 @@ internal static unsafe class Interop
     /// </summary>
     /// <param name="value">待编码文本。</param>
     /// <param name="field">失败错误中的参数名。</param>
+    /// <param name="maximumBytes">允许的 UTF-8 编码字节上限；默认不额外限制，配置 JSON 传入 1 MiB。</param>
     /// <returns>拥有型 UTF-8 字节或稳定错误。</returns>
-    internal static Result<byte[]> EncodeUtf8(string? value, string field)
+    internal static Result<byte[]> EncodeUtf8(string? value, string field, int maximumBytes = int.MaxValue)
     {
         if (value is null)
         {
@@ -324,6 +325,12 @@ internal static unsafe class Interop
 
         try
         {
+            var size = StrictUtf8.GetByteCount(value);
+            if (size > maximumBytes)
+            {
+                return Result<byte[]>.Failure(new VerdandiError("capacity", field));
+            }
+
             return Result<byte[]>.Success(StrictUtf8.GetBytes(value));
         }
         catch (EncoderFallbackException exception)

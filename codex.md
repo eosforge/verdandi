@@ -50,8 +50,6 @@ Its responsibilities are deliberately narrow:
 - discover independently identified service-process Registrations;
 - synchronize leased observed state and coarse load information;
 - synchronize persistent revisioned Catalog key/value namespaces;
-- coordinate leased, version-aware leader terms with fail-closed local
-  admission;
 - distribute versioned desired-configuration documents;
 - record validation, activation, rejection, and expiry results;
 - recover deterministic local state after missed notifications, reconnects,
@@ -76,8 +74,8 @@ Verdandi must not:
 - import Bifrost, Hermes, or another consumer's schema or implementation;
 - implement application routing, user authentication, or business data;
 - select one universal load-balancing algorithm for every consumer;
-- encode a fixed maximum number of services, Nodes, Catalog Values, or leader
-  candidates into the protocol;
+- encode a fixed maximum number of services, Nodes, or Catalog Values into the
+  protocol;
 - perform Redis access on a request or connection selection hot path;
 - present Pub/Sub delivery as durable or authoritative;
 - claim consensus, exactly-once execution, or lossless asynchronous failover;
@@ -124,27 +122,13 @@ a connection-generation RedisClock. Filtering, weights,
 locality, least-load policy, and optimistic reservation logic belong to the
 consuming application.
 
-### 3.4 Campaign and Leader
-
-A Campaign owns one immutable positive-integer version and one fresh private
-readiness token independently from Registration. The token is its internal
-lifetime identity; no separate public Campaign ID is required. Only
-a locally preferred ready Campaign attempts to acquire a Leader term. A Leader
-term uses a separate private ownership token, a conservative local deadline,
-exact-token renewal and release, and joined application cleanup. A higher
-eligible Campaign version asks the current Leader to retire; it does not
-preempt application work before cleanup completes. Every domain has zero or one
-application-active Leader; temporary absence is accepted and overlapping
-active terms are not. Sentinel Campaigns require a deployment-provided durable
-fence before application activation.
-
-### 3.5 Administrator
+### 3.4 Administrator
 
 An Administrator provisions Zones, identities, Redis and
 Sentinel credentials, ACL policy, and the non-expiring Zone capacity Hash.
 Administrative
 credentials must not be available to ordinary Nodes, Publishers, Selectors,
-Campaigns, or Catalog Subscribers.
+or Catalog Subscribers.
 
 ## 4. Communication and Deployment Model
 
@@ -187,8 +171,8 @@ Verdandi provides recoverable convergence, not general distributed consensus:
   Entry; loss, reconnect, or a nonmatching Patch base invokes authoritative
   Hash/ZSET/Read recovery.
 - Durable current keys, paginated indexes, buffered Pub/Sub events, immutable chunks,
-  manifests, current pointers, Registration records, leader terms, Catalog
-  Hashes plus revision indexes, and acknowledgements are the recovery source.
+  manifests, current pointers, Registration records, Catalog Hashes plus
+  revision indexes, and acknowledgements are the recovery source.
 - A subscriber subscribes before its initial authoritative read.
 - Shared Publisher-owned publications carry one Redis-owned monotonic revision
   per target. Registration instead carries one SDK-owned per-UUID revision that
@@ -215,8 +199,8 @@ UUID.
 
 ## 6. Data Classes
 
-Topology, observed load, Catalog KV, leadership, desired configuration,
-acknowledgements, and commands remain distinct because they have different
+Topology, observed load, Catalog KV, desired configuration, acknowledgements,
+and commands remain distinct because they have different
 owners, cadences, and failure semantics.
 
 - **Zone Configuration:** one non-expiring Redis Hash at
@@ -253,10 +237,6 @@ owners, cadences, and failure semantics.
 - **Command:** deferred from SDK `1.0.0`; a future bounded imperative request is
   considered only when desired-state reconciliation cannot express a concrete
   approved operation.
-- **Leadership:** one independent Campaign readiness token/version and lease
-  plus one exact private ownership term. Redis serializes acquisition and
-  token-fenced renewal/release, while local admission fails closed on
-  uncertainty or lease expiry.
 
 Desired configuration uses complete snapshots in the first release. Registry
 uses per-Registration record mutations; Catalog uses globally ordered
@@ -272,11 +252,7 @@ The protocol distinguishes:
 - Registration `revision`: an SDK-owned positive per-UUID content version that
   advances only when Data changes and is validated/stored by Lua; and
 - shared `revision`: a Redis-owned monotonic value within a Catalog, desired
-  target, election, or ACK scope.
-
-Campaign readiness and Leader ownership tokens are independent from
-`registration_id` and public routing metadata. They are private random term
-identities, so delayed renewal or cleanup cannot affect a later term.
+  target, or ACK scope.
 
 A process may update, acknowledge, or delete only the key containing its exact
 Registration UUID. A restart receives another key and never overwrites the
@@ -366,7 +342,7 @@ test evidence, not a permanent maximum.
 Mocks alone are insufficient. Protocol acceptance requires real Redis and
 Sentinel integration tests covering TTL, Lua, paginated Registry loads,
 subscribe/scan/PING reconciliation, Catalog Hash/ZSET/Read alignment,
-tombstones, floors, checkpoints and strict-Patch/LWW conflicts, leader handoff, Pub/Sub loss,
+tombstones, floors, checkpoints and strict-Patch/LWW conflicts, Pub/Sub loss,
 reconnect, replication, failover, script-cache loss, acknowledged-write loss,
 and self-healing republish.
 
@@ -433,7 +409,7 @@ commit and does not become standing permission for later pushes.
 
 ## 13. Current Repository Snapshot
 
-As of 2026-09-01:
+As of 2026-09-02:
 
 - GitHub repository `eosforge/verdandi` exists and is public; package and source
   references use this canonical identity.
@@ -442,9 +418,10 @@ As of 2026-09-01:
 - The maintainer selected `0.1.0` as the current non-production Alpha version
   for distributed development and controlled service integration. No tag or
   package publication is implied by a working-tree metadata change.
-- `1.0.0` remains reserved for the complete stable scope, including qualified
-  Leader election and standard English production-source comments. No stable
-  protocol has been published.
+- `1.0.0` remains reserved for the complete remaining stable scope and standard
+  English production-source comments. Generic Campaign/Leader election was
+  withdrawn on 2026-09-02 and is not a stable release gate. No stable protocol
+  has been published.
 - It was cloned to `D:\laconis\verdandi`.
 - This working copy is on the public `alpha` review branch. Later edits remain
   uncommitted and unpushed until separately authorized.
@@ -504,16 +481,22 @@ As of 2026-09-01:
   package-level generic constructors are removed. Internal generic function
   assignment avoids retained Selector codec closures, and promoted embedded
   fields are used where the flattened literal is explicit and complete.
+- Go Selector additionally offers an optional `verdandi-refgen` facade for a
+  measured callback-only hot path. It generates read-only Attr/Data accessors,
+  selected-Data setters, mutable-slice clones, aliases, and a wrapper but never
+  application codecs or policy. `WithOne`/`WithAny` return no detached values,
+  commit only edits attached to the final Selection set, reuse the ordinary
+  Selector gate/view/overlay, and runtime-fence Editors after the callback.
 - A non-normative decision docket now turns the P0 and P1 open questions into
   explicit recommendations for maintainer review.
 - Redis Open Source 8.0.0 or later in a qualified Redis 8 line is the Alpha
-  backend baseline; Campaign readiness uses Hash field TTL.
+  backend baseline.
 - The first complete source, documentation, conformance, and bounded-regression
   snapshot has been committed and pushed once under the maintainer's explicit
   2026-08-31 instruction. Its detached worktree is the only source accepted by
   the post-freeze twelve-hour campaigns.
-- MIT is selected. Zone/Type and Registration UUID forms, fixed positive-
-  integer SDK-side election comparison, Catalog last-write-wins batches,
+- MIT is selected. Zone/Type and Registration UUID forms, positive-integer
+  application Registration Version, Catalog last-write-wins batches,
   role/Zone ACL granularity, and Registration Meta/Attr/Data field classes are
   accepted. Registration events use key/value MessagePack arrays with aligned
   `register`, `update`, `renew`, and `unregister` kinds; Registry recovery uses per-Registration revisions,
@@ -521,16 +504,89 @@ As of 2026-09-01:
   a Registry-wide revision. Go and Rust have passed standalone Redis 8.8,
   bounded per-UUID pending-event coalescing, cross-language MessagePack, and a
   real three-node Redis/three-Sentinel failover matrix. Exact typed Attr/Data
-  codecs, wider event/fan-out benchmarks, and the cross-language shape of the
-  mandatory Sentinel fence remain under review. Campaign/Leader is not yet
-  implemented. Existing Registration Version and Register/Update behavior are
-  unchanged and outside the Leader task. Rust uses the qualified `fred` line
-  for the implemented slice.
+  codecs and wider event/fan-out benchmarks remain under review. Generic
+  Campaign/Leader election is out of scope. Existing Registration Version and
+  Register/Update behavior remain application-defined and unchanged. Rust uses
+  the qualified `fred` line for the implemented slice.
 
 ## 14. Durable Decision Record
 
 Keep only decisions that materially constrain future work. Never delete a
 superseded entry; mark it superseded and link to its replacement.
+
+### 2026-09-02: Standardize the Windows and Linux native build entry points
+
+- **Decision:** `sdk/cpp/build.ps1` on Windows x64 and `sdk/cpp/build.sh` on
+  Linux x64 are the normal source-build entry points for the C++23 core, C ABI,
+  and C++11/14/17 Legacy facade. Go, Rust, and C# remain independent source
+  SDKs and are not compiled by these scripts. C# only consumes the shared DLL
+  or SO from one of its documented native-library locations.
+- **Toolchain boundary:** The scripts detect and validate existing compilers,
+  SDKs, CMake, build generators, OpenSSL, and vcpkg, but never install a
+  toolchain or package manager. They do not require .NET. Ninja is optional;
+  macOS remains unsupported.
+- **Dependency boundary:** OpenSSL 3.0 or newer comes from the system or an
+  existing vcpkg installation and is never built directly by Verdandi. Boost,
+  SQLite, and yyjson use compatible system packages or checksum-locked source
+  archives. Offline mode permits only verified caches and cannot fall back to
+  the network.
+- **Output contract:** Every script-owned help, progress, diagnostic, warning,
+  error, command, elapsed-time result, and final summary is detailed standard
+  English. The two script sources retain detailed Chinese maintainer comments
+  during the current review phase; comments never enter console output.
+- **Isolation:** Generated files stay under ignored repository-level `build/`
+  paths partitioned by platform, compiler, generator, OpenSSL provider,
+  dependency policy, profile, and linkage. Immutable verified downloads are
+  shared, while extracted sources and compiled objects remain build-tree
+  scoped.
+- **Evidence:** Windows MSVC/vcpkg and Linux GCC/system-OpenSSL online and cold
+  offline configuration passed, as did Release native tests on both platforms.
+  The Windows shared result was separately loaded by the existing C# net8/net10
+  tests. Invalid explicit vcpkg roots and missing offline archives fail early
+  with actionable English diagnostics.
+
+### 2026-09-02: Add an optional generated Go Selector reference path
+
+- **Decision:** Preserve detached `One`/`Any` as the safe default and add a
+  separately generated callback-only facade for consumers whose measured
+  selection path needs to avoid full Candidate/result copies.
+- **Generation boundary:** `verdandi-refgen` emits only read accessors, Data
+  setters, mutable-slice cloning, concrete aliases, and a wrapper constructor.
+  Application `Encoder`/`Decoder`, wire field names, Redis behavior, and
+  selection/weighting logic remain handwritten application contracts.
+- **Lifetime boundary:** Generated views expose no raw mutable pointer and are
+  borrowed for one synchronous callback. Go cannot statically encode that
+  lifetime; callers must not retain or asynchronously use them. Editors and
+  Selection commits remain runtime token-fenced.
+- **Transaction boundary:** `WithOne` returns found/error and `WithAny` returns
+  count/error. Only edits belonging to final returned Selections are encoded
+  and atomically committed to the existing local overlay. Unselected edits and
+  every error/cancellation/invalid-result path roll back.
+- **Reason:** Selector weighting is intentionally local and mutable, while
+  detached results add measurable allocations when the caller only needs one
+  copied route value. The optional facade improves this path without weakening
+  the ordinary API or moving business policy into the SDK.
+
+### 2026-09-02: Withdraw generic Campaign and Leader election
+
+- **Decision:** Remove generic Campaign readiness, Leader election, LeaderTerm,
+  election keys, election Lua, Sentinel fencing adapters, and Leader SDK APIs
+  from every current and stable Verdandi target. They will not be implemented.
+- **Boundary:** Redis Sentinel primary promotion remains required backend
+  recovery. It selects the current Redis primary and is unrelated to an
+  application-level Leader API.
+- **Compatibility:** Registration `@version` remains an application-defined
+  positive integer transported by Register/Update. Verdandi does not compare it
+  or interpret it as an election priority.
+- **Supersession:** This decision supersedes every earlier Campaign/Leader,
+  readiness-token, election-version, exact-term, retirement, and durable-fence
+  decision in this record. Those entries remain only as historical rationale.
+- **Release effect:** Leader is no longer a `1.0.0` requirement. The stable
+  release still requires its remaining protocol, package/ABI, security,
+  documentation, and exact-final-source qualification gates.
+- **Reason:** The maintainer does not plan to provide generic Leader election;
+  retaining an unimplemented design would expand the public contract and
+  release burden without a consuming requirement.
 
 ### 2026-09-01: Release the implemented preview as 0.1.0
 
@@ -538,9 +594,9 @@ superseded entry; mark it superseded and link to its replacement.
   Catalog, configuration, and binding surfaces. It permits distributed
   development and controlled service integration without a production or
   stable compatibility promise.
-- **Decision:** Reserve `1.0.0` for the complete stable contract. It must include
-  qualified Leader election and concise standard English production-source
-  comments in addition to the remaining release matrix.
+- **Partially superseded 2026-09-02:** `1.0.0` remains reserved for the complete
+  stable contract and concise standard English production-source comments, but
+  Leader election is no longer part of that contract.
 - **Decision:** Move the canonical repository and package identity to
   `eosforge/verdandi`. Preserve historical result files as evidence from their
   original commit rather than rewriting embedded old import paths.
@@ -596,9 +652,10 @@ superseded entry; mark it superseded and link to its replacement.
 
 ### 2026-08-21: Separate coordination data classes
 
+- **Partially superseded 2026-09-02:** Generic leadership was removed from the
+  project scope; the remaining data-class separation still applies.
 - **Decision:** Model Registration, Registry, load, Catalog KV,
-  leadership, desired configuration, acknowledgements, and commands
-  separately.
+  desired configuration, acknowledgements, and commands separately.
 - **Reason:** Their owners, rates, security permissions, retention, and failure
   semantics differ materially.
 
@@ -611,12 +668,14 @@ superseded entry; mark it superseded and link to its replacement.
 - **Reason:** Product scale should follow measured deployment capacity while
   every individual operation remains safe and bounded.
 
-### 2026-08-21: Base discovery and leadership on the Hermes Redis invariants
+### 2026-08-21: Base discovery and leadership on the Hermes Redis invariants (partially superseded)
 
+- **Superseded 2026-09-02:** The readiness, ownership, retirement, and term
+  clauses were withdrawn with generic Campaign/Leader election. Discovery keeps
+  the following relevant decision.
 - **Decision:** Carry forward Hermes's proven subscribe-before-snapshot,
-  revision-gap recovery, immutable local views, lease deadlines, separate
-  readiness and ownership tokens, version-aware retirement, and token-CAS
-  release semantics. Replace Hermes's bounded all-in-one snapshot scans with
+  revision-gap recovery, immutable local views, and lease deadlines. Replace
+  Hermes's bounded all-in-one snapshot scans with
   paginated indexes and bounded event buffering between explicit barriers so
   Verdandi does not inherit its 100-instance boundary.
 - **Reason:** The state-machine and failure behavior have real implementation
@@ -660,9 +719,11 @@ superseded entry; mark it superseded and link to its replacement.
   boundary. A principal deliberately granted raw write access can bypass any
   SDK contract, and a canonical binary envelope would not prevent that action.
 
-### 2026-08-21: Require Redis 8 Hash field TTL for readiness
+### 2026-08-21: Require Redis 8 Hash field TTL for readiness (superseded)
 
-- **Decision:** Set Redis Open Source 8.0.0 or later in a qualified Redis 8
+- **Superseded 2026-09-02:** Campaign readiness was withdrawn. Redis 8 remains
+  the baseline for implemented Registry Hash-field TTL.
+- **Former decision:** Set Redis Open Source 8.0.0 or later in a qualified Redis 8
   line as the Alpha baseline. Store one Campaign readiness token per
   independently expiring Hash field.
 - **Reason:** This carries forward Hermes's measured lower-memory readiness
@@ -722,8 +783,7 @@ superseded entry; mark it superseded and link to its replacement.
   revision that advances atomically with every accepted mutation and does not
   reset on Publisher restart. Every mutation emits a wake signal.
 - **Reason:** The authoritative rewrite and revision already provide ordering.
-  Generic Leader election remains available for application coordination but
-  is not a prerequisite for Redis publication.
+  The later 2026-09-02 decision also removed generic Leader election entirely.
 
 ### 2026-08-22: Fix protocol 1.0 without capability negotiation
 
@@ -807,8 +867,10 @@ superseded entry; mark it superseded and link to its replacement.
   partial Redis updates and disjoint ownership without whole-object JSON
   rewrites.
 
-### 2026-08-22: Fix integer election versions and SDK-side comparison
+### 2026-08-22: Fix integer election versions and SDK-side comparison (superseded)
 
+- **Superseded 2026-09-02:** Generic Campaign/Leader election was withdrawn.
+  The earlier 2026-08-24 replacement below is retained only as history.
 - **Superseded 2026-08-24:** The fixed positive-integer SDK comparison remains,
   but election identity and version now belong to an independent Campaign, not
   Registration. The later strict Leader decisions remove version mutation and
@@ -826,7 +888,7 @@ superseded entry; mark it superseded and link to its replacement.
 - **Partially superseded 2026-08-24:** The direct Catalog identifier form
   remains; the opaque business-key/hash-token dimension was removed when one
   Catalog became one raw Value.
-- **Decision:** Case-sensitive partition, service, Catalog, and election-domain
+- **Decision:** Case-sensitive partition, service, and Catalog
   IDs use `[A-Za-z][A-Za-z0-9_.-]{0,63}`. An opaque Catalog business key is 1
   through 1,024 bytes; Redis keys use its lowercase unpadded base32hex SHA-256
   token and records validate the complete original key.
@@ -844,12 +906,13 @@ superseded entry; mark it superseded and link to its replacement.
 - **Reason for change:** One protocol-wide positive integer preserves the
   index-free scalable design without cross-language comparison ambiguity.
 
-### 2026-08-22: Use TTL-backed membership instead of expiry indexes
+### 2026-08-22: Use TTL-backed membership instead of expiry indexes (partially superseded)
 
-- **Partially superseded 2026-08-24:** This remains the Registry/Campaign rule;
-  Catalog no longer has membership fields or TTL.
-- **Decision:** Registry membership and Campaign readiness are Redis 8 Hash
-  fields with independent TTL. Proposed Catalog membership uses the same field-
+- **Partially superseded 2026-09-02:** Campaign readiness was withdrawn;
+  Registry membership remains current. Catalog no longer has membership fields
+  or TTL.
+- **Decision:** Registry membership is stored in Redis 8 Hash fields with
+  independent TTL. The former Catalog proposal used the same field-
   TTL mechanism when its record has TTL. Key/field TTL determines liveness and
   natural cleanup; no separate stale expiry/version index is required.
 - **Reason:** It removes redundant index cleanup while retaining bounded
@@ -957,7 +1020,7 @@ superseded entry; mark it superseded and link to its replacement.
 ### 2026-08-22: Scope ACLs by role and Zone
 
 - **Decision:** Redis ACL credentials grant combinations of Node, Publisher,
-  Selector, Campaign, Catalog Mirror, and Administrator roles within a Zone.
+  Selector, Catalog Mirror, and Administrator roles within a Zone.
   Do not create a credential policy per Registration UUID.
 - **Reason:** Per-start UUIDs change on every restart; role/Zone policy is
   stable and matches the chosen ACL trust boundary.
@@ -1025,8 +1088,8 @@ superseded entry; mark it superseded and link to its replacement.
 
 ### 2026-08-22: Align the four Registration lifecycle kinds
 
-- **Retained:** The independent-Campaign Leader decision does not alter these
-  Registration lifecycle kinds or Version/Data update behavior.
+- **Retained:** The subsequently withdrawn Campaign/Leader proposal never
+  altered these Registration lifecycle kinds or Version/Data update behavior.
 - **Decision:** SDK operations, Lua mutations, and Pub/Sub events use the same
   four string kinds: `register`, `update`, `renew`, and `unregister`. Register
   carries complete Meta/Attr/Data; Update carries UUID, Redis timestamp, the
@@ -1167,9 +1230,10 @@ superseded entry; mark it superseded and link to its replacement.
   results live under `testkit/results/` and the assessment is in
   `test-results.md`.
 - **Scope boundary:** this completes the current Registration/Selector slice,
-  not SDK `1.0.0`. Catalog, Campaign/Leader, desired state, acknowledgements,
-  TLS, managed Redis, and their qualification remain later work. No commit,
-  tag, package release, or push exists.
+  not SDK `1.0.0`. At this checkpoint Catalog, Campaign/Leader, desired state,
+  acknowledgements, TLS, managed Redis, and their qualification remained later
+  work; the 2026-09-02 decision subsequently withdrew Campaign/Leader. No
+  commit, tag, package release, or push exists.
 
 ### 2026-08-24: Keep Registration recovery state volatile
 
@@ -1225,8 +1289,8 @@ superseded entry; mark it superseded and link to its replacement.
 
 ### 2026-08-24: Freeze and optimize the positional Registration Lua ABI
 
-- **Retained:** The independent-Campaign Leader decision does not alter any
-  Registration positional ABI or generated script SHA.
+- **Retained:** The subsequently withdrawn Campaign/Leader proposal never
+  altered any Registration positional ABI or generated script SHA.
 - **Decision:** Fixed request controls are value-only positional slots. Register
   receives UUID, revision, TTL, and version before complete named Attr/Data
   pairs. Update receives UUID, revision, and version-or-empty before named Data
@@ -1282,12 +1346,14 @@ superseded entry; mark it superseded and link to its replacement.
   fresh five-minute load phases; 5,000-record recovery; and the complete
   two-promotion Sentinel matrix pass. No commit, release, or push was created.
 
-### 2026-08-24: Require immutable Version and zero-or-one active Leader
+### 2026-08-24: Require immutable Version and zero-or-one active Leader (superseded)
 
-- **Partially superseded 2026-08-24:** Strict zero-or-one activation and
-  Sentinel fencing remain accepted. The Registration Version conclusions below
-  were withdrawn from the Leader scope; existing Registration behavior remains
-  unchanged for later independent work.
+- **Superseded 2026-09-02:** The entire Campaign/Leader target was withdrawn.
+  The historical 2026-08-24 refinement below no longer constrains current work.
+- **Historical 2026-08-24 refinement:** Strict zero-or-one activation and
+  Sentinel fencing were retained at that checkpoint. The 2026-09-02 decision
+  later withdrew the complete Leader target; existing Registration behavior
+  remains unchanged.
 
 - **Decision:** Registration `@version` is the election priority already
   present in Meta and is immutable for the process-start UUID lifetime.
@@ -1310,9 +1376,14 @@ superseded entry; mark it superseded and link to its replacement.
   through invalidation and joined cleanup. Missing or failed fencing leaves the
   domain without an active Leader.
 - **Implementation status:** No Registration source or ABI change belongs to
-  the Leader task. Leader implementation and qualification remain future work.
+  the historical Leader task. It was future work at this checkpoint and was
+  later withdrawn rather than implemented.
 
-### 2026-08-24: Decouple Campaign and election Version from Registration
+### 2026-08-24: Decouple Campaign and election Version from Registration (superseded)
+
+- **Superseded 2026-09-02:** The entire Campaign/Leader target was withdrawn.
+  Registration Version remains application-defined, but none of the historical
+  Campaign lifecycle or election requirements remain current.
 
 - **Decision:** Verdandi's generic Campaign creates one immutable
   positive-integer Version and private random readiness token for its own
@@ -1961,10 +2032,11 @@ current; the request-queue representation below is superseded by the
   set. Each PEM file is read with a 1 MiB cap. JSON loading checks structure and
   path bounds without touching files; native transport construction reads them
   before any Redis connection.
-- **SNI boundary:** Fixed `server_name` is Standalone-only. Fred cannot carry
-  one override into a primary newly discovered by Sentinel, so Sentinel must
-  advertise host names present in its certificates rather than receiving a
-  Go-only behavior.
+- **Superseded 2026-09-01 — former SNI boundary:** Fixed `server_name` was
+  initially limited to Standalone because Fred could not carry one override
+  into a primary newly discovered by Sentinel. The later fixed-identity
+  Sentinel TLS decision replaces this restriction with a cross-language
+  transport implementation and deployment contract.
 - **Catalog workload:** Keep the external token-fenced Path lock. A Publisher
   is normally a single writer or one of a few nearby writers, making contention
   exceptional and the acquire round trip acceptable. This preserves SDK-owned
@@ -2029,9 +2101,9 @@ current; the request-queue representation below is superseded by the
   topology and may use a transactional monotonic SQLite restart checkpoint.
 - **Configuration and topology:** C++ loads the same strict v1 JSON and owns
   equivalent native `check()` methods. Redis 8 Standalone, ACLs, Standalone TLS,
-  and plain Sentinel are implemented. Cluster and Sentinel+TLS are rejected;
-  the latter remains closed until dynamic discovery can preserve hostname
-  verification without an insecure escape hatch.
+  and plain Sentinel were implemented at this checkpoint. Cluster and
+  Sentinel+TLS were rejected; the 2026-09-01 decision below supersedes only the
+  Sentinel+TLS restriction.
 - **Compatibility:** A second C++11/14/17 SDK is not maintained. Implemented C
   ABI v1 exposes the same compiled C++23 core to C11 and C++11/14/17 callers
   through opaque handles, raw Fields, strict JSON configuration, and owned
@@ -2039,8 +2111,8 @@ current; the request-queue representation below is superseded by the
   although a source build still needs a C++23-capable toolchain for the core.
 - **Evidence boundary:** Strict GCC, unit and authenticated Standalone
   integration, clang-format, clang-tidy, ASan/UBSan/leak checks, and an isolated
-  three-node/three-Sentinel startup/integration smoke pass. This does not claim
-  a full two-promotion C++ failover matrix, live TLS, MSVC/Clang/macOS,
+  three-node/three-Sentinel startup/integration smoke pass. At this checkpoint
+  this did not claim a full two-promotion C++ failover matrix, live TLS, MSVC/Clang/macOS,
   install/export packaging, long soak, or C++ performance qualification.
   Static/shared C ABI builds and lower-standard GCC consumers now pass, but
   Windows DLL/MSVC and automated ABI compatibility remain open. Details and
@@ -2099,7 +2171,7 @@ current; the request-queue representation below is superseded by the
   ACL Standalone tests, concurrent Registration/Selector pressure, configured
   capacity boundaries, concurrent root disposal, forced finalizer cleanup, and
   a two-promotion Sentinel fault matrix pass.
-  Windows/macOS, NativeAOT/trimming, NuGet packaging, TLS, direct
+  At this checkpoint Windows/macOS, NativeAOT/trimming, NuGet packaging, TLS, direct
   cross-language C# peers, performance, and soak remain release gates. The current managed-scope score is
   **9.3/10**.
 
@@ -2117,3 +2189,63 @@ current; the request-queue representation below is superseded by the
   run therefore owns its .NET 8/10 Standalone and Sentinel results, while the
   Release-only C++ parser correction separately owns Debug, shared Release,
   ASan/UBSan, format, clang-tidy, and live C++ Sentinel results.
+
+### 2026-09-01: Commit to fixed-identity Sentinel TLS and local runtime capability queries
+
+- **Sentinel TLS contract:** TLS-enabled Sentinel requires one non-empty fixed
+  `redis.tls.server_name`. Every Sentinel and every Redis primary/replica that
+  can be announced must present a certificate containing this same DNS name or
+  IP SAN. A Sentinel-returned address is routing input and never changes the
+  configured trust identity.
+- **Verification:** All SDKs retain TLS 1.2+, CA-chain, validity, handshake-
+  signature, and peer-identity verification. No insecure bypass is added. Go
+  applies one `tls.Config.ServerName`; C++ stores the identity on `SSL_CTX` and
+  reapplies DNS SNI at every OpenSSL handshake, including Boost.Redis streams
+  rebuilt after discovery or failover.
+- **Rust transport boundary:** rustls delegates complete validation to its
+  standard WebPKI verifier with only the server identity fixed. Fred 10.1
+  cannot propagate fixed SNI to every dynamically discovered node, so Sentinel
+  mode disables address-derived SNI. Redis/Sentinel must terminate TLS directly
+  and cannot depend on SNI virtual-host routing for dynamic node addresses.
+- **Capability API:** C ABI v1 adds the allocation-free exact string query
+  `verdandi_c_has_capability`. C++11 Legacy exposes `has_capability`, and C#
+  exposes `Runtime.Supports`. Current names are `catalog`, `client`,
+  `configuration.json`, `redis.commands`, `redis.sentinel_tls`, `registration`,
+  and `selector`. Presence describes compiled code, not Redis, ACL, certificate,
+  or network health. This does not supersede the 2026-08-22 decision against
+  wire-protocol capability negotiation.
+- **Evidence:** On both Windows x64 and Linux x64, the certificate SAN contained
+  only `verdandi.test`, not the announced node IPs. Go and Rust rejected a wrong
+  fixed identity and preserved UUIDs plus Selector generations `1 -> 2 -> 3`
+  through two promotions, total Sentinel loss, and recovery. C++23 passed TLS
+  Root/Registration/Selector/Catalog/checkpoint integration and rejected a
+  wrong identity on both native runtimes. C# net8.0 and net10.0 passed the
+  two-promotion matrix through each platform's C++ shared core.
+- **Deferred scope:** Automated native/NuGet RID packaging remains deliberately
+  deferred. Live mutual TLS, package signing, direct C++23 two-promotion
+  coverage, and TLS endurance remain future release gates.
+
+### 2026-09-01: Support Linux and Windows while excluding macOS
+
+- **Platform contract:** Linux x64 and Windows x64 are supported source-build
+  targets. macOS is intentionally unsupported and is not a deferred `1.0.0`
+  release gate.
+- **Windows baseline:** Native C++ targets Windows 10 or newer. The qualified
+  local toolchain is Visual Studio Community 2026, MSVC 19.51, Windows SDK
+  26100, CMake 4.4, and an existing vcpkg OpenSSL 3.6.0 installation. Verdandi
+  does not install a compiler, SDK, package manager, or OpenSSL automatically.
+- **Build behavior:** MSVC compiles project sources explicitly as UTF-8 so the
+  temporary Chinese production comments remain valid under `/W4 /WX`. The
+  platform baseline is expressed through `_WIN32_WINNT` and `WINVER`; warning
+  severity is not reduced.
+- **Evidence:** Static Debug and shared Release builds both pass the complete
+  nine-test acceptance matrix with only the three intentionally endpoint-owned
+  tests skipped. The DLL exports the ABI version and string capability query;
+  Windows .NET 8 and .NET 10 directly load it and pass their offline suites and
+  complete two-promotion Sentinel TLS matrix. Direct C++23 TLS domain smoke and
+  native Go/Rust two-promotion TLS also pass on Windows. Linux GCC Debug/shared
+  Release, ASan/UBSan, formatting, and the corresponding TLS matrix remain
+  passing.
+- **Remaining Windows scope:** Automated RID packaging, signing and binary-ABI
+  automation remain unqualified. They are separate from the now-proven
+  compiler, DLL, managed-loading, and server-authenticated TLS boundaries.

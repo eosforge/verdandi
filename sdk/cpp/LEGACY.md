@@ -137,6 +137,19 @@ The facade does not define another configuration default/range table. Parsing,
 validation, ACLs, pooling, reconnect behavior, and topology remain in the
 native runtime selected by the JSON document.
 
+Before constructing optional integrations, a lower-standard consumer can query
+the loaded runtime without allocating a handle:
+
+```cpp
+if (!verdandi::legacy::has_capability("redis.sentinel_tls")) {
+    report_incompatible_runtime();
+}
+```
+
+Unknown and empty names return false. Capability presence describes compiled
+code only; it does not test the current Redis topology, certificate files, ACLs,
+or network.
+
 ## Registration
 
 Registration construction is local. `publish` remains the explicit readiness
@@ -277,8 +290,11 @@ retains its Subscriber state and loads one atomic immutable Fields snapshot.
   `result<T>` is copy/move constructible but deliberately non-assignable because
   C++11 cannot safely switch an inline Union between arbitrary throwing user
   types; construct the next result as a new value instead.
-- Windows DLL/MSVC, Clang, macOS, install/export packages, and automated ABI
-  compatibility remain release gates.
+- Windows MSVC static and shared offline builds now pass for C++11/14/17. The
+  shared C++23/C ABI core also has live Windows private-CA Sentinel TLS evidence;
+  the Legacy facade itself remains offline-qualified. Linux Clang,
+  install/export packages, and automated ABI compatibility remain release
+  gates. macOS is unsupported.
 
 Direct C ownership and binary-evolution rules remain documented in
 [`C_ABI.md`](C_ABI.md).

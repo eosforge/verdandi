@@ -1,4 +1,4 @@
-// Package configuration 定义 Go/Rust 共用的 JSON 配置结构。
+// Package configuration 定义 Verdandi v1 跨语言外部 JSON 配置结构。
 //
 // JSON 层只使用字符串、布尔值、十进制整数、数组和嵌套对象；加载后再转换成
 // Verdandi 各领域使用的 time.Duration、TLS、驱动拓扑和本地路径等精确类型。
@@ -24,13 +24,13 @@ type Auth struct {
 	Password string `json:"password"`
 }
 
-// TLS 描述 Go/Rust 共用的 Redis TLS 信任、SNI 和客户端证书文件。
+// TLS 描述跨语言统一的 Redis TLS 信任、固定证书身份和客户端证书文件。
 type TLS struct {
 	// Enabled 控制是否启用 TLS；默认 false。
 	Enabled bool `json:"enabled"`
 	// SystemRoots 控制是否信任操作系统根证书；省略使用 true，false 时必须提供 CAFile。
 	SystemRoots *bool `json:"system_roots,omitempty"`
-	// ServerName 覆盖证书校验和握手使用的服务名；默认空字符串并使用连接地址，仅 Standalone 允许配置，UTF-8 字节数上限为 253。
+	// ServerName 指定固定证书身份；Standalone 默认空并使用连接地址，Sentinel TLS 必须非空且由所有 Sentinel/数据节点证书共同包含，UTF-8 字节数上限为 253。
 	ServerName string `json:"server_name"`
 	// CAFile 是追加信任的 PEM CA bundle 路径；默认空字符串，每个文件读取上限为 1 MiB。
 	CAFile string `json:"ca_file"`
@@ -54,7 +54,7 @@ type Redis struct {
 	SentinelAuth Auth `json:"sentinel_auth"`
 	// Database 是逻辑数据库编号；省略使用 0，允许范围为 0 至 255。
 	Database *int64 `json:"database,omitempty"`
-	// TLS 控制加密、系统/私有信任根、Standalone SNI 覆盖和可选双向 TLS；子字段均可省略并采用默认值。
+	// TLS 控制加密、系统/私有信任根、固定证书身份和可选双向 TLS；子字段均可省略并采用默认值。
 	TLS TLS `json:"tls"`
 	// TimeoutMS 是单条普通 Redis 命令总等待上限；省略使用 2000，允许范围为 10 至 15000。
 	TimeoutMS *int64 `json:"timeout_ms,omitempty"`
@@ -62,7 +62,7 @@ type Redis struct {
 	ConnectTimeoutMS *int64 `json:"connect_timeout_ms,omitempty"`
 	// Pool 控制共享连接池；省略字段分别使用 1、4 和 10000 毫秒。
 	Pool Pool `json:"pool"`
-	// Reconnect 控制连接恢复退避，不会重放已发送的业务命令。
+	// Reconnect 控制重新建立物理连接前的固定等待，不会重放已发送的业务命令。
 	Reconnect Reconnect `json:"reconnect"`
 }
 
@@ -76,16 +76,10 @@ type Pool struct {
 	IdleTimeoutMS *int64 `json:"idle_timeout_ms,omitempty"`
 }
 
-// Reconnect 描述 Redis 连接恢复退避。
+// Reconnect 描述 Redis 驱动重新建立物理连接前的固定等待。
 type Reconnect struct {
-	// InitialDelayMS 是首次恢复等待；省略使用 100，允许范围为 10 至 5000。
-	InitialDelayMS *int64 `json:"initial_delay_ms,omitempty"`
-	// MaxDelayMS 是恢复等待上限；省略使用 5000，允许范围为 100 至 30000。
-	MaxDelayMS *int64 `json:"max_delay_ms,omitempty"`
-	// Multiplier 是指数增长倍数；省略使用 2，允许范围为 1 至 8。
-	Multiplier *int64 `json:"multiplier,omitempty"`
-	// JitterPercent 是随机抖动百分比；省略使用 10，允许范围为 0 至 50，零表示禁用。
-	JitterPercent *int64 `json:"jitter_percent,omitempty"`
+	// DelayMS 是每次重新建连前的固定等待；省略使用 100，允许范围为 10 至 30000。
+	DelayMS *int64 `json:"delay_ms,omitempty"`
 }
 
 // Registration 描述一个 Zone 的 Registration、Redis 策略默认值和 Selector 本地行为。

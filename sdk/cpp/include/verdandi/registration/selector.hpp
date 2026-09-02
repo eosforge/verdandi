@@ -497,8 +497,9 @@ private:
             return verdandi::detail::invoke_application("candidate", [&]() -> result<candidate<Attr, Data>> {
                 return candidate<Attr, Data>{entry.record->meta, *entry.attr, entry.staged_data ? *entry.staged_data : *entry.data};
             });
+        } else {
+            return detach_record(entry.record, entry.staged_data ? &entry.staged_fields : entry.data_fields);
         }
-        return detach_record(entry.record, entry.staged_data ? &entry.staged_fields : entry.data_fields);
     }
 
     [[nodiscard]] static result<candidate<Attr, Data>> detach_record(const std::shared_ptr<const detail::selector_record>& record,

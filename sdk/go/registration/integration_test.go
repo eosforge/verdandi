@@ -465,6 +465,124 @@ func TestTypedRegistrationAndTransactionalSelectorIntegration(t *testing.T) {
 	}
 }
 
+func TestReferenceSelectorIntegration(t *testing.T) {
+	redisURL := os.Getenv("VERDANDI_REDIS_URL")
+	if redisURL == "" {
+		t.Skip("VERDANDI_REDIS_URL is not configured")
+	}
+	options, err := redis.ParseURL(redisURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := redis.NewClient(options)
+	t.Cleanup(func() { _ = raw.Close() })
+	zone := integrationZone(t)
+	transportConfig := verdandi.Config{Standalone: &verdandi.Standalone{
+		Address: options.Addr, Username: options.Username, Password: options.Password,
+		Database: options.DB, TLS: options.TLSConfig,
+	}}
+	interval := time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	client, err := openTestRegistrationClient(t, ctx, transportConfig, Config{
+		Zone: zone, SelectorPublishInterval: &interval, SelectorMaxBytes: 1 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer closeCancel()
+		_ = client.Close(closeCtx)
+		cleanupZone(t, raw, zone)
+	})
+
+	selector, err := client.Selector[apiAttr, apiData](ctx, SelectorOptions{Type: "reference"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer closeCancel()
+		_ = selector.Close(closeCtx)
+	})
+	registration, err := client.Registration[apiAttr, apiData](RegistrationOptions{
+		Type: "reference", TTL: 3 * time.Second, RenewInterval: 500 * time.Millisecond, Version: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := registration.Register(ctx, apiAttr{Region: []byte("east")}, apiData{Power: 1}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer closeCancel()
+		_ = registration.Unregister(closeCtx)
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		candidate, exists, findErr := selector.Find(ctx, registration.UUID())
+		if findErr != nil && !IsCode(findErr, CodeUnavailable) {
+			t.Fatal(findErr)
+		}
+		if findErr == nil && exists && candidate.Data.Power == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("reference Selector did not observe Registration")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	reference := newAPIReferenceSelector(t, selector)
+	var selectedUUID string
+	selected, err := reference.WithOne(ctx, func(candidates apiReferenceCandidates) (apiReferenceSelection, bool, error) {
+		if candidates.Len() != 1 {
+			return apiReferenceSelection{}, false, fmt.Errorf("candidate count %d", candidates.Len())
+		}
+		candidate, ok := candidates.At(0)
+		if !ok {
+			return apiReferenceSelection{}, false, fmt.Errorf("candidate missing")
+		}
+		selectedUUID = candidate.Meta().UUID
+		selection := candidate.Select()
+		if editErr := selection.Edit().SetPower(candidate.Data().Power() + 1); editErr != nil {
+			return apiReferenceSelection{}, false, editErr
+		}
+		return selection, true, nil
+	})
+	if err != nil || !selected || selectedUUID != registration.UUID() {
+		t.Fatalf("WithOne = uuid %q, %v, %v", selectedUUID, selected, err)
+	}
+	locallyPredicted, exists, err := selector.Find(ctx, registration.UUID())
+	if err != nil || !exists || locallyPredicted.Data.Power != 2 {
+		t.Fatalf("local prediction = %#v, %v, %v", locallyPredicted, exists, err)
+	}
+
+	if err := registration.Update(ctx, apiData{Power: 8}); err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		candidate, exists, findErr := selector.Find(ctx, registration.UUID())
+		if findErr == nil && exists && candidate.Data.Power == 8 {
+			break
+		}
+		if findErr != nil && !IsCode(findErr, CodeUnavailable) {
+			t.Fatal(findErr)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("remote Update did not replace reference prediction: %#v, %v, %v", candidate, exists, findErr)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := registration.Unregister(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func testSelectorMissingRepairCapacity(t *testing.T, ctx context.Context, raw *redis.Client, client *Client, selector *RawSelector) {
 	t.Helper()
 	runtime := requireRegistrationRuntime(t, client)

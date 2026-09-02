@@ -4,6 +4,10 @@
 
 Date: 2026-09-01
 
+Scope update, 2026-09-02: generic Campaign/Leader election was withdrawn from
+all release targets. Historical references below describe the scope at their
+recorded checkpoint only; Redis Sentinel primary failover remains supported.
+
 The implemented Go, Rust, and C++23 Registration/Selector and Catalog slices,
 plus the C# facade over C ABI v1, have the evidence boundaries recorded below.
 Go and Rust have prior
@@ -16,6 +20,104 @@ The 2026-08-28 Fields-mailbox/configuration revision passed the recorded
 one-hour owned campaign. The newer 2026-08-29 optimization fingerprint has its
 own microbenchmark, full short Redis, race, interoperability, and Sentinel
 evidence below; it does not inherit the earlier fingerprint's one-hour label.
+
+### 2026-09-02 Windows/Linux native build-entry regression
+
+- Added the normal `sdk/cpp/build.ps1` and `sdk/cpp/build.sh` entry points for
+  C++23, C ABI, and C++11/14/17 Legacy. Go, Rust, and C# are explicitly outside
+  this native build boundary. C# independently compiles and loads a shared
+  DLL/SO from its application output.
+- Windows actual doctor passed C++23 compile/link with Visual Studio 18 2026,
+  MSVC toolset 14.51, CMake 4.4.2, existing vcpkg, and OpenSSL 3.6.0. Linux
+  actual doctor passed GCC 13.3, CMake 4.3.2, Ninja, and system OpenSSL 3.0+
+  compile/link. Neither path requires .NET.
+- Fresh empty Release trees configured offline from checksum-verified caches on
+  Windows and Linux. Full offline builds/tests passed, then online reuse of the
+  same trees passed without dependency re-extraction. Corrupt/missing offline
+  archives cannot fall through to the network.
+- Final Windows Release tests passed six endpoint-independent native entries,
+  with three expected endpoint-owned skips. Final Linux Release tests passed
+  the same six native entries and three expected endpoint-owned skips. The
+  final Windows shared result was separately loaded by the existing C#
+  net8/net10 tests after managed orchestration was removed; C# is not a script
+  stage.
+- PowerShell 5.1/current parsing, detailed comment-based help, Bash syntax and
+  help, check-profile dry runs, exact tool-path reporting, invalid explicit
+  vcpkg roots, atomic environment-manifest writes, JSON parsing, line length,
+  trailing whitespace, and script-owned ASCII/English runtime-string audits
+  passed.
+- Every script-owned console message is detailed standard English. Script
+  source comments remain detailed Chinese for the current maintainer review.
+  The machine result is
+  [`native-build-entry-20260902.json`](testkit/results/native-build-entry-20260902.json).
+  No commit or push was performed.
+
+### 2026-09-02 generated Go Selector reference API
+
+- Added the optional callback-only `ReferenceSelector` and deterministic
+  `verdandi-refgen` facade while preserving the ordinary detached APIs.
+- Generation/check, vet, ten shuffled all-package runs, complete WSL/Linux
+  race, 100 shuffled targeted race repetitions, mutable-ownership/rollback/
+  panic/concurrency tests, and generated public-API compilation passed.
+- A random-Zone Redis 8.8 integration passed typed publication, discovery,
+  local `Power++`, remote Update correction, joined cleanup, and final zero
+  owned keys. It performed no global flush and no Catalog operation.
+- Ten one-second Linux samples reduced selected-and-mutated 500-candidate `One`
+  from a median 11.460 microseconds/28 allocations to 10.178 microseconds/four
+  allocations. Eight-of-500 `Any` fell from 13.875 microseconds/97 allocations
+  to 5.587 microseconds/zero allocations. Reference operations intentionally
+  return no detached values, so this is an explicit contract tradeoff.
+- Complete samples, source fingerprints, test matrix, discarded attempts, and
+  release boundary are in
+  [`go-selector-reference-20260902.json`](testkit/results/go-selector-reference-20260902.json).
+- This is uncommitted working-tree evidence, not inherited endurance
+  qualification. No commit or push was performed.
+
+### 2026-09-01 complete working-tree optimization regression
+
+- The detailed current-tree review is
+  [`optimization-review-20260901.md`](optimization-review-20260901.md); its
+  machine-readable gate summary is
+  [`optimization-regression-20260901.json`](testkit/results/optimization-regression-20260901.json).
+- Go passed format, vet, all packages, and WSL/Linux race. Rust passed format,
+  all-feature strict Clippy, warning-denied rustdoc, 73 library tests, six
+  offline external tests, and the declared Rust 1.85 check. C# passed format/
+  analyzers and zero-warning net8/net10 Release builds.
+- C++ passed clang-format, project clang-tidy, GCC Debug, GCC ASan/UBSan, MSVC
+  Debug, and MSVC shared Release. Every tree accepted 9/9 CTest entries: six
+  endpoint-independent tests passed and three Redis-URL tests skipped by
+  contract; live endpoint behavior was exercised separately below.
+- The isolated Redis 8.8 Standalone matrix passed Lua Registration/Catalog,
+  Go, Linux race, every Rust live domain, root Redis APIs, and Go/Rust
+  interoperability with 4,228 processed commands. Evidence:
+  [`full-project-regression-20260901.json`](testkit/results/full-project-regression-20260901.json).
+- The C#-owned Standalone matrix passed 11 build, analyzer, offline,
+  self-contained, loader, ACL and full-domain suites in .NET 8/10. Evidence:
+  [`csharp-standalone-full-review-20260901.json`](testkit/results/csharp-standalone-full-review-20260901.json).
+- Direct C++ Windows/MSVC and Linux/GCC shared Release each passed private-CA
+  Sentinel TLS Root/Registration/Selector/Catalog/checkpoint smoke and rejected
+  the wrong identity. Evidence:
+  [`cpp-sentinel-tls-windows-full-review-20260901.json`](testkit/results/cpp-sentinel-tls-windows-full-review-20260901.json)
+  and
+  [`cpp-sentinel-tls-linux-full-review-20260901.json`](testkit/results/cpp-sentinel-tls-linux-full-review-20260901.json).
+- C# Windows/Linux net8/net10 and Go/Rust Linux peers passed the full private-CA
+  two-promotion matrix, including acknowledged-write loss, `SCRIPT FLUSH`, all
+  Sentinels unavailable, primary loss, recovery, UUID preservation where
+  applicable, and Selector generations `1 -> 2 -> 3`. Evidence:
+  [`csharp-sentinel-tls-windows-full-review-20260901.json`](testkit/results/csharp-sentinel-tls-windows-full-review-20260901.json),
+  [`csharp-sentinel-tls-linux-full-review-20260901.json`](testkit/results/csharp-sentinel-tls-linux-full-review-20260901.json),
+  and
+  [`sentinel-tls-go-rust-linux-final-review-20260901.json`](testkit/results/sentinel-tls-go-rust-linux-final-review-20260901.json).
+- Catalog Go/Rust completed `16381 -> 16382 -> 16383`, script-cache recovery,
+  final revision 10, Delete, and zero keys. Evidence:
+  [`catalog-sentinel-final-review-20260901.json`](testkit/results/catalog-sentinel-final-review-20260901.json).
+- Three-run Linux Go measurements place 500-record Selector publication at
+  47.056..47.914 us with six allocations, RedisClock reads at 21.76..21.88 ns
+  with zero allocations, typed `One` at 11.641..11.774 us, and typed `Any(8)`
+  at 12.593..12.693 us. Full ranges and allocation counts are in the review.
+- This is a complete short regression of an uncommitted working tree, not a
+  new endurance qualification. It cannot inherit the exact earlier frozen
+  source's twelve-hour result. No commit or push was performed.
 
 ### 2026-08-31 Alpha source-freeze short regression
 
@@ -82,6 +184,66 @@ evidence below; it does not inherit the earlier fingerprint's one-hour label.
   [`registration-soak-12h-freeze-20260901.json`](testkit/results/registration-soak-12h-freeze-20260901.json)
   and
   [`catalog-soak-12h-freeze-20260901.json`](testkit/results/catalog-soak-12h-freeze-20260901.json).
+
+### 2026-09-01 fixed-identity Sentinel TLS and runtime capabilities
+
+- The isolated Redis 8.8 fixture now has an explicit `--tls` mode. It generates
+  one private CA and one leaf whose SAN contains only `verdandi.test`, not any
+  announced node IP. Redis data ports, Sentinel control ports, and replication
+  links all use TLS; Redis and Sentinel retain separate generated ACL users.
+- Go and Rust each rejected `wrong.verdandi.test` on native Windows x64 and
+  WSL/Linux x64, then their integration suites and persistent peers passed the
+  full two-promotion matrix on both runtimes. Both UUIDs survived, both Selector
+  generations advanced `1 -> 2 -> 3`, acknowledged-write loss was repaired,
+  `SCRIPT FLUSH` recovered, all Sentinels could disappear before the primary,
+  and each final fixture was removed. Machine evidence:
+  [`sentinel-tls-go-rust-windows-20260901.json`](testkit/results/sentinel-tls-go-rust-windows-20260901.json)
+  and
+  [`sentinel-tls-go-rust-linux-20260901.json`](testkit/results/sentinel-tls-go-rust-linux-20260901.json).
+- C++23 shared Release rejected the wrong certificate identity and then passed
+  root Key/Hash, Registration, Selector, Catalog, and SQLite-checkpoint
+  integration through three TLS Sentinels on Windows/MSVC and Linux/GCC. Both
+  runs left `DBSIZE=0`; evidence:
+  [`sentinel-tls-cpp-windows-20260901.json`](testkit/results/sentinel-tls-cpp-windows-20260901.json)
+  and
+  [`sentinel-tls-cpp-linux-20260901.json`](testkit/results/sentinel-tls-cpp-linux-20260901.json).
+- C# self-contained Windows x64 and Linux x64 net8.0/net10.0 peers used the same
+  platform-native C++ core and remained alive through two TLS promotions. Every
+  Selector generation advanced `1 -> 2 -> 3`, every recovery scenario passed,
+  and final `DBSIZE=0` was verified. Machine evidence:
+  [`sentinel-tls-csharp-windows-20260901.json`](testkit/results/sentinel-tls-csharp-windows-20260901.json)
+  and
+  [`sentinel-tls-csharp-linux-20260901.json`](testkit/results/sentinel-tls-csharp-linux-20260901.json).
+- C ABI v1, C++11 Legacy, and C# offline tests cover the new string capability
+  query with known, unknown, empty, and invalid inputs. The GCC shared Release
+  library exports 90 unique `verdandi_*` symbols including
+  `verdandi_c_has_capability`.
+- The three older result files without a platform suffix remain historical
+  Linux evidence; the six platform-suffixed files above are authoritative for
+  the current matrix. This is server-authenticated private-CA Sentinel TLS
+  evidence. It does not claim live mutual TLS, direct C++23 two-promotion
+  coverage, automatic native/NuGet RID packaging, or a TLS endurance campaign.
+
+### 2026-09-01 Windows MSVC and native .NET boundary
+
+- Visual Studio Community 2026 supplied MSVC 19.51, Windows SDK 26100, CMake
+  4.4, Ninja, LLVM, and vcpkg. The existing vcpkg tree supplied OpenSSL 3.6.0;
+  no toolchain or package was installed during qualification.
+- C++ now compiles source and Chinese review comments explicitly as UTF-8,
+  targets Windows 10 or newer, and remains under `/W4 /WX /permissive-`.
+- MSVC x64 static Debug and shared Release builds both completed. Each CTest
+  matrix accepted 9/9 tests: six offline tests passed and three endpoint-owned
+  Redis tests skipped by contract. The DLL exports both
+  `verdandi_c_abi_version` and `verdandi_c_has_capability`.
+- Windows .NET 8 and .NET 10 directly loaded the generated Release DLL and
+  passed the complete managed offline suite, including configuration
+  conformance and runtime capability discovery.
+- Linux GCC Debug, shared Release, ASan/UBSan, and format gates were rerun after
+  the portability corrections and passed. Native Windows Redis/Sentinel TLS
+  subsequently passed for Go, Rust, C++23, and C# as recorded above. Automated
+  packaging remains open. macOS is intentionally unsupported rather than an
+  unqualified release target. Machine evidence:
+  [`windows-msvc-20260901.json`](testkit/results/windows-msvc-20260901.json).
 
 ### 2026-08-31 C# independent regression and C++ Release boundary
 
@@ -491,8 +653,10 @@ This result includes:
   Subscribers, 18 injected faults, final convergence, and complete cleanup.
 
 The current source and SDK version is the non-production `0.1.0` Alpha. Stable
-`1.0.0` remains reserved for the complete contract. Campaign/Leader, desired configuration, acknowledgements,
-TLS, managed Redis services, and production readiness are outside this result.
+`1.0.0` remains reserved for the complete supported contract. Desired
+configuration, acknowledgements, managed Redis services, and production
+readiness are outside this result; generic Campaign/Leader election is excluded
+from the project rather than deferred.
 No commit, tag, package publication, or push was created.
 
 ### 2026-08-27 Rust test-source separation verification
@@ -1135,9 +1299,10 @@ unqualified.
 - Maximum-shape correctness is tested, but sustained 64-KiB register fan-out,
   arbitrary Redis clock steps, TLS, managed Redis, wider subscriber counts, and
   multi-day operation remain unqualified.
-- Campaign/Leader, desired state, and acknowledgements remain deferred. Catalog
-  is functionally and bounded-fault qualified, but its 24-hour interval remains
-  unfinished and is not a production-readiness claim.
+- At this historical checkpoint Campaign/Leader, desired state, and
+  acknowledgements were deferred. Campaign/Leader was later withdrawn on
+  2026-09-02. Catalog is functionally and bounded-fault qualified, but its
+  24-hour interval remains unfinished and is not a production-readiness claim.
 
 ### 2026-08-25 Register/Selector production optimization addendum
 
@@ -2099,10 +2264,13 @@ toolchain and the available WSL image had no Go installation. Historical WSL
 race evidence remains historical only.
 
 This is C++ startup/integration Sentinel evidence, not a full failover
-qualification. Two consecutive promotions, acknowledged-write-loss repair,
-live TLS, MSVC/Clang/macOS, install/export packaging, a long soak, fuzzing, and
-dedicated C++ performance baselines remain open. Sentinel+TLS is explicitly
-rejected until dynamic target discovery can preserve hostname verification.
+qualification. At this dated checkpoint, two consecutive promotions,
+acknowledged-write-loss repair, live TLS, MSVC/Clang/macOS, install/export
+packaging, a long soak, fuzzing, and dedicated C++ performance baselines
+remained open, and Sentinel+TLS was explicitly rejected until dynamic target
+discovery could preserve hostname verification. The current top-level
+2026-09-01 section supersedes that historical TLS restriction with the tested
+fixed-identity contract.
 
 At this first implementation checkpoint the C++ SDK score was **9.1/10**:
 root transport/configuration 8.8,
@@ -2269,3 +2437,48 @@ Windows DLL/MSVC, Clang/macOS, install/export, and automated ABI gates. The
 overall C++ SDK remains **9.3/10** because release qualification did not change.
 No long, new Sentinel, or performance-baseline run was performed. No commit or
 push was created.
+
+## 28. Cross-language configuration normalization regression
+
+Date: 2026-09-01.
+
+The external v1 JSON contract was normalized across Go, Rust, C++23, C ABI and
+C#. Redis physical reconnect now has one fixed `delay_ms`; Selector and Catalog
+retain separate business-recovery backoff. Endpoint syntax, Unicode boundaries,
+strict object shape, missing required fields, null, duplicate/unknown fields,
+numeric lexical rules, TLS safety, bounded file reads, path checks and stable
+error fields now share one 47-case conformance corpus.
+
+Go retains idiomatic native topology and TLS types behind a thin go-redis
+driver. Rust retains Duration/PathBuf and isolates Fred URL adaptation. C++23
+uses compile-time JSON member bindings and an iterative null walk. A new C ABI
+offline validator lets C++11/14/17 and C# reuse the same parser; C# performs
+strict UTF-16 and 1-MiB preflight without creating a duplicate configuration
+DTO.
+
+Accepted short gates:
+
+- Go all-package test/vet and WSL/Linux race: passed;
+- Rust format, 72 library tests plus offline suites, strict all-target/all-feature
+  Clippy and Rust 1.85 minimum-toolchain tests: passed; 12 external Redis/load
+  cases remained explicitly ignored;
+- C++ Debug static, Release shared and ASan/UBSan: each reported six offline
+  passes and three expected Redis skips out of nine CTest entries;
+- C++ clang-format and project-owned clang-tidy: passed;
+- C# Release net8.0/net10.0: zero warnings/errors; both Linux self-contained
+  offline runners passed against the latest shared native library;
+- shared configuration corpus: Go/Rust/C++ passed 41 semantic plus six raw
+  cases; C# passed all 41 semantic and five string-representable raw cases,
+  while native tests own the remaining invalid-UTF-8 byte case;
+- shared native library: 90 exported unmangled `verdandi_*` symbols, including
+  the string capability query.
+
+The initial focused configuration run did not use an endpoint. The subsequent
+fixed-identity Sentinel TLS qualification is recorded in the current top-level
+2026-09-01 section and its three machine results; no long-duration TLS run was
+performed. The configuration-layer score is **9.7/10**. The
+detailed language scores, strengths, deductions and remaining release work are
+in [`configuration-review-20260901.md`](configuration-review-20260901.md); the
+machine-readable result is
+[`testkit/results/configuration-normalization-20260901.json`](testkit/results/configuration-normalization-20260901.json).
+No commit or push was created.

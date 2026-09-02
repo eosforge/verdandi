@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"os"
 	"strings"
@@ -27,6 +29,10 @@ func run() error {
 	if len(addresses) == 1 && addresses[0] == "" {
 		return fmt.Errorf("VERDANDI_SENTINEL_ADDRS is required")
 	}
+	tlsConfig, err := sentinelTLS()
+	if err != nil {
+		return err
+	}
 	client, err := verdandi.Open(context.Background(), verdandi.Config{
 		Sentinel: &verdandi.Sentinel{
 			Addresses:        addresses,
@@ -35,6 +41,7 @@ func run() error {
 			Password:         os.Getenv("VERDANDI_REDIS_PASSWORD"),
 			SentinelUsername: os.Getenv("VERDANDI_SENTINEL_USERNAME"),
 			SentinelPassword: os.Getenv("VERDANDI_SENTINEL_PASSWORD"),
+			TLS:              tlsConfig,
 		},
 		Timeout: 3 * time.Second,
 	})
@@ -164,6 +171,30 @@ func run() error {
 		}
 	}
 	return scanner.Err()
+}
+
+func sentinelTLS() (*tls.Config, error) {
+	path := os.Getenv("VERDANDI_TLS_CA_FILE")
+	if path == "" {
+		return nil, nil
+	}
+	serverName := os.Getenv("VERDANDI_TLS_SERVER_NAME")
+	if serverName == "" {
+		return nil, fmt.Errorf("VERDANDI_TLS_SERVER_NAME is required with VERDANDI_TLS_CA_FILE")
+	}
+	certificate, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(certificate) {
+		return nil, fmt.Errorf("VERDANDI_TLS_CA_FILE contains no certificate")
+	}
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    roots,
+		ServerName: serverName,
+	}, nil
 }
 
 func renewUntilConfirmed(registration *discovery.Registration[verdandi.Fields, verdandi.Fields], timeout time.Duration) error {

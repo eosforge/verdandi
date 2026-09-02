@@ -22,20 +22,23 @@ wire and storage rules move to [`protocol.md`](protocol.md).
 
 ## 2. Accepted Maintainer Directions
 
-The following directions were accepted on 2026-08-21 and 2026-08-22 and are
+The following directions were accepted from 2026-08-21 through 2026-09-02 and are
 reflected in the owning documents:
 
+- Withdraw generic Campaign/Leader election from every release target,
+  including `1.0.0`. Redis Sentinel primary discovery and failover remain
+  supported backend-recovery behavior and do not expose an application Leader
+  API.
 - Reuse the Redis lease, exact-token, callback-lifecycle, and recovery
   invariants exercised by Hermes, without inheriting Hermes Primary's required
   service-Registration dependency.
 - Add persistent Catalog KV synchronization.
-- Do not encode a maximum service, Node, or Campaign count. Catalog is one
+- Do not encode a maximum service or Node count. Catalog is one
   complete Path value rather than a population of protocol records.
   Replace Hermes's bounded full-domain Lua scans with paginated membership,
   subscribe-before-scan recovery, bounded event buffers, and byte-based local
   resource budgets.
-- Use Redis Open Source 8.0 or later as the Alpha baseline and store Campaign
-  readiness as independently expiring Hash fields.
+- Use Redis Open Source 8.0 or later as the Alpha baseline.
 - Call one Node's leased record a `Registration`, call its Zone/Type collection
   a `Registry`, and store each Registration in an independent Redis
   Hash with key TTL and typed partial field updates.
@@ -48,8 +51,8 @@ reflected in the owning documents:
   Patch or whole Delete changes the Hash revision and appends its exact Stream
   delta atomically.
 - Publish the implemented SDK preview as non-production `0.1.0`. Reserve
-  `1.0.0` for the complete stable contract, including qualified Leader election
-  and standard English production-source comments. The intended first stable
+  `1.0.0` for the complete remaining stable contract and standard English
+  production-source comments. The intended first stable
   protocol version remains `1.0`, but the `0.x` implementation carries no
   stable wire-compatibility promise.
 - Generate one fresh Registration UUID in the SDK on every process start. Use
@@ -61,8 +64,7 @@ reflected in the owning documents:
   directly.
 - Do not model Publisher or Catalog write authority as a protocol term. Every
   changed mutation advances the Redis-owned revision for its target; Catalog
-  appends the matching Stream delta. Generic Leader election remains independent
-  from publication.
+  appends the matching Stream delta.
 - Protocol version `1.0` has no protocol-capability field or negotiation. Every
   `1.0` behavior is mandatory; Registration `service_capabilities` remain
   application/service discovery metadata.
@@ -81,12 +83,10 @@ reflected in the owning documents:
   and mutable fixed-structure `Data`: Meta uses `@name`, Attr uses `.name`, and
   Data uses an unprefixed `name`. Every top-level leaf remains an independent
   Hash field.
-- Candidate `version` is a protocol-defined positive safe integer. Every SDK
-  uses the same numeric comparison, larger versions are preferred, and equal
-  versions are first-successful-claim wins. Redis validates leases and exact
-  ownership but does not centrally search for the highest candidate.
-- Use Redis 8 Hash-field TTL for Registry membership and Campaign readiness so
-  natural expiry removes those fields without a separate stale-order index.
+- Registration `version` is application-defined positive safe-integer metadata.
+  Verdandi stores and synchronizes it without applying election semantics.
+- Use Redis 8 Hash-field TTL for Registry membership so natural expiry removes
+  those fields without a separate stale-order index.
 - Catalog accepts multiple ACL-authorized writers and bounded independent
   last-write-wins Patches. Redis-primary execution order, not client wall time,
   determines which overlapping mutation is later.
@@ -104,7 +104,7 @@ reflected in the owning documents:
   measured baseline, not a count limit.
 - Use `@` for Redis/Lua-managed Meta fields, `.` for immutable Attr, `&` for
   event controls, and no prefix for Data. Use the accepted common ASCII form
-  for Type/Catalog/election identifiers. Catalog identity is exactly one
+  for Type/Catalog identifiers. Catalog identity is exactly one
   bounded Part/ID Path and has no hashed token.
 - Accept the protocol resource maxima, configurable SDK limits, Registry
   subscribe/scan/PING and Catalog Hash/ZSET/Read recovery, `fred` qualification route, and
@@ -130,7 +130,8 @@ not only their overview text:
   [`primary.lua`](../hermes/go/core/redis/primary.lua), and
   [`primary_term.go`](../hermes/go/core/redis/primary_term.go) for separate
   readiness/ownership tokens, highest-ready-version retirement, exact release,
-  release-only wake, and synchronous local term validity; and
+  release-only wake, and synchronous local term validity. That comparison
+  informed an earlier design that was withdrawn on 2026-09-02; and
 - [`KV_DESIGN.md`](../hermes/go/core/redis/KV_DESIGN.md) for the proposed CAS,
   synchronized-view, and stale-view contract. Hermes KV is a reviewed design,
   not a production implementation, so Verdandi still requires its own vectors
@@ -143,8 +144,8 @@ Review decisions in this order because later choices depend on earlier ones:
 1. FND-001 through FND-004 establish repository and release policy.
 2. PRT-001 through PRT-004 establish encoding, versioning, identifiers, and
    the ACL trust boundary.
-3. PRT-005 through PRT-008 establish Redis layout, Leader fencing, leases, and
-   acknowledgements.
+3. PRT-005 through PRT-008 establish Redis layout, the withdrawn election
+   record, leases, and acknowledgements.
 4. PRT-009 through PRT-014 establish limits, commands, Redis qualification,
    executable conformance evidence, scalable discovery, and Catalog KV.
 5. SDK dependency and package-name choices follow only after the protocol
@@ -158,8 +159,9 @@ Review decisions in this order because later choices depend on earlier ones:
   implemented Registration, Selector, Catalog, configuration, and binding
   surfaces begin at non-production Alpha version `0.1.0`.
 - **Stable-release rule:** `1.0.0` remains reserved for the complete documented
-  contract, including qualified Leader election and standard English
-  production-source comments. Its first published artifacts are immutable.
+  supported contract and standard English production-source comments. Its
+  first published artifacts are immutable. Generic Leader election is not part
+  of that contract.
 - **Compatibility rule:** `0.1.0` permits distributed development and controlled
   service integration, but makes no production or stable API/wire guarantee.
   Consumers pin exact `0.x` releases and coordinate upgrades.
@@ -199,7 +201,7 @@ Review decisions in this order because later choices depend on earlier ones:
 ### PRT-001: Redis-native field contracts
 
 - **Accepted direction:** do not impose one CDDL/deterministic-CBOR envelope on
-  ordinary Redis coordination state. Registration, Registry, election, ACK,
+  ordinary Redis coordination state. Registration, Registry, ACK,
   and Catalog metadata use protocol-defined Redis data
   structures, Hash fields, scalar encodings, and Lua actions directly.
 - **SDK rule:** an SDK reads and retains the fields required by its supported
@@ -272,8 +274,7 @@ Review decisions in this order because later choices depend on earlier ones:
   instance and is its fencing boundary. A future stable machine or business
   identity, if needed, is a separate optional application field and must not
   replace the Registration UUID.
-- **Accepted remaining text identities:** case-sensitive `type`, `catalog`,
-  and `election_domain_id` use
+- **Accepted remaining text identities:** case-sensitive `type` and `catalog` use
   `[A-Za-z][A-Za-z0-9_.-]{0,63}`. They are 1 through 64 ASCII bytes, contain no
   Redis separator or ACL glob character, and may therefore appear directly as
   one key segment without escaping. SDK configuration may impose a lower
@@ -282,7 +283,7 @@ Review decisions in this order because later choices depend on earlier ones:
 - **Superseded Catalog business key:** the former opaque business-key/hash-token
   dimension is removed. A Catalog identifier directly names its one Value.
 - **Revision rule:** each Registration owns an SDK-retained per-UUID revision.
-  Each Catalog, desired target, election, and ACK scope owns a Redis-stored
+  Each Catalog, desired target, and ACK scope owns a Redis-stored
   revision. Catalog revision starts at 1, advances only for changed mutations,
   never resets or wraps, and is limited to `9223372036854775807`; its Lua uses
   canonical decimal string operations. Other numeric domains retain their
@@ -342,10 +343,6 @@ verdandi:catalog:<zone>:@deleted_time
 verdandi:catalog:<zone>:<part>:<id>
 verdandi:catalog:<zone>:<part>:<id>:@field_revisions
 
-verdandi:election:<zone>:<domain>:leader
-verdandi:election:<zone>:<domain>:revision
-verdandi:election:<zone>:<domain>:ready
-
 verdandi:desired:<zone>:<target-hash>:current
 verdandi:desired:<zone>:<target-hash>:manifest:<revision>
 verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
@@ -377,9 +374,9 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   receive no raw configuration-write API.
 - **Write rule:** immutable desired chunks and manifests use `SET NX` semantics
   and reject conflicting existing bytes. Registration Hashes, Registry indexes,
-  Catalog Hashes/ZSETs, Leader state, current pointers, and ACKs change only
+  Catalog Hashes/ZSETs, current pointers, and ACKs change only
   through protocol-owned Lua. No Lua mutation scans a full
-  Registry, Catalog, or election domain.
+  Registry or Catalog.
 - **Accepted Desired concurrency:** use the same Redis-order last-write-wins
   model selected for Catalog. Every Publisher reserves a scope revision, and
   the highest successfully installed current revision remains current.
@@ -415,73 +412,21 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   Public records expose ordinary `Meta`, `Attr`, and `Data` members; language
   tags, generated descriptors, or an explicit codec map them to Redis fields.
 
-### PRT-006: Campaign and Leader term
+### PRT-006: Withdrawn Campaign and Leader proposal
 
-- **Accepted direction:** implement generic leased, SDK-driven,
-  version-aware election using an independently identified Campaign, private
-  readiness token, and separate private ownership token. Unlike Hermes Primary,
-  Verdandi's generic Leader does not require a live service Registration. The
-  SDK owns candidate-view synchronization, comparison, Claim decisions,
-  retirement, renewal, and application lifetime. Redis owns bounded atomic
-  eligibility and exact-owner transitions; Lua never scans or sorts the
-  complete candidate population.
-- **Accepted version policy:** each Campaign carries a positive integer
-  `version` in the protocol-wide exact range `1..9007199254740991`. It is
-  immutable for that Campaign lifetime. Every SDK compares it numerically and
-  prefers the larger value. Changing version requires closing the Campaign and
-  creating a fresh readiness token/version pair; there is no public Campaign
-  ID, in-place version mutation, version revision, application comparator, or
-  `version_contract_id`.
-- **Claim policy:** the SDK maintains the ready-candidate view, applies the
-  fixed numeric comparison, and claims only when it considers itself the best
-  ready candidate. Redis atomically verifies the exact readiness token and
-  immutable version plus the empty Leader key.
-  Equal versions are first-successful-claim wins. Because comparison is
-  client-side, preference is convergent rather than an atomic strongest-version
-  guarantee: a stale client can win temporarily, then retires after observing a
-  preferred ready version.
-- **Readiness layout:** store one independently expiring Redis 8 Hash field per
-  readiness token. The private field token is the Campaign lifetime's internal
-  identity and its bounded value contains the immutable integer version. SDKs
-  discover candidates with bounded
-  `HSCAN` pages and revision/wake recovery. There is no Redis version-ordered
-  index and therefore no stale version-index cleanup problem. No
-  candidate-count limit is permitted.
-- **Retirement:** a current Leader is not asynchronously deleted by another
-  candidate. When its SDK observes a preferred ready version, it closes local
-  admission, cancels and joins term-owned work, then exact-token releases. The
-  business observer receives the same candidate-view update and may make its
-  own application decision before attempting another claim.
-- **Publication separation:** Publisher, desired-state, and Catalog mutations
-  do not carry or validate a Leader/write-authority term. Each accepted
-  mutation atomically advances the Redis-owned revision for its target and
-  publishes a wake. An application may independently use generic election to
-  coordinate controller work, but publication correctness does not depend on
-  that Leader token.
-- **Local fence:** every SDK term has a synchronous validity check backed by
-  cancellation and a conservative monotonic deadline. Failed or ambiguous
-  renewal clears validity and never reuses the old token.
-- **Zero-or-one policy:** one election domain has zero or one
-  application-active Leader. Handoff, renewal uncertainty, callback cleanup,
-  lease expiry, and fencing may leave it without a Leader. No supported mode
-  accepts overlapping active terms to improve availability.
-- **Failover boundary:** Standalone uses its one configured Redis primary as
-  the term authority. Sentinel asynchronous replication cannot prove that an
-  old primary stopped accepting renewals after promotion. A Sentinel Campaign
-  therefore requires one deployment-provided durable fence or advisory lock
-  acquired after Redis claim and before application callback admission. It is
-  held through invalidation and joined cleanup. While fence acquisition is
-  pending the SDK renews the Redis claim within bounded limits; after
-  acquisition it exact-token confirms Redis ownership again before creating the
-  LeaderTerm. Failed confirmation releases the fence without invoking
-  application code. Without that fence, Sentinel leadership remains
-  fail-closed and no LeaderTerm is exposed. The fence authority must be
-  independent from the same Sentinel replication history; its uncertainty
-  invalidates the term, and a leased fence contributes to the conservative
-  local admission deadline.
-- **Accepted release event:** exact-token release emits one bounded latency-only
-  wake. Claim and renew do not. Lease expiry and retry remain the correctness
-  path when the event is missed.
+- **Status:** withdrawn by the maintainer on 2026-09-02 and excluded from every
+  release target, including protocol `1.0` and SDK `1.0.0`.
+- **Removed surface:** no Campaign readiness, Leader term, distributed lock,
+  election key, election Lua action, election ACL role, durable-fence adapter,
+  or Leader SDK API will be implemented.
+- **Registration boundary:** Registration `@version` remains application-defined
+  metadata that Verdandi stores and synchronizes without election semantics.
+- **Sentinel boundary:** Redis Sentinel discovery and primary failover remain
+  supported backend recovery; they do not provide application leadership or an
+  exclusivity guarantee.
+- **History:** the former independently leased Campaign and exact-token Leader
+  design remains recoverable from repository history, but none of its details
+  are a current requirement or future commitment.
 
 ### PRT-007: Lease and time calculations
 
@@ -524,10 +469,6 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   `encoding`, `protocol`, `missing`, `stale`, `immutable`, `expired`,
   `capacity`, `unavailable`, `deadline`, `ambiguous`, and `corrupt`. Context is
   carried in separate string-keyed reply fields.
-- **Election outcomes:** Redis actions use `ok`, `occupied`, `ineligible`, and
-  `lost`; `retire` is the SDK Campaign state transition produced by its
-  synchronized version comparison. These are expected state-machine outcomes,
-  not stable errors.
 - **Extension:** new core statuses require registry review. SDK-only diagnostics
   must not allocate stable protocol
   values.
@@ -576,8 +517,8 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   remain subject to their capacity suites. Deployments may change Redis-backed
   Registration limits within the maxima but may not silently raise a protocol
   maximum.
-- **Rule:** there is no protocol or SDK default for total service, Node, or
-  Campaign count. Catalog is one Path value. Counts apply only to one page, patch, or
+- **Rule:** there is no protocol or SDK default for total service or Node
+  count. Catalog is one Path value. Counts apply only to one page, patch, or
   bounded batch or event buffer. Counts and bytes are checked independently before
   allocation. Compression ratio is bounded by both encoded and decoded
   maxima. Defaults remain provisional until the Alpha capacity suite measures
@@ -621,17 +562,11 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   Redis 8 line, or a documented compatible service, with Sentinel from a
   qualified compatible line. Exact patch releases remain pinned by the Alpha
   integration matrix rather than assumed compatible.
-- **Readiness storage:** use one Hash field per private readiness token and
-  `HSETEX`/`HGETEX` field expiration. SDK-side fixed integer comparison avoids a
-  Redis version-order index; SDKs use bounded `HSCAN` and an immutable local
-  ready view instead.
-- **Reason:** Redis 8 provides the direct field-TTL operations used by Hermes.
-  Hermes measured its relevant 100-candidate readiness layout at `5827` bytes
-  versus `23003` bytes for the former ZSET plus per-token TTL Hashes, and its
-  integration fixture at `6943` versus `24119` bytes. This is strong evidence
-  for lower readiness memory and key overhead in the workload Verdandi is
-  carrying forward; it is not a claim that every Redis 8 workload has lower
-  latency.
+- **Field-expiry storage:** Registry membership uses Redis 8 Hash-field TTL so
+  each Registration membership field expires independently without a second
+  per-member key or stale-order index.
+- **Reason:** Redis 8 provides the direct field-TTL operations required by the
+  implemented Registry lease model.
 - **ACL rule:** fixtures begin with no command, key, or channel permissions and
   add exact commands plus key/channel patterns per role. Broad command
   categories are not the conformance source of truth.
@@ -639,8 +574,8 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   per-start Registration UUID. A credential may combine explicit roles.
   Proposed roles are: Node (own SDK Registration/ACK actions plus authorized
   reads), Publisher (desired/Catalog writes and convergence reads), Selector
-  (Registry read/subscription), Campaign (readiness/Leader actions), Catalog
-  Subscriber (Catalog read/subscription), and Administrator (provisioning). Because
+  (Registry read/subscription), Catalog Subscriber (Catalog read/subscription),
+  and Administrator (provisioning). Because
   Redis ACL patterns cannot express SDK object ownership for a newly generated
   UUID, a same-role principal deliberately using raw Redis commands remains
   outside the guarantee accepted in PRT-004.
@@ -660,10 +595,10 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
 4. Valid and invalid Redis field/scalar vectors for every validation rule.
 5. Hash, chunk assembly, target mismatch, and ACL-role vectors.
 6. Lease vectors covering skew, delay, overflow, missing TTL, and reread.
-7. Paginated Registry subscribe/scan/PING bootstrap, Catalog Hash/ZSET/Read/floor, and
-   Leader state-machine vectors.
+7. Paginated Registry subscribe/scan/PING bootstrap and Catalog
+   Hash/ZSET/Read/floor vectors.
 8. Lua contracts and result vectors before the scripts themselves.
-9. Real Redis ACL, TTL, Lua, pagination, event-gap, election, and Pub/Sub-loss
+9. Real Redis ACL, TTL, Lua, pagination, event-gap, and Pub/Sub-loss
    tests.
 
 - **Reason:** this ordering makes the language-neutral contract executable
@@ -682,8 +617,8 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   derived from timestamp plus TTL. Data patch omission means unchanged; typed
   zero or encoded null clears a value, so there is no unset operation. Attr,
   and TTL remain immutable for the UUID lifetime. Version and Data are mutable
-  Registration content. Leader uses its separate Campaign Version and never
-  reads Registration Version.
+  Registration content. Verdandi does not interpret Registration Version as an
+  election priority.
 - **Accepted writer (superseded by SDK-006 below):** the earlier Client-wide
   coordinator design is retained here only as decision history. The current
   design gives each successfully published Registration its own single-slot
@@ -926,8 +861,7 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   configuration owns connectivity, other operational timing, local
   concurrency/buffer limits, and any data-class limit not explicitly
   centralized by the protocol.
-- Provisionally accepted qualification defaults are 15-second
-  Registration/readiness/Leader leases,
+- Provisionally accepted qualification defaults are 15-second Registration leases,
   renewal every 5 seconds with 10 percent jitter, 2-second Redis operation
   timeout, reconnect backoff from 100 milliseconds through 5 seconds, 256
   records per page, and 16 concurrent record fetches.
@@ -966,14 +900,14 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   recovery orchestration itself. Standalone Pub/Sub, scripting, reconnect, and
   cross-language behavior, Sentinel resolution, separate authentication, two
   promotions, and acknowledged-state recovery are qualified for the
-  Registration/Selector slice. Hash-field-expiry election remains a release
-  gate for the later Campaign/Leader slice.
+  Registration/Selector slice. Generic Campaign/Leader election is explicitly
+  outside the SDK scope.
 
 ### SDK-004: Release gate
 
 - Publish Go and Rust `1.0.0` only after all language-neutral vectors,
   same-language tests, cross-language producer/consumer tests, Standalone and
-  Sentinel failover tests, TTL/election tests, and accepted capacity tests pass.
+  Sentinel failover tests, TTL tests, and accepted capacity tests pass.
   No partial SDK receives a formal `1.0.0` release first.
 
 ### SDK-005: Application-owned typed Registration and Selector
@@ -1498,3 +1432,34 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   independent .NET 8/10 Standalone and Sentinel matrices; the Release-only C++
   parser correction also passed C++ Debug, shared Release, ASan/UBSan,
   clang-format, clang-tidy, and C++-owned live Sentinel integration.
+
+### SDK-024: Add an optional generated Go Selector reference path
+
+- Accepted 2026-09-02. The existing `One`, `Any`, `Find`, and `Snapshot` APIs
+  remain the safe detached-value surface. Applications with a measured local
+  selection hot path may generate a separate callback-only
+  `ReferenceSelector` facade for their concrete Attr/Data structs.
+- `verdandi-refgen` generates only read-only accessors, selected-Data field
+  setters, mutable-slice cloning, concrete aliases, and one wrapper
+  constructor. It does not generate application `Encoder`/`Decoder` methods,
+  wire field names, Redis commands, weighting rules, or other business logic.
+- Reference Candidates, AttrRef, DataRef, and Selection values are borrowed for
+  one synchronous callback and must not escape or be used asynchronously. No
+  raw `*Attr` or `*Data` is exposed. Go cannot encode the read lifetime in its
+  type system; selected Editors and commit validation therefore retain runtime
+  transaction fencing while read-only traversal avoids per-field fencing cost.
+- `WithOne` returns only found/error and `WithAny` only count/error. The caller
+  copies any required route value during the callback. Only Data edits attached
+  to the final returned Selection set are encoded and committed; edits to
+  examined but unselected candidates are discarded.
+- The reference path shares the original Selector's operation gate,
+  synchronized view, field-granular prediction overlay, remote reconciliation,
+  unavailability boundary, and no-Redis-I/O selection contract. Callback
+  failure, context cancellation, empty, stale, foreign, duplicate, encoding,
+  shape, or limit failure remains an all-or-nothing rollback.
+- Ten-sample Go 1.27 WSL/Linux measurements over 500 candidates reduced the
+  selected-and-mutated `One` median from 11.460 to 10.178 microseconds and
+  allocations from 28 to four. Eight-of-500 `Any` without Data edits reduced
+  its median from 13.875 to 5.587 microseconds and reached zero steady-state
+  allocations. The semantic difference is explicit: reference operations do
+  not construct detached return values.

@@ -13,7 +13,7 @@ use verdandi::registration::{
 
 type FieldsRegistration = Registration<Fields, Fields>;
 type FieldsSelector = Selector<Fields, Fields>;
-use verdandi::{Client, Code, Config, Error as VerdandiError, FieldValue, Fields};
+use verdandi::{Client, Code, Config, Error as VerdandiError, FieldValue, Fields, TlsConfig};
 
 const TYPE_NAME: &str = "Proxy";
 const RAW_UUID: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -678,8 +678,15 @@ async fn dropping_last_registration_client_handle_stops_owned_workers() -> Resul
 async fn sentinel_registration_and_selector_reconcile() -> Result<(), Box<dyn StdError>> {
     let endpoint = std::env::var("VERDANDI_SENTINEL_URL")?;
     let zone = unique_zone()?;
-    let redis = direct_client(&endpoint).await?;
-    let transport = Client::open(Config::new(&endpoint)).await?;
+    if std::env::var_os("VERDANDI_TLS_CA_FILE").is_some() {
+        let mut wrong = sentinel_client_config(&endpoint)?;
+        wrong.tls.as_mut().ok_or("missing Sentinel TLS test configuration")?.server_name = Some("wrong.verdandi.test".to_owned());
+        if let Ok(client) = Client::open(wrong).await {
+            client.close().await?;
+            return Err("Sentinel TLS accepted a certificate for the wrong fixed identity".into());
+        }
+    }
+    let transport = Client::open(sentinel_client_config(&endpoint)?).await?;
     let registration_config = RegistrationConfig {
         zone: zone.clone(),
         selector_publish_interval: Duration::from_millis(1),
@@ -736,10 +743,25 @@ async fn sentinel_registration_and_selector_reconcile() -> Result<(), Box<dyn St
     registration.close().await?;
     selector.close().await?;
     client.close().await?;
+    transport.key().delete(&format!("verdandi:config:{zone}")).await?;
     transport.close().await?;
-    let _: i64 = redis.del(format!("verdandi:config:{zone}")).await?;
-    redis.quit().await?;
     Ok(())
+}
+
+fn sentinel_client_config(endpoint: &str) -> Result<Config, Box<dyn StdError>> {
+    let mut config = Config::new(endpoint);
+    let Some(ca_file) = std::env::var_os("VERDANDI_TLS_CA_FILE") else {
+        return Ok(config);
+    };
+    let server_name = std::env::var("VERDANDI_TLS_SERVER_NAME")?;
+    config.tls = Some(TlsConfig {
+        system_roots: false,
+        server_name: Some(server_name),
+        ca_file: Some(ca_file.into()),
+        cert_file: None,
+        key_file: None,
+    });
+    Ok(config)
 }
 
 async fn direct_client(endpoint: &str) -> Result<fred::clients::Client, fred::error::Error> {

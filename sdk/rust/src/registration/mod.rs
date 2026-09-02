@@ -40,7 +40,7 @@ pub(crate) struct RegistrationConfig {
     pub ttl: Duration,
     /// 自动续期间隔；`None` 使用 `ttl` 的三分之一。
     pub renew_interval: Option<Duration>,
-    /// 供上层选主策略使用的正应用 Version。
+    /// 供上层路由或兼容性策略使用的正应用 Version。
     pub version: u64,
     /// 生命周期内不可变的固定顶层 Attr 结构。
     pub attr: Fields,
@@ -159,7 +159,7 @@ pub struct RegistrationOptions {
     pub ttl: Duration,
     /// 自动续期间隔；`None` 使用 `ttl` 的三分之一。
     pub renew_interval: Option<Duration>,
-    /// 供上层选主策略使用的正应用 Version。
+    /// 供上层路由或兼容性策略使用的正应用 Version。
     pub version: u64,
 }
 

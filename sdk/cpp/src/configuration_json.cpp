@@ -3,9 +3,11 @@
 
 #include <yyjson.h>
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
@@ -29,9 +31,9 @@ constexpr std::size_t maximum_json_bytes = std::size_t{1'024} * 1'024;
     return result;
 }
 
-[[nodiscard]] result<void> read_value(yyjson_val* value, std::string& output, const std::string_view field) {
+[[nodiscard]] result<void> read_value(yyjson_val* value, std::string& output, std::string_view) {
     if (!yyjson_is_str(value)) {
-        return std::unexpected(error(code::invalid, std::string(field)));
+        return std::unexpected(error(code::invalid, "json"));
     }
     output.assign(yyjson_get_str(value), yyjson_get_len(value));
     return {};
@@ -43,16 +45,17 @@ constexpr std::size_t maximum_json_bytes = std::size_t{1'024} * 1'024;
         return status;
     }
     try {
-        output = std::filesystem::path(text);
+        const std::u8string utf8(reinterpret_cast<const char8_t*>(text.data()), text.size());
+        output = std::filesystem::path(utf8);
         return {};
     } catch (const std::exception& exception) {
         return std::unexpected(error(code::invalid, std::string(field)).with_detail(exception.what()));
     }
 }
 
-[[nodiscard]] result<void> read_value(yyjson_val* value, bool& output, const std::string_view field) {
+[[nodiscard]] result<void> read_value(yyjson_val* value, bool& output, std::string_view) {
     if (!yyjson_is_bool(value)) {
-        return std::unexpected(error(code::invalid, std::string(field)));
+        return std::unexpected(error(code::invalid, "json"));
     }
     output = yyjson_get_bool(value);
     return {};
@@ -62,10 +65,25 @@ template <class T>
     requires std::unsigned_integral<T> && (!std::same_as<T, bool>)
 [[nodiscard]] result<void> read_value(yyjson_val* value, T& output, const std::string_view field) {
     static_assert(std::is_unsigned_v<T>);
-    if (!yyjson_is_uint(value)) {
-        return std::unexpected(error(code::invalid, std::string(field)));
+    std::uint64_t number{};
+    if (yyjson_is_uint(value)) {
+        number = yyjson_get_uint(value);
+        // Go 和 Rust 的稳定 DTO 使用有符号 64 位整数；超出该解析域属于 JSON 类型错误。
+        if (number > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+            return std::unexpected(error(code::invalid, "json"));
+        }
+    } else if (yyjson_is_sint(value)) {
+        const auto signed_number = yyjson_get_sint(value);
+        if (signed_number == 0) {
+            return std::unexpected(error(code::invalid, "json"));
+        }
+        if (signed_number < 0) {
+            return std::unexpected(error(code::invalid, std::string(field)));
+        }
+        number = static_cast<std::uint64_t>(signed_number);
+    } else {
+        return std::unexpected(error(code::invalid, "json"));
     }
-    const auto number = yyjson_get_uint(value);
     if (number > static_cast<std::uint64_t>(std::numeric_limits<T>::max())) {
         return std::unexpected(error(code::invalid, std::string(field)));
     }
@@ -87,7 +105,7 @@ template <class T>
 
 [[nodiscard]] result<void> read_value(yyjson_val* value, std::vector<std::string>& output, const std::string_view field) {
     if (!yyjson_is_arr(value)) {
-        return std::unexpected(error(code::invalid, std::string(field)));
+        return std::unexpected(error(code::invalid, "json"));
     }
     output.clear();
     output.reserve(yyjson_arr_size(value));
@@ -168,7 +186,7 @@ template <class... Binding>
 [[nodiscard]] result<void> parse_object(yyjson_val* value, const std::string_view path, Binding&&... binding) {
     static_assert(sizeof...(Binding) > 0);
     if (!yyjson_is_obj(value)) {
-        return std::unexpected(error(code::invalid, std::string(path)));
+        return std::unexpected(error(code::invalid, "json"));
     }
     auto iterator = yyjson_obj_iter_with(value);
     while (auto* key = yyjson_obj_iter_next(&iterator)) {
@@ -221,6 +239,10 @@ template <class... Binding>
                         bind_value<"multiplier">(output.multiplier), bind_value<"jitter_percent">(output.jitter_percent));
 }
 
+[[nodiscard]] result<void> parse_redis_reconnect(yyjson_val* value, redis_reconnect_configuration& output, const std::string_view path) {
+    return parse_object(value, path, bind_value<"delay_ms">(output.delay));
+}
+
 [[nodiscard]] result<void> parse_redis(yyjson_val* value, redis_configuration& output) {
     bool has_mode = false;
     bool has_addresses = false;
@@ -233,7 +255,7 @@ template <class... Binding>
         bind_object<"tls">([&](yyjson_val* member, const std::string_view field) { return parse_tls(member, output.tls, field); }),
         bind_value<"timeout_ms">(output.timeout), bind_value<"connect_timeout_ms">(output.connect_timeout),
         bind_object<"pool">([&](yyjson_val* member, const std::string_view field) { return parse_pool(member, output.pool, field); }),
-        bind_object<"reconnect">([&](yyjson_val* member, const std::string_view field) { return parse_reconnect(member, output.reconnect, field); }));
+        bind_object<"reconnect">([&](yyjson_val* member, const std::string_view field) { return parse_redis_reconnect(member, output.reconnect, field); }));
     if (!status) {
         return status;
     }
@@ -288,7 +310,16 @@ template <class... Binding>
                      bind_value<"event_buffer_capacity">(output.event_buffer_capacity), bind_value<"error_buffer_capacity">(output.error_buffer_capacity),
                      bind_value<"max_view_bytes">(output.max_view_bytes), bind_value<"max_record_bytes">(output.max_record_bytes),
                      bind_object<"recovery">([&](yyjson_val* member, const std::string_view field) { return parse_reconnect(member, output.recovery, field); }),
-                     bind_value<"local_store_path">(output.local_store_path));
+                     bind_object<"local_store_path">([&](yyjson_val* member, const std::string_view field) -> result<void> {
+                         if (auto parsed = read_value(member, output.local_store_path, field); !parsed) {
+                             return parsed;
+                         }
+                         // 省略字段表示关闭本地持久化；显式空字符串通常是部署配置错误。
+                         if (output.local_store_path.empty()) {
+                             return std::unexpected(error(code::invalid, std::string(field)));
+                         }
+                         return {};
+                     }));
     if (!status) {
         return status;
     }
@@ -298,11 +329,42 @@ template <class... Binding>
     return {};
 }
 
+/// 迭代拒绝 JSON null，使“字段省略采用默认值”不会与显式空值产生第四种语义，并避免深层无关输入消耗 C++ 调用栈。
+[[nodiscard]] bool contains_null(yyjson_val* value) {
+    std::vector<yyjson_val*> pending;
+    pending.reserve(32);
+    pending.push_back(value);
+    while (!pending.empty()) {
+        auto* current = pending.back();
+        pending.pop_back();
+        if (yyjson_is_null(current)) {
+            return true;
+        }
+        if (yyjson_is_arr(current)) {
+            auto iterator = yyjson_arr_iter_with(current);
+            while (auto* element = yyjson_arr_iter_next(&iterator)) {
+                pending.push_back(element);
+            }
+            continue;
+        }
+        if (yyjson_is_obj(current)) {
+            auto iterator = yyjson_obj_iter_with(current);
+            while (auto* key = yyjson_obj_iter_next(&iterator)) {
+                pending.push_back(yyjson_obj_iter_get_val(key));
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 result<configuration> configuration::from_json(const std::span<const std::byte> source) {
-    if (source.empty() || source.size() > maximum_json_bytes) {
-        return std::unexpected(error(code::capacity, "configuration"));
+    if (source.empty()) {
+        return std::unexpected(error(code::invalid, "json"));
+    }
+    if (source.size() > maximum_json_bytes) {
+        return std::unexpected(error(code::capacity, "json"));
     }
     try {
         std::string input(reinterpret_cast<const char*>(source.data()), source.size());
@@ -310,14 +372,19 @@ result<configuration> configuration::from_json(const std::span<const std::byte> 
         std::unique_ptr<yyjson_doc, decltype(&yyjson_doc_free)> document(
             yyjson_read_opts(input.data(), input.size(), YYJSON_READ_NOFLAG, nullptr, &parse_error), &yyjson_doc_free);
         if (!document) {
-            return std::unexpected(error(code::invalid, "configuration").with_detail(parse_error.msg == nullptr ? "invalid JSON" : parse_error.msg));
+            return std::unexpected(error(code::invalid, "json").with_detail(parse_error.msg == nullptr ? "invalid JSON" : parse_error.msg));
+        }
+
+        auto* root = yyjson_doc_get_root(document.get());
+        if (contains_null(root)) {
+            return std::unexpected(error(code::invalid, "json"));
         }
 
         configuration output;
         bool has_version = false;
         bool has_redis = false;
         auto status = parse_object(
-            yyjson_doc_get_root(document.get()), "", bind_required<"version">(output.version, has_version),
+            root, "", bind_required<"version">(output.version, has_version),
             bind_present<"redis">(has_redis, [&](yyjson_val* member, std::string_view) { return parse_redis(member, output.redis); }),
             bind_present<"registration">(output.registration_enabled,
                                          [&](yyjson_val* member, std::string_view) { return parse_registration(member, output.registration); }),
@@ -329,43 +396,52 @@ result<configuration> configuration::from_json(const std::span<const std::byte> 
             return std::unexpected(error(code::invalid, "version"));
         }
         if (!has_redis) {
-            return std::unexpected(error(code::invalid, "redis"));
+            return std::unexpected(error(code::invalid, "redis.mode"));
         }
         if (auto checked = output.check(); !checked) {
             return std::unexpected(checked.error());
         }
         return output;
     } catch (const std::bad_alloc&) {
-        return std::unexpected(error(code::capacity, "configuration"));
+        return std::unexpected(error(code::capacity, "json"));
     } catch (const std::exception& exception) {
-        return std::unexpected(error(code::invalid, "configuration").with_detail(exception.what()));
+        return std::unexpected(error(code::invalid, "json").with_detail(exception.what()));
     }
 }
 
 result<configuration> configuration::load_json(const std::filesystem::path& path) {
+    if (path.empty()) {
+        return std::unexpected(error(code::invalid, "path"));
+    }
+    std::ifstream input;
     try {
-        std::ifstream input(path, std::ios::binary);
-        if (!input) {
-            return std::unexpected(error(code::missing, "configuration").with_detail(path.string()));
-        }
+        input.open(path, std::ios::binary);
+    } catch (const std::exception& exception) {
+        return std::unexpected(error(code::unavailable, "path").with_detail(exception.what()));
+    }
+    if (!input) {
+        return std::unexpected(error(code::unavailable, "path"));
+    }
+
+    try {
         std::vector<char> buffer(maximum_json_bytes + 1);
         input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
         const auto count = input.gcount();
         if (count <= 0) {
-            return std::unexpected(error(code::invalid, "configuration"));
+            return std::unexpected(error(code::invalid, "json"));
         }
         if (static_cast<std::size_t>(count) > maximum_json_bytes) {
-            return std::unexpected(error(code::capacity, "configuration"));
+            return std::unexpected(error(code::capacity, "json"));
         }
         if (input.bad()) {
-            return std::unexpected(error(code::unavailable, "configuration"));
+            return std::unexpected(error(code::unavailable, "json"));
         }
         const auto* first = reinterpret_cast<const std::byte*>(buffer.data());
         return from_json(std::span(first, static_cast<std::size_t>(count)));
     } catch (const std::bad_alloc&) {
-        return std::unexpected(error(code::capacity, "configuration"));
+        return std::unexpected(error(code::capacity, "json"));
     } catch (const std::exception& exception) {
-        return std::unexpected(error(code::unavailable, "configuration").with_detail(exception.what()));
+        return std::unexpected(error(code::unavailable, "json").with_detail(exception.what()));
     }
 }
 

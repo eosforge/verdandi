@@ -2,7 +2,6 @@ package verdandi
 
 import (
 	"context"
-	"errors"
 	"time"
 )
 
@@ -29,7 +28,7 @@ func (client *Client) commandContext(parent context.Context) (context.Context, f
 	if client.closed.Load() || client.redis == nil {
 		return nil, nil, protocolError(CodeClosed, "", 0)
 	}
-	ctx, cancel := context.WithTimeout(parent, client.config.timeout)
+	ctx, cancel := context.WithTimeout(parent, client.timeout)
 	return ctx, cancel, nil
 }
 
@@ -65,20 +64,6 @@ func addRedisSize(total *int, size int, field string) error {
 	}
 	*total += size
 	return nil
-}
-
-// redisServerError 匹配 go-redis 返回的确定性 Redis 服务端错误。
-type redisServerError interface {
-	RedisError()
-}
-
-// wrapRedisCommand 把确定性服务端拒绝统一归类为 protocol，否则使用调用方给出的传输结果 code。
-func wrapRedisCommand(code Code, err error) error {
-	var serverError redisServerError
-	if errors.As(err, &serverError) {
-		return wrapDriver(CodeProtocol, err)
-	}
-	return wrapDriver(code, err)
 }
 
 // Ping 使用后台 Context 验证共享 Redis 传输能否执行一条受超时限制的命令。

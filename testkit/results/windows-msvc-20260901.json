@@ -1,0 +1,81 @@
+{
+  "status": "pass",
+  "platform": "windows-x64",
+  "minimum_windows_version": "10.0",
+  "toolchain": {
+    "visual_studio": "Community 2026 18.9.1",
+    "msvc": "19.51.36256",
+    "windows_sdk": "10.0.26100.0",
+    "cmake": "4.4.2",
+    "dotnet_sdks": [
+      "10.0.400"
+    ],
+    "go": "1.27.0",
+    "rust": "1.98.0"
+  },
+  "dependencies": {
+    "openssl": "3.6.0#3 x64-windows",
+    "manager": "vcpkg 2025-12-16",
+    "installed_during_qualification": false
+  },
+  "native_builds": [
+    {
+      "configuration": "Debug",
+      "library": "static",
+      "accepted_tests": 9,
+      "passed_tests": 6,
+      "endpoint_skips": 3,
+      "status": "pass"
+    },
+    {
+      "configuration": "Release",
+      "library": "shared",
+      "accepted_tests": 9,
+      "passed_tests": 6,
+      "endpoint_skips": 3,
+      "status": "pass"
+    }
+  ],
+  "dll_exports": [
+    "verdandi_c_abi_version",
+    "verdandi_c_has_capability"
+  ],
+  "managed_offline": {
+    "frameworks": [
+      "net8.0",
+      "net10.0"
+    ],
+    "loaded_generated_windows_dll": true,
+    "status": "pass"
+  },
+  "linux_portability_regression": {
+    "gcc_debug": "pass",
+    "gcc_shared_release": "pass",
+    "asan_ubsan": "pass",
+    "format": "pass"
+  },
+  "server_authenticated_sentinel_tls": {
+    "status": "pass",
+    "go_rust": {
+      "scope": "complete two-promotion matrix",
+      "result": "sentinel-tls-go-rust-windows-20260901.json",
+      "status": "pass"
+    },
+    "cpp23": {
+      "scope": "root, Registration, Selector, Catalog and checkpoint smoke",
+      "result": "sentinel-tls-cpp-windows-20260901.json",
+      "status": "pass"
+    },
+    "csharp": {
+      "frameworks": [
+        "net8.0",
+        "net10.0"
+      ],
+      "scope": "complete two-promotion matrix",
+      "result": "sentinel-tls-csharp-windows-20260901.json",
+      "status": "pass"
+    }
+  },
+  "automated_packaging": "deferred",
+  "macos": "unsupported"
+}

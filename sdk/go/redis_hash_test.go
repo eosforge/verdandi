@@ -88,9 +88,7 @@ func TestRedisHashDescriptorRejectsAggregateFieldNamesAboveCeiling(t *testing.T)
 
 func TestRootCommandsValidateBeforeRedisIO(t *testing.T) {
 	client := &Client{
-		config: runtimeConfig{
-			timeout: time.Second,
-		},
+		timeout: time.Second,
 	}
 
 	if _, _, err := client.Key().GetContext[string](nil, "key"); !IsCode(err, CodeInvalid) {

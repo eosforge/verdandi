@@ -2,8 +2,11 @@ package verdandi
 
 import (
 	"crypto/tls"
+	"net"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 )
@@ -21,14 +24,8 @@ type PoolConfig struct {
 // ReconnectConfig 控制 Redis 连接建立失败后的驱动级退避。
 // 它只影响连接恢复，不会重试已经发送或结果不明确的 Redis 命令。
 type ReconnectConfig struct {
-	// InitialDelay 是同一次连接建立过程首次失败后的基础等待；零值使用 100 毫秒，允许范围为 10 毫秒至 5 秒且必须为整毫秒。
-	InitialDelay time.Duration
-	// MaxDelay 是连续连接失败时的退避上限；零值使用 5 秒，允许范围为 100 毫秒至 30 秒且必须为整毫秒。
-	MaxDelay time.Duration
-	// Multiplier 是每次连续失败后的指数增长倍数；零值使用 2，允许范围为 1 至 8。
-	Multiplier int
-	// JitterPercent 是从计算延迟中随机扣除的百分比上限；nil 使用 10，显式值允许范围为 0 至 50，指向零值表示禁用。
-	JitterPercent *int
+	// Delay 是驱动重新建立连接前的固定等待；零值使用 100 毫秒，允许范围为 10 毫秒至 30 秒且必须为整毫秒。
+	Delay time.Duration
 }
 
 // Standalone 配置一个地址固定的 Redis 主节点。
@@ -41,7 +38,8 @@ type Standalone struct {
 	Password string
 	// Database 是 Redis 逻辑数据库编号；零值就是数据库 0，允许范围为 0 至 255。
 	Database int
-	// TLS 默认 nil 并使用明文传输；非 nil 时启用 TLS，建立客户端时会复制配置，调用方之后的修改不会生效。
+	// TLS 默认 nil 并使用明文传输；非 nil 时启用 TLS，最低允许 TLS 1.2，且禁止 InsecureSkipVerify。
+	// SDK 会复制配置容器；调用方仍须保证其中引用的证书、私钥和回调在 Client 生命周期内不可变。
 	TLS *tls.Config
 }
 
@@ -61,7 +59,9 @@ type Sentinel struct {
 	SentinelPassword string
 	// Database 是 Redis 数据节点的逻辑数据库编号；零值就是数据库 0，允许范围为 0 至 255。
 	Database int
-	// TLS 默认 nil 并使用明文传输；非 nil 时启用到 Redis 数据节点的 TLS，建立客户端时会复制配置。
+	// TLS 默认 nil 并使用明文传输；非 nil 时启用 TLS，最低允许 TLS 1.2、禁止 InsecureSkipVerify，且 ServerName 必须非空。
+	// ServerName 是所有 Sentinel 和所有可能成为主节点的 Redis 证书共同包含的固定身份，不取信动态发现地址。
+	// SDK 会复制配置容器；调用方仍须保证其中引用的证书、私钥和回调在 Client 生命周期内不可变。
 	TLS *tls.Config
 }
 
@@ -78,7 +78,7 @@ type Config struct {
 	ConnectTimeout time.Duration
 	// Pool 控制共享 Redis 连接池；零值结构展开为最少 1 条、最多 4 条连接和 10 秒空闲回收时间，范围见 PoolConfig。
 	Pool PoolConfig
-	// Reconnect 控制连接级恢复退避；零值结构展开为 100 毫秒起步、5 秒封顶、倍数 2 和 10% 抖动，范围见 ReconnectConfig。
+	// Reconnect 控制驱动连接恢复等待；零值结构展开为固定 100 毫秒，范围见 ReconnectConfig。
 	Reconnect ReconnectConfig
 }
 
@@ -89,30 +89,6 @@ func (config Config) Check() error {
 	return err
 }
 
-// runtimeConfig 保存校验后的公开配置和供驱动构建直接读取的展开值。
-type runtimeConfig struct {
-	// Config 保留调用方传入并通过校验的公开配置；私有字段保存展开后的实际运行值。
-	Config
-	// timeout 是已展开的普通命令超时；默认展开值为 2 秒，范围为 10 毫秒至 15 秒。
-	timeout time.Duration
-	// connectTimeout 是已展开的连接及 TLS 握手超时；默认展开值为 5 秒，范围为 20 毫秒至 30 秒。
-	connectTimeout time.Duration
-	// poolMin 是连接池实际保留的最少连接数；默认展开值为 1，范围为 1 至 1024。
-	poolMin int
-	// poolMax 是连接池实际允许的最多连接数；默认展开值为 4，范围为 1 至 1024，且不小于 poolMin。
-	poolMax int
-	// poolIdle 是超过 poolMin 的空闲连接回收时间；默认展开值为 10 秒，范围为 1 秒至 1 小时。
-	poolIdle time.Duration
-	// reconnectInitial 是连接恢复首次退避；默认展开值为 100 毫秒，范围为 10 毫秒至 5 秒。
-	reconnectInitial time.Duration
-	// reconnectMax 是连接恢复退避上限；默认展开值为 5 秒，范围为 100 毫秒至 30 秒且不小于 reconnectInitial。
-	reconnectMax time.Duration
-	// reconnectFactor 是连接恢复指数倍数；默认展开值为 2，范围为 1 至 8。
-	reconnectFactor int
-	// reconnectJitter 是连接恢复随机扣减百分比；默认展开值为 10，范围为 0 至 50。
-	reconnectJitter int
-}
-
 // normalize 校验配置的拓扑互斥、地址和取值范围，并返回不可变的运行时配置。
 // 返回错误时不会建立网络连接；成功结果中的 timeout 始终为正值。
 func (config Config) normalize() (runtimeConfig, error) {
@@ -120,36 +96,54 @@ func (config Config) normalize() (runtimeConfig, error) {
 	if (config.Standalone == nil) == (config.Sentinel == nil) {
 		return runtimeConfig{}, protocolError(CodeInvalid, "topology", 0)
 	}
-	// Standalone 检查：固定主节点模式必须提供非空 host:port 地址。
-	if config.Standalone != nil && strings.TrimSpace(config.Standalone.Address) == "" {
-		return runtimeConfig{}, protocolError(CodeInvalid, "standalone.address", 0)
+	// Standalone 检查：固定主节点模式必须提供合法 host:port；TLS 必须保持验证且最低使用 TLS 1.2。
+	if config.Standalone != nil {
+		if !validEndpoint(config.Standalone.Address) {
+			return runtimeConfig{}, protocolError(CodeInvalid, "standalone.address", 0)
+		}
+		if err := checkTLS(config.Standalone.TLS); err != nil {
+			return runtimeConfig{}, err
+		}
 	}
-	// Sentinel 检查：至少提供一个非空端点和非空 MasterName，且端点列表中不能出现空项。
+	// Sentinel 检查：至少提供一个合法端点和规范 MasterName；TLS 使用跨全部动态节点共享的固定证书身份。
 	if config.Sentinel != nil {
 		if len(config.Sentinel.Addresses) == 0 {
 			return runtimeConfig{}, protocolError(CodeInvalid, "sentinel.addresses", 0)
 		}
-		if strings.TrimSpace(config.Sentinel.MasterName) == "" {
+		if !canonicalText(config.Sentinel.MasterName) {
 			return runtimeConfig{}, protocolError(CodeInvalid, "sentinel.master_name", 0)
 		}
 		for _, address := range config.Sentinel.Addresses {
-			if strings.TrimSpace(address) == "" {
+			if !validEndpoint(address) {
 				return runtimeConfig{}, protocolError(CodeInvalid, "sentinel.addresses", 0)
 			}
 		}
+		if err := checkTLS(config.Sentinel.TLS); err != nil {
+			return runtimeConfig{}, err
+		}
+		if config.Sentinel.TLS != nil && config.Sentinel.TLS.ServerName == "" {
+			return runtimeConfig{}, protocolError(CodeInvalid, "tls.server_name", 0)
+		}
 	}
 
-	// 保留原始公开值，同时把零值默认值展开到私有字段，避免驱动和热路径重复判断。
+	// 复制拓扑容器并展开零值默认项，避免驱动持有调用方可变的地址切片或 TLS 配置指针。
 	result := runtimeConfig{
-		Config:           config,
-		timeout:          config.Timeout,
-		connectTimeout:   config.ConnectTimeout,
-		poolMin:          config.Pool.MinConnections,
-		poolMax:          config.Pool.MaxConnections,
-		poolIdle:         config.Pool.IdleTimeout,
-		reconnectInitial: config.Reconnect.InitialDelay,
-		reconnectMax:     config.Reconnect.MaxDelay,
-		reconnectFactor:  config.Reconnect.Multiplier,
+		timeout:        config.Timeout,
+		connectTimeout: config.ConnectTimeout,
+		poolMin:        config.Pool.MinConnections,
+		poolMax:        config.Pool.MaxConnections,
+		poolIdle:       config.Pool.IdleTimeout,
+		reconnectDelay: config.Reconnect.Delay,
+	}
+	if config.Standalone != nil {
+		standalone := *config.Standalone
+		standalone.TLS = cloneTLS(config.Standalone.TLS)
+		result.standalone = &standalone
+	} else {
+		sentinel := *config.Sentinel
+		sentinel.Addresses = append([]string(nil), config.Sentinel.Addresses...)
+		sentinel.TLS = cloneTLS(config.Sentinel.TLS)
+		result.sentinel = &sentinel
 	}
 	var ok bool
 	// 命令超时检查：默认 2 秒，必须是 10 毫秒至 15 秒内的整毫秒值。
@@ -177,45 +171,22 @@ func (config Config) normalize() (runtimeConfig, error) {
 	if !ok {
 		return runtimeConfig{}, protocolError(CodeInvalid, "pool.idle_timeout", 0)
 	}
-	// 重连延迟检查：首次延迟默认 100 毫秒、范围 10 毫秒至 5 秒。
-	result.reconnectInitial, ok = validate.Duration(
-		result.reconnectInitial,
+	// 驱动重连检查：默认固定等待 100 毫秒，必须是 10 毫秒至 30 秒内的整毫秒值。
+	result.reconnectDelay, ok = validate.Duration(
+		result.reconnectDelay,
 		100*time.Millisecond,
 		10*time.Millisecond,
-		5*time.Second,
-	)
-	if !ok {
-		return runtimeConfig{}, protocolError(CodeInvalid, "reconnect.initial_delay", 0)
-	}
-	// 重连上限检查：最大延迟默认 5 秒、范围 100 毫秒至 30 秒。
-	result.reconnectMax, ok = validate.Duration(
-		result.reconnectMax,
-		5*time.Second,
-		100*time.Millisecond,
 		30*time.Second,
 	)
 	if !ok {
-		return runtimeConfig{}, protocolError(CodeInvalid, "reconnect.max_delay", 0)
+		return runtimeConfig{}, protocolError(CodeInvalid, "reconnect.delay", 0)
 	}
-	// 整数默认值展开：连接池最少使用 1 条、最多使用 4 条连接，重连指数倍数使用 2。
+	// 连接池整数默认值展开：最少使用 1 条、最多使用 4 条连接。
 	if result.poolMin == 0 {
 		result.poolMin = 1
 	}
 	if result.poolMax == 0 {
 		result.poolMax = 4
-	}
-	if result.reconnectFactor == 0 {
-		result.reconnectFactor = 2
-	}
-	// 重连抖动检查：nil 使用 10%，显式值允许 0% 至 50%。
-	result.reconnectJitter, ok = validate.OptionalInt(
-		config.Reconnect.JitterPercent,
-		10,
-		0,
-		50,
-	)
-	if !ok {
-		return runtimeConfig{}, protocolError(CodeInvalid, "reconnect.jitter_percent", 0)
 	}
 
 	// 数据库检查：Standalone 或 Sentinel 数据节点的数据库编号必须在 0 至 255 之间。
@@ -240,12 +211,101 @@ func (config Config) normalize() (runtimeConfig, error) {
 		return runtimeConfig{}, protocolError(CodeInvalid, "pool.min_connections", 0)
 	}
 
-	// 重连关系检查：指数倍数为 1 至 8，首次延迟不得超过最大延迟。
-	if result.reconnectFactor < 1 || result.reconnectFactor > 8 {
-		return runtimeConfig{}, protocolError(CodeInvalid, "reconnect.multiplier", 0)
-	}
-	if result.reconnectInitial > result.reconnectMax {
-		return runtimeConfig{}, protocolError(CodeInvalid, "reconnect.initial_delay", 0)
-	}
 	return result, nil
+}
+
+// validEndpoint 接受域名、IPv4 或方括号 IPv6 的 host:port，并要求端口处于 Redis 可连接范围。
+func validEndpoint(address string) bool {
+	if !canonicalText(address) {
+		return false
+	}
+	host, portText, err := net.SplitHostPort(address)
+	if err != nil || !validEndpointHost(host) {
+		return false
+	}
+	port, err := strconv.ParseUint(portText, 10, 16)
+	return err == nil && port != 0 && decimalPort(portText)
+}
+
+// decimalPort 固定跨语言端口词法，只接受至少一个 ASCII 十进制数字。
+func decimalPort(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index := range len(value) {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// validEndpointHost 拒绝主机部分中的 ASCII 空白和控制字符；Unicode 主机名仍交由平台解析器按原样处理。
+func validEndpointHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	for index := range len(host) {
+		if host[index] <= ' ' || host[index] == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+// canonicalText 拒绝空值、首尾空白和 NUL，避免不同驱动对配置文本执行不同的隐式修整。
+func canonicalText(value string) bool {
+	return value != "" && utf8.ValidString(value) && strings.TrimSpace(value) == value && strings.IndexByte(value, 0) < 0
+}
+
+// checkTLS 统一原生 Go TLS 的最低安全语义，并校验可选固定证书身份。
+func checkTLS(config *tls.Config) error {
+	if config == nil {
+		return nil
+	}
+	if config.InsecureSkipVerify {
+		return protocolError(CodeInvalid, "tls.insecure_skip_verify", 0)
+	}
+	if config.MinVersion != 0 && config.MinVersion < tls.VersionTLS12 {
+		return protocolError(CodeInvalid, "tls.min_version", 0)
+	}
+	if config.MaxVersion != 0 && config.MaxVersion < tls.VersionTLS12 {
+		return protocolError(CodeInvalid, "tls.max_version", 0)
+	}
+	if config.MinVersion != 0 && config.MaxVersion != 0 && config.MinVersion > config.MaxVersion {
+		return protocolError(CodeInvalid, "tls.min_version", 0)
+	}
+	if config.ServerName != "" && (!canonicalText(config.ServerName) || hasASCIIWhitespace(config.ServerName) || len(config.ServerName) > 253) {
+		return protocolError(CodeInvalid, "tls.server_name", 0)
+	}
+	return nil
+}
+
+// hasASCIIWhitespace 判断文本是否含协议和各 TLS 驱动都不应隐式修整的 ASCII 空白。
+func hasASCIIWhitespace(value string) bool {
+	for index := range len(value) {
+		switch value[index] {
+		case ' ', '\t', '\n', '\r', '\v', '\f':
+			return true
+		}
+	}
+	return false
+}
+
+// cloneTLS 复制可变 TLS 容器和证书池；私钥对象及回调仍按 crypto/tls 的惯例由调用方保持不可变。
+func cloneTLS(config *tls.Config) *tls.Config {
+	if config == nil {
+		return nil
+	}
+	result := config.Clone()
+	if result.MinVersion == 0 {
+		result.MinVersion = tls.VersionTLS12
+	}
+	if config.RootCAs != nil {
+		result.RootCAs = config.RootCAs.Clone()
+	}
+	if config.ClientCAs != nil {
+		result.ClientCAs = config.ClientCAs.Clone()
+	}
+	return result
 }

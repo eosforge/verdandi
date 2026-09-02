@@ -7,7 +7,7 @@ use verdandi::registration::{
     Client as RegistrationClient, Config as RegistrationConfig, Registration as TypedRegistration, RegistrationOptions, Selector as TypedSelector,
     SelectorOptions,
 };
-use verdandi::{Client, Code, Config, Fields};
+use verdandi::{Client, Code, Config, Fields, TlsConfig};
 
 type Registration = TypedRegistration<Fields, Fields>;
 type Selector = TypedSelector<Fields, Fields>;
@@ -25,6 +25,15 @@ async fn run() -> Result<(), Box<dyn StdError>> {
     let endpoint = std::env::var("VERDANDI_SENTINEL_URL")?;
     let mut config = Config::new(endpoint);
     config.timeout = Duration::from_secs(3);
+    if let Some(ca_file) = std::env::var_os("VERDANDI_TLS_CA_FILE") {
+        config.tls = Some(TlsConfig {
+            system_roots: false,
+            server_name: Some(std::env::var("VERDANDI_TLS_SERVER_NAME")?),
+            ca_file: Some(ca_file.into()),
+            cert_file: None,
+            key_file: None,
+        });
+    }
     let transport = Client::open(config).await?;
     let mut registration_config = RegistrationConfig::new(zone);
     registration_config.selector_page_size = 64;

@@ -14,8 +14,9 @@ execution state belongs in [`worklog.md`](worklog.md).
 Status: **draft for maintainer review**. `Alpha` names the development phase.
 Source and package metadata for the implemented preview is `0.1.0`, without a
 production or stable compatibility promise. The first published `1.0.0`
-artifacts remain immutable and require Leader plus the complete acceptance
-matrix below. No implementation may present these requirements as a released
+artifacts remain immutable and require the complete remaining acceptance matrix
+below. Generic Campaign/Leader election is an explicit non-goal. No
+implementation may present these requirements as a released
 guarantee until the remaining protocol and trust decisions listed here are
 resolved.
 
@@ -35,20 +36,20 @@ a fourth independent protocol implementation:
    limit;
 4. maintain validated local Selector views with no Redis operation on the
    selection read path;
-5. coordinate independently identified, leased, version-aware Leader terms;
-6. synchronize persistent revisioned Catalog key/value namespaces;
-7. synchronize bounded coarse load samples;
-8. deliver ACL-authorized, versioned, opaque desired-configuration snapshots;
-9. activate accepted configuration atomically through consumer callbacks;
-10. publish stable acknowledgements and bounded diagnostics;
-11. recover after Pub/Sub generation loss, reconnects, and primary failover; and
-12. pass the same protocol vectors and cross-language integration matrix.
+5. synchronize persistent revisioned Catalog key/value namespaces;
+6. synchronize bounded coarse load samples;
+7. deliver ACL-authorized, versioned, opaque desired-configuration snapshots;
+8. activate accepted configuration atomically through consumer callbacks;
+9. publish stable acknowledgements and bounded diagnostics;
+10. recover after Pub/Sub generation loss, reconnects, and primary failover; and
+11. pass the same protocol vectors and cross-language integration matrix.
 
 The `0.1.0` preview intentionally exposes only the implemented root Client and
 configuration surfaces, Registration/Registry/Selector lifecycle, persistent
 Catalog synchronization, and their Standalone/Sentinel recovery paths. It does
-not claim Campaign/Leader, desired configuration, acknowledgements, complete
+not claim desired configuration, acknowledgements, complete
 load synchronization, production availability, or a stable wire contract.
+Campaign/Leader is excluded rather than deferred.
 Consumers may begin distributed development and controlled integration against
 these APIs with the normal SemVer expectation that a later `0.x` minor release
 may contain breaking changes.
@@ -121,8 +122,6 @@ copying one language's syntax into another:
 - `Publisher`: owns Catalog KV mutation and desired-configuration publication.
 - `Selector<T>` or the language-equivalent typed selector: owns an immutable
   local Registry view and exposes application selection inputs.
-- `Campaign` and `LeaderTerm`: own candidate readiness, exclusive term
-  acquisition, fail-closed local admission, and joined release.
 - Catalog `Publisher`, `Subscriber`, stable `Entry`, and generic `Entry.Load<T>` or
   language equivalents: bind application-owned codecs per Path while keeping
   the Redis state raw and complete in memory.
@@ -139,8 +138,8 @@ Rust keeps Fred private.
 ## 5. Connection Modes and Lifecycle
 
 Alpha qualifies Redis Open Source 8.0.0 or later in an explicitly tested Redis
-8 line, or a documented compatible service. Registry membership and Campaign
-readiness use independently expiring Redis Hash fields.
+8 line, or a documented compatible service. Registry membership uses
+independently expiring Redis Hash fields.
 
 ### 5.1 Standalone
 
@@ -240,7 +239,7 @@ deadlines. Normal synchronization performs no `PTTL` or `HPTTL`; those commands
 are diagnostic/fallback tools. Natural Redis TTL expiry and conservative local
 expiry must both be tested.
 
-## 7. Registry, Catalog KV, Leadership, and Selectors
+## 7. Registry, Catalog KV, and Selectors
 
 ### 7.1 Registry and Selectors
 
@@ -338,40 +337,6 @@ that Client generation, and local state is never replayed back to Redis. The
 complete Catalog defaults to 512 KiB and is configurable up to 4 MiB; pages,
 concurrent reads, decoder input,
 synchronization, diagnostics, and checkpoint work are bounded independently.
-### 7.3 Leadership
-
-A Campaign does not require a Registration. Its private random readiness token
-is the Campaign lifetime's internal identity; every ownership attempt uses a
-different private ownership token and lease. Campaign `version` is immutable
-for the Campaign lifetime and is a positive integer in
-`1..9007199254740991`; every SDK uses the same numeric comparison and prefers
-the larger value. Changing version requires closing the Campaign and creating
-another readiness-token/version pair. The SDK attempts claim only when its
-local ready view considers it best; Redis verifies the exact readiness token,
-matching version, and empty ownership atomically.
-Equal versions are first-successful-claim wins. A live owner is not preempted;
-after observing a larger ready version it invalidates new local admission,
-joins term-owned cleanup, and exact-token releases before replacement.
-
-Every election domain has zero or one application-active Leader. Every Leader
-term exposes a synchronous local validity check backed by cancellation and a
-conservative monotonic deadline. An ambiguous or failed renewal invalidates the
-local term immediately. The SDK cancels and joins all term-owned work before
-exact-token release; a replacement starts only after the prior application
-cleanup and required fence handoff. Exact release publishes one Pub/Sub wake to
-reduce handoff latency, while bounded retry and the Redis lease remain the
-correctness path. Temporary absence is accepted; overlapping active Leaders
-are not.
-
-Standalone uses the configured Redis primary as its term authority. A Sentinel
-Campaign must acquire one deployment-provided durable fence or advisory lock
-after Redis claim and before exposing a LeaderTerm or invoking application
-code. After acquisition it exact-token confirms Redis ownership once more;
-failed confirmation releases the fence without starting the callback. It holds
-an active fence until term-owned application cleanup finishes. A
-promoted-primary claimant waiting for the same fence is not
-application-active. Missing or failed fencing leaves the domain without an
-active Leader.
 
 ## 8. Observed Load
 
@@ -498,9 +463,6 @@ Shared test vectors must cover:
 - Catalog Value/Array/Map Replace, exact-base Patch, Delete/recreate,
   multiple-writer last-write-wins conflict, field-level repair, checkpoint
   recovery, and ambiguous-write reconciliation;
-- Campaign-without-Registration readiness, independent token/version lifecycle,
-  Leader acquisition, version retirement, ready-view loss, and token-fenced
-  release;
 - lease and queue-delay calculations;
 - stable string error/status mappings;
 - every Redis Lua input, output, and error condition.
@@ -532,8 +494,6 @@ Real integration tests must cover:
 - paginated registry and Catalog synchronization during concurrent mutation;
 - Registration revision gaps, PONG timeout/ordering, buffer overflow, and
   unsynchronized Catalog Entries/Subscribers;
-- concurrent Campaigns, Leader retirement, exact-token release, and local term
-  expiry;
 - Publisher restart, revision continuation, wake delivery, and failover rollback;
 - malformed, incomplete, oversized, incompatible, and expired documents;
 - cancellation during every network and activation phase; and
@@ -549,7 +509,7 @@ population. An Update already refreshes the lease, so the profiles do not add a
 redundant Renew to the same second. The result is a qualification point, not a
 hard protocol ceiling.
 
-The protocol and Lua actions must contain no service, Node, or Campaign count
+The protocol and Lua actions must contain no service or Node count
 ceiling; Catalog is one complete bounded Value. Capacity tests additionally increase population until
 the tested deployment misses its latency or resource objective, recording the
 measured boundary rather than turning it into a wire constant.
@@ -568,16 +528,15 @@ isolation. Cross-partition atomic Catalog mutations are not an Alpha guarantee.
 ### Stage 0: Freeze the Contract
 
 - Resolve serialization, compatibility, error taxonomy, key identifiers,
-  ACL ownership, configurable limits, synchronization barriers, and
-  Leader policy.
+  ACL ownership, configurable limits, and synchronization barriers.
 - Produce schemas, Lua contracts, and adversarial vectors before SDK network
   clients.
 
 ### Stage 1: Standalone Coordination
 
 - Catalog Publisher/Subscriber, stable Entry, generic per-load typing, and
-  optional checkpoint are implemented in Go and Rust. Complete the remaining Client lifecycle,
-  Campaign/Leader, load synchronization, and ACK work in both languages.
+  optional checkpoint are implemented in Go and Rust. Complete the remaining
+  Client lifecycle, load synchronization, and ACK work in both languages.
 - Pass all same-language and cross-language Standalone tests.
 
 ### Stage 2: Sentinel
@@ -586,10 +545,6 @@ isolation. Cross-partition atomic Catalog mutations are not an Alpha guarantee.
   protocol and passed real promotion, reconnect, resubscription, acknowledged-
   loss repair, and state-recovery tests. Later data classes must independently
   extend that qualification.
-- Campaign/Leader qualification must prove primary-generation invalidation,
-  durable-fence acquisition before callback admission, joined fence handoff,
-  and zero overlapping application-active terms. Without a fence, Sentinel
-  Campaign remains unavailable.
 
 ### Stage 3: Desired Configuration
 
@@ -618,6 +573,7 @@ isolation. Cross-partition atomic Catalog mutations are not an Alpha guarantee.
 Alpha does not include:
 
 - Redis Cluster;
+- generic Campaign/Leader election or application-level distributed locking;
 - active/active or multi-primary state merging;
 - a consensus implementation;
 - cross-partition linearizable publication;
@@ -644,9 +600,6 @@ Alpha does not include:
   7,866.527-Redis-second Registration fault campaign, and a real Redis 8.8
   Sentinel topology. Catalog's separate 24-hour interval remains outside this
   Registration completion.
-- Freeze the cross-language Sentinel fence adapter shape and qualify at least
-  one durable advisory-lock implementation. The strict zero-or-one Leader
-  policy and mandatory Sentinel fencing behavior are accepted.
 - Audit canonical Catalog custom-field naming and flattening codecs; independent
   Hash records with reserved plus expanded custom fields are accepted.
 

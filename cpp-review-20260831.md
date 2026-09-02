@@ -13,8 +13,10 @@ language-neutral Alpha contract:
 - generated Registration and Catalog Lua integration;
 - Standalone and Sentinel transport paths.
 
-Leader, desired state, acknowledgements, Redis Cluster, and release packaging
-are outside this implementation. No commit, tag, package, or push was created.
+At this checkpoint, Leader, desired state, acknowledgements, Redis Cluster, and
+release packaging were outside this implementation. Generic Leader election was
+subsequently withdrawn from every release target on 2026-09-02. No commit, tag,
+package, or push was created.
 
 The physical C/C++ inventory contains 50 production header/source/template
 files with 14,537 lines and thirteen test translation units with 1,325 lines. The C
@@ -275,3 +277,53 @@ configuration consistency improved, while the remaining score deductions are
 still a direct native two-promotion campaign, TLS, MSVC/Clang/macOS, install and
 package export, automated ABI compatibility, native fuzzing, dedicated
 performance baselines, and bounded C++-owned endurance.
+
+## 9. 2026-09-01 Sentinel TLS and capability addendum
+
+This addendum supersedes only the earlier Sentinel+TLS rejection, live-TLS
+deduction, exported-symbol count, and current score.
+
+- Sentinel TLS now requires one fixed non-empty certificate identity shared by
+  all Sentinel and data-node certificates. OpenSSL verifies that identity and
+  an `SSL_CTX` handshake callback reapplies DNS SNI to every SSL stream that
+  Boost.Redis rebuilds during discovery or reconnect.
+- A private-CA fixture whose leaf SAN contains only `verdandi.test` passed the
+  shared-Release Root/Registration/Selector/Catalog/SQLite integration. A run
+  using `wrong.verdandi.test` was rejected before the accepted run, and cleanup
+  ended at `DBSIZE=0`.
+- The same core stayed alive through two TLS promotions from C# net8/net10;
+  this is strong transport-state evidence but still does not replace a direct
+  native C++23 two-promotion peer.
+- C ABI v1 now exports allocation-free string capability discovery. C11,
+  C++11 Legacy and C# cover known, unknown, empty and invalid queries. The
+  shared library exports 90 unique `verdandi_*` symbols.
+
+Updated scores after the cross-platform TLS qualification: Root transport/
+configuration **9.6/10**, C ABI/lower-standard boundary **9.6/10**, tests/
+release engineering **9.3/10**, and overall C++ SDK **9.6/10**. Remaining
+deductions are the direct native two-promotion campaign, live mutual TLS, Linux
+Clang, install/export and automated package/ABI gates, native fuzzing,
+dedicated performance baselines, and bounded C++-owned endurance. Windows MSVC
+shared Release now passes direct private-CA Sentinel TLS integration, while C#
+net8/net10 pass two TLS promotions through the same DLL; macOS is intentionally
+unsupported rather than an open gate.
+Automated packaging is intentionally deferred rather than represented as
+complete.
+
+## 10. 2026-09-01 Driver lifetime and clean-runtime addendum
+
+The overall C++ score remains **9.6/10**. The reactor `io_context` and work
+guard now live in a shared runtime captured by the reactor thread. If the last
+Driver reference is released from an I/O handler, implementation destruction
+may detach the current thread without leaving the active `io_context::run()`
+stack dependent on destroyed storage. A command that exceeds the completion
+fallback permanently retires its connection from the pool before cancellation,
+so a still-pending handler and an unrelated later command cannot share it.
+
+Windows shared builds now copy transitive runtime DLLs beside the target. A
+clean Release CTest no longer depends on a caller's PATH containing yyjson or
+OpenSSL. GCC Debug, ASan/UBSan, MSVC Debug/shared Release, format, clang-tidy,
+direct Windows/Linux Sentinel TLS smoke, and C# two-promotion use of the same
+core all pass after the change. The score remains bounded by the missing direct
+C++23 two-promotion peer, install/export packaging, automated ABI compatibility,
+dedicated native performance/fuzz gates, mTLS, and current-source endurance.

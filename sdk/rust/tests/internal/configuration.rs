@@ -7,6 +7,7 @@ use crate::Code;
 #[derive(serde::Deserialize)]
 struct ConfigurationCorpus {
     cases: Vec<ConfigurationCase>,
+    raw_cases: Vec<RawConfigurationCase>,
 }
 
 #[derive(serde::Deserialize)]
@@ -15,7 +16,23 @@ struct ConfigurationCase {
     valid: bool,
     #[serde(default)]
     field: String,
+    #[serde(default)]
+    code: String,
     document: serde_json::Value,
+}
+
+#[derive(serde::Deserialize)]
+struct RawConfigurationCase {
+    name: String,
+    valid: bool,
+    #[serde(default)]
+    field: String,
+    #[serde(default)]
+    code: String,
+    #[serde(default)]
+    source: String,
+    #[serde(default)]
+    source_hex: String,
 }
 
 #[test]
@@ -24,13 +41,39 @@ fn shared_configuration_corpus_has_identical_results() {
     let corpus: ConfigurationCorpus = serde_json::from_str(source).unwrap_or_else(|error| panic!("invalid conformance corpus: {error}"));
     for case in corpus.cases {
         let document = serde_json::to_vec(&case.document).unwrap_or_else(|error| panic!("{} encoding failed: {error}", case.name));
-        match Config::from_json(&document) {
-            Ok(_) if case.valid => {}
-            Ok(_) => panic!("{} unexpectedly succeeded", case.name),
-            Err(error) if !case.valid => assert_eq!(error.field_name(), Some(case.field.as_str()), "{} field", case.name),
-            Err(error) => panic!("{} unexpectedly failed: {error}", case.name),
-        }
+        assert_conformance(&case.name, case.valid, &case.code, &case.field, &document);
     }
+    for case in corpus.raw_cases {
+        let source = if case.source_hex.is_empty() {
+            case.source.into_bytes()
+        } else {
+            decode_hex(&case.source_hex).unwrap_or_else(|| panic!("{} has invalid source_hex", case.name))
+        };
+        assert_conformance(&case.name, case.valid, &case.code, &case.field, &source);
+    }
+}
+
+fn assert_conformance(name: &str, valid: bool, code: &str, field: &str, source: &[u8]) {
+    match Config::from_json(source) {
+        Ok(_) if valid => {}
+        Ok(_) => panic!("{name} unexpectedly succeeded"),
+        Err(error) if !valid => {
+            assert_eq!(error.code().as_str(), code, "{name} code");
+            assert_eq!(error.field_name(), Some(field), "{name} field");
+        }
+        Err(error) => panic!("{name} unexpectedly failed: {error}"),
+    }
+}
+
+fn decode_hex(source: &str) -> Option<Vec<u8>> {
+    let mut output = Vec::with_capacity(source.len() / 2);
+    let mut digits = source.as_bytes().chunks_exact(2);
+    for pair in &mut digits {
+        let high = (pair[0] as char).to_digit(16)?;
+        let low = (pair[1] as char).to_digit(16)?;
+        output.push(u8::try_from((high << 4) | low).ok()?);
+    }
+    digits.remainder().is_empty().then_some(output)
 }
 
 #[test]
@@ -105,13 +148,13 @@ fn preserves_explicit_zero() {
     let config = Config::from_json(
         br#"{
             "version":"v1",
-            "redis":{"mode":"standalone","addresses":["localhost:6379"],"reconnect":{"jitter_percent":0}},
+            "redis":{"mode":"standalone","addresses":["localhost:6379"],"reconnect":{"delay_ms":10}},
             "registration":{"zone":"Alpha","selector":{"view_publish_interval_ms":0,"max_retained_bytes":0,"clock_uncertainty_ms":0}}
         }"#,
     )
     .unwrap_or_else(|error| panic!("{error}"));
     let redis = config.redis_config().unwrap_or_else(|error| panic!("{error}"));
-    assert_eq!(redis.reconnect.jitter_percent, 0);
+    assert_eq!(redis.reconnect.delay, Duration::from_millis(10));
     let registration = config
         .registration_config()
         .unwrap_or_else(|error| panic!("{error}"))
@@ -201,8 +244,8 @@ fn rejects_invalid_tls_relationships() {
             "redis.tls.cert_file",
         ),
         (
-            "sentinel fixed server name",
-            r#"{"version":"v1","redis":{"mode":"sentinel","addresses":["localhost:26379"],"master_name":"primary","tls":{"enabled":true,"server_name":"redis.test"}}}"#,
+            "sentinel missing fixed server name",
+            r#"{"version":"v1","redis":{"mode":"sentinel","addresses":["localhost:26379"],"master_name":"primary","tls":{"enabled":true}}}"#,
             "redis.tls.server_name",
         ),
     ];

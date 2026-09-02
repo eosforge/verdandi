@@ -26,13 +26,16 @@ Current qualification covers:
   behavior, including concurrent root disposal and finalizer-backed native
   cleanup; and
 - an independent three-Redis/three-Sentinel matrix with separate Redis and
-  Sentinel ACLs, two promotions, acknowledged-write-loss repair, `SCRIPT
-  FLUSH`, total Sentinel loss, unavailable views, and generation recovery.
+  Sentinel ACLs, private-CA TLS, two promotions, acknowledged-write-loss
+  repair, `SCRIPT FLUSH`, total Sentinel loss, unavailable views, and
+  generation recovery.
 
-Windows DLL/MSVC, macOS, NativeAOT, trimming, NuGet RID packaging, TLS,
-cross-language C# peers, allocation benchmarks, and soak tests remain release
-gates. The SDK is not ready for
-production use.
+Windows x64 now passes MSVC shared-Release DLL construction, .NET 8/10 offline
+loading of that DLL, and the same complete live private-CA Sentinel TLS
+two-promotion matrix as Linux x64. NativeAOT, trimming, automated NuGet RID
+packaging, live mutual-TLS, cross-language C# peers, allocation benchmarks, and
+soak tests remain release gates. macOS is intentionally unsupported. The SDK is
+not ready for production use.
 
 ## Architecture
 
@@ -63,7 +66,28 @@ completion/cancellation contract or an independently approved pure-C# backend.
 
 ## Build
 
-Build and verify the managed projects from this directory:
+C# needs no dedicated PowerShell or Bash build orchestration. The managed
+assembly is compiled normally by a consuming `dotnet build`, project reference,
+or eventual NuGet package. Only the C++23 shared runtime must be built
+separately. From the repository root:
+
+```powershell
+./sdk/cpp/build.ps1 all -Profile release -Linkage shared
+```
+
+```bash
+bash sdk/cpp/build.sh all --profile release --linkage shared
+```
+
+The native scripts print the exact `verdandi_cpp.dll` or
+`libverdandi_cpp.so` path. Copy that file beside the consuming application or
+under its `runtimes/<runtime-identifier>/native/` directory; alternatively set
+`VERDANDI_NATIVE_LIBRARY` to the exact file. The scripts do not detect .NET or
+compile this C# project.
+
+See [`../cpp/BUILD.md`](../cpp/BUILD.md) for tool detection, dependency policy,
+offline behavior, cache layout, and the complete native placement contract.
+C#-owned checks remain normal .NET commands:
 
 ```powershell
 dotnet restore Verdandi.slnx
@@ -74,8 +98,8 @@ dotnet run --project tests/Verdandi.Tests --configuration Release --framework ne
 ```
 
 The managed assembly requires a matching shared Verdandi C++ runtime at
-execution time. A source checkout can build it with the existing C++ shared
-preset under WSL/Linux:
+execution time. The existing CMake shared preset remains available as a
+lower-level Linux qualification path:
 
 ```text
 cmake --preset gcc-shared-release
@@ -105,6 +129,20 @@ layer performs only strict UTF-8 conversion and passes the bytes to the native
 parser, so it has no duplicate DTO, defaults, bounds, credential storage, or
 TLS interpretation.
 
+Use `Configuration.Validate` when deployment tooling needs complete parser and
+relationship checks without opening Redis or reading TLS files:
+
+```csharp
+using Verdandi;
+
+var checkedConfiguration = Configuration.Validate(File.ReadAllText("configuration.json"));
+if (!checkedConfiguration.IsSuccess)
+{
+    Console.Error.WriteLine(checkedConfiguration.Error);
+    return;
+}
+```
+
 ```csharp
 using Verdandi;
 
@@ -122,6 +160,21 @@ var ping = client.Ping();
 `Client` additionally exposes complete raw Key and Hash operations. They are
 ACL-controlled escape hatches outside Registration and Catalog validation and
 atomicity guarantees.
+
+`Runtime.Supports` checks the capability set of the native library that was
+actually loaded. It performs no Redis I/O:
+
+```csharp
+var supported = Runtime.Supports(Runtime.RedisSentinelTls);
+if (!supported.IsSuccess || !supported.Value)
+{
+    Console.Error.WriteLine("The loaded native runtime does not support Sentinel TLS.");
+    return;
+}
+```
+
+Unknown or empty capability names return `false`; a missing query symbol in an
+older native library returns `incompatible/native_library`.
 
 ## Strong field values
 
@@ -313,8 +366,19 @@ language's SDK suite:
 
 ```powershell
 $env:VERDANDI_TEST_SSH_PASSWORD = "<temporary test-host password>"
-python -B tests/standalone_test.py --host 192.168.0.90 --ssh-user ubuntu --result-file ../../testkit/results/csharp-standalone.json
-python -B tests/sentinel_test.py --host 192.168.0.90 --ssh-user ubuntu --result-file ../../testkit/results/csharp-sentinel.json
+python -B tests/standalone_test.py `
+  --host 192.168.0.90 --ssh-user ubuntu `
+  --result-file ../../testkit/results/csharp-standalone.json
+python -B tests/sentinel_test.py `
+  --host 192.168.0.90 --ssh-user ubuntu `
+  --result-file ../../testkit/results/csharp-sentinel.json
+python -B tests/sentinel_test.py --tls --runtime linux-x64 `
+  --host 192.168.0.90 --ssh-user ubuntu `
+  --result-file ../../testkit/results/csharp-sentinel-tls-linux.json
+python -B tests/sentinel_test.py --tls --runtime win-x64 `
+  --vcpkg-root "D:\Program Files\vcpkg" `
+  --host 192.168.0.90 --ssh-user ubuntu `
+  --result-file ../../testkit/results/csharp-sentinel-tls-windows.json
 ```
 
 The Standalone harness builds the shared Release core, restores and analyzes
@@ -331,8 +395,12 @@ The Sentinel harness keeps one .NET 8 and one .NET 10 peer alive through two
 promotions. It proves loss of an acknowledged write, same-UUID desired-state
 repair, `SCRIPT FLUSH` reload, continued use while every Sentinel is down,
 unavailable views after the primary also disappears, and recovery to Selector
-generation `1 -> 2 -> 3`. Its C#-owned fixture uses a five-second Sentinel
+generation `1 -> 2 -> 3`. With `--tls`, the fixture encrypts Sentinel, Redis,
+and replication links with a private CA; the certificate contains only the
+fixed `verdandi.test` identity, not the announced node IPs. Its C#-owned fixture uses a five-second Sentinel
 `down-after` so waiting for the managed view to declare unavailability does not
-itself disqualify the only surviving replica. This is independent Linux x64
-Standalone/Sentinel evidence, not a TLS, platform, package, NativeAOT,
-performance, or endurance claim.
+itself disqualify the only surviving replica. Linux x64 and Windows x64 both
+have independent server-authenticated Sentinel TLS evidence; Windows uses the
+MSVC Release DLL and Linux uses the GCC Release shared object. This does not
+claim an automated package, NativeAOT, mutual-TLS, performance, or endurance.
+macOS is unsupported.

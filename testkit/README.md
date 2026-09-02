@@ -396,10 +396,13 @@ PowerShell example:
 
 ```text
 $env:VERDANDI_TEST_SSH_PASSWORD = "<temporary test-host password>"
-python -B testkit/sentinel/sentinel_test.py --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/sentinel.json
+python -B testkit/sentinel/sentinel_test.py --tls --runtime win-x64 --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/sentinel-tls-windows.json
+python -B testkit/sentinel/sentinel_test.py --tls --runtime linux-x64 --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/sentinel-tls-linux.json
 python -B testkit/catalog/sentinel_test.py --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/catalog-sentinel.json
-python -B testkit/cpp/sentinel_smoke.py --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/cpp-sentinel-smoke.json
-python -B sdk/csharp/tests/sentinel_test.py --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/csharp-sentinel.json
+python -B testkit/cpp/sentinel_smoke.py --tls --runtime win-x64 --build msvc-shared-release --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/cpp-sentinel-tls-windows.json
+python -B testkit/cpp/sentinel_smoke.py --tls --runtime linux-x64 --build gcc-shared-release --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/cpp-sentinel-tls-linux.json
+python -B sdk/csharp/tests/sentinel_test.py --tls --runtime win-x64 --vcpkg-root "D:\Program Files\vcpkg" --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/csharp-sentinel-tls-windows.json
+python -B sdk/csharp/tests/sentinel_test.py --tls --runtime linux-x64 --host 192.168.0.90 --ssh-user ubuntu --result-file testkit/results/csharp-sentinel-tls-linux.json
 ```
 
 The harness first runs the SDK-specific Sentinel integration tests. It then
@@ -411,6 +414,18 @@ convergence. It verifies synchronization generations and removes only its own
 containers and remote temporary directory in `finally`. `--keep-topology`
 retains those exact resources only for diagnosis. `--result-file` writes the
 final machine-readable scenario summary only after every assertion succeeds.
+On a Windows host, the Go/Rust harness defaults to `win-x64`; selecting
+`linux-x64` runs the client builds and processes through WSL and therefore
+requires Linux Go and Rust toolchains in that user's login path. C++ and C#
+runtime selection is explicit in the examples. The Windows C# path requires an
+existing vcpkg checkout containing `openssl:x64-windows`; the harness does not
+install it.
+With `--tls`, the shared fixture generates a short-lived private CA and a leaf
+whose SAN contains only `verdandi.test`; Redis, Sentinel and replication ports
+all use TLS. The SDKs must therefore use the configured fixed identity rather
+than any IP announced by Sentinel. Go/Rust and C++ also run a deliberate wrong-
+identity rejection before the accepted path. Certificate generation requires
+the pinned `cryptography` dependency in `testkit/sentinel/requirements.txt`.
 The clean-repeat Rust transport-boundary result is
 `testkit/results/rust-transport-refactor-sentinel-20260828.json`.
 The C++ harness is intentionally a short root/Registration/Selector/Catalog/
@@ -426,7 +441,8 @@ and three-Sentinel shape but does not claim the two-promotion fault matrix.
 - Rust load must use `--release`; debug timings are smoke evidence only.
 - The standalone long harness gives the Go package enough timeout for both
   consecutive sustained phases rather than relying on Go's default 10 minutes.
-- Standalone and the provided Sentinel harness are separate qualifications;
-  neither qualifies TLS or managed Redis services.
+- Standalone and the provided Sentinel harness are separate qualifications.
+  `--tls` qualifies server-authenticated private-CA TLS only; it does not
+  qualify mutual TLS, managed Redis services, or platform package delivery.
 - Windows timings are smoke evidence. Optimization decisions should use a
   consistent Linux client/runtime and a characterized Redis host.

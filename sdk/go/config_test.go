@@ -2,12 +2,10 @@ package verdandi
 
 import (
 	"bytes"
-	"context"
+	"crypto/tls"
 	"errors"
 	"testing"
 	"time"
-
-	redis "github.com/redis/go-redis/v9"
 )
 
 func requireInvalidConfigField(t *testing.T, err error, field string) {
@@ -62,17 +60,7 @@ func TestNormalizeTransportConfig(t *testing.T) {
 			},
 			code: CodeInvalid,
 		},
-		{
-			name: "reconnect minimum above maximum",
-			config: Config{
-				Standalone: &Standalone{Address: "127.0.0.1:6379"},
-				Reconnect: ReconnectConfig{
-					InitialDelay: 2 * time.Second,
-					MaxDelay:     time.Second,
-				},
-			},
-			code: CodeInvalid,
-		},
+		{name: "invalid endpoint", config: Config{Standalone: &Standalone{Address: "127.0.0.1"}}, code: CodeInvalid},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -90,13 +78,11 @@ func TestNormalizeTransportConfig(t *testing.T) {
 				t.Fatalf("timeout = %v", runtime.timeout)
 			}
 			if runtime.connectTimeout != 5*time.Second || runtime.poolMin != 1 || runtime.poolMax != 4 ||
-				runtime.poolIdle != 10*time.Second || runtime.reconnectInitial != 100*time.Millisecond ||
-				runtime.reconnectMax != 5*time.Second || runtime.reconnectFactor != 2 || runtime.reconnectJitter != 10 {
+				runtime.poolIdle != 10*time.Second || runtime.reconnectDelay != 100*time.Millisecond {
 				t.Fatalf("runtime defaults = %#v", runtime)
 			}
-			if runtime.Standalone != test.config.Standalone || runtime.Sentinel != test.config.Sentinel ||
-				runtime.Timeout != test.config.Timeout {
-				t.Fatalf("runtime config did not retain the validated transport: %#v", runtime.Config)
+			if (runtime.standalone == nil) == (runtime.sentinel == nil) {
+				t.Fatalf("runtime topology = %#v", runtime)
 			}
 		})
 	}
@@ -104,7 +90,6 @@ func TestNormalizeTransportConfig(t *testing.T) {
 
 func TestNormalizeTransportConfigAcceptsBoundaries(t *testing.T) {
 	t.Parallel()
-	zero := 0
 	minimum := Config{
 		Standalone:     &Standalone{Address: "127.0.0.1:6379"},
 		Timeout:        10 * time.Millisecond,
@@ -115,13 +100,9 @@ func TestNormalizeTransportConfigAcceptsBoundaries(t *testing.T) {
 			IdleTimeout:    time.Second,
 		},
 		Reconnect: ReconnectConfig{
-			InitialDelay:  10 * time.Millisecond,
-			MaxDelay:      100 * time.Millisecond,
-			Multiplier:    1,
-			JitterPercent: &zero,
+			Delay: 10 * time.Millisecond,
 		},
 	}
-	maximumJitter := 50
 	maximum := Config{
 		Standalone:     &Standalone{Address: "127.0.0.1:6379", Database: 255},
 		Timeout:        15 * time.Second,
@@ -132,10 +113,7 @@ func TestNormalizeTransportConfigAcceptsBoundaries(t *testing.T) {
 			IdleTimeout:    time.Hour,
 		},
 		Reconnect: ReconnectConfig{
-			InitialDelay:  5 * time.Second,
-			MaxDelay:      30 * time.Second,
-			Multiplier:    8,
-			JitterPercent: &maximumJitter,
+			Delay: 30 * time.Second,
 		},
 	}
 	for name, config := range map[string]Config{"minimum": minimum, "maximum": maximum} {
@@ -152,7 +130,6 @@ func TestNormalizeTransportConfigReportsExactInvalidField(t *testing.T) {
 	standalone := func() Config {
 		return Config{Standalone: &Standalone{Address: "127.0.0.1:6379"}}
 	}
-	integer := func(value int) *int { return &value }
 	tests := []struct {
 		name   string
 		field  string
@@ -167,11 +144,29 @@ func TestNormalizeTransportConfigReportsExactInvalidField(t *testing.T) {
 		{name: "standalone address", field: "standalone.address", config: func() Config {
 			return Config{Standalone: &Standalone{}}
 		}},
+		{name: "standalone address without port", field: "standalone.address", config: func() Config {
+			return Config{Standalone: &Standalone{Address: "localhost"}}
+		}},
+		{name: "standalone port out of range", field: "standalone.address", config: func() Config {
+			return Config{Standalone: &Standalone{Address: "localhost:65536"}}
+		}},
+		{name: "standalone port leading plus", field: "standalone.address", config: func() Config {
+			return Config{Standalone: &Standalone{Address: "localhost:+6379"}}
+		}},
+		{name: "standalone host whitespace", field: "standalone.address", config: func() Config {
+			return Config{Standalone: &Standalone{Address: "bad host:6379"}}
+		}},
+		{name: "standalone address invalid UTF-8", field: "standalone.address", config: func() Config {
+			return Config{Standalone: &Standalone{Address: string([]byte{0xff}) + ":6379"}}
+		}},
 		{name: "sentinel addresses missing", field: "sentinel.addresses", config: func() Config {
 			return Config{Sentinel: &Sentinel{MasterName: "primary"}}
 		}},
 		{name: "sentinel address empty", field: "sentinel.addresses", config: func() Config {
 			return Config{Sentinel: &Sentinel{Addresses: []string{" "}, MasterName: "primary"}}
+		}},
+		{name: "sentinel address malformed", field: "sentinel.addresses", config: func() Config {
+			return Config{Sentinel: &Sentinel{Addresses: []string{"localhost"}, MasterName: "primary"}}
 		}},
 		{name: "sentinel master", field: "sentinel.master_name", config: func() Config {
 			return Config{Sentinel: &Sentinel{Addresses: []string{"127.0.0.1:26379"}}}
@@ -201,24 +196,9 @@ func TestNormalizeTransportConfigReportsExactInvalidField(t *testing.T) {
 			config.Pool.IdleTimeout = time.Second - time.Millisecond
 			return config
 		}},
-		{name: "reconnect initial delay", field: "reconnect.initial_delay", config: func() Config {
+		{name: "reconnect delay", field: "reconnect.delay", config: func() Config {
 			config := standalone()
-			config.Reconnect.InitialDelay = 9 * time.Millisecond
-			return config
-		}},
-		{name: "reconnect max delay", field: "reconnect.max_delay", config: func() Config {
-			config := standalone()
-			config.Reconnect.MaxDelay = 99 * time.Millisecond
-			return config
-		}},
-		{name: "reconnect jitter below range", field: "reconnect.jitter_percent", config: func() Config {
-			config := standalone()
-			config.Reconnect.JitterPercent = integer(-1)
-			return config
-		}},
-		{name: "reconnect jitter above range", field: "reconnect.jitter_percent", config: func() Config {
-			config := standalone()
-			config.Reconnect.JitterPercent = integer(51)
+			config.Reconnect.Delay = 9 * time.Millisecond
 			return config
 		}},
 		{name: "database below range", field: "database", config: func() Config {
@@ -247,15 +227,27 @@ func TestNormalizeTransportConfigReportsExactInvalidField(t *testing.T) {
 			config.Pool.MaxConnections = 4
 			return config
 		}},
-		{name: "reconnect multiplier", field: "reconnect.multiplier", config: func() Config {
+		{name: "insecure TLS", field: "tls.insecure_skip_verify", config: func() Config {
 			config := standalone()
-			config.Reconnect.Multiplier = 9
+			config.Standalone.TLS = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // 测试拒绝路径。
 			return config
 		}},
-		{name: "reconnect relation", field: "reconnect.initial_delay", config: func() Config {
+		{name: "obsolete TLS", field: "tls.min_version", config: func() Config {
 			config := standalone()
-			config.Reconnect.InitialDelay = 2 * time.Second
-			config.Reconnect.MaxDelay = time.Second
+			config.Standalone.TLS = &tls.Config{MinVersion: tls.VersionTLS11}
+			return config
+		}},
+		{name: "reversed TLS version range", field: "tls.min_version", config: func() Config {
+			config := standalone()
+			config.Standalone.TLS = &tls.Config{MinVersion: tls.VersionTLS13, MaxVersion: tls.VersionTLS12}
+			return config
+		}},
+		{name: "sentinel missing fixed TLS identity", field: "tls.server_name", config: func() Config {
+			return Config{Sentinel: &Sentinel{Addresses: []string{"127.0.0.1:26379"}, MasterName: "primary", TLS: &tls.Config{}}}
+		}},
+		{name: "standalone SNI whitespace", field: "tls.server_name", config: func() Config {
+			config := standalone()
+			config.Standalone.TLS = &tls.Config{ServerName: "redis test"}
 			return config
 		}},
 	}
@@ -267,33 +259,18 @@ func TestNormalizeTransportConfigReportsExactInvalidField(t *testing.T) {
 	}
 }
 
-func TestReconnectDelayIsBounded(t *testing.T) {
+func TestNormalizeTransportConfigCopiesMutableInputs(t *testing.T) {
 	t.Parallel()
-	for attempt := range 64 {
-		delay := reconnectDelay(attempt, 100*time.Millisecond, 5*time.Second, 2, 0)
-		if delay < 100*time.Millisecond || delay > 5*time.Second {
-			t.Fatalf("attempt %d delay = %v", attempt, delay)
-		}
-	}
-}
-
-func TestRedisDriverOptionsDisableCommandRetries(t *testing.T) {
-	t.Parallel()
-	runtime, err := (Config{Standalone: &Standalone{Address: "127.0.0.1:6379"}}).normalize()
+	addresses := []string{"127.0.0.1:26379"}
+	tlsConfig := &tls.Config{RootCAs: nil, ServerName: "redis.test"}
+	runtime, err := (Config{Sentinel: &Sentinel{Addresses: addresses, MasterName: "primary", TLS: tlsConfig}}).normalize()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 此测试只检查 Options 映射；禁用最小空闲连接，避免 go-redis 构造时真实启动后台拨号。
-	// 默认值 1 已由 TestNormalizeTransportConfig 独立验证。
-	runtime.poolMin = 0
-	client := newRedisClient(runtime)
-	defer func() { _ = client.Close() }()
-	options := client.Options()
-	// go-redis 接收 -1 后会把“零次重试”规范化为 0；两个退避值也应同时归零。
-	if options.MaxRetries != 0 || options.MinRetryBackoff != 0 || options.MaxRetryBackoff != 0 ||
-		options.DialTimeout != 5*time.Second || options.PoolSize != 4 ||
-		options.MinIdleConns != 0 || options.MaxActiveConns != 4 || options.ConnMaxIdleTime != 10*time.Second {
-		t.Fatalf("unexpected driver options: %#v", options)
+	addresses[0] = "127.0.0.1:1"
+	tlsConfig.ServerName = "mutated"
+	if runtime.sentinel.Addresses[0] != "127.0.0.1:26379" || runtime.sentinel.TLS.ServerName != "redis.test" || runtime.sentinel.TLS.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("runtime retained caller aliases: %#v", runtime.sentinel)
 	}
 }
 
@@ -305,18 +282,5 @@ func TestFieldsAreDefensivelyCopied(t *testing.T) {
 	source["new"] = []byte("value")
 	if !bytes.Equal(copy["load"], []byte{1, 2, 3}) || len(copy) != 1 {
 		t.Fatalf("cloneFields() retained caller aliases: %#v", copy)
-	}
-}
-
-func TestWriteTransportErrorsRemainAmbiguous(t *testing.T) {
-	t.Parallel()
-	if err := wrapDriver(CodeAmbiguous, context.DeadlineExceeded); !IsCode(err, CodeAmbiguous) {
-		t.Fatalf("write timeout error = %v, want ambiguous", err)
-	}
-	if err := wrapDriver(CodeUnavailable, context.DeadlineExceeded); !IsCode(err, CodeDeadline) {
-		t.Fatalf("read timeout error = %v, want deadline", err)
-	}
-	if err := wrapDriver(CodeAmbiguous, redis.ErrClosed); !IsCode(err, CodeClosed) {
-		t.Fatalf("closed write error = %v, want closed", err)
 	}
 }

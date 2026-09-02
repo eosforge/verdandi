@@ -40,6 +40,16 @@ internal static class Program
 
     private static void RunOffline()
     {
+        Check(Require(Runtime.Supports(Runtime.RedisSentinelTls), "Sentinel TLS capability"), "Sentinel TLS capability present");
+        Check(!Require(Runtime.Supports("future.capability"), "unknown capability"), "unknown capability absent");
+        Check(!Require(Runtime.Supports(string.Empty), "empty capability"), "empty capability absent");
+        RunConfigurationConformance();
+        var invalidUnicode = Configuration.Validate("{\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"127.0.0.1:6379\"],\"auth\":{\"username\":\"\ud800\"}}}");
+        Check(!invalidUnicode.IsSuccess && invalidUnicode.Error?.Code == "invalid", "invalid configuration UTF-16");
+        var oversizedConfiguration = Configuration.Validate(new string(' ', 1024 * 1024 + 1));
+        Check(!oversizedConfiguration.IsSuccess && oversizedConfiguration.Error?.Code == "capacity" && oversizedConfiguration.Error.Field == "json",
+            "oversized configuration preflight");
+
         Check(!default(Result).IsSuccess, "default Result must fail");
         Check(default(Result).Error?.Field == "result", "default Result error");
         Check(Result.Success().IsSuccess && Result.Success().Error is null, "Result success state");
@@ -136,6 +146,42 @@ internal static class Program
         }
     }
 
+    private static void RunConfigurationConformance()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "configuration-conformance.json")));
+        var root = document.RootElement;
+        foreach (var testCase in root.GetProperty("cases").EnumerateArray())
+        {
+            CheckConfigurationCase(testCase.GetProperty("name").GetString()!, testCase.GetProperty("document").GetRawText(), testCase);
+        }
+
+        foreach (var testCase in root.GetProperty("raw_cases").EnumerateArray())
+        {
+            if (!testCase.TryGetProperty("source", out var source))
+            {
+                continue;
+            }
+            CheckConfigurationCase(testCase.GetProperty("name").GetString()!, source.GetString()!, testCase);
+        }
+    }
+
+    private static void CheckConfigurationCase(string name, string source, JsonElement expected)
+    {
+        var result = Configuration.Validate(source);
+        var valid = expected.GetProperty("valid").GetBoolean();
+        if (valid)
+        {
+            Check(result.IsSuccess, $"configuration case {name}: {result.Error}");
+            return;
+        }
+
+        var code = expected.GetProperty("code").GetString();
+        var field = expected.GetProperty("field").GetString();
+        var error = result.Error;
+        Check(!result.IsSuccess && error is not null && error.Code == code && error.Field == field,
+            $"configuration case {name}: received {error}, expected {code}/{field}");
+    }
+
     private static void RunRedis(RedisTestConfiguration testConfiguration)
     {
         var registrationZone = testConfiguration.RegistrationZone;
@@ -153,6 +199,8 @@ internal static class Program
             Check(!Require(client.ContainsKey(rawKey), "missing key contains"), "missing key does not exist");
             Check(!Require(client.EraseKey(rawKey), "missing key erase"), "missing key erase is false");
             Check(!Require(client.ExpireKey(rawKey, TimeSpan.FromSeconds(5)), "missing key expire"), "missing key expire is false");
+            Require(client.StoreKey(rawKey, ReadOnlySpan<byte>.Empty), "empty key value store");
+            Check(Require(client.LoadKey(rawKey), "empty key value load")?.Length == 0, "empty key value round trip");
             Require(client.StoreKey(rawKey, "persistent"u8), "key store without TTL");
             Check(Require(client.LoadKey(rawKey), "persistent key load")?.SequenceEqual("persistent"u8.ToArray()) == true, "key no-TTL round trip");
             Require(client.StoreKey(rawKey, "payload"u8, TimeSpan.FromSeconds(5)), "key store");

@@ -75,8 +75,8 @@ public sealed class Fields : IFieldValue<Fields>
 
         try
         {
-            var pending = new List<PendingField>();
-            var names = new HashSet<string>(StringComparer.Ordinal);
+            var knownCount = fields.TryGetNonEnumeratedCount(out var count) ? count : 0;
+            var pending = new List<PendingField>(knownCount);
             foreach (var field in fields)
             {
                 if (field.Name is null)
@@ -84,22 +84,18 @@ public sealed class Fields : IFieldValue<Fields>
                     return Result<Fields>.Failure(new VerdandiError("invalid", "field"));
                 }
 
-                if (!names.Add(field.Name))
-                {
-                    return Result<Fields>.Failure(new VerdandiError("contract", field.Name));
-                }
-
-                byte[] name;
+                int nameLength;
                 try
                 {
-                    name = StrictUtf8.GetBytes(field.Name);
+                    nameLength = StrictUtf8.GetByteCount(field.Name);
                 }
                 catch (EncoderFallbackException exception)
                 {
                     return Result<Fields>.Failure(new VerdandiError("invalid", field.Name, exception.Message));
                 }
 
-                pending.Add(new PendingField(field.Name, name, field.Value.ToArray()));
+                // Value 在 Create 返回前始终只借用；调用方按 Field 契约不得在本次调用期间修改其存储。
+                pending.Add(new PendingField(field.Name, nameLength, field.Value));
             }
 
             if (pending.Count == 0)
@@ -108,10 +104,18 @@ public sealed class Fields : IFieldValue<Fields>
             }
 
             pending.Sort(static (left, right) => StringComparer.Ordinal.Compare(left.Name, right.Name));
+            for (var index = 1; index < pending.Count; index++)
+            {
+                if (StringComparer.Ordinal.Equals(pending[index - 1].Name, pending[index].Name))
+                {
+                    return Result<Fields>.Failure(new VerdandiError("contract", pending[index].Name));
+                }
+            }
+
             var total = 0;
             foreach (var field in pending)
             {
-                total = checked(total + field.NameBytes.Length + field.Value.Length);
+                total = checked(total + field.NameLength + field.Value.Length);
             }
 
             var payload = GC.AllocateUninitializedArray<byte>(total);
@@ -120,11 +124,11 @@ public sealed class Fields : IFieldValue<Fields>
             for (var index = 0; index < pending.Count; index++)
             {
                 var field = pending[index];
-                field.NameBytes.CopyTo(payload, offset);
                 var nameOffset = offset;
-                offset += field.NameBytes.Length;
-                field.Value.CopyTo(payload, offset);
-                entries[index] = new Entry(field.Name, nameOffset, field.NameBytes.Length, offset, field.Value.Length);
+                var written = StrictUtf8.GetBytes(field.Name.AsSpan(), payload.AsSpan(offset, field.NameLength));
+                offset += written;
+                field.Value.Span.CopyTo(payload.AsSpan(offset));
+                entries[index] = new Entry(field.Name, nameOffset, written, offset, field.Value.Length);
                 offset += field.Value.Length;
             }
 
@@ -346,9 +350,9 @@ public sealed class Fields : IFieldValue<Fields>
     internal readonly record struct Entry(string Name, int NameOffset, int NameLength, int ValueOffset, int ValueLength);
 
     /// <summary>
-    /// 暂存已经复制的字段，直到名称排序和连续载荷大小检查完成。
+    /// 暂存借用字段及预先验证的 UTF-8 名称长度，最终只向连续载荷复制一次。
     /// </summary>
-    private sealed record PendingField(string Name, byte[] NameBytes, byte[] Value);
+    private readonly record struct PendingField(string Name, int NameLength, ReadOnlyMemory<byte> Value);
 }
 
 /// <summary>

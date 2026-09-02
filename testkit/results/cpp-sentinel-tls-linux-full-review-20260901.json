@@ -1,0 +1,13 @@
+{
+  "client_runtime": "linux-x64",
+  "elapsed_seconds": 6.737,
+  "fixed_server_name": "verdandi.test",
+  "master_port": 16381,
+  "native_build": "gcc-shared-release",
+  "redis_version": "8.8.0",
+  "scope": "C++23 root, Registration, Selector, Catalog and checkpoint through Sentinel",
+  "sentinels": 3,
+  "status": "pass",
+  "tls": true,
+  "wrong_identity_rejected": true
+}

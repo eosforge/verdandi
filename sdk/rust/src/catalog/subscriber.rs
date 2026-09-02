@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry as BTreeEntry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use fred::clients::SubscriberClient;
 use fred::prelude::*;
@@ -229,31 +229,36 @@ impl SubscriberInner {
         let result = tokio::task::spawn_blocking(move || checkpoint.load(&zone, &scope, maximum)).await;
         match result {
             Ok(Ok((cursor, states))) => {
-                let total = states.values().try_fold(0_u64, |total, state| {
-                    u64::try_from(state.encoded_bytes).ok().and_then(|size| total.checked_add(size))
-                });
-                let Some(total) = total else {
-                    self.report(Error::field(Code::Capacity, "max_view_bytes"));
-                    return;
-                };
+                let mut total = 0_u64;
+                let mut restored = BTreeMap::new();
+                for (path, state) in states {
+                    if !self.subscription.covers(&path) {
+                        continue;
+                    }
+                    let Some(size) = u64::try_from(state.encoded_bytes).ok() else {
+                        self.report(Error::field(Code::Capacity, "max_view_bytes"));
+                        return;
+                    };
+                    let Some(next_total) = total.checked_add(size) else {
+                        self.report(Error::field(Code::Capacity, "max_view_bytes"));
+                        return;
+                    };
+                    total = next_total;
+                    let entry = Entry::new(path.clone(), Status::Synchronizing);
+                    entry.store(state.with_status(Status::Synchronizing));
+                    restored.insert(path, entry);
+                }
                 if self.client.config.max_view_bytes != 0 && total > self.client.config.max_view_bytes {
                     // 检查点只负责加速；超出当前内存预算时整份放弃并从 Redis 权威状态重建。
                     self.report(Error::field(Code::Capacity, "max_view_bytes"));
                     return;
                 }
+
+                // 先提交完整视图与对应字节数，最后发布 cursor；任何观察到新 cursor 的同步任务
+                // 都必然同时看到与该检查点一致的本地起点。
+                *write_lock(&self.entries) = restored;
+                *mutex_lock(&self.view_bytes) = total;
                 self.cursor.store(cursor, Ordering::Release);
-                if let Ok(mut entries) = self.entries.write() {
-                    for (path, state) in states {
-                        if self.subscription.covers(&path) {
-                            let entry = Entry::new(path.clone(), Status::Synchronizing);
-                            entry.store(state.with_status(Status::Synchronizing));
-                            entries.insert(path, entry);
-                        }
-                    }
-                }
-                if let Ok(mut view_bytes) = self.view_bytes.lock() {
-                    *view_bytes = total;
-                }
             }
             Ok(Err(error)) => self.disable_store(error),
             Err(error) => self.disable_store(error.to_string()),
@@ -262,17 +267,13 @@ impl SubscriberInner {
 
     /// 返回 `path` 的稳定 Entry；首次出现时以 `status` 创建。
     ///
-    /// 先读锁快查，缺失时再写锁二次确认。锁中毒时返回独立 Closed Entry，避免 panic。
+    /// 先读锁快查，缺失时再写锁二次确认。所有锁内操作不调用用户代码，
+    /// 因而内部 panic 留下的 poison 标记可安全恢复而不会永久丢失权威 Entry。
     fn entry(&self, path: &Path, status: Status) -> Entry {
-        if let Ok(entries) = self.entries.read() {
-            if let Some(entry) = entries.get(path) {
-                return entry.clone();
-            }
+        if let Some(entry) = read_lock(&self.entries).get(path) {
+            return entry.clone();
         }
-        let mut entries = match self.entries.write() {
-            Ok(entries) => entries,
-            Err(_) => return Entry::new(path.clone(), Status::Closed),
-        };
+        let mut entries = write_lock(&self.entries);
         entries.entry(path.clone()).or_insert_with(|| Entry::new(path.clone(), status)).clone()
     }
 
@@ -474,7 +475,7 @@ impl SubscriberInner {
 
     /// 在同一短锁内提交 Entry CAS 与完整值字节总量，防止并发事件突破本地视图预算。
     fn install_state(&self, entry: &Entry, current: &Arc<RawState>, next: RawState) -> Result<Option<Arc<RawState>>> {
-        let mut total = self.view_bytes.lock().map_err(|_| Error::field(Code::Corrupt, "max_view_bytes"))?;
+        let mut total = mutex_lock(&self.view_bytes);
         let observed = entry.state();
         if !Arc::ptr_eq(&observed, current) {
             return Ok(None);
@@ -500,18 +501,16 @@ impl SubscriberInner {
     /// `force_full` 要求跳过增量索引；`waiter` 可等待本批完成。范围请求覆盖已排队 Path。
     /// 若当前没有同步任务，本次请求同时取得唯一临时任务槽并负责创建任务。
     fn request_scope(self: &Arc<Self>, force_full: bool, waiter: Option<oneshot::Sender<Result<()>>>) {
-        let start = if let Ok(mut sync) = self.sync.lock() {
-            sync.batch.scope = true;
-            sync.batch.force_full |= force_full;
-            sync.batch.align = true;
-            sync.batch.paths.clear();
-            if let Some(waiter) = waiter {
-                sync.batch.waiters.push(waiter);
-            }
-            self.start_sync_locked(&mut sync)
-        } else {
-            false
-        };
+        let mut sync = mutex_lock(&self.sync);
+        sync.batch.scope = true;
+        sync.batch.force_full |= force_full;
+        sync.batch.align = true;
+        sync.batch.paths.clear();
+        if let Some(waiter) = waiter {
+            sync.batch.waiters.push(waiter);
+        }
+        let start = self.start_sync_locked(&mut sync);
+        drop(sync);
         if start {
             self.spawn_sync_worker();
         }
@@ -523,24 +522,22 @@ impl SubscriberInner {
     fn request_path(self: &Arc<Self>, path: Path, waiter: Option<oneshot::Sender<Result<()>>>) {
         let entry = self.entry(&path, Status::Synchronizing);
         mark_entry(&entry, Status::Synchronizing);
-        let start = if let Ok(mut sync) = self.sync.lock() {
-            if !sync.batch.scope {
-                if sync.batch.paths.contains(&path) || sync.batch.paths.len() < self.client.config.event_buffer_capacity {
-                    sync.batch.paths.insert(path);
-                } else {
-                    // Path 合并集合满时退化为范围恢复，保持内存有界且仍由权威索引找回全部变化。
-                    sync.batch.scope = true;
-                    sync.batch.align = true;
-                    sync.batch.paths.clear();
-                }
+        let mut sync = mutex_lock(&self.sync);
+        if !sync.batch.scope {
+            if sync.batch.paths.contains(&path) || sync.batch.paths.len() < self.client.config.event_buffer_capacity {
+                sync.batch.paths.insert(path);
+            } else {
+                // Path 合并集合满时退化为范围恢复，保持内存有界且仍由权威索引找回全部变化。
+                sync.batch.scope = true;
+                sync.batch.align = true;
+                sync.batch.paths.clear();
             }
-            if let Some(waiter) = waiter {
-                sync.batch.waiters.push(waiter);
-            }
-            self.start_sync_locked(&mut sync)
-        } else {
-            false
-        };
+        }
+        if let Some(waiter) = waiter {
+            sync.batch.waiters.push(waiter);
+        }
+        let start = self.start_sync_locked(&mut sync);
+        drop(sync);
         if start {
             self.spawn_sync_worker();
         }
@@ -569,27 +566,18 @@ impl SubscriberInner {
 
     /// 在互斥锁内取走当前待同步工作；空状态会原子释放临时任务槽。
     fn take_batch(&self) -> Option<SyncBatch> {
-        match self.sync.lock() {
-            Ok(mut sync) => sync.take_or_stop(),
-            Err(poisoned) => poisoned.into_inner().take_or_stop(),
-        }
+        mutex_lock(&self.sync).take_or_stop()
     }
 
     /// owner 取消且批次尚未取空时释放当前临时任务槽。
     fn stop_sync_worker(&self) {
-        let mut sync = match self.sync.lock() {
-            Ok(sync) => sync,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let mut sync = mutex_lock(&self.sync);
         sync.running = false;
     }
 
     /// 终止收尾取走全部尚未完成的请求，不改变已经停止的临时任务状态。
     fn drain_pending(&self) -> SyncBatch {
-        let mut sync = match self.sync.lock() {
-            Ok(sync) => sync,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let mut sync = mutex_lock(&self.sync);
         std::mem::take(&mut sync.batch)
     }
 
@@ -597,10 +585,7 @@ impl SubscriberInner {
     ///
     /// 返回 true 表示存在后续工作；相关范围/Entry 会重新标为 Synchronizing。
     fn carry_batch(&self, batch: &mut SyncBatch) -> bool {
-        let mut sync = match self.sync.lock() {
-            Ok(sync) => sync,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let mut sync = mutex_lock(&self.sync);
         if !sync.batch.scope && sync.batch.paths.is_empty() {
             return false;
         }
@@ -622,11 +607,7 @@ impl SubscriberInner {
     /// 原子更新范围 `status`，并把当前全部 Entry 标记为相同非终止状态。
     fn mark_scope(&self, status: Status) {
         self.scope_status.store(status_byte(status), Ordering::Release);
-        let entries = self
-            .entries
-            .read()
-            .map(|entries| entries.values().cloned().collect::<Vec<_>>())
-            .unwrap_or_default();
+        let entries = read_lock(&self.entries).values().cloned().collect::<Vec<_>>();
         for entry in entries {
             mark_entry(&entry, status);
         }
@@ -635,11 +616,7 @@ impl SubscriberInner {
     /// 在一次成功权威对齐后发布范围健康，并按内容把每个 Entry 恢复为 Present/Absent/Deleted。
     fn mark_aligned(&self) {
         self.scope_status.store(status_byte(Status::Present), Ordering::Release);
-        let entries = self
-            .entries
-            .read()
-            .map(|entries| entries.values().cloned().collect::<Vec<_>>())
-            .unwrap_or_default();
+        let entries = read_lock(&self.entries).values().cloned().collect::<Vec<_>>();
         for entry in entries {
             loop {
                 let current = entry.state();
@@ -728,9 +705,7 @@ impl SubscriberInner {
         notify_waiters(&mut pending.waiters, Err(Error::new(Code::Closed)));
         self.closed.store(true, Ordering::Release);
         self.mark_scope(Status::Closed);
-        if let Ok(mut guard) = self.guard.lock() {
-            guard.take();
-        }
+        mutex_lock(&self.guard).take();
         self.done.notify_waiters();
     }
 
@@ -1034,10 +1009,7 @@ impl SubscriberInner {
 
     /// 返回当前 Entry map 中仍被订阅覆盖的 Path 快照，不在后续 I/O 期间持锁。
     fn entry_paths(&self) -> BTreeSet<Path> {
-        self.entries
-            .read()
-            .map(|entries| entries.keys().filter(|path| self.subscription.covers(path)).cloned().collect())
-            .unwrap_or_default()
+        read_lock(&self.entries).keys().filter(|path| self.subscription.covers(path)).cloned().collect()
     }
 
     /// 在专用 Pub/Sub 连接上建立一个顺序栅栏。
@@ -1058,6 +1030,23 @@ impl SubscriberInner {
         self.fence.send(FenceRequest { done }).await.map_err(|_| Error::new(Code::Closed))?;
         receiver.await.map_err(|_| Error::new(Code::Closed))
     }
+}
+
+/// 恢复只由 Verdandi 内部无用户回调临界区产生的 Mutex poison。
+///
+/// 这些临界区的修改均保持容器可析构、可继续使用；永久拒绝后续操作反而会丢失同步请求。
+fn mutex_lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
+    value.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// 恢复内部 RwLock 的只读访问；对应写临界区不执行用户代码。
+fn read_lock<T>(value: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    value.read().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// 恢复内部 RwLock 的写访问；写入步骤仅使用异常安全的标准容器与拥有型值。
+fn write_lock<T>(value: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    value.write().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// 用 CAS 把 `entry` 标记为 `status`，但永不覆盖终止 Closed。

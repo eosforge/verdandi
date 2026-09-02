@@ -1,0 +1,80 @@
+{
+  "elapsed_seconds": 37.789,
+  "frameworks": [
+    "net8.0",
+    "net10.0"
+  ],
+  "language": "C#",
+  "native_build": "gcc-shared-release",
+  "redis_version": "8.8.0",
+  "runtime": "linux-x64",
+  "status": "pass",
+  "suites": [
+    {
+      "elapsed_seconds": 4.678,
+      "name": "C# native Release configure",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000-- Configuring done (4.2s)\n-- Generating done (0.2s)\n-- Build files have been written to: /mnt/d/laconis/verdandi/sdk/cpp/build/gcc-shared-release",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.992,
+      "name": "C# native Release build",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000[0/2] Re-checking globbed directories...\nninja: no work to do.",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.724,
+      "name": "C# restore",
+      "output": "\u6b63\u5728\u786e\u5b9a\u8981\u8fd8\u539f\u7684\u9879\u76ee\u2026\n  \u6240\u6709\u9879\u76ee\u5747\u662f\u6700\u65b0\u7684\uff0c\u65e0\u6cd5\u8fd8\u539f\u3002",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 6.441,
+      "name": "C# format and analyzer gate",
+      "output": "",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.739,
+      "name": "C# .NET 8 and .NET 10 Release build",
+      "output": "Verdandi -> D:\\laconis\\verdandi\\sdk\\csharp\\src\\Verdandi\\bin\\Release\\net10.0\\Verdandi.dll\n  Verdandi -> D:\\laconis\\verdandi\\sdk\\csharp\\src\\Verdandi\\bin\\Release\\net8.0\\Verdandi.dll\n  Verdandi.Tests -> D:\\laconis\\verdandi\\sdk\\csharp\\tests\\Verdandi.Tests\\bin\\Release\\net10.0\\Verdandi.Tests.dll\n  Verdandi.Tests -> D:\\laconis\\verdandi\\sdk\\csharp\\tests\\Verdandi.Tests\\bin\\Release\\net8.0\\Verdandi.Tests.dll\n\n\u5df2\u6210\u529f\u751f\u6210\u3002\n    0 \u4e2a\u8b66\u544a\n    0 \u4e2a\u9519\u8bef\n\n\u5df2\u7528\u65f6\u95f4 00:00:00.54",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.594,
+      "name": "C# net8.0 offline regression",
+      "output": "Verdandi C# offline tests passed.",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 0.598,
+      "name": "C# net10.0 offline regression",
+      "output": "Verdandi C# offline tests passed.",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 1.715,
+      "name": "C# net8.0 self-contained Linux publish",
+      "output": "\u6b63\u5728\u786e\u5b9a\u8981\u8fd8\u539f\u7684\u9879\u76ee\u2026\n  \u5df2\u8fd8\u539f D:\\laconis\\verdandi\\sdk\\csharp\\src\\Verdandi\\Verdandi.csproj (\u7528\u65f6 155 \u6beb\u79d2)\u3002\n  \u5df2\u8fd8\u539f D:\\laconis\\verdandi\\sdk\\csharp\\tests\\Verdandi.Tests\\Verdandi.Tests.csproj (\u7528\u65f6 160 \u6beb\u79d2)\u3002\n  Verdandi -> D:\\laconis\\verdandi\\sdk\\csharp\\src\\Verdandi\\bin\\Release\\net8.0\\Verdandi.dll\n  Verdandi.Tests -> D:\\laconis\\verdandi\\sdk\\csharp\\tests\\Verdandi.Tests\\bin\\Release\\net8.0\\linux-x64\\Verdandi.Tests.dll\n  Verdandi.Tests -> C:\\Users\\Ethan\\AppData\\Local\\Temp\\verdandi-csharp-dq7fm3h6\\net8.0\\",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 9.27,
+      "name": "C# net8.0 ACL Redis integration (explicit loader)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000Verdandi C# offline and Redis tests passed.",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 1.605,
+      "name": "C# net10.0 self-contained Linux publish",
+      "output": "\u6b63\u5728\u786e\u5b9a\u8981\u8fd8\u539f\u7684\u9879\u76ee\u2026\n  \u6240\u6709\u9879\u76ee\u5747\u662f\u6700\u65b0\u7684\uff0c\u65e0\u6cd5\u8fd8\u539f\u3002\n  Verdandi -> D:\\laconis\\verdandi\\sdk\\csharp\\src\\Verdandi\\bin\\Release\\net10.0\\Verdandi.dll\n  Verdandi.Tests -> D:\\laconis\\verdandi\\sdk\\csharp\\tests\\Verdandi.Tests\\bin\\Release\\net10.0\\linux-x64\\Verdandi.Tests.dll\n  Verdandi.Tests -> C:\\Users\\Ethan\\AppData\\Local\\Temp\\verdandi-csharp-dq7fm3h6\\net10.0\\",
+      "status": "pass"
+    },
+    {
+      "elapsed_seconds": 9.404,
+      "name": "C# net10.0 ACL Redis integration (application-directory loader)",
+      "output": "w\u0000s\u0000l\u0000:\u0000 \u0000?hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006tM?n\u007f\f?FO*g\\??P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN?v \u0000W\u0000S\u0000L\u0000 \u0000\nN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000?N\u0006t\u00020\n\u0000\n\u0000Verdandi C# offline and Redis tests passed.",
+      "status": "pass"
+    }
+  ]
+}

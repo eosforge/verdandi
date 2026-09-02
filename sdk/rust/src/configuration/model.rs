@@ -5,8 +5,10 @@ use serde::Deserialize;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// 配置结构版本；首版必须为 `v1`。
+    #[serde(default)]
     pub version: String,
     /// 必需的共享 Redis 传输配置。
+    #[serde(default)]
     pub redis: Redis,
     /// 可选 Registration/Selector 配置；缺失表示当前进程不创建该领域 Client。
     pub registration: Option<Registration>,
@@ -24,7 +26,7 @@ pub struct Auth {
     pub password: String,
 }
 
-/// Go/Rust 共用的 Redis TLS 信任、SNI 和客户端证书文件。
+/// 跨语言统一的 Redis TLS 信任、固定证书身份和客户端证书文件。
 #[derive(Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Tls {
@@ -32,7 +34,8 @@ pub struct Tls {
     pub enabled: bool,
     /// 是否信任操作系统根证书；省略使用 true，false 时必须提供 `ca_file`。
     pub system_roots: Option<bool>,
-    /// 覆盖证书校验和握手使用的服务名；默认空字符串并使用连接地址，仅 Standalone 允许配置，UTF-8 字节数上限为 253。
+    /// 固定证书身份；Standalone 默认空并使用连接地址，Sentinel TLS 必须非空且由所有 Sentinel/数据节点证书共同包含。
+    /// UTF-8 字节数上限为 253。
     pub server_name: String,
     /// 追加信任的 PEM CA bundle 路径；默认空字符串，每个文件读取上限为 1 MiB。
     pub ca_file: String,
@@ -66,7 +69,7 @@ pub struct Redis {
     pub connect_timeout_ms: Option<i64>,
     /// 共享连接池设置；子字段省略时分别使用 1、4 和 10000 毫秒。
     pub pool: Pool,
-    /// 连接恢复退避；不会重放已经发送的业务命令。
+    /// 重新建立物理连接前的固定等待；不会重放已经发送的业务命令。
     pub reconnect: Reconnect,
 }
 
@@ -82,18 +85,12 @@ pub struct Pool {
     pub idle_timeout_ms: Option<i64>,
 }
 
-/// Redis 连接恢复退避配置。
+/// Redis 驱动重新建立物理连接前的固定等待配置。
 #[derive(Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Reconnect {
-    /// 首次恢复等待毫秒；省略使用 100，允许 10 至 5000。
-    pub initial_delay_ms: Option<i64>,
-    /// 恢复等待上限毫秒；省略使用 5000，允许 100 至 30000。
-    pub max_delay_ms: Option<i64>,
-    /// 指数增长倍数；省略使用 2，允许 1 至 8。
-    pub multiplier: Option<i64>,
-    /// 随机抖动百分比；省略使用 10，允许 0 至 50，零禁用。
-    pub jitter_percent: Option<i64>,
+    /// 每次重新建连前固定等待毫秒；省略使用 100，允许 10 至 30000。
+    pub delay_ms: Option<i64>,
 }
 
 /// 一个 Zone 的 Registration、Redis 策略默认值和 Selector 本地行为。

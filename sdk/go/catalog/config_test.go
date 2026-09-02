@@ -3,6 +3,7 @@ package catalog
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,6 +131,15 @@ func TestNormalizeCatalogConfigReportsExactInvalidField(t *testing.T) {
 		{name: "recovery relation", field: "catalog.recovery.initial_delay", mutate: func(config *Config) {
 			config.RecoveryInitialDelay = 2 * time.Second
 			config.RecoveryMaxDelay = time.Second
+		}},
+		{name: "local store path too long", field: "catalog.local_store_path", mutate: func(config *Config) {
+			config.LocalStorePath = strings.Repeat("x", 4097)
+		}},
+		{name: "local store path NUL", field: "catalog.local_store_path", mutate: func(config *Config) {
+			config.LocalStorePath = "catalog\x00.db"
+		}},
+		{name: "local store path invalid UTF-8", field: "catalog.local_store_path", mutate: func(config *Config) {
+			config.LocalStorePath = string([]byte{0xff})
 		}},
 	}
 	for _, test := range tests {

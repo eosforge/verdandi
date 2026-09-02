@@ -9,6 +9,8 @@ and a remote /tmp directory bearing its random run identifier.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
+from functools import cache
 import json
 import os
 import queue
@@ -27,15 +29,99 @@ from typing import Iterable
 from urllib.parse import quote
 
 import paramiko
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 REDIS_PORTS = (16381, 16382, 16383)
 SENTINEL_PORTS = (26381, 26382, 26383)
 MASTER_NAME = "verdandi-primary"
 TYPE_NAME = "fault"
+TLS_SERVER_NAME = "verdandi.test"
 
 
 class QualificationError(RuntimeError):
     """One deterministic qualification assertion failed."""
+
+
+@dataclass(frozen=True)
+class TLSMaterial:
+    """One private CA and one shared test-server identity for the isolated topology."""
+
+    ca_certificate: str
+    server_certificate: str
+    server_key: str
+
+    @classmethod
+    def generate(cls) -> "TLSMaterial":
+        now = datetime.now(timezone.utc)
+        ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Verdandi Sentinel TLS test CA")])
+        ca_certificate = (
+            x509.CertificateBuilder()
+            .subject_name(ca_name)
+            .issuer_name(ca_name)
+            .public_key(ca_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=5))
+            .not_valid_after(now + timedelta(days=2))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .add_extension(
+                x509.KeyUsage(
+                    digital_signature=True,
+                    content_commitment=False,
+                    key_encipherment=False,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=True,
+                    crl_sign=True,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+                critical=True,
+            )
+            .sign(ca_key, hashes.SHA256())
+        )
+
+        server_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        server_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, TLS_SERVER_NAME)])
+        server_certificate = (
+            x509.CertificateBuilder()
+            .subject_name(server_name)
+            .issuer_name(ca_certificate.subject)
+            .public_key(server_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=5))
+            .not_valid_after(now + timedelta(days=2))
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .add_extension(x509.SubjectAlternativeName([x509.DNSName(TLS_SERVER_NAME)]), critical=False)
+            .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+            .add_extension(
+                x509.KeyUsage(
+                    digital_signature=True,
+                    content_commitment=False,
+                    key_encipherment=True,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=False,
+                    crl_sign=False,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+                critical=True,
+            )
+            .sign(ca_key, hashes.SHA256())
+        )
+        return cls(
+            ca_certificate=ca_certificate.public_bytes(serialization.Encoding.PEM).decode("ascii"),
+            server_certificate=server_certificate.public_bytes(serialization.Encoding.PEM).decode("ascii"),
+            server_key=server_key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            ).decode("ascii"),
+        )
 
 
 class Remote:
@@ -64,12 +150,12 @@ class Remote:
             raise QualificationError(f"remote command failed ({status}): {command}\n{diagnostics}")
         return output
 
-    def write(self, path: str, content: str) -> None:
+    def write(self, path: str, content: str, *, mode: int = 0o666) -> None:
         sftp = self._client.open_sftp()
         try:
             with sftp.file(path, "w") as target:
                 target.write(content)
-            sftp.chmod(path, 0o666)
+            sftp.chmod(path, mode)
         finally:
             sftp.close()
 
@@ -89,12 +175,13 @@ class Credentials:
 
 
 class Topology:
-    def __init__(self, remote: Remote, run_id: str, credentials: Credentials) -> None:
+    def __init__(self, remote: Remote, run_id: str, credentials: Credentials, tls: TLSMaterial | None = None) -> None:
         if not re.fullmatch(r"[a-z0-9]{8}", run_id):
             raise QualificationError("invalid topology run identifier")
         self.remote = remote
         self.run_id = run_id
         self.credentials = credentials
+        self.tls = tls
         self.root = f"/tmp/verdandi-sentinel-it-{run_id}"
         self.redis = [f"verdandi-it-{run_id}-redis-{index}" for index in range(1, 4)]
         self.sentinels = [f"verdandi-it-{run_id}-sentinel-{index}" for index in range(1, 4)]
@@ -113,6 +200,7 @@ class Topology:
         ]
         self.remote.run("mkdir -p " + " ".join(map(shlex.quote, directories)))
         self.remote.run("chmod 777 " + " ".join(map(shlex.quote, directories)))
+        self._write_tls_material(directories)
         self._write_redis_configuration()
         self._write_sentinel_configuration()
 
@@ -156,7 +244,7 @@ class Topology:
             if not self.is_running(name):
                 continue
             output = self.remote.run(
-                f"docker exec {shlex.quote(name)} redis-cli -p {port} "
+                f"docker exec {shlex.quote(name)} redis-cli {self.cli_tls_arguments()} -p {port} "
                 f"--user sentinel-client --pass {self.credentials.sentinel_client} "
                 "--no-auth-warning --raw SENTINEL get-master-addr-by-name "
                 f"{MASTER_NAME}",
@@ -207,7 +295,16 @@ class Topology:
             "--raw",
             *arguments,
         ]
+        if self.tls is not None:
+            command[4:4] = ["--tls", "--cacert", "/test/ca.crt", "--sni", TLS_SERVER_NAME]
         return self.remote.run(" ".join(map(shlex.quote, command)))
+
+    def cli_tls_arguments(self) -> str:
+        """Return redis-cli TLS switches for commands executed inside fixture containers."""
+
+        if self.tls is None:
+            return ""
+        return f"--tls --cacert /test/ca.crt --sni {TLS_SERVER_NAME}"
 
     def stop_sentinel(self, index: int) -> None:
         self.remote.run(f"docker stop {shlex.quote(self.sentinels[index])}")
@@ -253,7 +350,7 @@ class Topology:
             ports: list[int] = []
             for name, port in zip(self.sentinels, SENTINEL_PORTS, strict=True):
                 output = self.remote.run(
-                    f"docker exec {shlex.quote(name)} redis-cli -p {port} "
+                    f"docker exec {shlex.quote(name)} redis-cli {self.cli_tls_arguments()} -p {port} "
                     f"--user sentinel-client --pass {self.credentials.sentinel_client} "
                     "--no-auth-warning --raw SENTINEL get-master-addr-by-name "
                     f"{MASTER_NAME}",
@@ -276,7 +373,7 @@ class Topology:
                 known_by: list[int] = []
                 for name, port in zip(self.sentinels, SENTINEL_PORTS, strict=True):
                     output = self.remote.run(
-                        f"docker exec {shlex.quote(name)} redis-cli -p {port} "
+                        f"docker exec {shlex.quote(name)} redis-cli {self.cli_tls_arguments()} -p {port} "
                         f"--user sentinel-client --pass {self.credentials.sentinel_client} "
                         "--no-auth-warning --raw SENTINEL replicas "
                         f"{MASTER_NAME}",
@@ -322,6 +419,16 @@ class Topology:
             time.sleep(0.1)
         raise QualificationError("replicas did not attach to the initial primary")
 
+    def _write_tls_material(self, directories: list[str]) -> None:
+        if self.tls is None:
+            return
+        for directory in directories:
+            self.remote.write(f"{directory}/ca.crt", self.tls.ca_certificate, mode=0o644)
+            self.remote.write(f"{directory}/server.crt", self.tls.server_certificate, mode=0o644)
+            # The official image drops privileges before Redis reads mounted files.
+            # The key exists only inside this random, short-lived test directory.
+            self.remote.write(f"{directory}/server.key", self.tls.server_key, mode=0o644)
+
     def _write_redis_configuration(self) -> None:
         credentials = self.credentials
         acl = (
@@ -335,7 +442,14 @@ class Topology:
         )
         for index, port in enumerate(REDIS_PORTS, 1):
             replica = "" if index == 1 else f"replicaof {self.remote.host} {REDIS_PORTS[0]}\n"
-            config = f"""port {port}
+            listener = f"""port 0
+tls-port {port}
+tls-cert-file /test/server.crt
+tls-key-file /test/server.key
+tls-ca-cert-file /test/ca.crt
+tls-auth-clients no
+tls-replication yes""" if self.tls is not None else f"port {port}"
+            config = f"""{listener}
 bind 0.0.0.0
 protected-mode no
 daemonize no
@@ -363,7 +477,14 @@ replica-announce-port {port}
             "+sentinel|replicas +sentinel|sentinels +sentinel|masters\n"
         )
         for index, port in enumerate(SENTINEL_PORTS, 1):
-            config = f"""port {port}
+            listener = f"""port 0
+tls-port {port}
+tls-cert-file /test/server.crt
+tls-key-file /test/server.key
+tls-ca-cert-file /test/ca.crt
+tls-auth-clients no
+tls-replication yes""" if self.tls is not None else f"port {port}"
+            config = f"""{listener}
 bind 0.0.0.0
 protected-mode no
 daemonize no
@@ -484,21 +605,157 @@ def registration_key(zone: str, uuid: str) -> str:
     return f"verdandi:registration:{zone}:{TYPE_NAME}:{uuid}"
 
 
-def build_peers(repository: Path, output: Path) -> tuple[list[str], list[str]]:
-    go_executable = output / ("go-peer.exe" if os.name == "nt" else "go-peer")
-    subprocess.run(
-        ["go", "build", "-o", str(go_executable), "."],
-        cwd=repository / "testkit" / "sentinel" / "go-peer",
+def wsl_path(path: Path) -> str:
+    completed = subprocess.run(
+        ["wsl.exe", "--", "wslpath", "-a", path.as_posix()],
         check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return completed.stdout.strip()
+
+
+@cache
+def wsl_tool(name: str) -> str:
+    completed = subprocess.run(
+        ["wsl.exe", "--", "bash", "-lc", f"command -v -- {shlex.quote(name)}"],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    tool = completed.stdout.strip()
+    if not tool.startswith("/"):
+        raise QualificationError(f"Linux tool is unavailable in WSL: {name}")
+    return tool
+
+
+@cache
+def wsl_login_path() -> str:
+    completed = subprocess.run(
+        ["wsl.exe", "--", "bash", "-lc", 'printf %s "$PATH"'],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    tool_directories = (wsl_tool("go").rsplit("/", 1)[0], wsl_tool("cargo").rsplit("/", 1)[0])
+    linux_directories = tuple(
+        directory
+        for directory in completed.stdout.strip().split(":")
+        if directory and not directory.startswith("/mnt/")
+    )
+    return ":".join((*tool_directories, *linux_directories))
+
+
+def runtime_environment(environment: dict[str, str], runtime: str) -> dict[str, str]:
+    if os.name != "nt" or runtime != "linux-x64":
+        return environment
+    forwarded = {
+        name: value
+        for name, value in environment.items()
+        if name.startswith("VERDANDI_") and name != "VERDANDI_TEST_SSH_PASSWORD"
+    }
+    forwarded["PATH"] = wsl_login_path()
+    if ca_file := forwarded.get("VERDANDI_TLS_CA_FILE"):
+        forwarded["VERDANDI_TLS_CA_FILE"] = wsl_path(Path(ca_file))
+    return forwarded
+
+
+def run_runtime(
+    command: list[str],
+    directory: Path,
+    environment: dict[str, str],
+    runtime: str,
+) -> None:
+    if os.name == "nt" and runtime == "linux-x64":
+        forwarded = runtime_environment(environment, runtime)
+        script = "exec " + shlex.join(
+            ["env", *(f"{name}={value}" for name, value in forwarded.items()), *command]
+        )
+        subprocess.run(
+            [
+                "wsl.exe",
+                "--cd",
+                wsl_path(directory),
+                "--",
+                "bash",
+                "-lc",
+                script,
+            ],
+            cwd=directory,
+            env=os.environ.copy(),
+            check=True,
+        )
+        return
+    subprocess.run(command, cwd=directory, env=environment, check=True)
+
+
+def peer_runtime(
+    command: list[str],
+    directory: Path,
+    environment: dict[str, str],
+    runtime: str,
+) -> tuple[list[str], Path, dict[str, str]]:
+    if os.name == "nt" and runtime == "linux-x64":
+        forwarded = runtime_environment(environment, runtime)
+        host_environment = os.environ.copy()
+        host_environment.pop("VERDANDI_TEST_SSH_PASSWORD", None)
+        script = "exec " + shlex.join(
+            ["env", *(f"{name}={value}" for name, value in forwarded.items()), *command]
+        )
+        return (
+            [
+                "wsl.exe",
+                "--cd",
+                wsl_path(directory),
+                "--",
+                "bash",
+                "-lc",
+                script,
+            ],
+            directory,
+            host_environment,
+        )
+    return command, directory, environment
+
+
+def build_peers(repository: Path, output: Path, runtime: str) -> tuple[list[str], list[str]]:
+    go_executable = output / ("go-peer.exe" if runtime == "win-x64" else "go-peer")
+    go_output = wsl_path(go_executable) if os.name == "nt" and runtime == "linux-x64" else str(go_executable)
+    run_runtime(
+        ["go", "build", "-o", go_output, "."],
+        repository / "testkit" / "sentinel" / "go-peer",
+        os.environ.copy(),
+        runtime,
     )
     rust_directory = repository / "testkit" / "sentinel" / "rust-peer"
-    subprocess.run(["cargo", "build", "--quiet"], cwd=rust_directory, check=True)
-    rust_executable = rust_directory / "target" / "debug" / ("verdandi-sentinel-rust-peer.exe" if os.name == "nt" else "verdandi-sentinel-rust-peer")
+    rust_target = (
+        rust_directory / "target" / "linux-x64"
+        if os.name == "nt" and runtime == "linux-x64"
+        else rust_directory / "target"
+    )
+    rust_target_argument = wsl_path(rust_target) if os.name == "nt" and runtime == "linux-x64" else str(rust_target)
+    run_runtime(
+        ["cargo", "build", "--quiet", "--target-dir", rust_target_argument],
+        rust_directory,
+        os.environ.copy(),
+        runtime,
+    )
+    rust_executable = rust_target / "debug" / (
+        "verdandi-sentinel-rust-peer.exe" if runtime == "win-x64" else "verdandi-sentinel-rust-peer"
+    )
+    if os.name == "nt" and runtime == "linux-x64":
+        return [wsl_path(go_executable)], [wsl_path(rust_executable)]
     return [str(go_executable)], [str(rust_executable)]
 
 
-def run_sdk_sentinel_tests(repository: Path, environment: dict[str, str]) -> None:
-    subprocess.run(
+def run_sdk_sentinel_tests(repository: Path, environment: dict[str, str], runtime: str) -> None:
+    run_runtime(
         [
             "go",
             "test",
@@ -507,11 +764,11 @@ def run_sdk_sentinel_tests(repository: Path, environment: dict[str, str]) -> Non
             "-count=1",
             "./...",
         ],
-        cwd=repository / "sdk" / "go",
-        env=environment,
-        check=True,
+        repository / "sdk" / "go",
+        environment,
+        runtime,
     )
-    subprocess.run(
+    run_runtime(
         [
             "cargo",
             "test",
@@ -522,13 +779,19 @@ def run_sdk_sentinel_tests(repository: Path, environment: dict[str, str]) -> Non
             "--ignored",
             "--nocapture",
         ],
-        cwd=repository / "sdk" / "rust",
-        env=environment,
-        check=True,
+        repository / "sdk" / "rust",
+        environment,
+        runtime,
     )
 
 
-def qualify(repository: Path, topology: Topology, zone: str) -> dict[str, object]:
+def qualify(
+    repository: Path,
+    topology: Topology,
+    zone: str,
+    runtime: str,
+    ca_file: Path | None = None,
+) -> dict[str, object]:
     credentials = topology.credentials
     sentinel_addresses = ",".join(f"{topology.remote.host}:{port}" for port in SENTINEL_PORTS)
     sentinel_url = (
@@ -552,13 +815,22 @@ def qualify(repository: Path, topology: Topology, zone: str) -> dict[str, object
             "VERDANDI_SENTINEL_URL": sentinel_url,
         }
     )
+    if ca_file is not None:
+        environment.update(
+            {
+                "VERDANDI_TLS_CA_FILE": str(ca_file),
+                "VERDANDI_TLS_SERVER_NAME": TLS_SERVER_NAME,
+            }
+        )
 
     started = time.monotonic()
-    run_sdk_sentinel_tests(repository, environment)
+    run_sdk_sentinel_tests(repository, environment, runtime)
     with tempfile.TemporaryDirectory(prefix="verdandi-sentinel-", ignore_cleanup_errors=True) as temporary:
-        go_command, rust_command = build_peers(repository, Path(temporary))
-        go = Peer("go", [*go_command, zone], repository, environment)
-        rust = Peer("rust", [*rust_command, zone], repository, environment)
+        go_command, rust_command = build_peers(repository, Path(temporary), runtime)
+        go_process = peer_runtime([*go_command, zone], repository, environment, runtime)
+        rust_process = peer_runtime([*rust_command, zone], repository, environment, runtime)
+        go = Peer("go", *go_process)
+        rust = Peer("rust", *rust_process)
         try:
             go_uuid = parse_ready(go.read("READY"))
             rust_uuid = parse_ready(rust.read("READY"))
@@ -646,8 +918,9 @@ def qualify(repository: Path, topology: Topology, zone: str) -> dict[str, object
             go.send("STOP", "STOPPED")
             rust.send("STOP", "STOPPED")
             topology.redis_cli(final_master, "DEL", f"verdandi:config:{zone}")
-            return {
+            result: dict[str, object] = {
                 "status": "pass",
+                "client_runtime": runtime,
                 "redis_version": "8.8.0",
                 "initial_master": old_master,
                 "acknowledged_loss_master": new_master,
@@ -678,6 +951,18 @@ def qualify(repository: Path, topology: Topology, zone: str) -> dict[str, object
                 ],
                 "elapsed_seconds": round(time.monotonic() - started, 3),
             }
+            if topology.tls is not None:
+                result["tls"] = {
+                    "enabled": True,
+                    "fixed_server_name": TLS_SERVER_NAME,
+                    "certificate_san_excludes_node_addresses": True,
+                    "sentinel_and_data_planes": True,
+                }
+                scenarios = result["scenarios"]
+                assert isinstance(scenarios, list)
+                scenarios.insert(0, "wrong fixed TLS certificate identity rejected by Go and Rust")
+                scenarios.insert(0, "TLS 1.2+ with a private CA and one fixed cluster certificate identity")
+            return result
         finally:
             go.close()
             rust.close()
@@ -698,14 +983,28 @@ def arguments() -> argparse.Namespace:
         help="retain only this harness run's containers and /tmp directory",
     )
     parser.add_argument(
+        "--tls",
+        action="store_true",
+        help="encrypt Sentinel, replication, and data connections with a private test CA",
+    )
+    parser.add_argument(
         "--result-file",
         help="optional path receiving the complete JSON result",
+    )
+    parser.add_argument(
+        "--runtime",
+        choices=("linux-x64", "win-x64"),
+        default="win-x64" if os.name == "nt" else "linux-x64",
+        help="client process target; linux-x64 uses WSL when the harness runs on Windows",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     options = arguments()
+    if options.runtime == "win-x64" and os.name != "nt":
+        print("win-x64 Sentinel tests require a Windows host", file=sys.stderr)
+        return 2
     password = os.environ.get(options.ssh_password_env)
     if not password:
         print(f"missing {options.ssh_password_env}", file=sys.stderr)
@@ -714,24 +1013,29 @@ def main() -> int:
     run_id = secrets.token_hex(4)
     zone = "Sentinel" + "".join(chr(ord("a") + value % 26) for value in os.urandom(8))
     remote = Remote(options.host, options.ssh_user, password)
-    topology = Topology(remote, run_id, Credentials.generate())
-    try:
-        topology.deploy()
-        result = qualify(repository, topology, zone)
-        serialized = json.dumps(result, indent=2, sort_keys=True)
-        if options.result_file:
-            target = Path(options.result_file).resolve()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(serialized + "\n", encoding="utf-8")
-        print(serialized)
-        return 0
-    except Exception as error:
-        print(f"FAIL: {error}", file=sys.stderr)
-        return 1
-    finally:
-        if not options.keep_topology:
-            topology.cleanup()
-        remote.close()
+    tls = TLSMaterial.generate() if options.tls else None
+    topology = Topology(remote, run_id, Credentials.generate(), tls=tls)
+    with tempfile.TemporaryDirectory(prefix="verdandi-sentinel-tls-", ignore_cleanup_errors=True) as temporary:
+        ca_file = Path(temporary) / "ca.crt" if tls is not None else None
+        if ca_file is not None:
+            ca_file.write_text(tls.ca_certificate, encoding="ascii")
+        try:
+            topology.deploy()
+            result = qualify(repository, topology, zone, options.runtime, ca_file)
+            serialized = json.dumps(result, indent=2, sort_keys=True)
+            if options.result_file:
+                target = Path(options.result_file).resolve()
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(serialized + "\n", encoding="utf-8")
+            print(serialized)
+            return 0
+        except Exception as error:
+            print(f"FAIL: {error}", file=sys.stderr)
+            return 1
+        finally:
+            if not options.keep_topology:
+                topology.cleanup()
+            remote.close()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,115 @@
+{
+  "status": "pass",
+  "date": "2026-09-02",
+  "scope": "Windows and Linux C++ native build entry points",
+  "console_contract": {
+    "script_owned_output": "detailed standard English",
+    "source_comments": "detailed Chinese during maintainer review",
+    "powershell_runtime_string_audit": "pass",
+    "bash_runtime_string_audit": "pass"
+  },
+  "supported_platforms": [
+    "windows-x64",
+    "linux-x64"
+  ],
+  "unsupported_platforms": [
+    "macos"
+  ],
+  "native_components": [
+    "cpp23",
+    "c-abi-v1",
+    "cpp11-legacy",
+    "cpp14-legacy",
+    "cpp17-legacy"
+  ],
+  "consumer_boundary": {
+    "languages_not_compiled": [
+      "go",
+      "rust",
+      "csharp"
+    ],
+    "csharp_runtime": "shared DLL or SO placed in an application native-library location"
+  },
+  "windows": {
+    "doctor": {
+      "status": "pass",
+      "cmake": "4.4.2",
+      "generator": "Visual Studio 18 2026",
+      "compiler": "MSVC toolset 14.51",
+      "openssl": "3.6.0#3 through existing vcpkg"
+    },
+    "shared_runtime": {
+      "status": "pass",
+      "file": "verdandi_cpp.dll",
+      "bytes": 12625408
+    },
+    "release_native_tests": {
+      "status": "pass",
+      "passed": 6,
+      "endpoint_skips": 3,
+      "failed": 0
+    },
+    "independent_csharp_consumer": {
+      "status": "pass",
+      "frameworks": [
+        "net8.0",
+        "net10.0"
+      ],
+      "compiled_by_native_script": false
+    },
+    "cold_offline_configure": "pass",
+    "offline_full_build_and_test": "pass",
+    "online_after_offline_cache_reuse": "pass"
+  },
+  "linux": {
+    "doctor": {
+      "status": "pass",
+      "cmake": "4.3.2",
+      "generator": "Ninja",
+      "c_compiler": "GCC 13.3.0",
+      "cpp_compiler": "G++ 13.3.0",
+      "openssl": "system OpenSSL 3.0+"
+    },
+    "shared_runtime": {
+      "status": "pass",
+      "file": "libverdandi_cpp.so",
+      "bytes": 5141536
+    },
+    "release_native_tests": {
+      "status": "pass",
+      "passed": 6,
+      "endpoint_skips": 3,
+      "failed": 0
+    },
+    "cold_offline_configure": "pass",
+    "offline_full_build_and_test": "pass",
+    "online_after_offline_cache_reuse": "pass"
+  },
+  "negative_tests": {
+    "windows_invalid_explicit_vcpkg_root": "pass",
+    "linux_invalid_explicit_vcpkg_root": "pass",
+    "fresh_offline_missing_archive_fails_before_network": "pass"
+  },
+  "static_checks": {
+    "powershell_5_1_parse_and_dry_run": "pass",
+    "powershell_current_parse": "pass",
+    "bash_syntax_help_and_dry_run": "pass",
+    "check_profile_tool_discovery_windows": "pass",
+    "check_profile_tool_discovery_linux": "pass",
+    "json_parse": "pass",
+    "line_length_and_trailing_whitespace": "pass",
+    "concurrent_atomic_environment_manifest": "pass"
+  },
+  "source_sha256": {
+    "sdk/cpp/build.ps1": "14da461ebe3470e0b5d002a1f038a4e82ea89bae9f99565eee0edd4a40e1b3c0",
+    "sdk/cpp/build.sh": "a1e8d22bbfa47b91ef3cbe4ed8bc70d6804d72c0c5199de63a9388a12d3b1a96",
+    "sdk/cpp/BUILD.md": "1b3b23af5ff56b66c374b569abb496e72066066375cb873ad57770f897a1cdd8",
+    "sdk/cpp/CMakeLists.txt": "317320c0319040d496a4887b8b3536ec9e889b8dc9795909efcf2308c2b45646",
+    "sdk/cpp/cmake/Dependencies.cmake": "f4562b27eacbf63f73e60f1775f251676e60c3316163c6ae24c1a2324e656e84",
+    "sdk/cpp/cmake/probe/CMakeLists.txt": "46bb247cbe4c184f569fa6362879b5d54165b34e88969d454fea0f0885898026",
+    "sdk/cpp/cmake/probe/main.cpp": "3bb6303b48f7d71e78723f3818d6a3c3a9cf5bb2411f266d756ec9da7aa7ecf2",
+    "sdk/cpp/vcpkg.json": "a85a57720669c2447d384c722d05c7d4c008911854019e4647d664b8e04da7e1"
+  },
+  "commit_created": false,
+  "push_performed": false
+}
