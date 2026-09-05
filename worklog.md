@@ -19,16 +19,17 @@ Maintain this file with the work it describes:
 
 ## 2. Current Snapshot
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 - Project: Verdandi, a language-neutral distributed coordination protocol and
   SDK ecosystem.
 - Repository: public `git@github.com:eosforge/verdandi.git`.
 - Local path: `D:\laconis\verdandi`.
-- Git state: the public `alpha` branch contains the first complete source
-  freeze; the configuration normalization and cross-platform Sentinel TLS
-  qualification recorded on 2026-09-01 remain local uncommitted review changes
-  and have not been pushed.
+- Git state: the prior public `alpha` baseline is
+  `00842fbbe2233ff3136549f3811fded8f10332b4` (`feat: harden multilingual alpha
+  SDK`). This change set publishes the 2026-09-03 optimization, boundary-test,
+  Windows PowerShell 5.1 probe fix, and review artifacts under the maintainer's
+  explicit 2026-09-05 approval.
 - Release state: the maintainer selected `0.1.0` as the current
   non-production Alpha version for distributed development and controlled
   service integration. Its source and documentation are published only on the
@@ -183,8 +184,9 @@ Last updated: 2026-09-02
   two-promotion harness, live mutual TLS, and automated packaging remain open.
   No service or Node ceiling is encoded; each Catalog
   Path is one bounded complete value.
-- License: MIT. The source-freeze commit is public; the `0.1.0` preparation and
-  post-freeze endurance evidence remain uncommitted until explicitly approved.
+- License: MIT. The `0.1.0` preparation, frozen-source endurance evidence,
+  multilingual Alpha hardening, and the 2026-09-03 optimization review are
+  public on `alpha`.
 
 ## 3. Active Work
 
@@ -531,6 +533,43 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   checkpoint, timeout, and complete-value limits under the accepted workload.
 
 ## 6. Completed Work
+
+### 2026-09-03: Re-optimize hot parsers and re-audit the complete Alpha tree
+
+- Profiled the Go Catalog 512-field Replace decoder on WSL/Linux and removed
+  its redundant post-decode name slice, sort, and validation traversal. The
+  bounded decoder now validates structure, order, field contracts, capacity,
+  and encoded bytes during the ownership copy while preserving structural
+  error precedence.
+- Added shared zero-conversion canonical unsigned-decimal primitives for
+  strings and byte slices. Catalog revisions/config values, Registration
+  records/configuration, and Redis fixed-width scalar decoding now use the
+  same sign, leading-zero, overflow, and upper-bound rules.
+- Ten-sample Linux `benchstat` comparisons reduced Catalog Replace decoding
+  from 85.87 to 27.20 microseconds (-68.33%), 91,485 to 82,008 B/op, and eight
+  to six allocations. Redis int64/uint64 decoding improved by 42.86%/45.11%,
+  from 32 to 8 B/op and from two to one allocation. Registration stored-record
+  parsing improved by 2.99% and removed two allocations.
+- Added direct exact/+1 capacity, Value/Map/Patch shape, UTF-8/reserved-name,
+  canonical integer, fixed-width overflow, and shared JSON configuration fuzz
+  coverage. The configuration, Catalog, and Registration fuzz targets each
+  passed a 15-second run.
+- Fixed the Windows native doctor under Windows PowerShell 5.1: an expected
+  system OpenSSL probe failure is now captured and judged by exit status, so
+  `auto` can fall back to the existing vcpkg installation. PowerShell 5.1 and
+  7.6 real doctor runs passed; system-only mode retained its expected detailed
+  failure.
+- Go format/module/vet/all-package/ten-shuffle/Linux-race and targeted 100-run
+  boundaries passed. Rust stable and 1.85 MSRV tests passed. Linux/Windows C++
+  Release, GCC ASan/UBSan/leak, clang-format, clang-tidy, C ABI/Legacy, C#
+  net8/net10 Release/offline, Lua generator, Go generator, and Python syntax
+  checks passed.
+- The remote `192.168.0.90` was unreachable by SSH and ICMP. The Standalone
+  harness exited before fixture creation, so this working tree has no new live
+  Redis or endurance qualification and left no remote fixture.
+- Detailed analysis is in `optimization-review-20260903.md`; the structured
+  result is `testkit/results/optimization-regression-20260903.json`. No commit
+  or push was performed.
 
 ### 2026-09-02: Add reproducible Windows and Linux native build entry points
 

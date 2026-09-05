@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 )
 
 type scriptReply struct {
@@ -53,8 +54,10 @@ func parseScriptReply(value any) (scriptReply, error) {
 		}
 	}
 	if text, exists := fields["@pruned"]; exists {
-		reply.pruned, err = strconv.ParseUint(text, 10, 31)
-		if err != nil || strconv.FormatUint(reply.pruned, 10) != text {
+		var valid bool
+		reply.pruned, valid = validate.UintDecimal(text, (1<<31)-1, true)
+		if !valid {
+			_, err = strconv.ParseUint(text, 10, 31)
 			return scriptReply{}, newError(verdandi.CodeCorrupt, "@pruned", 0, err)
 		}
 	}
@@ -106,9 +109,9 @@ func redisString(value any) (string, bool) {
 
 // parseRevision 解析规范安全整数 revision；allowZero 决定零值是否有效。
 func parseRevision(value string, allowZero bool) (uint64, error) {
-	parsed, err := strconv.ParseUint(value, 10, 53)
-	if err != nil || parsed > maximumRevision || (!allowZero && parsed == 0) ||
-		strconv.FormatUint(parsed, 10) != value {
+	parsed, valid := validate.UintDecimal(value, maximumRevision, allowZero)
+	if !valid {
+		_, err := strconv.ParseUint(value, 10, 53)
 		return 0, newError(verdandi.CodeCorrupt, "@revision", 0, err)
 	}
 	return parsed, nil
@@ -116,8 +119,16 @@ func parseRevision(value string, allowZero bool) (uint64, error) {
 
 // parseInteger 解析 [0,maximum] 范围内的规范十进制 int，并把错误定位到 field。
 func parseInteger(value string, field string, maximum int) (int, error) {
-	parsed, err := strconv.ParseUint(value, 10, 31)
-	if err != nil || parsed > uint64(maximum) || strconv.FormatUint(parsed, 10) != value {
+	if maximum < 0 {
+		return 0, newError(verdandi.CodeCorrupt, field, 0, nil)
+	}
+	limit := uint64(maximum)
+	if limit > (1<<31)-1 {
+		limit = (1 << 31) - 1
+	}
+	parsed, valid := validate.UintDecimal(value, limit, true)
+	if !valid {
+		_, err := strconv.ParseUint(value, 10, 31)
 		return 0, newError(verdandi.CodeCorrupt, field, 0, err)
 	}
 	return int(parsed), nil

@@ -482,11 +482,11 @@ func parseZoneConfig(values []any) (zoneConfig, error) {
 		return zoneConfig{}, protocolError(codeProtocol, "protocol", 0)
 	}
 
-	// 重新格式化后必须与原文一致，借此拒绝符号、前导零和非规范数值。
+	// 共享解析原语拒绝符号、零、前导零、非数字和 31 位范围外的数值。
 	limits := make([]int, len(text)-1)
 	for index := 1; index < len(text); index++ {
-		parsed, err := strconv.ParseUint(text[index], 10, 31)
-		if err != nil || parsed == 0 || strconv.FormatUint(parsed, 10) != text[index] {
+		parsed, valid := validate.UintDecimal(text[index], (1<<31)-1, false)
+		if !valid {
 			return zoneConfig{}, protocolError(codeInvalid, zoneConfigFields[index], 0)
 		}
 		limits[index-1] = int(parsed)

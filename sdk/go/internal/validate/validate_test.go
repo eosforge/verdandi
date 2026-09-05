@@ -6,6 +6,43 @@ import (
 	"time"
 )
 
+func TestUintDecimalIsCanonicalAndBoundedForBothInputs(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		value     string
+		maximum   uint64
+		allowZero bool
+		want      uint64
+		valid     bool
+	}{
+		{name: "zero allowed", value: "0", allowZero: true, valid: true},
+		{name: "zero rejected", value: "0"},
+		{name: "maximum", value: "18446744073709551615", maximum: ^uint64(0), want: ^uint64(0), valid: true},
+		{name: "overflow", value: "18446744073709551616", maximum: ^uint64(0)},
+		{name: "bounded", value: "255", maximum: 255, want: 255, valid: true},
+		{name: "above bound", value: "256", maximum: 255},
+		{name: "empty", value: "", maximum: 255},
+		{name: "leading zero", value: "01", maximum: 255},
+		{name: "plus", value: "+1", maximum: 255},
+		{name: "minus", value: "-1", maximum: 255},
+		{name: "non-digit", value: "1x", maximum: 255},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fromString, stringOK := UintDecimal(test.value, test.maximum, test.allowZero)
+			fromBytes, bytesOK := UintDecimalBytes([]byte(test.value), test.maximum, test.allowZero)
+			if stringOK != test.valid || bytesOK != test.valid || fromString != test.want || fromBytes != test.want {
+				t.Fatalf(
+					"UintDecimal(%q, %d, %t) = string(%d,%t) bytes(%d,%t), want (%d,%t)",
+					test.value, test.maximum, test.allowZero,
+					fromString, stringOK, fromBytes, bytesOK, test.want, test.valid,
+				)
+			}
+		})
+	}
+}
+
 func TestDurationUsesDefaultAndEnforcesExactClosedRange(t *testing.T) {
 	const (
 		fallback = 2 * time.Second

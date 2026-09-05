@@ -2,11 +2,19 @@
 
 ## 1. Scope and final result
 
-Date: 2026-09-01
+Initial qualification date: 2026-09-01
+
+Last updated: 2026-09-03
 
 Scope update, 2026-09-02: generic Campaign/Leader election was withdrawn from
 all release targets. Historical references below describe the scope at their
 recorded checkpoint only; Redis Sentinel primary failover remains supported.
+
+Scope update, 2026-09-03: the complete Alpha tree was re-audited, Go parser hot
+paths were measurably optimized, and the Windows PowerShell 5.1 OpenSSL probe
+fallback was corrected. The current source tree completed the local short
+matrix below; the remote Redis host was unavailable before fixture creation,
+so no current-tree live or endurance qualification is claimed.
 
 The implemented Go, Rust, and C++23 Registration/Selector and Catalog slices,
 plus the C# facade over C ABI v1, have the evidence boundaries recorded below.
@@ -20,6 +28,42 @@ The 2026-08-28 Fields-mailbox/configuration revision passed the recorded
 one-hour owned campaign. The newer 2026-08-29 optimization fingerprint has its
 own microbenchmark, full short Redis, race, interoperability, and Sentinel
 evidence below; it does not inherit the earlier fingerprint's one-hour label.
+
+### 2026-09-03 full-tree optimization and boundary regression
+
+- The complete review and remaining-boundary analysis is
+  [`optimization-review-20260903.md`](optimization-review-20260903.md); the
+  machine-readable summary is
+  [`optimization-regression-20260903.json`](testkit/results/optimization-regression-20260903.json).
+- Go passed format, module verification, vet, all packages, ten random-order
+  runs, complete WSL/Linux race, 100 repeated new boundary cases, and all
+  benchmarks. Configuration, Catalog, and Registration fuzz targets each
+  passed 15 seconds. Ordinary non-live statement coverage was 47.4%; Redis,
+  Sentinel, load, and soak tests remain opt-in and are not represented by that
+  percentage.
+- Ten-sample Linux comparisons reduced 512-field Catalog Replace decode from
+  85.87 to 27.20 microseconds (-68.33%), with bytes/op -10.36% and allocations
+  -25%. Redis int64/uint64 decode improved 42.86%/45.11%, with bytes/op -75%
+  and allocations -50%. Registration stored-record parsing improved 2.99% and
+  removed two allocations.
+- Rust stable passed fmt, 77 endpoint-independent tests, strict all-target/
+  all-feature Clippy, and warning-denied rustdoc. Rust 1.85 passed all-target/
+  all-feature check and the same endpoint-independent tests.
+- Linux and Windows C++ shared Release build/test entry points, Linux GCC
+  ASan/UBSan/leak, C++23, C ABI v1, C++11/14/17 Legacy, clang-format, and
+  project-owned clang-tidy passed. Each native tree ran six endpoint-independent
+  tests and skipped the three Redis URL tests by contract.
+- C# .NET 8/10 format/analyzers/zero-warning Release and native-DLL offline
+  tests passed. Both Lua generators, the Go reference generator, and in-memory
+  syntax compilation of 17 Python testkit files passed.
+- Windows PowerShell 5.1 and PowerShell 7.6 now both complete the real C++
+  doctor with automatic vcpkg fallback when system OpenSSL is unavailable;
+  the system-only expected-failure diagnostic also passed. Linux doctor passed
+  with system OpenSSL.
+- `192.168.0.90:22` and ICMP timed out. The Standalone harness stopped before
+  creating an owned container or starting product tests. This is recorded as
+  environment unavailable, not a test failure; prior live and frozen-source
+results remain historical only.
 
 ### 2026-09-02 Windows/Linux native build-entry regression
 
@@ -70,8 +114,7 @@ evidence below; it does not inherit the earlier fingerprint's one-hour label.
 - Complete samples, source fingerprints, test matrix, discarded attempts, and
   release boundary are in
   [`go-selector-reference-20260902.json`](testkit/results/go-selector-reference-20260902.json).
-- This is uncommitted working-tree evidence, not inherited endurance
-  qualification. No commit or push was performed.
+- This is short-regression evidence, not inherited endurance qualification.
 
 ### 2026-09-01 complete working-tree optimization regression
 
@@ -115,9 +158,8 @@ evidence below; it does not inherit the earlier fingerprint's one-hour label.
   47.056..47.914 us with six allocations, RedisClock reads at 21.76..21.88 ns
   with zero allocations, typed `One` at 11.641..11.774 us, and typed `Any(8)`
   at 12.593..12.693 us. Full ranges and allocation counts are in the review.
-- This is a complete short regression of an uncommitted working tree, not a
-  new endurance qualification. It cannot inherit the exact earlier frozen
-  source's twelve-hour result. No commit or push was performed.
+- This is a complete short regression, not a new endurance qualification. It
+  cannot inherit the exact earlier frozen source's twelve-hour result.
 
 ### 2026-08-31 Alpha source-freeze short regression
 

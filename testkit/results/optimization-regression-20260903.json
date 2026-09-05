@@ -1,0 +1,199 @@
+{
+  "schema": "verdandi.optimization-regression.v1",
+  "date": "2026-09-03",
+  "base_commit": "00842fbbe2233ff3136549f3811fded8f10332b4",
+  "git_state": "uncommitted_working_tree",
+  "commit_or_push_performed": false,
+  "scope": [
+    "lua",
+    "go",
+    "rust",
+    "cpp23",
+    "c_abi_v1",
+    "cpp11_14_17_legacy",
+    "csharp",
+    "configuration",
+    "build_and_test_engineering"
+  ],
+  "changes": [
+    "Go Catalog validates and owns notification fields in one bounded decode pass",
+    "Go canonical decimal parsing avoids successful-path Parse/Format round trips",
+    "Go Redis fixed-width integer decoding parses source bytes directly",
+    "Go configuration, numeric, field-shape and capacity boundaries were expanded",
+    "Go 1.27 errors.AsType replaces temporary errors.As targets",
+    "Windows C++ doctor preserves PowerShell 5.1 OpenSSL fallback semantics"
+  ],
+  "source_fingerprints": {
+    "registration_selector": {
+      "sha256": "8486e81c85cba7218cc1c8938d63e3dd7f6f6f704c55d1321c58932ac72ce5aa",
+      "files": 103
+    },
+    "catalog": {
+      "sha256": "bffea96cd3ccf001e9f650e282e4cfed695f48fd085fc91b9103b3dcc429f291",
+      "files": 70
+    },
+    "changed_hot_files": {
+      "sdk/cpp/build.ps1": "e84bfcb0a23cf58251c38b9d67de9437a9db3766f4c3edede5f561ed57698620",
+      "sdk/go/catalog/event.go": "4ab868217758e19fc669b30ce6f955218653977241ce80e134775f55b194d972",
+      "sdk/go/catalog/protocol.go": "e4ed1759f5b9d4b70f9d0492d5aec5660b2a6e81743ab359e3d696e93e36274a",
+      "sdk/go/redis_value.go": "a76b663f25301dbe4b32b29b71b8fad194c1e5f8f9086811dea91b3b7bc05f6d",
+      "sdk/go/internal/validate/validate.go": "2ed91b6e3489d4cebe95d2a2918d7640e5a3c17a7b5c9d9440248764df32f4f6"
+    }
+  },
+  "benchmark_environment": {
+    "os": "linux",
+    "architecture": "amd64",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13700F",
+    "go": "1.27.0",
+    "samples_per_comparison": 10,
+    "comparison": "benchstat"
+  },
+  "benchmarks": {
+    "catalog_decode_replace_event": {
+      "before_ns_per_op": 85870,
+      "after_ns_per_op": 27200,
+      "time_change_percent": -68.33,
+      "before_bytes_per_op": 91485,
+      "after_bytes_per_op": 82008,
+      "bytes_change_percent": -10.36,
+      "before_allocs_per_op": 8,
+      "after_allocs_per_op": 6,
+      "allocs_change_percent": -25.0,
+      "p_value": 0.0
+    },
+    "redis_int64_decode": {
+      "before_ns_per_op": 96.94,
+      "after_ns_per_op": 55.38,
+      "time_change_percent": -42.86,
+      "before_bytes_per_op": 32,
+      "after_bytes_per_op": 8,
+      "before_allocs_per_op": 2,
+      "after_allocs_per_op": 1,
+      "p_value": 0.0
+    },
+    "redis_uint64_decode": {
+      "before_ns_per_op": 102.35,
+      "after_ns_per_op": 56.19,
+      "time_change_percent": -45.11,
+      "before_bytes_per_op": 32,
+      "after_bytes_per_op": 8,
+      "before_allocs_per_op": 2,
+      "after_allocs_per_op": 1,
+      "p_value": 0.0
+    },
+    "registration_parse_stored_record": {
+      "before_ns_per_op": 6351,
+      "after_ns_per_op": 6161,
+      "time_change_percent": -2.99,
+      "before_bytes_per_op": 8789,
+      "after_bytes_per_op": 8768,
+      "before_allocs_per_op": 67,
+      "after_allocs_per_op": 65,
+      "p_value": 0.0
+    }
+  },
+  "tests": {
+    "go": {
+      "status": "pass",
+      "checks": [
+        "gofmt",
+        "go mod verify",
+        "go vet ./...",
+        "go test -count=1 ./...",
+        "go test -shuffle=on -count=10 ./...",
+        "WSL go test -race -count=1 ./...",
+        "targeted boundary tests repeated 100 times",
+        "all benchmarks smoke",
+        "three fuzz targets for 15 seconds each"
+      ],
+      "statement_coverage_percent_without_live_tags": 47.4,
+      "fuzz_executions": {
+        "configuration": 1098567,
+        "catalog": 208118,
+        "registration": 3854238
+      }
+    },
+    "rust": {
+      "status": "pass",
+      "stable": [
+        "cargo fmt --check",
+        "cargo test --locked --all-features",
+        "cargo clippy --locked --all-targets --all-features -- -D warnings",
+        "RUSTDOCFLAGS=-Dwarnings cargo doc --locked --no-deps --all-features"
+      ],
+      "msrv_1_85": [
+        "cargo check --locked --all-targets --all-features",
+        "cargo test --locked --all-targets --all-features"
+      ],
+      "endpoint_independent_tests": 77
+    },
+    "cpp": {
+      "status": "pass",
+      "checks": [
+        "Linux build.sh shared Release build and CTest",
+        "Windows build.ps1 shared Release build and CTest",
+        "Linux GCC ASan/UBSan/leak CTest",
+        "clang-format --dry-run --Werror",
+        "project-owned clang-tidy",
+        "C ABI v1 and C++11/14/17 Legacy consumers"
+      ],
+      "tests_per_tree": {
+        "passed": 6,
+        "endpoint_skipped": 3,
+        "failed": 0
+      }
+    },
+    "csharp": {
+      "status": "pass",
+      "checks": [
+        "dotnet format Verdandi.slnx --verify-no-changes --no-restore",
+        "dotnet build Verdandi.slnx -c Release --no-restore",
+        ".NET 8 offline native regression",
+        ".NET 10 offline native regression"
+      ],
+      "warnings": 0,
+      "errors": 0
+    },
+    "generators_and_testkit": {
+      "status": "pass",
+      "checks": [
+        "Registration Lua generator --check",
+        "Catalog Lua generator --check",
+        "Go reference generator deterministic check",
+        "17 Python files compiled in memory"
+      ]
+    },
+    "windows_build_entry": {
+      "status": "pass",
+      "checks": [
+        "PowerShell 7.6 auto fallback to vcpkg",
+        "Windows PowerShell 5.1 auto fallback to vcpkg",
+        "Windows PowerShell 5.1 system-only expected failure diagnostic",
+        "Linux Bash doctor with system OpenSSL"
+      ]
+    },
+    "remote_redis": {
+      "status": "environment_unavailable",
+      "host": "192.168.0.90",
+      "ssh_port": 22,
+      "fixture_created": false,
+      "product_tests_started": false,
+      "reason": "SSH and ICMP timed out before the isolated fixture was created"
+    }
+  },
+  "endurance": {
+    "current_working_tree_qualified": false,
+    "reason": "No long test was requested or run for this uncommitted working tree; historical frozen-source evidence is not inherited"
+  },
+  "scores": {
+    "lua": 9.8,
+    "go": 9.8,
+    "rust": 9.7,
+    "cpp23": 9.6,
+    "c_abi_legacy": 9.6,
+    "csharp": 9.6,
+    "configuration": 9.8,
+    "build_test_release": 9.6,
+    "overall_alpha": 9.7
+  }
+}

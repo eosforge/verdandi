@@ -84,14 +84,26 @@ func decodeEvent(payload string, expectedPath Path, maximumBytes int) (catalogEv
 		if err != nil {
 			return catalogEvent{}, err
 		}
-		event.fields, err = decodeEventFields(&decoder, event.valueKind == Array)
+		var actualBytes int
+		event.fields, actualBytes, err = decodeEventFields(
+			&decoder,
+			event.valueKind,
+			false,
+			maximumBytes,
+		)
 		if err != nil {
-			return catalogEvent{}, err
-		}
-		_, actual, validateErr := validateValue(event.valueKind, event.fields, maximumBytes)
-		if validateErr != nil || actual != event.encodedBytes {
+			// 字段容器损坏应保留精确位置；合法容器中的值契约错误仍按
+			// Replace 的完整值损坏语义归并到 @encoded_bytes。
+			if verdandi.IsCode(err, verdandi.CodeCorrupt) {
+				return catalogEvent{}, err
+			}
 			return catalogEvent{}, newError(
-				verdandi.CodeCorrupt, "@encoded_bytes", event.revision, validateErr,
+				verdandi.CodeCorrupt, "@encoded_bytes", event.revision, err,
+			)
+		}
+		if actualBytes != event.encodedBytes {
+			return catalogEvent{}, newError(
+				verdandi.CodeCorrupt, "@encoded_bytes", event.revision, nil,
 			)
 		}
 	case "patch":
@@ -124,11 +136,13 @@ func decodeEvent(payload string, expectedPath Path, maximumBytes int) (catalogEv
 		if err != nil {
 			return catalogEvent{}, err
 		}
-		event.fields, err = decodeEventFields(&decoder, false)
+		event.fields, _, err = decodeEventFields(
+			&decoder,
+			event.valueKind,
+			true,
+			maximumBytes,
+		)
 		if err != nil {
-			return catalogEvent{}, err
-		}
-		if _, err := validatePatchFields(event.fields, maximumBytes); err != nil {
 			return catalogEvent{}, err
 		}
 	case "delete":
@@ -173,16 +187,29 @@ func decodeEventRevision(decoder *eventDecoder, field string) (uint64, error) {
 	return revision, nil
 }
 
-// decodeEventFields 解码按名称/值交替排列的字段数组。
-// arrayReplace 为 true 时要求名称严格为连续数组下标；否则要求字段名严格递增。
+// decodeEventFields 解码并一次性校验按名称/值交替排列的字段数组。
+// Replace 根据 kind 校验完整 Value/Array/Map 形状，Patch 校验非空增量；两种模式
+// 都要求字段按协议顺序出现，并在复制值时累计逻辑字节数，避免随后重新排序和遍历。
 // 返回的字段名和值由本次事件私有存储承载，值切片容量被截断到长度，调用者追加时
-// 不会覆盖相邻字段；任何结构、顺序或数量错误都会使整条事件失败。
-func decodeEventFields(decoder *eventDecoder, arrayReplace bool) (verdandi.Fields, error) {
+// 不会覆盖相邻字段；任何结构、顺序、名称、形状或容量错误都会使整条事件失败。
+func decodeEventFields(
+	decoder *eventDecoder,
+	kind Kind,
+	patch bool,
+	maximumBytes int,
+) (verdandi.Fields, int, error) {
 	count, ok := decoder.arrayLength()
 	if !ok || count%2 != 0 || count/2 > maximumFields {
-		return nil, newError(verdandi.CodeCorrupt, "fields", 0, nil)
+		return nil, 0, newError(verdandi.CodeCorrupt, "fields", 0, nil)
 	}
 	fieldCount := int(count / 2)
+	var validationErr error
+	if patch && fieldCount == 0 {
+		validationErr = newError(verdandi.CodeInvalid, "patch", 0, nil)
+	}
+	if !patch && kind == Value && fieldCount != 1 {
+		validationErr = newError(verdandi.CodeContract, "value", 0, nil)
+	}
 	remaining := len(decoder.payload) - decoder.offset
 	nameCapacity := fieldCount * 16
 	if nameCapacity > remaining {
@@ -195,20 +222,40 @@ func decodeEventFields(decoder *eventDecoder, arrayReplace bool) (verdandi.Field
 	valueStorage := make([]byte, 0, remaining)
 	fields := make(verdandi.Fields, fieldCount)
 	previous := ""
+	encodedBytes := 0
 	for expectedIndex := range fieldCount {
 		name, nameOK := decoder.text()
 		value, valueOK := decoder.rawBytes()
 		if !nameOK || !valueOK || name == "" {
-			return nil, newError(verdandi.CodeCorrupt, "fields", 0, nil)
+			return nil, 0, newError(verdandi.CodeCorrupt, "fields", 0, nil)
 		}
-		if arrayReplace {
+		if !patch && kind == Array {
 			index, canonical := arrayFieldIndex(name, fieldCount)
 			if !canonical || index != expectedIndex {
-				return nil, newError(verdandi.CodeCorrupt, name, 0, nil)
+				return nil, 0, newError(verdandi.CodeCorrupt, name, 0, nil)
 			}
 		} else if previous != "" && previous >= name {
-			return nil, newError(verdandi.CodeCorrupt, name, 0, nil)
+			return nil, 0, newError(verdandi.CodeCorrupt, name, 0, nil)
 		}
+		if validationErr == nil {
+			if !patch && kind == Value {
+				if name != "value" {
+					validationErr = newError(verdandi.CodeContract, "value", 0, nil)
+				}
+			} else if !validFieldName(name) {
+				validationErr = newError(verdandi.CodeInvalid, name, 0, nil)
+			}
+		}
+		if validationErr == nil && (encodedBytes > maximumBytes ||
+			len(name) > maximumBytes-encodedBytes ||
+			len(value) > maximumBytes-encodedBytes-len(name)) {
+			field := "value"
+			if patch {
+				field = "patch"
+			}
+			validationErr = newError(verdandi.CodeCapacity, field, 0, nil)
+		}
+		encodedBytes += len(name) + len(value)
 		previous = name
 		nameOffset := names.Len()
 		names.WriteString(name)
@@ -218,7 +265,10 @@ func decodeEventFields(decoder *eventDecoder, arrayReplace bool) (verdandi.Field
 		valueEnd := len(valueStorage)
 		fields[nameStorage[nameOffset:]] = valueStorage[valueOffset:valueEnd:valueEnd]
 	}
-	return fields, nil
+	if validationErr != nil {
+		return nil, 0, validationErr
+	}
+	return fields, encodedBytes, nil
 }
 
 // done 报告 decoder 是否已经精确消费整个 payload。

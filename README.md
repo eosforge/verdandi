@@ -215,9 +215,9 @@ the application-selected type without Redis or disk I/O. The current API and
 performance record are in
 [`catalog/api.md`](catalog/api.md) and
 [`catalog/optimization.md`](catalog/optimization.md). The current whole-project
-consolidation, lock-free Catalog qualification, exact scores, and remaining
+optimization measurements, boundary-coverage audit, exact scores, and remaining
 weaknesses are recorded in
-[`optimization-review-20260830.md`](optimization-review-20260830.md).
+[`optimization-review-20260903.md`](optimization-review-20260903.md).
 The cross-platform native-runtime build entry, C++23/C ABI/Legacy APIs,
 qualification, scores, and remaining release gates are in
 [`sdk/cpp/BUILD.md`](sdk/cpp/BUILD.md),

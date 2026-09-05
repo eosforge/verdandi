@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 	"github.com/vmihailenco/msgpack/v5/msgpcode"
 )
 
@@ -520,10 +520,10 @@ func parseStoredRecord(uuid string, values map[string]string, limits zoneConfig)
 }
 
 // parseCanonicalUint 解析规范十进制的正安全整数。
-// 重新格式化必须与 value 完全相同，因此会拒绝符号、空白和前导零。
+// 共享解析原语拒绝符号、零、前导零、非数字和安全整数上限外的值。
 func parseCanonicalUint(value string) (uint64, error) {
-	parsed, err := strconv.ParseUint(value, 10, 64)
-	if err != nil || parsed == 0 || parsed > maxSafeInteger || strconv.FormatUint(parsed, 10) != value {
+	parsed, valid := validate.UintDecimal(value, maxSafeInteger, false)
+	if !valid {
 		return 0, fmt.Errorf("invalid positive safe integer")
 	}
 	return parsed, nil

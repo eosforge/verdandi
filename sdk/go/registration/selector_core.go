@@ -512,8 +512,8 @@ func selectorReceiveTimeout(
 
 // isReceiveTimeout 判断 err 是否为网络层超时；这种超时用于驱动本地定时工作，不代表连接代失败。
 func isReceiveTimeout(err error) bool {
-	var timeout net.Error
-	return errors.As(err, &timeout) && timeout.Timeout()
+	timeout, ok := errors.AsType[net.Error](err)
+	return ok && timeout.Timeout()
 }
 
 // openGeneration 在专用 Pub/Sub 连接上订阅 Registry，并等待精确 subscribe 确认。

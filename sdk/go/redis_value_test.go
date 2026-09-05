@@ -100,9 +100,16 @@ func TestRedisScalarBuiltinsUseCanonicalEncoding(t *testing.T) {
 }
 
 func TestRedisScalarRejectsNoncanonicalAndUnsupportedTypes(t *testing.T) {
-	for _, source := range []string{"", "+1", "01", "-0", " 1"} {
+	for _, source := range []string{
+		"", "+1", "01", "-0", " 1", "-", "9223372036854775808", "-9223372036854775809",
+	} {
 		if _, err := decodeRedisValue[int64]([]byte(source), "value"); !IsCode(err, CodeCorrupt) {
 			t.Fatalf("%q returned %v, want corrupt", source, err)
+		}
+	}
+	for _, source := range []string{"-1", "+1", "01", "256"} {
+		if _, err := decodeRedisValue[uint8]([]byte(source), "value"); !IsCode(err, CodeCorrupt) {
+			t.Fatalf("uint8 %q returned %v, want corrupt", source, err)
 		}
 	}
 	for _, source := range []string{"false", "true", "2", ""} {

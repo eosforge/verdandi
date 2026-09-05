@@ -623,13 +623,28 @@ function Invoke-CMakeProbe {
     New-Item -ItemType Directory -Path $probeDirectory -Force | Out-Null
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("configure: $($script:Native.CMake) $($configureArguments -join ' ')")
-    $configureOutput = & $script:Native.CMake @configureArguments 2>&1 | Out-String
-    $configureExit = $LASTEXITCODE
+
+    # Windows PowerShell 5.1 会把重定向后的原生 stderr 包装成 ErrorRecord；当脚本
+    # 使用 Stop 策略时，正常的“系统 OpenSSL 探针失败后回退 vcpkg”会被提前终止。
+    # 探针局部按退出码裁决并保留完整输出，离开临界段立即恢复全局严格策略。
+    $savedErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $configureOutput = & $script:Native.CMake @configureArguments 2>&1 | Out-String
+        $configureExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedErrorActionPreference
+    }
     $lines.Add($configureOutput)
     if ($configureExit -eq 0) {
         $lines.Add("build: $($script:Native.CMake) $($buildArguments -join ' ')")
-        $buildOutput = & $script:Native.CMake @buildArguments 2>&1 | Out-String
-        $buildExit = $LASTEXITCODE
+        try {
+            $ErrorActionPreference = 'Continue'
+            $buildOutput = & $script:Native.CMake @buildArguments 2>&1 | Out-String
+            $buildExit = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $savedErrorActionPreference
+        }
         $lines.Add($buildOutput)
     } else {
         $buildExit = $configureExit

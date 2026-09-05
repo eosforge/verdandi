@@ -69,8 +69,8 @@ func (err *Error) Unwrap() error {
 // IsCode 判断 err 的错误链中是否包含指定 code 的 Verdandi Error。
 // err 为 nil 或错误链中没有 Verdandi Error 时返回 false。
 func IsCode(err error, code Code) bool {
-	var target *Error
-	return errors.As(err, &target) && target.Code == code
+	target, ok := errors.AsType[*Error](err)
+	return ok && target.Code == code
 }
 
 // protocolError 构造不带底层 Cause 的稳定协议错误。

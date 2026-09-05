@@ -30,6 +30,27 @@ func BenchmarkDecodeRegistrationEvent(b *testing.B) {
 	}
 }
 
+func BenchmarkParseStoredRecord(b *testing.B) {
+	values := map[string]string{
+		"@uuid": pendingTestUUID, "@revision": "1", "@timestamp": "1787466000000",
+		"@ttl": "30000", "@version": "1",
+	}
+	for index := range 16 {
+		values[fmt.Sprintf(".attr%02d", index)] = "0123456789abcdef"
+	}
+	for index := range 32 {
+		values[fmt.Sprintf("data%02d", index)] = "0123456789abcdef"
+	}
+	limits := defaultZoneConfig()
+	b.ReportAllocs()
+	for b.Loop() {
+		record, err := parseStoredRecord(pendingTestUUID, values, limits)
+		if err != nil || len(record.attr) != 16 || len(record.data) != 32 {
+			b.Fatalf("parse = %#v, %v", record, err)
+		}
+	}
+}
+
 func BenchmarkRegistrationConstruction(b *testing.B) {
 	client := &Client{}
 	options := RegistrationOptions{Type: "benchmark", TTL: 3 * time.Second, Version: 1}

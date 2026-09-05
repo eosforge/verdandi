@@ -3,6 +3,7 @@ package catalog
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -271,6 +272,132 @@ func TestNotificationDecoding(t *testing.T) {
 	}
 	if _, err := decodeEvent(string(nonCanonicalMap), path, 128); err == nil {
 		t.Fatal("Map notification fields must use lexical order")
+	}
+}
+
+func TestNotificationFieldBoundaries(t *testing.T) {
+	t.Parallel()
+
+	path, err := NewPath("routing", "boundaries")
+	if err != nil {
+		t.Fatal(err)
+	}
+	encode := func(values []any) string {
+		t.Helper()
+		payload, encodeErr := msgpack.Marshal(values)
+		if encodeErr != nil {
+			t.Fatal(encodeErr)
+		}
+		return string(payload)
+	}
+	requireError := func(err error, code verdandi.Code, field string) {
+		t.Helper()
+		var actual *verdandi.Error
+		if !errors.As(err, &actual) {
+			t.Fatalf("error = %v, want *verdandi.Error", err)
+		}
+		if actual.Code != code || actual.Field != field {
+			t.Fatalf("error = %#v, want code=%q field=%q", actual, code, field)
+		}
+	}
+
+	if _, err := decodeEvent(encode([]any{
+		"v1", "replace", path.member(), "1", "map", "8",
+		[]any{"a", []byte("1234567")},
+	}), path, 8); err != nil {
+		t.Fatalf("exact-size Replace must be accepted: %v", err)
+	}
+	replaceCases := []struct {
+		name   string
+		kind   string
+		fields []any
+	}{
+		{name: "over capacity", kind: "map", fields: []any{"a", []byte("12345678")}},
+		{name: "reserved name", kind: "map", fields: []any{"@a", []byte{}}},
+		{name: "invalid UTF-8 name", kind: "map", fields: []any{string([]byte{0xff}), []byte{}}},
+		{name: "invalid Value shape", kind: "value", fields: []any{"other", []byte{}}},
+	}
+	for _, test := range replaceCases {
+		t.Run("replace "+test.name, func(t *testing.T) {
+			_, decodeErr := decodeEvent(encode([]any{
+				"v1", "replace", path.member(), "2", test.kind, "8", test.fields,
+			}), path, 8)
+			requireError(decodeErr, verdandi.CodeCorrupt, "@encoded_bytes")
+		})
+	}
+
+	patchCases := []struct {
+		name   string
+		fields []any
+		limit  int
+		code   verdandi.Code
+		field  string
+	}{
+		{name: "empty", fields: []any{}, limit: 8, code: verdandi.CodeInvalid, field: "patch"},
+		{name: "over capacity", fields: []any{"a", []byte("12345678")}, limit: 8, code: verdandi.CodeCapacity, field: "patch"},
+		{name: "reserved name", fields: []any{"@a", []byte{}}, limit: 8, code: verdandi.CodeInvalid, field: "@a"},
+		{name: "invalid UTF-8 name", fields: []any{string([]byte{0xff}), []byte{}}, limit: 8, code: verdandi.CodeInvalid, field: string([]byte{0xff})},
+	}
+	for _, test := range patchCases {
+		t.Run("patch "+test.name, func(t *testing.T) {
+			_, decodeErr := decodeEvent(encode([]any{
+				"v1", "patch", path.member(), "1", "2", "map", "1", test.fields,
+			}), path, test.limit)
+			requireError(decodeErr, test.code, test.field)
+		})
+	}
+}
+
+func TestCanonicalIntegerParsing(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		value     string
+		allowZero bool
+		valid     bool
+	}{
+		{name: "zero allowed", value: "0", allowZero: true, valid: true},
+		{name: "zero rejected", value: "0", valid: false},
+		{name: "one", value: "1", valid: true},
+		{name: "maximum", value: "9007199254740991", valid: true},
+		{name: "above maximum", value: "9007199254740992", valid: false},
+		{name: "empty", value: "", valid: false},
+		{name: "leading zero", value: "01", valid: false},
+		{name: "plus", value: "+1", valid: false},
+		{name: "minus", value: "-1", valid: false},
+		{name: "non-digit", value: "1x", valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			value, parseErr := parseRevision(test.value, test.allowZero)
+			if test.valid && (parseErr != nil || value > maximumRevision) {
+				t.Fatalf("parseRevision(%q) = %d, %v", test.value, value, parseErr)
+			}
+			if !test.valid && !verdandi.IsCode(parseErr, verdandi.CodeCorrupt) {
+				t.Fatalf("parseRevision(%q) error = %v", test.value, parseErr)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		value   string
+		maximum int
+		valid   bool
+	}{
+		{value: "0", maximum: 0, valid: true},
+		{value: "8", maximum: 8, valid: true},
+		{value: "9", maximum: 8},
+		{value: "00", maximum: 8},
+		{value: "+1", maximum: 8},
+		{value: "1", maximum: -1},
+	} {
+		value, parseErr := parseInteger(test.value, "integer", test.maximum)
+		if test.valid && (parseErr != nil || value > test.maximum) {
+			t.Fatalf("parseInteger(%q, %d) = %d, %v", test.value, test.maximum, value, parseErr)
+		}
+		if !test.valid && !verdandi.IsCode(parseErr, verdandi.CodeCorrupt) {
+			t.Fatalf("parseInteger(%q, %d) error = %v", test.value, test.maximum, parseErr)
+		}
 	}
 }
 

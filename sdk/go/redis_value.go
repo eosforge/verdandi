@@ -5,6 +5,8 @@ import (
 	"encoding"
 	"reflect"
 	"strconv"
+
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 )
 
 // 以下反射类型在进程内固定，集中缓存可避免每次编解码重复构造接口类型。
@@ -150,28 +152,27 @@ func decodeRedisReflectValue(value reflect.Value, source []byte, field string) e
 		return nil
 	}
 
-	// 数值仅接受重新格式化后完全相同的规范十进制文本，拒绝空白、加号和前导零。
+	// 数值直接在原始字节上执行规范十进制和位宽检查，避免 string 转换及
+	// Parse/Format 往返产生的临时分配。
 	switch value.Kind() {
 	case reflect.Bool:
-		switch string(source) {
-		case "0":
+		switch {
+		case len(source) == 1 && source[0] == '0':
 			value.SetBool(false)
-		case "1":
+		case len(source) == 1 && source[0] == '1':
 			value.SetBool(true)
 		default:
 			return protocolError(CodeCorrupt, field, 0)
 		}
 	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		text := string(source)
-		decoded, err := strconv.ParseInt(text, 10, value.Type().Bits())
-		if err != nil || strconv.FormatInt(decoded, 10) != text {
+		decoded, ok := parseRedisInt(source, value.Type().Bits())
+		if !ok {
 			return protocolError(CodeCorrupt, field, 0)
 		}
 		value.SetInt(decoded)
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		text := string(source)
-		decoded, err := strconv.ParseUint(text, 10, value.Type().Bits())
-		if err != nil || strconv.FormatUint(decoded, 10) != text {
+		decoded, ok := parseRedisUint(source, value.Type().Bits())
+		if !ok {
 			return protocolError(CodeCorrupt, field, 0)
 		}
 		value.SetUint(decoded)
@@ -183,4 +184,43 @@ func decodeRedisReflectValue(value reflect.Value, source []byte, field string) e
 		return protocolError(CodeContract, field, 0)
 	}
 	return nil
+}
+
+// parseRedisInt 解析指定位宽的规范有符号十进制字节。
+// 唯一允许的符号是非零负数前的减号；所有溢出都在乘加前判定。
+func parseRedisInt(source []byte, bits int) (int64, bool) {
+	if bits < 1 || bits > 64 || len(source) == 0 {
+		return 0, false
+	}
+	negative := source[0] == '-'
+	if negative {
+		source = source[1:]
+	}
+
+	negativeLimit := uint64(1) << (bits - 1)
+	limit := negativeLimit - 1
+	if negative {
+		limit = negativeLimit
+	}
+	magnitude, ok := validate.UintDecimalBytes(source, limit, true)
+	if !ok || negative && magnitude == 0 {
+		return 0, false
+	}
+	if negative {
+		// magnitude-1 始终可由 int64 表示，包括 MinInt64 的绝对值 1<<63。
+		return -int64(magnitude-1) - 1, true
+	}
+	return int64(magnitude), true
+}
+
+// parseRedisUint 解析指定位宽的规范无符号十进制字节。
+func parseRedisUint(source []byte, bits int) (uint64, bool) {
+	if bits < 1 || bits > 64 {
+		return 0, false
+	}
+	limit := ^uint64(0)
+	if bits < 64 {
+		limit = (uint64(1) << bits) - 1
+	}
+	return validate.UintDecimalBytes(source, limit, true)
 }
