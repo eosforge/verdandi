@@ -61,6 +61,15 @@ func run() error {
 			continue
 		}
 		switch fields[0] {
+		case "PING":
+			probe, cancel := context.WithTimeout(ctx, 5*time.Second)
+			pingErr := transport.Redis().Ping(probe).Err()
+			cancel()
+			if pingErr != nil {
+				fmt.Printf("ERROR %v\n", pingErr)
+			} else {
+				fmt.Println("ROOT_READY")
+			}
 		case "REPLACE":
 			if len(fields) != 3 {
 				return fmt.Errorf("REPLACE requires owner and generation")

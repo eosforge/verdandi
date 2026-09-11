@@ -1,0 +1,182 @@
+{
+  "date": "2026-09-08",
+  "status": "short-regression-pass-with-explicit-gaps",
+  "branch": "alpha",
+  "base_commit": "81cb8b916d1bee155fe9b58ff8ee71fc53f2bb67",
+  "source_state": "uncommitted working tree; existing changes preserved",
+  "review": "code-reaudit-20260907.md",
+  "repairs": "code-reaudit-fixes-20260908.md",
+  "source_fixed_findings": 29,
+  "review_coverage": {
+    "manual_source_files": 325,
+    "manual_lines": 75027,
+    "generated_lua_files": 32,
+    "generated_lua_lines": 5912,
+    "review_finished_before_sdk_tests": true
+  },
+  "windows": {
+    "go_unit": "pass",
+    "go_redis": "pass",
+    "go_vet_integration": "pass",
+    "rust_lib_passed": 84,
+    "rust_workspace": "pass; Redis conditional/ignored branches counted separately",
+    "rust_redis_passed": 10,
+    "clippy": "pass --workspace --all-targets -D warnings",
+    "cpp_shared_debug": "pass",
+    "cpp_ctest_passed": 16,
+    "cpp_close_race_iterations": 8,
+    "csharp_net8": "build/offline/Redis pass",
+    "csharp_net10": "build/offline/Redis pass"
+  },
+  "ubuntu": {
+    "version": "26.04",
+    "project": "/home/ubuntu/verdandi",
+    "go_unit_race": "pass",
+    "go_redis_race": "pass",
+    "rust_lib_passed": 85,
+    "rust_redis_passed": 10,
+    "cpp_shared_debug": "pass",
+    "cpp_ctest_passed": 16,
+    "cpp_close_race_iterations": 8,
+    "csharp": "not run",
+    "build_jobs": 1,
+    "go_gomaxprocs": 2,
+    "last_mem_total_mib": 7422,
+    "last_mem_available_mib": 6719,
+    "observed_swap_used_mib": 0
+  },
+  "interop": {
+    "registration": "Go -> Rust and Rust -> Go pass",
+    "catalog": "Go -> Rust and Rust -> Go writes/reads; delete observed; revisions 1/2/3 pass",
+    "zone": "Interopsgdiwgaaackm",
+    "peers": "both exited normally",
+    "cleanup": "dedicated zone unlinked; final scan empty"
+  },
+  "additional_dependencies": {
+    "purpose": "existing Rust interop peer lockfile",
+    "source": "crates.io",
+    "location": "build/deps/cargo",
+    "lockfile_modified": false,
+    "packages": [
+      "icu_normalizer_data 2.3.0",
+      "idna_adapter 1.2.2",
+      "icu_provider 2.3.1",
+      "icu_properties_data 2.3.0",
+      "icu_collections 2.3.0",
+      "icu_locale_core 2.3.0",
+      "icu_properties 2.3.0",
+      "icu_normalizer 2.3.0"
+    ]
+  },
+  "excluded": [
+    "user-deferred Python A22/A23 and Python downloads",
+    "unsafe Sentinel cleanup fixture",
+    "current-source long soak",
+    "Sentinel/TLS/mTLS failover",
+    "Linux C# runtime",
+    "sanitizers",
+    "selected exact cancellation/ACL/malformed-reply/fence-timeout injections listed in repair report"
+  ],
+  "evidence": [
+    {
+      "path": "build\\reaudit-20260907\\go-windows-unit.log",
+      "sha256": "22e1fb241542bcf28b2f6838633eaf99712f00ab13cdfefe339fbcf8ce986980"
+    },
+    {
+      "path": "build\\reaudit-20260907\\go-windows-redis.log",
+      "sha256": "f6cb699e9258e177b1c7d433dff34e7671fa8aac6d1d6bb25a18e4015450d60c"
+    },
+    {
+      "path": "build\\reaudit-20260907\\go-windows-empty-data.log",
+      "sha256": "bed65c6f33980bd0357acaed2429cfec7e68c306dcc843a5da3b4cf5a21b5f51"
+    },
+    {
+      "path": "build\\reaudit-20260907\\go-windows-vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build\\reaudit-20260907\\go-linux-unit.log",
+      "sha256": "5582030acf0c16bd01d2c4e0e68bda1a8dc647b0b0de1bee71600cbf9ff92dc6"
+    },
+    {
+      "path": "build\\reaudit-20260907\\go-linux-redis.log",
+      "sha256": "6756157a9a8ce4199a0155aff459b683ad96bec97dc72d0fc32eaa3874ccbe07"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-windows-unit.log",
+      "sha256": "620e38e82d41554d2cd6991579af07326716d99d78cee3382b44718cdcc97462"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-windows-workspace.log",
+      "sha256": "530dae5acffc7e7aee7f807ba0619ba154e0ecad99fae50a5766cc792d8c5782"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-windows-redis.log",
+      "sha256": "ba6117bffcb2cc5d4907457de7c2bcd0fae62aa1dc57aea5779d154ad10b16b1"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-windows-clippy.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-linux-unit.log",
+      "sha256": "97ce6aab8a7e89a1a0db8d588664a09983af50c59c4dee69d10127d36e1a472f"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-linux-redis.log",
+      "sha256": "ba7266ed70fd1012cbbaa3ad2c0bf44c87bc347587d6919ba6a890253a578bfe"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-linux-redis-regressions.log",
+      "sha256": "916293bdbc4f35866b4afe6e3be300ddc8860c1764dc6f8f171bb23be443fe26"
+    },
+    {
+      "path": "build\\reaudit-20260907\\cpp-windows-build.log",
+      "sha256": "991c4f1295cc9e7309f61b273a4ea3d9905a8e8ca11e567a59271a3d3a5185d4"
+    },
+    {
+      "path": "build\\reaudit-20260907\\cpp-windows-redis.log",
+      "sha256": "ce2de0f00daf9aa51cfd50fc6f6eb2d25695e8dc4f4f3fe4ca4e56a062064a90"
+    },
+    {
+      "path": "build\\reaudit-20260907\\cpp-windows-close-race.log",
+      "sha256": "6d3666617be6240538adc524b1ae7a6059274284124afe02014f9ee8ab00c026"
+    },
+    {
+      "path": "build\\reaudit-20260907\\cpp-linux-build.log",
+      "sha256": "10f753211f87aedff329d1ad8a9a030d8960319cf5a9821e877b46303e1d7eb3"
+    },
+    {
+      "path": "build\\reaudit-20260907\\cpp-linux-redis.log",
+      "sha256": "bc85c7bc377853fdf0b46be506008d321fe50a7a83fe4f9b3052f1a59556c107"
+    },
+    {
+      "path": "build\\reaudit-20260907\\cpp-format.log",
+      "sha256": "6e5ebe2ed4456fd23374b4688ce95a59bceb679018e91588dcdb238608e0cd73"
+    },
+    {
+      "path": "build\\reaudit-20260907\\csharp-windows-redis-net8.0.log",
+      "sha256": "d91b6689b1ed435f079dc63de4d96bdabd975dc1a8a0c154359e0c3ff9c99d95"
+    },
+    {
+      "path": "build\\reaudit-20260907\\csharp-windows-redis-net10.0.log",
+      "sha256": "d91b6689b1ed435f079dc63de4d96bdabd975dc1a8a0c154359e0c3ff9c99d95"
+    },
+    {
+      "path": "build\\reaudit-20260907\\go-rust-interop.log",
+      "sha256": "c55a487d4eb64cc6ae23cf4bcf865b6b31a9b93288b6c89ce6d35b9c7c0176cd"
+    },
+    {
+      "path": "build\\reaudit-20260907\\rust-interop-fetch.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build\\reaudit-20260907\\powershell-environment-success.log",
+      "sha256": "ad2e91d77a275fd03a9fe8a2e06f71e897167cbbdf0b9b69682b551bcd80ec7e"
+    },
+    {
+      "path": "build\\reaudit-20260907\\powershell-environment-failure.log",
+      "sha256": "2dfd898357072ee226f9c3bf16f96f65ab1e571de085905cdcac386757c1ee3e"
+    }
+  ]
+}

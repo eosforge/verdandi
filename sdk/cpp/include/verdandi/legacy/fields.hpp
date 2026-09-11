@@ -284,12 +284,12 @@ struct member_field {
     /// C ABI 中使用的稳定字段名；调用方必须提供静态生命周期文本。
     const char* name;
     /// 指向应用结构成员的类型安全指针。
-    Member Owner::*pointer;
+    Member Owner::* pointer;
 };
 
 /// 构造一个字段描述；`name` 必须在 Schema 静态对象的完整生命周期内有效。
 template <class Owner, class Member>
-member_field<Owner, Member> make_field(const char* name, Member Owner::*pointer) {
+member_field<Owner, Member> make_field(const char* name, Member Owner::* pointer) {
     member_field<Owner, Member> output = {name, pointer};
     return output;
 }

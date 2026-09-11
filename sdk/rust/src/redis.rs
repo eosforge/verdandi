@@ -21,6 +21,14 @@ const MAX_REDIS_FIELD_NAME_BYTES: usize = 1024;
 const MAX_REDIS_VALUE_BYTES: usize = 512 * 1024;
 const MAX_REDIS_HASH_BYTES: usize = 512 * 1024;
 
+/// 只接受 RESP 字符串或字节，避免驱动的通用转换拆开数组或把整数转成协议文本。
+pub(crate) fn reply_bytes(value: fred::types::Value) -> Option<Vec<u8>> {
+    match value {
+        fred::types::Value::String(_) | fred::types::Value::Bytes(_) => value.into_owned_bytes(),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy)]
 enum CommandKind {
     Read,

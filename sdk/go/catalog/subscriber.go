@@ -460,6 +460,10 @@ func (subscriber *Subscriber) getOrCreate(path Path, status Status) *Entry {
 	subscriber.entriesMu.Lock()
 	defer subscriber.entriesMu.Unlock()
 	if entry = subscriber.entries[path]; entry == nil {
+		// 与关闭的最终 Entry 扫描共用 entriesMu，迟到的 Find 只能创建 Closed。
+		if subscriber.closed.Load() || Status(subscriber.scopeStatus.Load()) == StatusClosed {
+			status = StatusClosed
+		}
 		entry = newEntry(path, status)
 		subscriber.entries[path] = entry
 	}

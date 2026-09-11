@@ -204,6 +204,23 @@ async fn checkpoint_restarts_with_zone_delta_and_field_patch() -> Result<()> {
 
     third.close().await?;
     client.close().await?;
+    // Closed handles intentionally stay alive while a new client acquires the
+    // same checkpoint file. Close must release the database independently of Drop.
+    let mut reopened_config = Config::new(&zone);
+    reopened_config.local_store_path = Some(store_path.clone());
+    let reopened = CatalogClient::open(&transport, reopened_config).await?;
+    let restored = Subscriber::new(
+        &reopened,
+        Subscription {
+            parts: vec!["routing".to_owned()],
+            ..Subscription::default()
+        },
+    )
+    .await?;
+    let restored_entry = restored.find(&path).ok_or_else(|| Error::field(Code::Missing, "checkpoint"))?;
+    wait_state(&restored_entry, Status::Present, current.revision).await?;
+    reopened.close().await?;
+    assert_eq!(restored_entry.status(), Status::Closed);
     transport.close().await?;
     drop(third);
     drop(publisher);

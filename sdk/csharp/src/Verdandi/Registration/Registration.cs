@@ -12,7 +12,6 @@ public sealed unsafe class Registration<TAttr, TData> : IDisposable
     where TData : IFieldValue<TData>
 {
     private readonly RegistrationHandle _handle;
-    private readonly SafeHandleLease<RegistrationClientHandle> _ownerLease;
     private int _disposed;
 
     /// <summary>
@@ -24,7 +23,7 @@ public sealed unsafe class Registration<TAttr, TData> : IDisposable
     private Registration(RegistrationHandle handle, SafeHandleLease<RegistrationClientHandle> ownerLease, string uuid)
     {
         _handle = handle;
-        _ownerLease = ownerLease;
+        _handle.AttachParent(ownerLease);
         Uuid = uuid;
     }
 
@@ -272,7 +271,6 @@ public sealed unsafe class Registration<TAttr, TData> : IDisposable
         }
 
         _handle.Dispose();
-        _ownerLease.Dispose();
         GC.SuppressFinalize(this);
     }
 

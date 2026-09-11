@@ -7,6 +7,26 @@ import (
 	"testing"
 )
 
+func TestLocalTypeOverridesPredeclaredScalarName(t *testing.T) {
+	directory := t.TempDir()
+	source := "package fixture\ntype uintptr []byte\ntype Attr struct { Token uintptr }\ntype Data struct { Power int64 }\n"
+	if err := os.WriteFile(filepath.Join(directory, "model.go"), []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	options := generatorOptions{directory: directory, attrName: "Attr", dataName: "Data", name: "Proxy", output: "reference_generated.go"}
+	if err := generate(options); err != nil {
+		t.Fatal(err)
+	}
+	generated, err := os.ReadFile(filepath.Join(directory, options.output))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(generated), "verdandiregistration.ReferenceSlice[uintptr, byte]") ||
+		!strings.Contains(string(generated), "return view.fieldToken.Clone()") {
+		t.Fatalf("shadowed uintptr must retain slice ownership:\n%s", generated)
+	}
+}
+
 func TestGenerateViewsEditorsAndCheckMode(t *testing.T) {
 	directory := t.TempDir()
 	source := `package fixture

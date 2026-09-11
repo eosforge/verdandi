@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/bits"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,26 +20,14 @@ import (
 	"time"
 
 	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/internal/teststats"
 	redis "github.com/redis/go-redis/v9"
 )
 
 const catalogSoakFieldBytes = 256
 
-type catalogSoakHistogram struct {
-	count   uint64
-	sum     uint64
-	maximum uint64
-	buckets [65]uint64
-}
-
-type catalogSoakDurationStats struct {
-	Count   uint64        `json:"count"`
-	P50     time.Duration `json:"p50_nanoseconds"`
-	P95     time.Duration `json:"p95_nanoseconds"`
-	P99     time.Duration `json:"p99_nanoseconds"`
-	Maximum time.Duration `json:"maximum_nanoseconds"`
-	Average time.Duration `json:"average_nanoseconds"`
-}
+type catalogSoakHistogram = teststats.Histogram
+type catalogSoakDurationStats = teststats.Summary
 
 type catalogSoakStats struct {
 	mu sync.Mutex
@@ -223,6 +210,7 @@ func TestCatalogSoak(t *testing.T) {
 	heartbeatDone := make(chan struct{})
 	go catalogSoakHeartbeats(t, runCtx, stats, collector, process, heartbeatDone)
 	started := time.Now()
+	t.Log("VERDANDI_SOAK_READY")
 	if err := catalogSoakMutate(
 		runCtx,
 		raw,
@@ -307,8 +295,8 @@ func TestCatalogSoak(t *testing.T) {
 	result.StaleRetries = stats.stale
 	result.ConvergenceChecks = stats.convergence
 	result.MaximumRevision = stats.maximumRevision
-	result.MutationLatency = stats.latency.snapshot()
-	result.ScheduleLag = stats.scheduleLag.snapshot()
+	result.MutationLatency = stats.latency.Snapshot()
+	result.ScheduleLag = stats.scheduleLag.Snapshot()
 	stats.mu.Unlock()
 	if len(result.UnexpectedAsyncErrors) != 0 {
 		t.Fatalf("unexpected asynchronous errors: %v", result.UnexpectedAsyncErrors)
@@ -454,9 +442,9 @@ func catalogSoakRecord(
 	stats.mu.Lock()
 	defer stats.mu.Unlock()
 	stats.attempts++
-	stats.scheduleLag.observe(lag)
+	stats.scheduleLag.Observe(lag)
 	if latency > 0 {
-		stats.latency.observe(latency)
+		stats.latency.Observe(latency)
 	}
 	if revision > stats.maximumRevision {
 		stats.maximumRevision = revision
@@ -647,7 +635,7 @@ func catalogSoakHeartbeats(
 				"transient_errors":      stats.transient,
 				"stale_retries":         stats.stale,
 				"maximum_revision":      stats.maximumRevision,
-				"mutation_p95_ns":       stats.latency.quantile(0.95),
+				"mutation_p95_ns":       stats.latency.Quantile(95),
 				"expected_async_errors": collector.expected.Load(),
 			}
 			stats.mu.Unlock()
@@ -662,58 +650,6 @@ func catalogSoakHeartbeats(
 			return
 		}
 	}
-}
-
-func (histogram *catalogSoakHistogram) observe(value time.Duration) {
-	if value < 0 {
-		value = 0
-	}
-	nanoseconds := uint64(value)
-	bucket := 0
-	if nanoseconds != 0 {
-		bucket = bits.Len64(nanoseconds)
-	}
-	histogram.buckets[bucket]++
-	histogram.count++
-	histogram.sum += nanoseconds
-	if nanoseconds > histogram.maximum {
-		histogram.maximum = nanoseconds
-	}
-}
-
-func (histogram catalogSoakHistogram) quantile(value float64) time.Duration {
-	if histogram.count == 0 {
-		return 0
-	}
-	target := uint64(float64(histogram.count-1)*value) + 1
-	var observed uint64
-	for bucket, count := range histogram.buckets {
-		observed += count
-		if observed >= target {
-			if bucket == 0 {
-				return 0
-			}
-			if bucket == 64 {
-				return time.Duration(histogram.maximum)
-			}
-			return time.Duration((uint64(1) << bucket) - 1)
-		}
-	}
-	return time.Duration(histogram.maximum)
-}
-
-func (histogram catalogSoakHistogram) snapshot() catalogSoakDurationStats {
-	result := catalogSoakDurationStats{
-		Count:   histogram.count,
-		P50:     histogram.quantile(0.50),
-		P95:     histogram.quantile(0.95),
-		P99:     histogram.quantile(0.99),
-		Maximum: time.Duration(histogram.maximum),
-	}
-	if histogram.count != 0 {
-		result.Average = time.Duration(histogram.sum / histogram.count)
-	}
-	return result
 }
 
 func catalogSoakInitialProcess() *catalogSoakProcessMonitor {

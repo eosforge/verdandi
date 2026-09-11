@@ -465,18 +465,24 @@ func requireRedisURL(t *testing.T) string {
 
 func runBounded(t *testing.T, count int, concurrency int, operation func(int) error) {
 	t.Helper()
-	semaphore := make(chan struct{}, concurrency)
-	errors := make(chan error, count)
+	if concurrency <= 0 {
+		t.Fatal("concurrency must be positive")
+	}
+	workers := min(count, concurrency)
+	errors := make(chan error, workers)
 	var wait sync.WaitGroup
-	for index := 0; index < count; index++ {
+	for start := range workers {
 		wait.Add(1)
-		go func(index int) {
+		go func() {
 			defer wait.Done()
-			semaphore <- struct{}{}
-			err := operation(index)
-			<-semaphore
-			errors <- err
-		}(index)
+			var first error
+			for index := start; index < count; index += workers {
+				if err := operation(index); err != nil && first == nil {
+					first = err
+				}
+			}
+			errors <- first
+		}()
 	}
 	wait.Wait()
 	close(errors)

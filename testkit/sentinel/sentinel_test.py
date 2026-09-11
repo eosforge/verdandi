@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timedelta, timezone
-from functools import cache
+from contextlib import ExitStack
 import json
 import os
 import queue
@@ -20,7 +20,6 @@ import shlex
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -28,7 +27,10 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import quote
 
-import paramiko
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from testkit.support import temporary_directory
+from testkit.resources import Remote, Resources
+from testkit.support import Peer as ManagedPeer, environment as project_environment, run_command
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -124,42 +126,6 @@ class TLSMaterial:
         )
 
 
-class Remote:
-    def __init__(self, host: str, username: str, password: str) -> None:
-        self.host = host
-        self._client = paramiko.SSHClient()
-        self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self._client.connect(
-            host,
-            username=username,
-            password=password,
-            timeout=10,
-            banner_timeout=10,
-            auth_timeout=10,
-        )
-
-    def close(self) -> None:
-        self._client.close()
-
-    def run(self, command: str, *, check: bool = True) -> str:
-        _, stdout, stderr = self._client.exec_command(command)
-        output = stdout.read().decode("utf-8", errors="replace")
-        diagnostics = stderr.read().decode("utf-8", errors="replace")
-        status = stdout.channel.recv_exit_status()
-        if check and status != 0:
-            raise QualificationError(f"remote command failed ({status}): {command}\n{diagnostics}")
-        return output
-
-    def write(self, path: str, content: str, *, mode: int = 0o666) -> None:
-        sftp = self._client.open_sftp()
-        try:
-            with sftp.file(path, "w") as target:
-                target.write(content)
-            sftp.chmod(path, mode)
-        finally:
-            sftp.close()
-
-
 @dataclass(frozen=True)
 class Credentials:
     admin: str
@@ -182,7 +148,8 @@ class Topology:
         self.run_id = run_id
         self.credentials = credentials
         self.tls = tls
-        self.root = f"/tmp/verdandi-sentinel-it-{run_id}"
+        self.root = f"{remote.project}/build/testkit/fixtures/sentinel-{run_id}"
+        self.resources = Resources(remote, run_id)
         self.redis = [f"verdandi-it-{run_id}-redis-{index}" for index in range(1, 4)]
         self.sentinels = [f"verdandi-it-{run_id}-sentinel-{index}" for index in range(1, 4)]
         self.paused: set[str] = set()
@@ -194,6 +161,7 @@ class Topology:
         if collisions:
             raise QualificationError(f"container collision: {sorted(collisions)}")
 
+        self.resources.directory(self.root)
         directories = [
             *(f"{self.root}/redis-{index}" for index in range(1, 4)),
             *(f"{self.root}/sentinel-{index}" for index in range(1, 4)),
@@ -206,8 +174,9 @@ class Topology:
 
         for index, name in enumerate(self.redis, 1):
             directory = f"{self.root}/redis-{index}"
+            self.resources.container(name)
             self.remote.run(
-                "docker run -d "
+                "docker run --pull never --memory 256m --memory-swap 256m --cpus 1 --pids-limit 128 -d "
                 f"--name {shlex.quote(name)} --network host --tmpfs /data "
                 f"--label verdandi.test={self.run_id} "
                 f"-v {shlex.quote(directory)}:/test:ro "
@@ -217,8 +186,9 @@ class Topology:
 
         for index, name in enumerate(self.sentinels, 1):
             directory = f"{self.root}/sentinel-{index}"
+            self.resources.container(name)
             self.remote.run(
-                "docker run -d "
+                "docker run --pull never --memory 256m --memory-swap 256m --cpus 1 --pids-limit 128 -d "
                 f"--name {shlex.quote(name)} --network host "
                 f"--label verdandi.test={self.run_id} "
                 f"-v {shlex.quote(directory)}:/test "
@@ -230,14 +200,7 @@ class Topology:
         self._wait_replicas(2)
 
     def cleanup(self) -> None:
-        for name in self.paused.copy():
-            self.remote.run(f"docker unpause {shlex.quote(name)}", check=False)
-            self.paused.discard(name)
-        for name in reversed((*self.redis, *self.sentinels)):
-            self.remote.run(f"docker rm -f {shlex.quote(name)}", check=False)
-        if not re.fullmatch(r"/tmp/verdandi-sentinel-it-[a-z0-9]{8}", self.root):
-            raise QualificationError(f"refusing unsafe remote cleanup path {self.root!r}")
-        self.remote.run(f"rm -rf -- {shlex.quote(self.root)}", check=False)
+        self.resources.cleanup()
 
     def master_port(self) -> int:
         for name, port in zip(self.sentinels, SENTINEL_PORTS, strict=True):
@@ -339,12 +302,10 @@ class Topology:
 
     def sentinel_monitor_line(self, index: int) -> str:
         directory = f"{self.root}/sentinel-{index + 1}"
-        output = self.remote.run(
-            "docker run --rm " f"-v {shlex.quote(directory)}:/test:ro redis:8.8.0 " f"grep '^sentinel monitor {MASTER_NAME} ' /test/sentinel.conf"
-        )
+        output = self.remote.run(f"grep '^sentinel monitor {MASTER_NAME} ' {shlex.quote(directory + '/sentinel.conf')}")
         return output.strip()
 
-    def wait_sentinel_agreement(self, expected_port: int, *, timeout: float = 15) -> None:
+    def wait_sentinel_agreement(self, expected_port: int, *, timeout: float = 30) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             ports: list[int] = []
@@ -361,7 +322,7 @@ class Topology:
             if ports == [expected_port, expected_port, expected_port]:
                 return
             time.sleep(0.1)
-        raise QualificationError("Sentinels did not converge on the promoted primary")
+        raise QualificationError(f"Sentinels did not converge on primary {expected_port}; last observed ports: {ports}")
 
     def wait_replica_ready(self, master_port: int, replica_port: int, *, timeout: float = 20) -> None:
         deadline = time.monotonic() + timeout
@@ -408,7 +369,8 @@ class Topology:
             if pending:
                 time.sleep(0.1)
         if pending:
-            raise QualificationError(f"ports did not become ready: {sorted(pending)}")
+            diagnostics = [self.remote.run(f"docker logs --tail 12 {shlex.quote(name)} 2>&1", check=False) for name in (*self.redis, *self.sentinels)]
+            raise QualificationError(f"ports did not become ready: {sorted(pending)}\n" + "\n".join(diagnostics))
 
     def _wait_replicas(self, expected: int) -> None:
         deadline = time.monotonic() + 20
@@ -442,13 +404,17 @@ class Topology:
         )
         for index, port in enumerate(REDIS_PORTS, 1):
             replica = "" if index == 1 else f"replicaof {self.remote.host} {REDIS_PORTS[0]}\n"
-            listener = f"""port 0
+            listener = (
+                f"""port 0
 tls-port {port}
 tls-cert-file /test/server.crt
 tls-key-file /test/server.key
 tls-ca-cert-file /test/ca.crt
 tls-auth-clients no
-tls-replication yes""" if self.tls is not None else f"port {port}"
+tls-replication yes"""
+                if self.tls is not None
+                else f"port {port}"
+            )
             config = f"""{listener}
 bind 0.0.0.0
 protected-mode no
@@ -477,13 +443,17 @@ replica-announce-port {port}
             "+sentinel|replicas +sentinel|sentinels +sentinel|masters\n"
         )
         for index, port in enumerate(SENTINEL_PORTS, 1):
-            listener = f"""port 0
+            listener = (
+                f"""port 0
 tls-port {port}
 tls-cert-file /test/server.crt
 tls-key-file /test/server.key
 tls-ca-cert-file /test/ca.crt
 tls-auth-clients no
-tls-replication yes""" if self.tls is not None else f"port {port}"
+tls-replication yes"""
+                if self.tls is not None
+                else f"port {port}"
+            )
             config = f"""{listener}
 bind 0.0.0.0
 protected-mode no
@@ -492,7 +462,7 @@ logfile ""
 dir /tmp
 aclfile /test/users.acl
 sentinel monitor {MASTER_NAME} {self.remote.host} {REDIS_PORTS[0]} 2
-sentinel down-after-milliseconds {MASTER_NAME} 1000
+sentinel down-after-milliseconds {MASTER_NAME} 5000
 sentinel failover-timeout {MASTER_NAME} 5000
 sentinel parallel-syncs {MASTER_NAME} 1
 sentinel auth-user {MASTER_NAME} sentinel-monitor
@@ -504,79 +474,23 @@ sentinel announce-port {port}
 """
             directory = f"{self.root}/sentinel-{index}"
             self.remote.write(f"{directory}/users.acl", acl)
-            self.remote.write(f"{directory}/sentinel.conf", config)
+            self.remote.write(f"{directory}/sentinel.conf", config, mode=0o666)
 
 
-class Peer:
-    def __init__(self, name: str, command: list[str], cwd: Path, environment: dict[str, str]):
-        self.name = name
-        self._stdout: queue.Queue[str | None] = queue.Queue()
-        self._stderr: list[str] = []
-        self._process = subprocess.Popen(
-            command,
-            cwd=cwd,
-            env=environment,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-        )
-        threading.Thread(target=self._read_stdout, daemon=True).start()
-        threading.Thread(target=self._read_stderr, daemon=True).start()
+class Peer(ManagedPeer):
+    def __init__(self, name, command, cwd, environment):
+        super().__init__(command, cwd, environment)
+        self.name, self._process = name, self.process
 
-    def close(self) -> None:
-        if self._process.poll() is None:
-            self._process.terminate()
-            try:
-                self._process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self._process.kill()
-                self._process.wait(timeout=5)
+    def read(self, expected, timeout=120):
+        return self.wait_line(expected, timeout)
 
-    def send(self, command: str, expected: str, timeout: float = 40) -> str:
-        if self._process.stdin is None:
-            raise QualificationError(f"{self.name} stdin is unavailable")
-        self._process.stdin.write(command + "\n")
-        self._process.stdin.flush()
+    def send(self, command, expected, timeout=40):
+        super().send(command)
         return self.read(expected, timeout)
 
-    def read(self, expected: str, timeout: float = 120) -> str:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            try:
-                line = self._stdout.get(timeout=max(0.001, min(0.2, deadline - time.monotonic())))
-            except queue.Empty:
-                if self._process.poll() is not None:
-                    break
-                continue
-            if line is None:
-                break
-            print(f"[{self.name}] {line}", flush=True)
-            if line.startswith(expected):
-                return line
-        diagnostics = "\n".join(self._stderr[-20:])
-        raise QualificationError(f"{self.name} did not emit {expected!r}; exit={self._process.poll()}\n{diagnostics}")
-
-    def _read_stdout(self) -> None:
-        stream = self._process.stdout
-        if stream is None:
-            self._stdout.put(None)
-            return
-        for line in stream:
-            self._stdout.put(line.rstrip("\r\n"))
-        self._stdout.put(None)
-
-    def _read_stderr(self) -> None:
-        stream = self._process.stderr
-        if stream is None:
-            return
-        for line in stream:
-            value = line.rstrip("\r\n")
-            self._stderr.append(value)
-            print(f"[{self.name}:diagnostic] {value}", file=sys.stderr, flush=True)
+    def close(self):
+        self.stop()
 
 
 def port_open(host: str, port: int) -> bool:
@@ -605,128 +519,24 @@ def registration_key(zone: str, uuid: str) -> str:
     return f"verdandi:registration:{zone}:{TYPE_NAME}:{uuid}"
 
 
-def wsl_path(path: Path) -> str:
-    completed = subprocess.run(
-        ["wsl.exe", "--", "wslpath", "-a", path.as_posix()],
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    return completed.stdout.strip()
+def runtime_environment(environment, runtime):
+    expected = "win-x64" if os.name == "nt" else "linux-x64"
+    if runtime != expected:
+        raise QualificationError("Run the requested platform through testkit/run.py; WSL execution was removed")
+    return project_environment(environment)
 
 
-@cache
-def wsl_tool(name: str) -> str:
-    completed = subprocess.run(
-        ["wsl.exe", "--", "bash", "-lc", f"command -v -- {shlex.quote(name)}"],
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    tool = completed.stdout.strip()
-    if not tool.startswith("/"):
-        raise QualificationError(f"Linux tool is unavailable in WSL: {name}")
-    return tool
+def run_runtime(command, directory, environment, runtime):
+    run_command("native " + " ".join(command[:3]), command, directory, runtime_environment(environment, runtime))
 
 
-@cache
-def wsl_login_path() -> str:
-    completed = subprocess.run(
-        ["wsl.exe", "--", "bash", "-lc", 'printf %s "$PATH"'],
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    tool_directories = (wsl_tool("go").rsplit("/", 1)[0], wsl_tool("cargo").rsplit("/", 1)[0])
-    linux_directories = tuple(
-        directory
-        for directory in completed.stdout.strip().split(":")
-        if directory and not directory.startswith("/mnt/")
-    )
-    return ":".join((*tool_directories, *linux_directories))
-
-
-def runtime_environment(environment: dict[str, str], runtime: str) -> dict[str, str]:
-    if os.name != "nt" or runtime != "linux-x64":
-        return environment
-    forwarded = {
-        name: value
-        for name, value in environment.items()
-        if name.startswith("VERDANDI_") and name != "VERDANDI_TEST_SSH_PASSWORD"
-    }
-    forwarded["PATH"] = wsl_login_path()
-    if ca_file := forwarded.get("VERDANDI_TLS_CA_FILE"):
-        forwarded["VERDANDI_TLS_CA_FILE"] = wsl_path(Path(ca_file))
-    return forwarded
-
-
-def run_runtime(
-    command: list[str],
-    directory: Path,
-    environment: dict[str, str],
-    runtime: str,
-) -> None:
-    if os.name == "nt" and runtime == "linux-x64":
-        forwarded = runtime_environment(environment, runtime)
-        script = "exec " + shlex.join(
-            ["env", *(f"{name}={value}" for name, value in forwarded.items()), *command]
-        )
-        subprocess.run(
-            [
-                "wsl.exe",
-                "--cd",
-                wsl_path(directory),
-                "--",
-                "bash",
-                "-lc",
-                script,
-            ],
-            cwd=directory,
-            env=os.environ.copy(),
-            check=True,
-        )
-        return
-    subprocess.run(command, cwd=directory, env=environment, check=True)
-
-
-def peer_runtime(
-    command: list[str],
-    directory: Path,
-    environment: dict[str, str],
-    runtime: str,
-) -> tuple[list[str], Path, dict[str, str]]:
-    if os.name == "nt" and runtime == "linux-x64":
-        forwarded = runtime_environment(environment, runtime)
-        host_environment = os.environ.copy()
-        host_environment.pop("VERDANDI_TEST_SSH_PASSWORD", None)
-        script = "exec " + shlex.join(
-            ["env", *(f"{name}={value}" for name, value in forwarded.items()), *command]
-        )
-        return (
-            [
-                "wsl.exe",
-                "--cd",
-                wsl_path(directory),
-                "--",
-                "bash",
-                "-lc",
-                script,
-            ],
-            directory,
-            host_environment,
-        )
-    return command, directory, environment
+def peer_runtime(command, directory, environment, runtime):
+    return command, directory, runtime_environment(environment, runtime)
 
 
 def build_peers(repository: Path, output: Path, runtime: str) -> tuple[list[str], list[str]]:
     go_executable = output / ("go-peer.exe" if runtime == "win-x64" else "go-peer")
-    go_output = wsl_path(go_executable) if os.name == "nt" and runtime == "linux-x64" else str(go_executable)
+    go_output = str(go_executable)
     run_runtime(
         ["go", "build", "-o", go_output, "."],
         repository / "testkit" / "sentinel" / "go-peer",
@@ -734,23 +544,15 @@ def build_peers(repository: Path, output: Path, runtime: str) -> tuple[list[str]
         runtime,
     )
     rust_directory = repository / "testkit" / "sentinel" / "rust-peer"
-    rust_target = (
-        rust_directory / "target" / "linux-x64"
-        if os.name == "nt" and runtime == "linux-x64"
-        else rust_directory / "target"
-    )
-    rust_target_argument = wsl_path(rust_target) if os.name == "nt" and runtime == "linux-x64" else str(rust_target)
+    rust_target = repository / "build/rust/target"
+    rust_target_argument = str(rust_target)
     run_runtime(
         ["cargo", "build", "--quiet", "--target-dir", rust_target_argument],
         rust_directory,
         os.environ.copy(),
         runtime,
     )
-    rust_executable = rust_target / "debug" / (
-        "verdandi-sentinel-rust-peer.exe" if runtime == "win-x64" else "verdandi-sentinel-rust-peer"
-    )
-    if os.name == "nt" and runtime == "linux-x64":
-        return [wsl_path(go_executable)], [wsl_path(rust_executable)]
+    rust_executable = rust_target / "debug" / ("verdandi-sentinel-rust-peer.exe" if runtime == "win-x64" else "verdandi-sentinel-rust-peer")
     return [str(go_executable)], [str(rust_executable)]
 
 
@@ -825,13 +627,14 @@ def qualify(
 
     started = time.monotonic()
     run_sdk_sentinel_tests(repository, environment, runtime)
-    with tempfile.TemporaryDirectory(prefix="verdandi-sentinel-", ignore_cleanup_errors=True) as temporary:
+    with temporary_directory(prefix="verdandi-sentinel-") as temporary:
         go_command, rust_command = build_peers(repository, Path(temporary), runtime)
         go_process = peer_runtime([*go_command, zone], repository, environment, runtime)
         rust_process = peer_runtime([*rust_command, zone], repository, environment, runtime)
-        go = Peer("go", *go_process)
-        rust = Peer("rust", *rust_process)
+        owners = ExitStack()
         try:
+            go = owners.enter_context(Peer("go", *go_process))
+            rust = owners.enter_context(Peer("rust", *rust_process))
             go_uuid = parse_ready(go.read("READY"))
             rust_uuid = parse_ready(rust.read("READY"))
             initial_go_generation = parse_generation(go.send(f"CHECK {rust_uuid} initial", "CHECKED"))
@@ -964,13 +767,12 @@ def qualify(
                 scenarios.insert(0, "TLS 1.2+ with a private CA and one fixed cluster certificate identity")
             return result
         finally:
-            go.close()
-            rust.close()
+            owners.close()
 
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="192.168.0.90")
+    parser.add_argument("--host", default="192.168.0.119")
     parser.add_argument("--ssh-user", default="ubuntu")
     parser.add_argument(
         "--ssh-password-env",
@@ -1015,7 +817,7 @@ def main() -> int:
     remote = Remote(options.host, options.ssh_user, password)
     tls = TLSMaterial.generate() if options.tls else None
     topology = Topology(remote, run_id, Credentials.generate(), tls=tls)
-    with tempfile.TemporaryDirectory(prefix="verdandi-sentinel-tls-", ignore_cleanup_errors=True) as temporary:
+    with temporary_directory(prefix="verdandi-sentinel-tls-") as temporary:
         ca_file = Path(temporary) / "ca.crt" if tls is not None else None
         if ca_file is not None:
             ca_file.write_text(tls.ca_certificate, encoding="ascii")

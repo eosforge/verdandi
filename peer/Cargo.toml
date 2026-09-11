@@ -1,0 +1,40 @@
+[workspace]
+members = ["common", "star", "planet"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/eosforge/verdandi"
+publish = false
+
+
+[workspace.dependencies]
+verdandi-peer-common = { path = "common" }
+prost = "=0.14.4"
+tokio = { version = "=1.53.1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util = { version = "=0.7.19", features = ["rt"] }
+serde_json = "=1.0.151"
+ring = "=0.17.14"
+rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std"] }
+rustls-pemfile = "=2.2.0"
+tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring"] }
+tonic = { version = "=0.14.6", default-features = false, features = ["transport", "codegen", "router"] }
+tonic-prost = "=0.14.6"
+tokio-stream = "=0.1.19"
+hyper-util = { version = "=0.1.20", features = ["tokio"] }
+tower = { version = "=0.5.3", default-features = false, features = ["util"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[workspace.lints.clippy]
+all = "deny"
+unwrap_used = "deny"
+expect_used = "deny"

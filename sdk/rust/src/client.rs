@@ -8,6 +8,7 @@ use fred::types::Builder;
 use fred::types::config::{Config as FredConfig, ConnectionConfig, DynamicPoolConfig, PerformanceConfig, ReconnectPolicy};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::AbortOnDropHandle;
 
 use crate::config::Config;
 use crate::error::{Code, Error, Result};
@@ -25,6 +26,7 @@ struct Inner {
     fred_performance: PerformanceConfig,
     fred_policy: ReconnectPolicy,
     driver: fred::clients::DynamicPool,
+    connections: Vec<ConnectionTask>,
     timeout: Duration,
     connect_timeout: Duration,
     pool_max: usize,
@@ -40,6 +42,30 @@ struct Inner {
 /// CommandGuard 统计正在等待结果的命令数，使动态连接池只在真实并发压力下扩展。
 pub(crate) struct CommandGuard {
     owner: Arc<Inner>,
+}
+
+/// 从 connect 返回的第一刻起拥有驱动任务；构造 future 被取消时也不会分离连接任务。
+pub(crate) struct ConnectionTask {
+    task: AsyncMutex<Option<AbortOnDropHandle<FredResult<()>>>>,
+}
+
+impl ConnectionTask {
+    /// 同步登记连接任务的取消责任，调用方随后可等待握手。
+    pub(crate) fn start<C: ClientLike>(client: &C) -> Self {
+        Self {
+            task: AsyncMutex::new(Some(AbortOnDropHandle::new(client.connect()))),
+        }
+    }
+
+    /// 终止并汇合驱动任务；取消等待或并发调用不会丢失剩余清理责任。
+    pub(crate) async fn close(&self) {
+        let mut task = self.task.lock().await;
+        if let Some(running) = task.as_mut() {
+            running.abort();
+            let _ = running.await;
+            *task = None;
+        }
+    }
 }
 
 impl Drop for CommandGuard {
@@ -82,17 +108,15 @@ impl Client {
         let fred_connection = builder.get_connection_config().clone();
         let fred_performance = builder.get_performance_config().clone();
         let driver = builder.build_dynamic_pool().map_err(|error| Error::driver(Code::Invalid, error))?;
-        // 驱动初始化只包含建连和内部握手，使用 connect_timeout；普通 PING 随后使用 timeout。
-        tokio::time::timeout(config.connect_timeout, driver.init())
-            .await
-            .map_err(|error| Error::driver(Code::Deadline, error))?
-            .map_err(|error| Error::driver(Code::Unavailable, error))?;
+        // 新池只有固定最小连接；逐一接管 connect 句柄，避免 DynamicPool::init 被取消时遗留其内部任务。
+        let connections = driver.clients().map(|client| ConnectionTask::start(&client)).collect();
         let inner = Arc::new(Inner {
             fred_config,
             fred_connection,
             fred_performance,
             fred_policy: reconnect_policy,
             driver,
+            connections,
             timeout: config.timeout,
             connect_timeout: config.connect_timeout,
             pool_max: config.pool.max_connections,
@@ -105,6 +129,20 @@ impl Client {
             close_error: Mutex::new(None),
         });
         let client = Self { inner };
+        let initialized = tokio::time::timeout(config.connect_timeout, async {
+            for driver in client.inner.driver.clients() {
+                driver.wait_for_connect().await?;
+            }
+            Ok::<(), fred::error::Error>(())
+        })
+        .await
+        .map_err(|error| Error::driver(Code::Deadline, error))
+        .and_then(|result| result.map_err(|error| Error::driver(Code::Unavailable, error)));
+        if let Err(error) = initialized {
+            client.inner.start_shutdown();
+            client.inner.finish_close().await;
+            return Err(error);
+        }
         if let Err(error) = client.command::<String, _>(client.driver().ping(None), Code::Unavailable).await {
             // 初始化尚未向调用方转移所有权；失败路径在返回前完成有界 Fred 清理。
             client.inner.start_shutdown();
@@ -203,6 +241,9 @@ impl Client {
     /// 因而连接故障不会把整个命令路径串行化。
     pub(crate) async fn begin_command(&self) -> CommandGuard {
         let active = self.inner.commands.fetch_add(1, Ordering::AcqRel) + 1;
+        let guard = CommandGuard {
+            owner: Arc::clone(&self.inner),
+        };
         if active > self.inner.driver.size() && self.inner.driver.size() < self.inner.pool_max {
             if let Ok(_gate) = self.inner.scale_gate.try_lock() {
                 if active > self.inner.driver.size() && self.inner.driver.size() < self.inner.pool_max {
@@ -210,9 +251,7 @@ impl Client {
                 }
             }
         }
-        CommandGuard {
-            owner: Arc::clone(&self.inner),
-        }
+        guard
     }
 }
 
@@ -258,9 +297,16 @@ impl Inner {
             Ok(Err(error)) => Some(Error::driver(Code::Unavailable, error)),
             Err(error) => Some(Error::driver(Code::Deadline, error)),
         };
+        for connection in &self.connections {
+            connection.close().await;
+        }
         if let Ok(mut stored) = self.close_error.lock() {
             *stored = error;
         }
         self.close_finished.store(true, Ordering::Release);
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/internal/client.rs"]
+mod tests;

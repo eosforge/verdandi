@@ -1,9 +1,11 @@
 # Verdandi Native Build Guide
 
-Verdandi provides one platform entry point in this directory:
+Verdandi uses one standard-library Python implementation in this directory:
 
-- Windows x64: `build.ps1`;
-- Linux x64: `build.sh`.
+- `build.py` owns dependency policy, probes, cache layout and build/test stages;
+- `build_support.py` owns process cleanup and Windows/Linux tool discovery;
+- Windows `build.ps1` and Linux `build.sh` preserve convenient platform entry
+  points and forward to the same implementation.
 
 These scripts build and test only the C++23 core, C ABI, and C++11/14/17 Legacy
 consumers. Go, Rust, and C# use their own language toolchains and are never
@@ -11,14 +13,24 @@ compiled by these native scripts. A C# application only needs the shared
 `verdandi_cpp` runtime placed in one of its documented native-library search
 locations.
 
-The scripts contain detailed Chinese maintainer comments for the current review
-phase. Help, progress, diagnostics, warnings, errors, and successful command
+Python 3.10 or newer is required. Ordinary builds use only its standard library;
+Black is a maintainer formatting tool and is not a build-time package dependency.
+Help, progress, diagnostics, warnings, errors, and successful command
 summaries are emitted in standard English so local and CI logs are consistent.
 
 ## Quick start
 
 Run commands from the repository root. The scripts resolve every source path
 from their own location, so another working directory is also safe.
+Prepare OpenSSL externally first. Obtain approval for each specific dependency
+download before an online configure; use `-Offline`/`--offline` for local caches.
+
+The same command works on Windows and Linux when an existing interpreter is
+available as `python` (use `python3` where appropriate):
+
+```text
+python -B sdk/cpp/build.py all --profile dev --linkage shared --offline --jobs 1
+```
 
 Windows:
 
@@ -26,6 +38,7 @@ Windows:
 ./sdk/cpp/build.ps1 doctor
 ./sdk/cpp/build.ps1 all -Profile dev
 ./sdk/cpp/build.ps1 all -Profile release -Linkage shared
+./sdk/cpp/build.ps1 doctor -Python 'C:\path to existing Python\python.exe'
 ```
 
 Linux:
@@ -34,9 +47,55 @@ Linux:
 bash sdk/cpp/build.sh doctor
 bash sdk/cpp/build.sh all --profile dev
 bash sdk/cpp/build.sh all --profile release --linkage shared
+bash sdk/cpp/build.sh --python /path/to/existing/python3 doctor
 ```
 
+The Windows wrapper checks existing Python commands and the standard
+`~/.local/bin/python.exe` location used by uv, and skips empty Windows Store
+placeholders. The Linux wrapper uses `python3` by default. Neither wrapper runs
+a Python package manager, installs Python, activates an environment, or changes
+the parent terminal. An explicit interpreter selection overrides discovery.
+
 ## Commands
+
+### Catalog checks without external SDK dependencies
+
+The standalone test project below requires only an existing C++23 compiler,
+its standard library, and CMake. It neither includes the full SDK project nor
+declares OpenSSL, Boost, SQLite, yyjson, or FetchContent dependencies. Use it
+to check Catalog shapes, byte limits, UTF-8, numeric Array ordering, the
+Replace argument ABI, and detached argument ownership before restoring SDK
+dependencies:
+
+```text
+cmake -S sdk/cpp/tests/offline -B build/catalog-offline -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+cmake --build build/catalog-offline --config Release
+ctest --test-dir build/catalog-offline -C Release --output-on-failure
+```
+
+On Windows, use a configured x64 MSVC developer shell; `-G "NMake Makefiles"`
+is available when the Visual Studio generator cannot discover an installed
+instance. Keep externally supplied package-manager toolchain files disabled
+for this dependency-free project.
+
+Add `-DVERDANDI_BUILD_BENCHMARKS=ON` at configure time to build
+`verdandi_cpp_catalog_value_benchmark`, which prints JSON timing and allocation
+measurements for successful Map and Patch validation. Input construction and
+JSON output are outside the measured region. The benchmark replaces the
+executable's allocation functions to count requests; it is not a Redis or
+end-to-end SDK benchmark.
+
+The same regression source is part of the normal SDK CTest matrix. Passing
+the standalone project does not qualify the full runtime, bindings, Redis,
+Sentinel, TLS, or checkpoint I/O.
+
+The standalone project also tests the production MessagePack notification
+field decoder. It verifies numeric Array Replace order, lexical Map/Patch
+order, decimal-width transitions, truncated fields, count limits, and owned
+binary values. This directly checks the field reader used by the Subscriber;
+it does not execute the complete notification envelope or recovery loop.
+
+### Full native build commands
 
 | Command | Contract |
 | --- | --- |
@@ -98,22 +157,70 @@ invoke the .NET SDK.
 
 ### Dependency policy
 
+The shared resolver has standard-library offline regressions. Optional shell
+checks exercise the real adapters with argument-reporting fixtures; CMake
+checks retain the early installation guards and package-boundary regressions.
+
+```text
+python sdk/cpp/tests/dependency_policy_test.py --work-dir build/dependency-policy-tests --cmake cmake --powershell powershell
+python sdk/cpp/tests/dependency_policy_test.py --work-dir build/dependency-policy-tests --cmake cmake --bash bash
+```
+
+Repeat `--powershell` to check both Windows PowerShell 5.1 and PowerShell 7.
+The shared tests also cover failure short-circuiting, child environment/cwd,
+argument boundaries, dry-run writes, native tool selection and timeout cleanup
+of compiler grandchildren. Each run keeps isolated fixtures under `--work-dir`.
+
+These check search order, failure handling, and installation guards; they do
+not replace real OpenSSL linking or platform runtime qualification.
+
 - `system`: require every dependency to be visible to CMake and forbid
   FetchContent/vcpkg downloads;
-- `auto`: prefer compatible system packages, use an existing vcpkg for OpenSSL
-  when necessary, and use locked FetchContent fallbacks for Boost, SQLite, and
-  yyjson;
-- `managed`: require an existing vcpkg for OpenSSL and use Verdandi's locked
-  FetchContent revisions for Boost, SQLite, and yyjson.
+- `auto`: try system OpenSSL, an already installed vcpkg OpenSSL package, then
+  the project prebuilt cache. Other libraries prefer system packages and retain
+  locked FetchContent source fallbacks;
+- `managed`: skip system OpenSSL and try installed vcpkg packages followed by
+  the prebuilt cache; use locked source revisions for Boost, SQLite, and yyjson.
 
 Verdandi never installs a compiler, Windows/Linux SDK, CMake, Ninja, Make,
-LLVM, or vcpkg. It also never downloads and builds OpenSSL directly.
-When OpenSSL 3.0 or newer is not usable as a system package, `auto` can invoke
-an already installed vcpkg using `vcpkg.json`. If neither provider exists, the
-script stops with installation guidance.
+LLVM, or vcpkg. OpenSSL acquisition and compilation are external responsibilities:
+even cached sources must never trigger an automatic OpenSSL build. Both CMake
+entry points disable `VCPKG_MANIFEST_INSTALL` before loading a toolchain. The
+native scripts also disable vcpkg app-local deployment; prepare matching DLLs
+beside consuming executables or on their runtime search path externally.
 
-Every downloaded source has a pinned revision and checksum or a pinned vcpkg
-baseline. Network operations have bounded total and inactivity timeouts.
+OpenSSL lookup uses these concrete locations:
+
+1. System discovery, including `OPENSSL_ROOT_DIR` and `CMAKE_PREFIX_PATH`.
+2. `<vcpkg-root>/installed/x64-windows` or `installed/x64-linux`. Set the
+   `VCPKG_INSTALLED_DIR` environment variable to reuse another existing install
+   tree, including one prepared externally from the retained `vcpkg.json`.
+3. An extracted development package at `build/deps/openssl/windows/x64` or
+   `build/deps/openssl/linux/x64`, with `include/openssl` and libraries in the
+   package's CMake-discoverable library layout. Other locations can be supplied
+   explicitly through `OPENSSL_ROOT_DIR`.
+4. If unavailable, report the required platform, development files, and cache
+   path. Obtain explicit approval for a specific binary package before download.
+5. If no compatible binary package exists, report that OpenSSL must be built
+   externally; do not start source compilation or install Perl/NASM/tools.
+
+Each available candidate must pass an actual C++23/OpenSSL compile/link probe
+for the selected Debug or Release profile. vcpkg/cache headers and Crypto/SSL
+libraries must resolve inside the selected package. A package-manager executable,
+source archive, or runtime-only DLL/SO is insufficient. Probes do not execute the
+binary, certify package provenance, or qualify runtime ABI/TLS behavior. Linux
+packages must match the target libc/distribution. Use a fresh CMake tree when
+replacing a package or changing its ABI; the fixed cache path holds one externally
+prepared package per platform/architecture.
+
+SQLite's amalgamated C source and yyjson's C sources still compile with the
+project; the selected Boost headers/Redis implementation compile in project
+translation units. This OpenSSL policy does not require external builds for
+those dependencies. Their source downloads still require prior approval.
+
+Every FetchContent source has a pinned revision and checksum. Network operations
+have bounded total and inactivity timeouts. The vcpkg manifest remains an input
+for external preparation, not an automatic restore instruction.
 
 ### Generator and compiler
 
@@ -134,11 +241,12 @@ Ninja is therefore optional on both platforms.
 
 ### Offline and dry-run
 
-`-Offline`/`--offline` forbids new FetchContent and vcpkg downloads.
+`-Offline`/`--offline` forbids new FetchContent downloads. OpenSSL acquisition is
+always external, regardless of this flag.
 Fallback dependencies are populated from checksum-verified local archive URLs,
 so a new build tree can be configured from the shared cache without network
 access. A missing or corrupt archive is a terminal error and never falls back
-to its remote URL. vcpkg receives `--no-downloads`. A valid cached archive is
+to its remote URL. vcpkg manifest installation is always disabled. A valid cached archive is
 also preferred online,
 which keeps FetchContent metadata stable when developers switch between online
 and offline invocations. In online mode only, a corrupt cache entry falls back
@@ -158,24 +266,25 @@ be in `1..256`.
 
 Common:
 
+- Python 3.10 or newer (standard library only);
 - CMake 3.28 or newer;
 - an actual C++23 compiler/standard library capable of `std::expected`;
-- OpenSSL 3.0 or newer, provided by the system or an existing vcpkg;
+- an already compiled OpenSSL 3.0+ development package;
 - network access for the first non-system dependency restore, unless all
   artifacts are already cached.
 
 Windows x64:
 
-- PowerShell;
+- PowerShell when using the `.ps1` compatibility entry;
 - Visual Studio with Desktop development with C++ and a Windows SDK;
 - `clang-format` when the `check` profile is selected.
 
 Linux x64:
 
-- Bash;
+- Bash when using the `.sh` compatibility entry;
 - GCC or Clang with C++23 library support;
 - Ninja or GNU Make;
-- an OpenSSL development package, or an existing Linux vcpkg;
+- an OpenSSL development package matching the Linux target;
 - `clang-format` and `run-clang-tidy` when `check` is selected.
 
 macOS and Redis Cluster are intentionally outside the supported build/runtime
@@ -201,6 +310,9 @@ An explicit path is strict: a missing directory, incomplete layout, or failed
 Automatically discovered broken candidates are skipped. Linux accepts only a
 native executable named `vcpkg`; it never attempts to use a Windows
 `vcpkg.exe` exposed through WSL.
+Finding vcpkg does not establish OpenSSL availability: its installed triplet
+must contain the headers and linkable libraries. No install, binary-cache
+restore, or source build is invoked by the native entry points.
 
 ## Console and diagnostic contract
 
@@ -215,9 +327,13 @@ localized text despite that request. The wrapper still reports the complete
 command, selected configuration, result, and elapsed time, while failures
 retain the underlying tool diagnostics.
 
-The source comments in `build.ps1` and `build.sh` are intentionally detailed
-Chinese during the maintainer-review phase. Comments never appear in console
-output and do not change the English logging contract.
+The Python implementation passes diagnostic language settings only to child
+processes. Commands are launched with argument arrays and inherit streaming
+output; probe logs stream to files instead of accumulating compilation output
+in memory. Failed commands stop the sequence and preserve their nonzero exit
+code. Interrupts return 130 and stop the active command's owned process tree.
+PowerShell reuses `sdk/run-tool.ps1` for lossless native argument forwarding,
+including Windows PowerShell 5.1. Its entry file retains a UTF-8 BOM for 5.1.
 
 ## Output and cache layout
 
@@ -229,8 +345,7 @@ build/
   cpp/<platform>/x64/<compiler>/<generator>/<openssl>/<dependency-policy>/<profile>-<linkage>/
   deps/<platform>/x64/<compiler>/<generator>/<openssl>/<dependency-policy>/<profile>-<linkage>/
   deps/common/downloads/fetchcontent/
-  deps/common/downloads/vcpkg/
-  deps/common/vcpkg-binary-cache/<platform>/x64/<compiler>/
+  deps/openssl/<platform>/x64/  # externally prepared development package
   probes/<platform>/x64/<compiler>/<generator>/
   environment.json
 ```
@@ -239,19 +354,33 @@ Downloaded archives are immutable and checksum-verified, so they are shared
 across dependency policies, profiles, and linkage modes. Extracted sources and
 compiled dependency objects remain isolated per native build tree. The policy
 dimension prevents `auto`, `system`, and `managed` from reusing a CMake cache
-whose dependency sources were resolved under different rules. vcpkg downloads
-and binary packages are shared by compatible platform/compiler ABI, while each
-CMake tree gets its own manifest installation.
-
-vcpkg's transient `buildtrees` and `packages` directories remain at the vcpkg
-installation's stable default location. Experimental redirection changes its
-package ABI and defeats cross-profile binary-cache reuse. They are not runtime
-or distribution inputs.
+whose dependency sources were resolved under different rules. vcpkg installed
+packages are consumed in place; the scripts do not populate vcpkg downloads,
+binary caches, buildtrees, packages, or per-build manifest installations.
 
 `build/environment.json` records the most recent invocation's selected paths,
-tool versions, provider, profile, linkage, and dependency policy. It must not be
+tool versions (including the actual Python executable), provider, profile,
+linkage, and dependency policy. It must not be
 treated as a release manifest; formal installation, export, packaging, signing,
 and artifact publication remain separate release work.
+
+## Maintaining the Python entry
+
+Use the repository's Black configuration for the three handwritten Python files:
+
+```text
+python -m black --config testkit/pyproject.toml sdk/cpp/build.py sdk/cpp/build_support.py sdk/cpp/tests/dependency_policy_test.py
+```
+
+The formatter is pinned in `sdk/cpp/requirements-dev.txt`.
+The maintainer-approved local Black environment is `build/tools/python-build`;
+its download cache is `build/deps/pip` and formatter cache is
+`build/cache/black`. These paths are ignored by Git. Python package acquisition
+still requires separate approval. No Redis, SSH or cryptography Python package
+is required for the build entry or its offline policy tests.
+For this local environment, replace `python` in the formatting command with
+`build/tools/python-build/Scripts/python.exe` on Windows (or the environment's
+`bin/python` on Linux). No environment activation is necessary.
 
 ## Existing CMake presets
 

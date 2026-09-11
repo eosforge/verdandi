@@ -1,5 +1,23 @@
 # Verdandi Testkit
 
+The independent Star/Planet/Supervisor backend uses `scripts/test-services.ps1`
+or `bash scripts/test-services.sh`. Both run offline service gates followed by
+real-process regression; `-Mode soak -Duration 3600` / `--mode soak --duration 3600`
+adds timed restart/failover loops with the same owned-resource cleanup.
+The matrix includes four Stars, two Planets, role rejection, group preference,
+Supervisor-offline switching and restart admission. It does not test business
+data replication, which is not implemented. See the
+[current connection rules](../peer/connection-rules.md) and
+[validation record](../peer/star-planet-validation-20260910.md).
+
+The C++26 replacement has an independent Linux entry:
+`bash peer-cpp/build.sh regression` and
+`bash peer-cpp/build.sh soak --profile release --duration=3600`.
+It selects its own binaries, runs C++/Rust interoperability, then reuses the
+same process scenarios and cleanup ownership. Direct harness use can pass
+`--peer-binaries build/peer-cpp/release`; omitting it keeps the Rust default.
+See the [C++ instructions and qualification limits](../peer-cpp/README.md).
+
 The current testkit covers the Registration and Catalog Lua contracts,
 independently executable Go, Rust, C++, and C# regressions, live Go/Rust
 interoperability, and isolated Redis Sentinel fault topologies. A language's
@@ -9,20 +27,132 @@ Use an isolated Redis Open Source 8 endpoint: some tests reset command
 statistics or flush the script cache. Tests generate a random alphabetic Zone,
 delete only that Zone's keys, and never run `FLUSHDB` or `FLUSHALL`.
 
-## Python dependencies
+## Two public test commands
 
-```text
-python -m pip install -r testkit/lua/requirements.txt
-python -m pip install -r testkit/sentinel/requirements.txt
+From Windows PowerShell:
+
+```powershell
+.\testkit\run.ps1 regression
+.\testkit\run.ps1 soak --duration 2h
 ```
+
+From the Ubuntu checkout:
+
+```bash
+bash testkit/run.sh regression --targets local
+bash testkit/run.sh soak --targets local --duration 2h
+```
+
+`run.ps1` and `run.sh` find the existing project Python environment and forward
+arguments to `run.py`. Python owns scheduling, fixtures, process lifetimes,
+source synchronization and reporting; Go, Cargo, CMake/MSVC/GCC and .NET still
+build and test their own SDKs. No activation, global environment change,
+automatic dependency installation, or WSL is required.
+
+The duration accepts `210s` through `24h`, defaulting to `2h`. The lower bound
+reserves time for repeated lease-expiry cycles and recovery from all five fault
+kinds; the fault clock begins when the Go workload announces readiness, after
+compilation and setup. It is the effective
+load duration **per domain and per target**, checked against Redis time.
+Registration and Catalog run serially to contain memory use. Thus `2h` means
+at least four hours of load for one target, or eight hours for Windows plus
+Ubuntu, with build, readiness, verification and cleanup time in addition.
+A short run checks the pipeline; it is not evidence of hours of endurance.
+
+## Project configuration and prerequisites
+
+Copy `testkit/config.example.json` to ignored `build/testkit/config.json` to
+select both `local` and `linux` targets from Windows. This checkout is configured
+for `ubuntu@192.168.0.119`, project `/home/ubuntu/verdandi`. Without a config file
+the default target is `local`; on Windows its Docker fixtures still live on the
+configured Ubuntu host. `--targets local`, `--targets linux`, and
+`--languages go,rust,cpp,csharp` explicitly select scope. A narrowed report
+records that scope and does not qualify omitted targets or SDKs.
+
+The SSH/sudo password is prompted and is not saved in configuration. An existing
+`VERDANDI_TEST_SSH_PASSWORD` is accepted for unattended callers. Do not commit
+credentials. SSH host keys are stored in `build/testkit/known_hosts`.
+
+Prepare these prerequisites externally with the maintainer's download approval:
+
+- Python 3.10+ and the packages in `testkit/requirements.txt`: Redis, MessagePack,
+  Paramiko and cryptography, installed in `build/tools/python-build`.
+- The selected SDK toolchains and their declared dependencies; C# also needs
+  the shared C++ library, .NET 10 SDK and .NET 8/10 runtimes.
+- Docker on the fixture host and its existing `redis:8.8.0` image. Tests use
+  `--pull never`; a missing image is a prerequisite failure.
+- Git for source inventory. The Ubuntu source-only test copy has local Git
+  metadata initialized inside that project; source sync does not transfer Git
+  history, stage files, create commits or configure remotes.
+- At least 1 GiB available memory before starting. Compilation is serial and
+  each test container has explicit memory, CPU and process limits.
+
+Both adapters and all migrated Python harnesses route Go/Cargo/NuGet/pip caches
+to the current project's ignored `build/`, using settings only in their child
+processes. Tests use offline dependency resolution and disable Rust toolchain
+auto-installation. A missing dependency produces a failure requiring external
+preparation; a test request grants no new download permission.
+
+```powershell
+.\testkit\run.ps1 regression --plan
+.\testkit\run.ps1 regression --preflight-only
+```
+
+`--plan` shows scope without creating fixtures. Preflight checks Python packages
+and tool versions; it is reported explicitly as preflight, not a regression pass.
+
+## Scope, results and cleanup
+
+| Scenario | Regression | Soak |
+| --- | --- | --- |
+| Framework ownership tests and Lua freshness | Yes | Lua freshness |
+| SDK unit/build checks, Lua contracts, authenticated Redis integration | All selected SDKs | All selected SDKs |
+| Go/Rust Registration and Catalog interoperability | Yes | Before load |
+| Two-promotion Registration Sentinel, plain/TLS | Go/Rust and C# | Separate regression |
+| Two-promotion Catalog Sentinel | Go/Rust, plain | Separate regression |
+| C++ Sentinel domain smoke, plain/TLS | Yes | Separate regression |
+| Continuous Registration and Catalog fault workloads | Separate soak | Go; duration per domain |
+| Continuous Rust/C++/C# endurance, live mutual TLS, direct native C++ two-promotion peer | Coverage gaps | Coverage gaps |
+
+Each campaign saves `build/testkit/runs/<run-id>/report.json` and `report.md`,
+stage logs, source hashes, tool versions, elapsed time and cleanup status. The
+Windows report includes the Linux stage results and downloads the Linux summary.
+Soak rows additionally retain their workload results and Redis observations.
+Exit codes are `0` for the requested scope passing, `1` for failure or missing
+prerequisites, and `130` for cancellation. Failed, interrupted, skipped required,
+or missing scenarios must never be presented as a full protocol qualification.
+
+Ctrl+C stops owned child process trees and enters cleanup. Containers are
+registered before creation, verified by label, and removed by immutable ID.
+Test files and temporary directories stay below `build/testkit`; cleanup checks
+their owner marker and exact path. Existing ports, directories, containers and
+Redis Zones belonging to another owner are preserved. Fixture cleanup still
+runs after a test fails, times out, or cannot become ready.
+
+OS locks prevent two campaigns from competing in the same checkout. A later
+run recovers manifests left by a crashed process, while skipping resources
+whose owner is still active. If the VM or SSH connection disappears, the local
+report keeps cleanup pending; the remote worker cancels after its heartbeat
+expires and attempts cleanup. Recovery is retried on the next connected run.
+Logs and reports are retained as evidence rather than removed with fixtures.
+
+Windows sends only changed source files, manifests and deletion records in a
+ZIP. It excludes build caches, Git state and old reports, verifies SHA-256 before
+and after applying, refuses conflicting VM edits, and retains replaced source
+in the VM's `build/testkit/sync-history`. A final source check prevents a run
+from qualifying code edited while it was running.
+
+The sections below describe individual diagnostic entry points and historical
+qualification evidence. Use the two public commands above for routine work;
+historical WSL measurements do not describe the current Ubuntu VM dispatcher.
 
 ## Authenticated standalone qualification
 
 The standalone harness connects to a dedicated Docker host, creates one exact
 randomly named Redis 8.8 container with generated ACL credentials, runs all
 Lua/Go/Rust/interop suites, verifies final `DBSIZE=0`, and removes only the
-container bearing its run label. On Windows it runs timing-sensitive Go load
-and race tests in WSL/Linux.
+container bearing its run label. The unified runner dispatches race coverage to
+the native Ubuntu checkout.
 
 PowerShell functional and race run:
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "internal/subscription_queue.hpp"
 #include "verdandi/client.hpp"
 
 #include <atomic>
@@ -7,7 +8,6 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -56,26 +56,6 @@ struct response {
 
     /// 返回字符串、数字或布尔叶节点的原始 RESP 文本；类型不匹配时返回 `corrupt`。
     [[nodiscard]] result<std::string_view> text() const;
-};
-
-/// 专用 Pub/Sub 连接传给域监听任务的有界队列项。
-struct subscription_item {
-    enum class kind : std::uint8_t {
-        message,
-        reconnected,
-        lagged,
-        fence,
-        idle,
-        failure,
-        closed,
-    };
-
-    kind type{kind::message};
-    std::string channel;
-    std::string payload;
-    std::optional<std::string> pattern;
-    std::uint64_t fence_id{};
-    std::optional<error> failure;
 };
 
 class subscription;

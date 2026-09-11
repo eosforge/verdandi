@@ -126,3 +126,24 @@ func TestFieldsEqualDistinguishesMissingEmptyValues(t *testing.T) {
 		t.Fatal("identical empty field values compared unequal")
 	}
 }
+
+func TestRegistrationRepliesRejectMalformedPresentMetadata(t *testing.T) {
+	for _, result := range []string{"ok", "error"} {
+		for _, pair := range [][2]any{
+			{"@revision", "01"}, {"@revision", "0"}, {"@revision", nil},
+			{"@timestamp", "01"}, {"@timestamp", "0"}, {"@timestamp", nil},
+			{"&field", int64(1)}, {"&field", []any{"field"}},
+		} {
+			_, err := parseRegistrationReply([]any{"&result", result, "&status", "stale", pair[0], pair[1]})
+			if !IsCode(err, CodeCorrupt) {
+				t.Errorf("%s %v: want corrupt, got %v", result, pair, err)
+			}
+		}
+	}
+	for _, status := range []string{"closed", "deadline", "ambiguous", "unavailable", "unknown"} {
+		_, err := parseRegistrationReply([]any{"&result", "error", "&status", status})
+		if !IsCode(err, CodeCorrupt) {
+			t.Errorf("status %q: %v", status, err)
+		}
+	}
+}

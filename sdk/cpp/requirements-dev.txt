@@ -1,0 +1,2 @@
+# Maintainer formatter only; build.py and policy tests use the standard library.
+black==26.5.1

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>黑洞固定视角验收</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #050914;
+      }
+      canvas {
+        display: block;
+      }
+      nav {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      button {
+        padding: 8px 16px;
+        color: #ddd;
+        background: #192333;
+        border: 1px solid #344155;
+        cursor: pointer;
+      }
+      button:focus-visible {
+        outline: 2px solid #63dfc0;
+      }
+      output {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        color: #ccc;
+        font: 12px monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <nav aria-label="固定验收条件">
+      <div>
+        <button data-angle="0">侧视 0°</button><button data-angle="-2">下侧 -2°</button><button data-angle="2">上侧 2°</button
+        ><button data-angle="12">参考 12°</button><button data-angle="45">斜视 45°</button><button data-angle="90">俯视 90°</button>
+      </div>
+      <div>
+        <button data-distance="18">距离 18</button><button data-distance="48">距离 48</button><button data-distance="96">距离 96</button
+        ><button data-distance="192">距离 192</button><button id="animation">播放流纹</button>
+      </div>
+    </nav>
+    <output aria-label="验收状态"></output>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { parseCelestialModel } from "/src/features/galaxy/runtime/celestialAssets.ts";
+      import { createBlackHole } from "/src/features/galaxy/runtime/createBlackHole.ts";
+      import { ResourceScope } from "/src/features/galaxy/runtime/resourceScope.ts";
+      const scope = new ResourceScope();
+      const output = document.querySelector("output");
+      const bytes = await fetch("/src/features/galaxy/runtime/assets/black-hole.glb").then((response) => {
+        if (!response.ok) throw new Error(`Model request failed: ${response.status}`);
+        return response.arrayBuffer();
+      });
+      const model = createBlackHole(await parseCelestialModel(bytes, "blackHole", scope));
+      const scene = new THREE.Scene();
+      scene.add(model.group);
+      const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1000);
+      const renderer = scope.own(new THREE.WebGLRenderer({ antialias: true }));
+      renderer.setClearColor(0x050914);
+      renderer.setSize(innerWidth, innerHeight);
+      document.body.append(renderer.domElement);
+      const controls = scope.own(new OrbitControls(camera, renderer.domElement));
+      const orientation = model.group.getObjectByName("Accretion").quaternion.clone();
+      let angle = 12;
+      let distance = 48;
+      let playing = false;
+      // 固定盘轴和画面滚转, 只改变已标注的倾角与距离, 便于重复检查左右连接和缩放回归.
+      function preset() {
+        const radians = (angle * Math.PI) / 180;
+        camera.position.set(0, Math.sin(radians) * distance, Math.cos(radians) * distance).applyQuaternion(orientation);
+        camera.up.set(0, Math.cos(radians), -Math.sin(radians)).applyQuaternion(orientation);
+        controls.target.set(0, 0, 0);
+        controls.update();
+      }
+      preset();
+      document.querySelectorAll("button[data-angle], button[data-distance]").forEach((button) =>
+        button.addEventListener("click", () => {
+          if (button.dataset.angle !== undefined) angle = Number(button.dataset.angle);
+          if (button.dataset.distance !== undefined) distance = Number(button.dataset.distance);
+          preset();
+        }),
+      );
+      document.getElementById("animation").addEventListener("click", (event) => {
+        playing = !playing;
+        event.target.textContent = playing ? "暂停流纹" : "播放流纹";
+      });
+      // 此页面只由 Vite 开发服务访问, 不作为生产入口; 生产实例仍负责 uniform 和资源共享.
+      let frame;
+      let previous = performance.now();
+      let measured = previous;
+      let count = 0;
+      function draw(now) {
+        if (playing) model.update(Math.min(0.1, (now - previous) / 1000));
+        previous = now;
+        renderer.render(scene, camera);
+        count++;
+        if (now - measured >= 1000) {
+          const detail = model.group.getObjectByName("Horizon").material.uniforms.detailLevel.value;
+          output.textContent = `${angle}° · distance ${distance} · ${innerWidth}×${innerHeight} · DPR 1 · ${Math.round((count * 1000) / (now - measured))} FPS · ${renderer.info.render.calls} draw · detail ${detail.toFixed(2)}`;
+          count = 0;
+          measured = now;
+        }
+        frame = requestAnimationFrame(draw);
+      }
+      frame = requestAnimationFrame(draw);
+      window.addEventListener("resize", () => {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+      });
+      window.addEventListener(
+        "pagehide",
+        () => {
+          cancelAnimationFrame(frame);
+          scope.dispose();
+          renderer.forceContextLoss();
+        },
+        { once: true },
+      );
+    </script>
+  </body>
+</html>

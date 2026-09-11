@@ -73,7 +73,7 @@ static int report_failure(const char* step, const verdandi_error* error) {
 static void erase_key(verdandi_client* client, const char* key) {
     int removed = 0;
     verdandi_error ignored;
-    if (client != NULL) {
+    if (client != NULL && key[0] != '\0') {
         (void)verdandi_key_erase(client, text_view(key), &removed, &ignored);
     }
 }
@@ -83,9 +83,9 @@ int main(void) {
     char registration_zone[32];
     char catalog_zone[32];
     char json[1024];
-    char key[256];
-    char hash[256];
-    char cleanup[512];
+    char key[256] = {0};
+    char hash[256] = {0};
+    char cleanup[512] = {0};
     int result = 0;
     int flag = 0;
     uint64_t revision = 0;
@@ -124,11 +124,22 @@ int main(void) {
 
     make_zone("CRegistration", registration_zone, sizeof(registration_zone));
     make_zone("CCatalog", catalog_zone, sizeof(catalog_zone));
-    (void)snprintf(json, sizeof(json),
-                   "{\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"%s\"]},"
-                   "\"registration\":{\"zone\":\"%s\",\"selector\":{\"sync_timeout_ms\":5000}},"
-                   "\"catalog\":{\"zone\":\"%s\",\"sync_timeout_ms\":5000}}",
-                   address, registration_zone, catalog_zone);
+    {
+        const char* supplied = getenv("VERDANDI_REDIS_CONFIGURATION_JSON");
+        char standalone[512];
+        int length = snprintf(standalone, sizeof(standalone), "{\"mode\":\"standalone\",\"addresses\":[\"%s\"]}", address);
+        if (length < 0 || (size_t)length >= sizeof(standalone)) {
+            return 1;
+        }
+        length = snprintf(json, sizeof(json),
+                          "{\"version\":\"v1\",\"redis\":%s,"
+                          "\"registration\":{\"zone\":\"%s\",\"selector\":{\"sync_timeout_ms\":5000}},"
+                          "\"catalog\":{\"zone\":\"%s\",\"sync_timeout_ms\":5000}}",
+                          supplied != NULL ? supplied : standalone, registration_zone, catalog_zone);
+        if (length < 0 || (size_t)length >= sizeof(json)) {
+            return 1;
+        }
+    }
 
     if (verdandi_client_open_json(bytes_view(json), &root, &error) == 0) {
         return report_failure("client open", &error);

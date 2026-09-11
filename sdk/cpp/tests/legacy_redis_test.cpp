@@ -103,8 +103,10 @@ int main() {
 
     const std::string registration_zone = make_zone("LegacyRegistration");
     const std::string catalog_zone = make_zone("LegacyCatalog");
+    const char* supplied = std::getenv("VERDANDI_REDIS_CONFIGURATION_JSON");
+    const std::string redis = supplied != NULL ? supplied : std::string("{\"mode\":\"standalone\",\"addresses\":[\"") + address + "\"]}";
     std::ostringstream json;
-    json << "{\"version\":\"v1\",\"redis\":{\"mode\":\"standalone\",\"addresses\":[\"" << address << "\"]},\"registration\":{\"zone\":\"" << registration_zone
+    json << "{\"version\":\"v1\",\"redis\":" << redis << ",\"registration\":{\"zone\":\"" << registration_zone
          << "\",\"selector\":{\"sync_timeout_ms\":5000}},\"catalog\":{\"zone\":\"" << catalog_zone << "\",\"sync_timeout_ms\":5000}}";
 
     result<client> opened = client::open(json.str());

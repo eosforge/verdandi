@@ -414,7 +414,8 @@ result<checkpoint_snapshot> checkpoint_store::load(const std::string_view zone, 
             disable();
             return std::unexpected(std::move(failure));
         }
-        for (int step = sqlite3_step(entries_query->get()); step == SQLITE_ROW; step = sqlite3_step(entries_query->get())) {
+        int step;
+        for (step = sqlite3_step(entries_query->get()); step == SQLITE_ROW; step = sqlite3_step(entries_query->get())) {
             const auto* member_data = reinterpret_cast<const char*>(sqlite3_column_text(entries_query->get(), 0));
             const int member_size = sqlite3_column_bytes(entries_query->get(), 0);
             const auto observed = sqlite3_column_int64(entries_query->get(), 1);
@@ -450,7 +451,7 @@ result<checkpoint_snapshot> checkpoint_store::load(const std::string_view zone, 
                 return std::unexpected(error(code::corrupt, "local_store_path"));
             }
         }
-        if (sqlite3_errcode(database) != SQLITE_OK || !execute(database, "COMMIT")) {
+        if (step != SQLITE_DONE || !execute(database, "COMMIT")) {
             auto failure = sqlite_error(database);
             rollback();
             disable();

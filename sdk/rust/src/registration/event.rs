@@ -367,13 +367,13 @@ fn redis_canonical_u64(value: RedisValue) -> Result<u64> {
 
 /// 把 Fred `value` 的拥有型字节转换为 UTF-8 String；类型或编码错误返回 Corrupt。
 fn redis_string(value: RedisValue) -> Result<String> {
-    let bytes = value.into_owned_bytes().ok_or_else(|| Error::field(Code::Corrupt, "string"))?;
+    let bytes = crate::redis::reply_bytes(value).ok_or_else(|| Error::field(Code::Corrupt, "string"))?;
     String::from_utf8(bytes).map_err(|_| Error::field(Code::Corrupt, "string"))
 }
 
 /// 从 Fred `value` 取得拥有型字节；非字符串/二进制值返回 Corrupt。
 fn redis_bytes(value: RedisValue) -> Result<Vec<u8>> {
-    value.into_owned_bytes().ok_or_else(|| Error::field(Code::Corrupt, "value"))
+    crate::redis::reply_bytes(value).ok_or_else(|| Error::field(Code::Corrupt, "value"))
 }
 
 /// 比较 MessagePack String/Binary 与规范 ASCII 文本，不创建临时 String。

@@ -224,13 +224,16 @@ impl ClientInner {
     async fn read_zone_config(&self, install_defaults: bool) -> Result<ZoneConfig> {
         let key = format!("verdandi:config:{}", self.config.zone);
         let mut value: Value = self.command(self.driver().hmget(&key, &ZONE_CONFIG_FIELDS), Code::Unavailable).await?;
-        let missing = matches!(&value, Value::Array(values) if values.iter().any(Value::is_null));
+        let Value::Array(values) = &value else {
+            return Err(Error::field(Code::Corrupt, "verdandi:config"));
+        };
+        if values.len() != ZONE_CONFIG_FIELDS.len() {
+            return Err(Error::field(Code::Corrupt, "verdandi:config"));
+        }
+        let missing = values.iter().any(Value::is_null);
         // HSETNX 只写缺失字段，可与管理员并发配置而不覆盖其值；随后必须整体重读。
         if missing && install_defaults {
             let defaults = self.config.initial_policy.values();
-            let Value::Array(values) = &value else {
-                return Err(Error::field(Code::Corrupt, "verdandi:config"));
-            };
             for (index, current) in values.iter().enumerate() {
                 if current.is_null() {
                     let _: bool = self
@@ -339,10 +342,10 @@ fn hello_version(value: Value) -> Result<String> {
         let Some(value) = values.next() else {
             return Err(Error::field(Code::Corrupt, "redis_version"));
         };
-        if name.into_owned_bytes().as_deref() != Some(b"version") {
+        if crate::redis::reply_bytes(name).as_deref() != Some(b"version") {
             continue;
         }
-        let bytes = value.into_owned_bytes().ok_or_else(|| Error::field(Code::Corrupt, "redis_version"))?;
+        let bytes = crate::redis::reply_bytes(value).ok_or_else(|| Error::field(Code::Corrupt, "redis_version"))?;
         return String::from_utf8(bytes).map_err(|_| Error::field(Code::Corrupt, "redis_version"));
     }
     Err(Error::field(Code::Corrupt, "redis_version"))

@@ -2,7 +2,8 @@ package registration
 
 import (
 	"context"
-	"strconv"
+
+	"github.com/eosforge/verdandi/sdk/go/internal/validate"
 )
 
 // registrationReply 是四种 Registration Lua 成功回复的最小公共投影。
@@ -64,12 +65,19 @@ func parseRegistrationReply(raw any) (registrationReply, error) {
 	if !ok {
 		return registrationReply{}, protocolError(codeCorrupt, "&result", 0)
 	}
-	revision, _ := replyUint(fields["@revision"])
+	revision, revisionOK := replyUint(fields["@revision"])
+	if _, exists := fields["@revision"]; exists && !revisionOK {
+		return registrationReply{}, protocolError(codeCorrupt, "@revision", 0)
+	}
+	timestamp, timestampOK := replyUint(fields["@timestamp"])
+	if _, exists := fields["@timestamp"]; exists && !timestampOK {
+		return registrationReply{}, protocolError(codeCorrupt, "@timestamp", 0)
+	}
+	field, fieldOK := replyString(fields["&field"])
+	if _, exists := fields["&field"]; exists && !fieldOK {
+		return registrationReply{}, protocolError(codeCorrupt, "&field", 0)
+	}
 	if result == "ok" {
-		timestamp, timestampOK := replyUint(fields["@timestamp"])
-		if _, exists := fields["@timestamp"]; exists && !timestampOK {
-			return registrationReply{}, protocolError(codeCorrupt, "@timestamp", 0)
-		}
 		return registrationReply{revision: revision, timestamp: timestamp}, nil
 	}
 	if result != "error" {
@@ -79,7 +87,6 @@ func parseRegistrationReply(raw any) (registrationReply, error) {
 	if !ok {
 		return registrationReply{}, protocolError(codeCorrupt, "&status", 0)
 	}
-	field, _ := replyString(fields["&field"])
 	code := code(status)
 	switch code {
 	case codeInvalid, codeProtocol, codeContract, codeTarget, codeCapacity,
@@ -112,11 +119,9 @@ func replyUint(value any) (uint64, bool) {
 		}
 		return uint64(typed), uint64(typed) <= maxSafeInteger
 	case string:
-		parsed, err := strconv.ParseUint(typed, 10, 64)
-		return parsed, err == nil && parsed > 0 && parsed <= maxSafeInteger
+		return validate.UintDecimal(typed, maxSafeInteger, false)
 	case []byte:
-		parsed, err := strconv.ParseUint(string(typed), 10, 64)
-		return parsed, err == nil && parsed > 0 && parsed <= maxSafeInteger
+		return validate.UintDecimal(string(typed), maxSafeInteger, false)
 	case nil:
 		return 0, false
 	default:

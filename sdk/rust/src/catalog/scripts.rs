@@ -68,6 +68,18 @@ pub(super) struct ScriptReply {
     pub revision: u64,
 }
 
+/// Catalog 的 Lua 状态白名单；本地关闭或传输状态不得伪装成服务器协议回复。
+pub(super) fn script_status(status: &str) -> Result<Code> {
+    Code::from_status(status)
+        .filter(|code| {
+            matches!(
+                code,
+                Code::Invalid | Code::Contract | Code::Capacity | Code::Stale | Code::Transition | Code::Corrupt | Code::Unavailable
+            )
+        })
+        .ok_or_else(|| Error::field(Code::Protocol, "&status"))
+}
+
 /// 解析 Catalog Lua 的交替名称/值 `value` 回复。
 ///
 /// 成功返回稳定 result 与可选 revision；Lua `error` 被转换为带 field/revision 的 Verdandi Error，
@@ -78,7 +90,7 @@ pub(super) fn parse_script_reply(value: Value) -> Result<ScriptReply> {
     // error 和 ok 两类回复分别验证允许字段，避免兼容路径静默接受协议漂移。
     if result == "error" {
         let status = take_string(&mut fields, "&status")?;
-        let code = Code::from_status(&status).ok_or_else(|| Error::field(Code::Corrupt, "&status"))?;
+        let code = script_status(&status)?;
         let field = fields.remove("&field").map(value_string).transpose()?.unwrap_or_default();
         let revision = fields.remove("@revision").map(|value| parse_revision(value, true)).transpose()?.unwrap_or(0);
         if !fields.is_empty() {
@@ -135,7 +147,7 @@ pub(super) fn take_string(fields: &mut BTreeMap<String, Value>, name: &str) -> R
 
 /// 把一个 Fred Value 的拥有型字节转换为 UTF-8 String；其他类型或非法 UTF-8 返回 `Corrupt`。
 pub(super) fn value_string(value: Value) -> Result<String> {
-    let bytes = value.into_owned_bytes().ok_or_else(|| Error::field(Code::Corrupt, "value"))?;
+    let bytes = crate::redis::reply_bytes(value).ok_or_else(|| Error::field(Code::Corrupt, "value"))?;
     String::from_utf8(bytes).map_err(|_| Error::field(Code::Corrupt, "value"))
 }
 

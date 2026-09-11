@@ -73,18 +73,20 @@ public:
     /// 编码 `T` 并读取 `key`；键不存在返回空 optional，解码失败不改变 Redis。
     template <field_scalar T>
     [[nodiscard]] result<std::optional<T>> get(const std::string_view key) const {
-        auto loaded = load(key);
-        if (!loaded) {
-            return std::unexpected(loaded.error());
-        }
-        if (!*loaded) {
-            return std::optional<T>{};
-        }
-        auto decoded = field_codec<T>::decode(**loaded);
-        if (!decoded) {
-            return std::unexpected(decoded.error());
-        }
-        return std::optional<T>(std::move(*decoded));
+        return detail::invoke_application("value", [&]() -> result<std::optional<T>> {
+            auto loaded = load(key);
+            if (!loaded) {
+                return std::unexpected(loaded.error());
+            }
+            if (!*loaded) {
+                return std::optional<T>{};
+            }
+            auto decoded = field_codec<T>::decode(**loaded);
+            if (!decoded) {
+                return std::unexpected(decoded.error());
+            }
+            return std::optional<T>(std::move(*decoded));
+        });
     }
 
     /// 无 TTL 覆盖写入 `key` 的二进制 `value`。
@@ -93,11 +95,13 @@ public:
     /// 编码 `value` 并无 TTL 覆盖写入 `key`。
     template <field_scalar T>
     [[nodiscard]] result<void> set(const std::string_view key, const T& value) const {
-        auto encoded = field_codec<T>::encode(value);
-        if (!encoded) {
-            return std::unexpected(encoded.error());
-        }
-        return store(key, *encoded);
+        return detail::invoke_application("value", [&]() -> result<void> {
+            auto encoded = field_codec<T>::encode(value);
+            if (!encoded) {
+                return std::unexpected(encoded.error());
+            }
+            return store(key, *encoded);
+        });
     }
 
     /// 以精确毫秒 `ttl` 覆盖写入二进制值；TTL 必须大于零。
@@ -106,11 +110,13 @@ public:
     /// 编码 `value` 并以精确毫秒 `ttl` 覆盖写入。
     template <field_scalar T>
     [[nodiscard]] result<void> set(const std::string_view key, const T& value, const std::chrono::milliseconds ttl) const {
-        auto encoded = field_codec<T>::encode(value);
-        if (!encoded) {
-            return std::unexpected(encoded.error());
-        }
-        return store(key, *encoded, ttl);
+        return detail::invoke_application("value", [&]() -> result<void> {
+            auto encoded = field_codec<T>::encode(value);
+            if (!encoded) {
+                return std::unexpected(encoded.error());
+            }
+            return store(key, *encoded, ttl);
+        });
     }
 
     /// 删除整个 `key`；返回删除前是否存在。

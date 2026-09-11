@@ -8,6 +8,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <map>
 #include <memory>
@@ -42,6 +43,12 @@ struct selector_options {
 
 namespace detail {
 class selector_core;
+
+/// 身份序列跨所有泛型实例共享，避免不同 Selector 的相同事务 token 相互混用。
+[[nodiscard]] inline std::uint64_t next_selector_identity() noexcept {
+    static std::atomic<std::uint64_t> next{};
+    return next.fetch_add(1, std::memory_order_relaxed) + 1;
+}
 
 struct selector_record {
     metadata meta;
@@ -88,8 +95,9 @@ public:
     choice() noexcept = default;
 
 private:
-    choice(std::uint64_t token, std::size_t index) noexcept : token_(token), index_(index) {}
+    choice(std::uint64_t owner, std::uint64_t token, std::size_t index) noexcept : owner_(owner), token_(token), index_(index) {}
 
+    std::uint64_t owner_{};
     std::uint64_t token_{};
     std::size_t index_{};
 
@@ -184,13 +192,13 @@ public:
         }
         const auto& entry = owner_->entries_[index];
         const auto* data = entry.staged_data ? &*entry.staged_data : entry.data;
-        return candidate_ref<Attr, Data>(&entry.record->meta, entry.attr, data, choice(owner_->token_, index));
+        return candidate_ref<Attr, Data>(&entry.record->meta, entry.attr, data, choice(owner_->identity_, owner_->token_, index));
     }
 
     /// 在当前事务中修改独立 Data 副本；回调失败或 One/Any 失败时不提交预测。
     template <class Mutate>
     [[nodiscard]] result<void> mutate(const choice selected, Mutate&& mutate) {
-        if (selected.token_ != owner_->token_ || selected.index_ >= owner_->entries_.size()) {
+        if (selected.owner_ != owner_->identity_ || selected.token_ != owner_->token_ || selected.index_ >= owner_->entries_.size()) {
             return std::unexpected(error(code::contract, "candidate"));
         }
         auto& entry = owner_->entries_[selected.index_];
@@ -293,8 +301,9 @@ public:
             if (!output) {
                 return std::unexpected(output.error());
             }
-            commit();
-            return std::optional<candidate<Attr, Data>>(std::move(*output));
+            result<std::optional<candidate<Attr, Data>>> returned(std::in_place, std::move(*output));
+            commit_guard publish(*this, prepare_commit());
+            return returned;
         });
     }
 
@@ -319,7 +328,7 @@ public:
             std::vector<candidate<Attr, Data>> output;
             output.reserve(selected->size());
             for (const auto value : *selected) {
-                if (value.token_ != token_ || value.index_ >= entries_.size() || selection_marks_[value.index_] == token_) {
+                if (value.owner_ != identity_ || value.token_ != token_ || value.index_ >= entries_.size() || selection_marks_[value.index_] == token_) {
                     return std::unexpected(error(code::contract, "candidate"));
                 }
                 selection_marks_[value.index_] = token_;
@@ -329,10 +338,10 @@ public:
                 }
                 output.push_back(std::move(*detached));
             }
-            if (!output.empty()) {
-                commit();
-            }
-            return output;
+            const bool selected_any = !output.empty();
+            result<std::vector<candidate<Attr, Data>>> returned(std::in_place, std::move(output));
+            commit_guard publish(*this, selected_any ? prepare_commit() : overlay_map{});
+            return returned;
         });
     }
 
@@ -347,7 +356,7 @@ public:
         output.synchronized = view_->synchronized;
         output.candidates.reserve(entries_.size());
         for (std::size_t index = 0; index < entries_.size(); ++index) {
-            auto detached = detach(choice(token_, index));
+            auto detached = detach(choice(identity_, token_, index));
             if (!detached) {
                 return std::unexpected(detached.error());
             }
@@ -383,6 +392,32 @@ private:
         Data data;
         fields base;
         fields value;
+    };
+
+    using overlay_map = std::map<std::string, overlay, std::less<>>;
+
+    /// 返回值也可能调用应用类型的抛异常移动；仅在返回对象构造成功后发布预分配节点。
+    class commit_guard final {
+    public:
+        commit_guard(selector& owner, overlay_map prepared) noexcept : owner_(owner), prepared_(std::move(prepared)) {}
+        commit_guard(const commit_guard&) = delete;
+        commit_guard& operator=(const commit_guard&) = delete;
+
+        ~commit_guard() noexcept {
+            if (std::uncaught_exceptions() == exceptions_) {
+                while (!prepared_.empty()) {
+                    auto node = prepared_.extract(prepared_.begin());
+                    owner_.overlays_.erase(node.key());
+                    // 相同分配器的节点转移不分配、不移动 Data；字符串比较也不调用应用代码。
+                    owner_.overlays_.insert(std::move(node));
+                }
+            }
+        }
+
+    private:
+        selector& owner_;
+        overlay_map prepared_;
+        int exceptions_{std::uncaught_exceptions()};
     };
 
     struct entry {
@@ -489,7 +524,7 @@ private:
     }
 
     [[nodiscard]] result<candidate<Attr, Data>> detach(const choice selected) const {
-        if (selected.token_ != token_ || selected.index_ >= entries_.size()) {
+        if (selected.owner_ != identity_ || selected.token_ != token_ || selected.index_ >= entries_.size()) {
             return std::unexpected(error(code::contract, "candidate"));
         }
         const auto& entry = entries_[selected.index_];
@@ -523,23 +558,26 @@ private:
         return candidate<Attr, Data>{record->meta, std::move(*attr), std::move(*data)};
     }
 
-    void commit() {
+    [[nodiscard]] overlay_map prepare_commit() {
+        overlay_map prepared;
         for (auto& entry : entries_) {
             if (!entry.staged_data) {
                 continue;
             }
-            overlays_.insert_or_assign(entry.record->meta.uuid,
-                                       overlay{entry.record->meta.revision, std::move(*entry.staged_data), entry.record->data, std::move(entry.staged_fields)});
+            prepared.emplace(entry.record->meta.uuid,
+                             overlay{entry.record->meta.revision, std::move(*entry.staged_data), entry.record->data, std::move(entry.staged_fields)});
         }
+        return prepared;
     }
 
     std::shared_ptr<detail::selector_core> core_;
     std::timed_mutex operation_;
-    std::map<std::string, overlay, std::less<>> overlays_;
+    overlay_map overlays_;
     std::shared_ptr<const detail::selector_view> view_;
     std::vector<entry> entries_;
     std::vector<std::uint64_t> selection_marks_;
     std::uint64_t token_{};
+    const std::uint64_t identity_{detail::next_selector_identity()};
     std::atomic_bool closed_{false};
 };
 

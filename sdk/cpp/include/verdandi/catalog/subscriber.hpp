@@ -78,7 +78,7 @@ public:
             return std::unexpected(error(code::unavailable, "entry"));
         }
         snapshot<Value> output{current->revision, current->state, synchronized_state(current->state), std::nullopt};
-        if (!current->value.empty() || current->state == status::present) {
+        if (current->replace_revision != 0) {
             auto decoded = decode_value<Value>(current->value);
             if (!decoded) {
                 return std::unexpected(decoded.error());

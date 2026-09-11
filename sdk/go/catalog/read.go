@@ -28,13 +28,30 @@ func parseReadReply(value any, base *rawState, maximumBytes int) (*rawState, err
 	}
 	if result == "error" {
 		reply := scriptReply{result: result}
-		reply.status, _ = readString(fields, "&status")
-		reply.field, _ = readString(fields, "&field")
-		if revisionText, exists := readString(fields, "@revision"); exists {
-			var err error
-			reply.revision, err = parseRevision(revisionText, true)
-			if err != nil {
-				return nil, err
+		var valid bool
+		reply.status, valid = readString(fields, "&status")
+		if !valid {
+			return nil, newError(verdandi.CodeCorrupt, "&status", 0, nil)
+		}
+		for name, value := range fields {
+			if name == "&result" || name == "&status" {
+				continue
+			}
+			text, valid := redisString(value)
+			if !valid {
+				return nil, newError(verdandi.CodeCorrupt, name, 0, nil)
+			}
+			switch name {
+			case "&field":
+				reply.field = text
+			case "@revision":
+				var err error
+				reply.revision, err = parseRevision(text, true)
+				if err != nil {
+					return nil, err
+				}
+			default:
+				return nil, newError(verdandi.CodeCorrupt, "read_reply", 0, nil)
 			}
 		}
 		return nil, scriptStatusError(reply)

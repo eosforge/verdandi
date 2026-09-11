@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -83,6 +83,7 @@ struct SelectorState {
 
 struct Generation {
     subscriber: SubscriberClient,
+    connection: crate::client::ConnectionTask,
     channel: String,
     messages: broadcast::Receiver<Message>,
     reconnects: broadcast::Receiver<Server>,
@@ -130,17 +131,6 @@ pub(crate) struct SelectorCore {
     shared: Arc<SelectorShared>,
 }
 
-struct StartupGuard(Option<CancellationToken>);
-
-impl Drop for StartupGuard {
-    /// 构造未成功转移所有权时取消 Selector owner，避免初始化失败泄漏任务。
-    fn drop(&mut self) {
-        if let Some(token) = self.0.take() {
-            token.cancel();
-        }
-    }
-}
-
 impl Client {
     /// 先订阅 Registry，再分页扫描，并只在首份 PING 栅栏视图同步后返回。
     ///
@@ -152,7 +142,7 @@ impl Client {
         }
         let guard = self.inner.admit()?;
         let owner = self.inner.shutdown.child_token();
-        let mut startup = StartupGuard(Some(owner.clone()));
+        let startup = owner.clone().drop_guard();
         let (errors, _) = broadcast::channel(self.inner.config.selector_error_buffer_capacity);
         let shared = Arc::new(SelectorShared {
             client: Arc::clone(&self.inner),
@@ -174,7 +164,7 @@ impl Client {
 
         match ready_receiver.await {
             Ok(Ok(())) => {
-                startup.0 = None;
+                startup.disarm();
                 Ok(SelectorCore { shared })
             }
             Ok(Err(error)) => {
@@ -256,8 +246,16 @@ impl<A, D> CandidateRef<'_, A, D> {
 /// 仅在当前回调事务中有效的不透明 Candidate 身份。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Choice {
+    owner: u64,
     token: u64,
     index: usize,
+}
+
+impl Choice {
+    /// 所属 Selector、事务版本与索引必须同时匹配，不能只比较可重复的局部 token。
+    fn valid_for(self, owner: u64, token: u64, count: usize) -> bool {
+        self.owner == owner && self.token == token && self.index < count
+    }
 }
 
 /// 一个独立、不可参与选择的恢复候选。
@@ -358,7 +356,11 @@ impl<A: FieldValue, D: FieldValue> Candidates<'_, A, D> {
             meta: &record.meta,
             attr: &cached.attr,
             data,
-            choice: Choice { token: self.token, index },
+            choice: Choice {
+                owner: self.selector.identity,
+                token: self.token,
+                index,
+            },
         })
     }
 
@@ -403,7 +405,7 @@ impl<A: FieldValue, D: FieldValue> Candidates<'_, A, D> {
 
     /// 验证 `choice` 的事务 token 和索引，并返回对应内部记录。
     fn validate_choice(&self, choice: Choice) -> Result<&Arc<SelectorRecord>> {
-        if choice.token != self.token {
+        if !choice.valid_for(self.selector.identity, self.token, self.view.ordered_records.len()) {
             return Err(Error::field(Code::Contract, "candidate"));
         }
         self.view
@@ -442,7 +444,7 @@ impl<A: FieldValue, D: FieldValue> Candidates<'_, A, D> {
 
     /// 标记 `choice` 已在当前 Any 结果中使用，并拒绝过期、越界或重复选择。
     fn mark_selected(&mut self, choice: Choice) -> Result<()> {
-        if choice.token != self.token || choice.index >= self.view.ordered_records.len() {
+        if !choice.valid_for(self.selector.identity, self.token, self.view.ordered_records.len()) {
             return Err(Error::field(Code::Contract, "candidate"));
         }
         if self.state.selected[choice.index] == self.token {
@@ -473,6 +475,7 @@ impl<A: FieldValue, D: FieldValue> Candidates<'_, A, D> {
 
 /// 带进程内事务型负载预测的强类型本地 Registry 视图。
 pub struct Selector<A: FieldValue, D: FieldValue> {
+    identity: u64,
     raw: SelectorCore,
     selection: AsyncMutex<SelectionState<A, D>>,
     closed: AtomicBool,
@@ -484,8 +487,10 @@ impl<A: FieldValue, D: FieldValue> Selector<A, D> {
     ///
     /// `client` 提供 Zone 与共享传输，`options.type_name` 选择 Registry；首次强类型解码按需发生。
     pub async fn new(client: &Client, options: SelectorOptions) -> Result<Self> {
+        static NEXT_IDENTITY: AtomicU64 = AtomicU64::new(1);
         let raw = client.select(SelectorConfig { type_name: options.type_name }).await?;
         Ok(Self {
+            identity: NEXT_IDENTITY.fetch_add(1, Ordering::Relaxed),
             raw,
             selection: AsyncMutex::new(SelectionState {
                 cache: HashMap::new(),
@@ -1591,17 +1596,18 @@ impl Generation {
         let messages = subscriber.message_rx();
         let mut reconnects = subscriber.reconnect_rx();
         let driver_errors = subscriber.error_rx();
-        client.command(subscriber.init(), Code::Unavailable).await?;
+        let connection = crate::client::ConnectionTask::start(&subscriber);
+        client.command(subscriber.wait_for_connect(), Code::Unavailable).await?;
         drain_initial_reconnect(&mut reconnects)?;
         let channel = registry_key(&client.config.zone, type_name);
         client.command(subscriber.subscribe(channel.clone()), Code::Unavailable).await?;
         if !matches!(reconnects.try_recv(), Err(broadcast::error::TryRecvError::Empty)) {
-            let _ = subscriber.quit().await;
             return Err(Error::field(Code::Unavailable, "subscription_generation"));
         }
         let (commands, command_receiver) = mpsc::channel(1);
         Ok(Self {
             subscriber,
+            connection,
             channel,
             messages,
             reconnects,
@@ -1627,6 +1633,7 @@ impl Generation {
     /// 关闭用于资源回收，超时或驱动错误不覆盖监听任务已经确定的主终止结果。
     async fn close(&mut self, timeout: Duration) {
         let _ = tokio::time::timeout(timeout, self.subscriber.quit()).await;
+        self.connection.close().await;
     }
 }
 
@@ -1693,7 +1700,7 @@ fn decode_subscription_message(channel: &str, message: Message, limits: &ZoneCon
     if &*message.channel != channel {
         return Err(Error::field(Code::Corrupt, "subscription_channel"));
     }
-    let payload = message.value.into_owned_bytes().ok_or_else(|| Error::field(Code::Corrupt, "event"))?;
+    let payload = crate::redis::reply_bytes(message.value).ok_or_else(|| Error::field(Code::Corrupt, "event"))?;
     decode_registration_event(&payload, limits)
 }
 
@@ -1997,8 +2004,8 @@ fn valid_pong(value: Value, nonce: &str) -> bool {
         Value::Bytes(value) => value.as_ref() == nonce.as_bytes(),
         Value::Array(values) if values.len() == 2 => {
             let mut values = values.into_iter();
-            let kind = values.next().and_then(Value::into_owned_bytes);
-            let payload = values.next().and_then(Value::into_owned_bytes);
+            let kind = values.next().and_then(crate::redis::reply_bytes);
+            let payload = values.next().and_then(crate::redis::reply_bytes);
             kind.is_some_and(|kind| kind.eq_ignore_ascii_case(b"pong")) && payload.is_some_and(|payload| payload == nonce.as_bytes())
         }
         _ => false,
@@ -2011,6 +2018,9 @@ fn valid_pong(value: Value, nonce: &str) -> bool {
 fn retry_delay(failures: u32, initial: Duration, maximum: Duration, multiplier: u8, jitter_percent: u8) -> Duration {
     let mut delay = initial;
     for _ in 0..failures {
+        if multiplier <= 1 {
+            break;
+        }
         delay = delay.saturating_mul(u32::from(multiplier)).min(maximum);
         if delay == maximum {
             break;

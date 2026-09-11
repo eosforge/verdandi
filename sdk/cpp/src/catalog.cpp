@@ -6,58 +6,16 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <map>
 #include <memory>
 #include <ranges>
 #include <shared_mutex>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace verdandi::catalog {
-
-namespace {
-
-[[nodiscard]] bool valid_segment(const std::string_view value, const std::size_t maximum) noexcept {
-    if (value.empty() || value.size() > maximum) {
-        return false;
-    }
-    return std::ranges::all_of(value, [](const char character) {
-        const bool letter = (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
-        return letter || (character >= '0' && character <= '9') || character == '_' || character == '-' || character == '.';
-    });
-}
-
-} // namespace
-
-result<path> path::create(std::string part, std::string id) {
-    if (!valid_segment(part, 64)) {
-        return std::unexpected(error(code::invalid, "part"));
-    }
-    if (!valid_segment(id, 128)) {
-        return std::unexpected(error(code::invalid, "id"));
-    }
-    return path(std::move(part), std::move(id));
-}
-
-std::string_view path::part() const noexcept {
-    return part_;
-}
-
-std::string_view path::id() const noexcept {
-    return id_;
-}
-
-std::string path::member() const {
-    return part_ + ':' + id_;
-}
-
-bool path::valid() const noexcept {
-    return valid_segment(part_, 64) && valid_segment(id_, 128);
-}
 
 result<client> client::open(const verdandi::client& transport, const catalog_configuration& configuration) {
     auto driver = verdandi::detail::driver_access::get(transport);
@@ -96,138 +54,6 @@ result<mutation_result> publisher::erase(const path& target) const {
 namespace verdandi::catalog::detail {
 
 namespace {
-
-[[nodiscard]] bool valid_utf8(const std::string_view value) noexcept {
-    std::size_t index{};
-    while (index < value.size()) {
-        const auto lead = static_cast<unsigned char>(value[index++]);
-        if (lead <= 0x7fU) {
-            continue;
-        }
-        std::size_t continuation{};
-        std::uint32_t codepoint{};
-        if ((lead & 0xe0U) == 0xc0U) {
-            continuation = 1;
-            codepoint = lead & 0x1fU;
-        } else if ((lead & 0xf0U) == 0xe0U) {
-            continuation = 2;
-            codepoint = lead & 0x0fU;
-        } else if ((lead & 0xf8U) == 0xf0U) {
-            continuation = 3;
-            codepoint = lead & 0x07U;
-        } else {
-            return false;
-        }
-        if (continuation > value.size() - index) {
-            return false;
-        }
-        for (std::size_t count = 0; count < continuation; ++count) {
-            const auto next = static_cast<unsigned char>(value[index++]);
-            if ((next & 0xc0U) != 0x80U) {
-                return false;
-            }
-            codepoint = (codepoint << 6U) | (next & 0x3fU);
-        }
-        const auto minimum = continuation == 1 ? 0x80U : continuation == 2 ? 0x800U : 0x10000U;
-        if (codepoint < minimum || codepoint > 0x10ffffU || (codepoint >= 0xd800U && codepoint <= 0xdfffU)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-[[nodiscard]] bool valid_field_name(const std::string_view value) noexcept {
-    return !value.empty() && value.front() != '@' && valid_utf8(value);
-}
-
-[[nodiscard]] std::string kind_name(const kind value) {
-    switch (value) {
-    case kind::value:
-        return "value";
-    case kind::array:
-        return "array";
-    case kind::map:
-        return "map";
-    }
-    return {};
-}
-
-[[nodiscard]] result<std::size_t> array_index(const std::string_view name, const std::size_t count) {
-    if (count == 0 || name.empty() || (name.size() > 1 && name.front() == '0')) {
-        return std::unexpected(error(code::contract, "array"));
-    }
-    std::size_t output{};
-    const auto [end, status] = std::from_chars(name.data(), name.data() + name.size(), output);
-    if (status != std::errc{} || end != name.data() + name.size() || output >= count) {
-        return std::unexpected(error(code::contract, "array"));
-    }
-    return output;
-}
-
-struct validated_value {
-    std::vector<std::string_view> names;
-    std::size_t bytes{};
-};
-
-/// 校验完整 Catalog 形状和编码字节，并返回协议确定顺序。
-[[nodiscard]] result<validated_value> validate_value(const kind shape, const fields& value, const std::size_t maximum_bytes) {
-    if (kind_name(shape).empty()) {
-        return std::unexpected(error(code::invalid, "kind"));
-    }
-    if (value.size() > maximum_fields) {
-        return std::unexpected(error(code::capacity, "fields"));
-    }
-    validated_value output;
-    output.names.reserve(value.size());
-    if (shape == kind::value) {
-        const auto iterator = value.find("value");
-        if (value.size() != 1 || iterator == value.end()) {
-            return std::unexpected(error(code::contract, "value"));
-        }
-    }
-    std::size_t expected_index{};
-    for (const auto& [name, bytes] : value) {
-        if (!valid_field_name(name)) {
-            return std::unexpected(error(code::invalid, name));
-        }
-        if (shape == kind::array) {
-            auto index = array_index(name, value.size());
-            if (!index || *index != expected_index++) {
-                return std::unexpected(error(code::contract, "array"));
-            }
-        }
-        if (name.size() > maximum_bytes - std::min(output.bytes, maximum_bytes) ||
-            bytes.size() > maximum_bytes - std::min(output.bytes + name.size(), maximum_bytes)) {
-            return std::unexpected(error(code::capacity, "value"));
-        }
-        output.bytes += name.size() + bytes.size();
-        output.names.push_back(name);
-    }
-    return output;
-}
-
-[[nodiscard]] result<std::vector<std::string_view>> validate_patch(const fields& value, const std::size_t maximum_bytes) {
-    if (value.empty()) {
-        return std::unexpected(error(code::invalid, "patch"));
-    }
-    if (value.size() > maximum_fields) {
-        return std::unexpected(error(code::capacity, "fields"));
-    }
-    std::vector<std::string_view> output;
-    output.reserve(value.size());
-    std::size_t bytes{};
-    for (const auto& [name, field] : value) {
-        if (!valid_field_name(name)) {
-            return std::unexpected(error(code::invalid, name));
-        }
-        if (name.size() > maximum_bytes - std::min(bytes, maximum_bytes) || field.size() > maximum_bytes - std::min(bytes + name.size(), maximum_bytes)) {
-            return std::unexpected(error(code::capacity, "patch"));
-        }
-        bytes += name.size() + field.size();
-        output.push_back(name);
-    }
-    return output;
-}
 
 [[nodiscard]] std::string binary_string(const bytes& value) {
     return {reinterpret_cast<const char*>(value.data()), value.size()};
@@ -283,9 +109,9 @@ struct validated_value {
         if (status == values.end()) {
             return std::unexpected(error(code::corrupt, "&status"));
         }
-        auto category = parse_code(status->second);
-        if (!category || *category == code::deadline || *category == code::ambiguous || *category == code::closed) {
-            return std::unexpected(error(code::protocol, "&status"));
+        auto category = catalog_script_status(status->second);
+        if (!category) {
+            return std::unexpected(category.error());
         }
         std::string field;
         if (const auto found = values.find("&field"); found != values.end()) {
@@ -326,22 +152,6 @@ struct validated_value {
 
 } // namespace
 
-result<std::size_t> validate_catalog_value(const kind shape, const fields& value, const std::size_t maximum_bytes) {
-    auto validated = validate_value(shape, value, maximum_bytes);
-    if (!validated) {
-        return std::unexpected(validated.error());
-    }
-    return validated->bytes;
-}
-
-result<void> validate_catalog_patch(const fields& value, const std::size_t maximum_bytes) {
-    auto validated = validate_patch(value, maximum_bytes);
-    if (!validated) {
-        return std::unexpected(validated.error());
-    }
-    return {};
-}
-
 std::optional<kind> parse_catalog_kind(const std::string_view value) noexcept {
     if (value == "value") {
         return kind::value;
@@ -357,6 +167,15 @@ std::optional<kind> parse_catalog_kind(const std::string_view value) noexcept {
 
 std::string catalog_prefix(const std::string_view zone) {
     return prefix(zone);
+}
+
+result<code> catalog_script_status(const std::string_view value) {
+    const auto category = parse_code(value);
+    if (!category || (*category != code::invalid && *category != code::contract && *category != code::capacity && *category != code::stale &&
+                      *category != code::transition && *category != code::corrupt && *category != code::unavailable)) {
+        return std::unexpected(error(code::protocol, "&status"));
+    }
+    return *category;
 }
 
 std::string catalog_meta_key(const std::string_view zone) {
@@ -441,11 +260,14 @@ result<void> client_core::bootstrap() {
 }
 
 result<void> client_core::close() {
+    std::lock_guard close_lock(close_mutex_);
     if (closed_.exchange(true, std::memory_order_acq_rel)) {
         return {};
     }
     std::vector<std::shared_ptr<subscriber_core>> children;
     {
+        // 先汇合正在创建的 Subscriber；释放准入锁后再等待子任务，避免锁与 join 互等。
+        std::unique_lock admission(operations_);
         std::lock_guard lock(children_mutex_);
         for (const auto& weak : children_) {
             if (auto value = weak.lock()) {
@@ -517,26 +339,16 @@ result<mutation_result> catalog_replace(const std::shared_ptr<client_core>& owne
     if (!target.valid()) {
         return std::unexpected(error(code::invalid, "path"));
     }
-    auto validated = validate_value(shape, value, owner->configuration().max_record_bytes);
-    if (!validated) {
-        return std::unexpected(validated.error());
-    }
-    std::vector<std::string> arguments;
-    arguments.reserve(4 + validated->names.size() * 2);
-    arguments.push_back(target.member());
-    arguments.push_back(kind_name(shape));
-    arguments.push_back(std::to_string(validated->bytes));
-    arguments.push_back(std::to_string(validated->names.size()));
-    for (const auto name : validated->names) {
-        arguments.emplace_back(name);
-        arguments.push_back(binary_string(value.find(name)->second));
+    auto arguments = encode_catalog_replace(target.member(), shape, value, owner->configuration().max_record_bytes);
+    if (!arguments) {
+        return std::unexpected(arguments.error());
     }
     auto keys = mutation_keys(owner->configuration().zone, target);
     std::shared_lock operation(owner->operations());
     if (!owner->open()) {
         return std::unexpected(error(code::closed));
     }
-    auto response = owner->replace_script().run(*owner->transport(), keys, arguments, true);
+    auto response = owner->replace_script().run(*owner->transport(), keys, *arguments, true);
     return response ? parse_mutation_reply(*response) : result<mutation_result>(std::unexpected(response.error()));
 }
 
@@ -550,9 +362,8 @@ result<mutation_result> catalog_patch(const std::shared_ptr<client_core>& owner,
     if (value.base_revision == 0 || value.base_revision > maximum_revision) {
         return std::unexpected(error(code::invalid, "@base_revision"));
     }
-    auto names = validate_patch(value.set, owner->configuration().max_record_bytes);
-    if (!names) {
-        return std::unexpected(names.error());
+    if (auto status = validate_catalog_patch(value.set, owner->configuration().max_record_bytes); !status) {
+        return std::unexpected(status.error());
     }
     std::shared_lock operation(owner->operations());
     if (!owner->open()) {
@@ -560,15 +371,20 @@ result<mutation_result> catalog_patch(const std::shared_ptr<client_core>& owner,
     }
     verdandi::detail::command read("HMGET");
     read.add(value_key(owner->configuration().zone, target)).add("@revision").add("@kind").add("@encoded_bytes");
-    for (const auto name : *names) {
+    for (const auto& [name, field] : value.set) {
         read.add(name);
     }
     auto header = owner->transport()->execute(read);
     if (!header) {
         return std::unexpected(header.error());
     }
-    if (header->type != verdandi::detail::response::kind::array || header->children.size() != names->size() + 3 ||
-        header->children[0].type == verdandi::detail::response::kind::null || header->children[1].type == verdandi::detail::response::kind::null ||
+    if (header->type != verdandi::detail::response::kind::array || header->children.size() != value.set.size() + 3) {
+        return std::unexpected(error(code::corrupt, "catalog_header"));
+    }
+    if (std::ranges::all_of(header->children, [](const auto& item) { return item.type == verdandi::detail::response::kind::null; })) {
+        return std::unexpected(error(code::stale, "@base_revision"));
+    }
+    if (header->children[0].type == verdandi::detail::response::kind::null || header->children[1].type == verdandi::detail::response::kind::null ||
         header->children[2].type == verdandi::detail::response::kind::null) {
         return std::unexpected(error(code::corrupt, "catalog_header"));
     }
@@ -576,50 +392,57 @@ result<mutation_result> catalog_patch(const std::shared_ptr<client_core>& owner,
     if (!revision) {
         return std::unexpected(revision.error());
     }
+    if (*revision == 0) {
+        return std::unexpected(error(code::corrupt, "@revision"));
+    }
     if (*revision != value.base_revision) {
         return std::unexpected(error(code::stale, "@base_revision").with_revision(*revision));
     }
     auto shape_text = header->children[1].text();
     const bool array = shape_text && *shape_text == "array";
-    if (!shape_text || (*shape_text != "array" && *shape_text != "map")) {
+    if (!shape_text || (*shape_text != "array" && *shape_text != "map" && *shape_text != "value")) {
+        return std::unexpected(error(code::corrupt, "@kind").with_revision(*revision));
+    }
+    if (*shape_text == "value") {
         return std::unexpected(error(code::transition, "@kind").with_revision(*revision));
     }
     auto projected = parse_nonnegative(header->children[2], "@encoded_bytes", owner->configuration().max_record_bytes);
     if (!projected) {
         return std::unexpected(projected.error());
     }
-    for (std::size_t index = 0; index < names->size(); ++index) {
-        const auto& old = header->children[index + 3];
-        const auto found = value.set.find((*names)[index]);
+    // HMGET 与参数编码复用同一只读 map 的字典序，避免名称副本和逐字段树查找。
+    std::size_t index = 3;
+    std::size_t added{}, removed{};
+    for (const auto& [name, field] : value.set) {
+        const auto& old = header->children[index++];
         if (old.type == verdandi::detail::response::kind::null) {
             if (array) {
-                return std::unexpected(error(code::transition, std::string((*names)[index])).with_revision(*revision));
+                return std::unexpected(error(code::transition, name).with_revision(*revision));
             }
-            if ((*names)[index].size() > owner->configuration().max_record_bytes - *projected ||
-                found->second.size() > owner->configuration().max_record_bytes - *projected - (*names)[index].size()) {
-                return std::unexpected(error(code::capacity, "value").with_revision(*revision));
-            }
-            *projected += (*names)[index].size() + found->second.size();
+            added += name.size() + field.size();
         } else {
             auto previous = old.text();
-            if (!previous || previous->size() > *projected) {
-                return std::unexpected(error(code::corrupt, std::string((*names)[index])));
+            if (!previous || previous->size() > *projected - removed) {
+                return std::unexpected(error(code::corrupt, name));
             }
-            *projected = *projected - previous->size() + found->second.size();
-            if (*projected > owner->configuration().max_record_bytes) {
-                return std::unexpected(error(code::capacity, "value").with_revision(*revision));
-            }
+            removed += previous->size();
+            added += field.size();
         }
     }
+    // 原状态与补丁各自已限制为至多 4 MiB；只在汇总所有缩减后判断最终容量。
+    *projected = *projected - removed + added;
+    if (*projected > owner->configuration().max_record_bytes) {
+        return std::unexpected(error(code::capacity, "value").with_revision(*revision));
+    }
     std::vector<std::string> arguments;
-    arguments.reserve(4 + names->size() * 2);
+    arguments.reserve(4 + value.set.size() * 2);
     arguments.push_back(target.member());
     arguments.push_back(std::to_string(value.base_revision));
     arguments.push_back(std::to_string(*projected));
-    arguments.push_back(std::to_string(names->size()));
-    for (const auto name : *names) {
+    arguments.push_back(std::to_string(value.set.size()));
+    for (const auto& [name, field] : value.set) {
         arguments.emplace_back(name);
-        arguments.push_back(binary_string(value.set.find(name)->second));
+        arguments.push_back(binary_string(field));
     }
     auto keys = mutation_keys(owner->configuration().zone, target);
     auto response = owner->patch_script().run(*owner->transport(), keys, arguments, true);

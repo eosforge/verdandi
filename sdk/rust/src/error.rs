@@ -100,25 +100,21 @@ impl Error {
     ///
     /// 诊断文本最多保留 512 字节，避免外部错误无限放大日志或返回值。
     pub(crate) fn driver(code: Code, error: impl Display) -> Self {
-        let mut detail = error.to_string();
-        detail.truncate(512);
         Self {
             code,
             field: None,
             revision: None,
-            detail: Some(detail),
+            detail: Some(bounded_detail(error)),
         }
     }
 
     /// 同时记录稳定 `code`、协议 `field` 和限长底层 `error`。
     pub(crate) fn field_driver(code: Code, field: impl Into<String>, error: impl Display) -> Self {
-        let mut detail = error.to_string();
-        detail.truncate(512);
         Self {
             code,
             field: Some(field.into()),
             revision: None,
-            detail: Some(detail),
+            detail: Some(bounded_detail(error)),
         }
     }
 
@@ -174,3 +170,20 @@ impl Display for Error {
 impl StdError for Error {}
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// 保留至多 512 字节诊断文本，并在 UTF-8 字符边界截断。
+pub(crate) fn bounded_detail(error: impl Display) -> String {
+    let mut detail = error.to_string();
+    if detail.len() > 512 {
+        let mut end = 512;
+        while !detail.is_char_boundary(end) {
+            end -= 1;
+        }
+        detail.truncate(end);
+    }
+    detail
+}
+
+#[cfg(test)]
+#[path = "../tests/internal/error.rs"]
+mod tests;

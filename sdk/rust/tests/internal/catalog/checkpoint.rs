@@ -1,6 +1,14 @@
 use super::*;
 
 #[test]
+fn checkpoint_diagnostic_keeps_complete_utf8_characters() {
+    let input = "中".repeat(200);
+    let detail = store_error(&input);
+    assert_eq!(detail.len(), 510);
+    assert!(input.starts_with(&detail));
+}
+
+#[test]
 fn checkpoint_state_round_trips_and_rejects_unsafe_revision() {
     let state = RawState {
         revision: 7,
@@ -61,7 +69,19 @@ fn checkpoint_entry_and_cursor_are_monotonic() {
     };
     assert_eq!(cursor, 9);
     assert_eq!(entries.get(&catalog_path).map(|state| state.revision), Some(9));
-    drop(checkpoint);
+    checkpoint.close();
+    let reopened = Checkpoint::open(&path).unwrap_or_else(|error| panic!("closed checkpoint still owns file lock: {error}"));
+    assert!(checkpoint.disabled());
+    assert!(checkpoint.save_cursor("Prod", "scope", 100).is_ok());
+    assert_eq!(
+        reopened
+            .load("Prod", "scope", 64)
+            .unwrap_or_else(|error| panic!("reopened checkpoint read failed: {error}"))
+            .0,
+        9
+    );
+    checkpoint.close();
+    drop(reopened);
     if let Err(error) = std::fs::remove_file(&path) {
         panic!("checkpoint cleanup failed: {error}");
     }

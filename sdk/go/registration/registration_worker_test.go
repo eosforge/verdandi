@@ -28,6 +28,21 @@ func TestRegistrationRawUpdateDetachesCallerState(t *testing.T) {
 	}
 }
 
+func TestEmptyDataUpdateIsANoopWithoutTransportAccess(t *testing.T) {
+	registration := &registrationCore{client: newTestRuntime(runtimeConfig{}, protocolZoneConfig())}
+	state := registrationState{version: 1, revision: 1, timestamp: 9, data: Fields{}}
+	update := registrationUpdateFields{Data: Fields{}}
+	if err := registration.validateBufferedUpdate(update); err != nil {
+		t.Fatal(err)
+	}
+	if err := registration.updateState(context.Background(), &state, update); err != nil {
+		t.Fatal(err)
+	}
+	if state.version != 1 || state.revision != 1 || state.timestamp != 9 {
+		t.Fatalf("empty no-op changed state: %+v", state)
+	}
+}
+
 func TestRegistrationFieldsMailboxMergesIntoOneBatch(t *testing.T) {
 	t.Parallel()
 	client := newTestRuntime(runtimeConfig{}, protocolZoneConfig())

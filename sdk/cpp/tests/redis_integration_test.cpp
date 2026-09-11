@@ -3,8 +3,10 @@
 #include "verdandi/registration/registration.hpp"
 #include "verdandi/registration/selector.hpp"
 
+#include <barrier>
 #include <chrono>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -196,6 +198,11 @@ int test_registration(const verdandi::client& transport, const std::string_view 
     if (auto status = handle->renew(); !status) {
         return fail("registration.renew", status.error());
     }
+    const auto record_key = "verdandi:registration:" + std::string(zone) + ":Proxy:" + std::string(handle->uuid());
+    auto leased_record = transport.hash().load(record_key);
+    if (!leased_record) {
+        return fail("registration record", leased_record.error());
+    }
     if (auto status = handle->close(); !status) {
         return fail("registration.close", status.error());
     }
@@ -205,7 +212,59 @@ int test_registration(const verdandi::client& transport, const std::string_view 
     if (auto status = owner->close(); !status) {
         return fail("registration client close", status.error());
     }
-    return 0;
+
+    // Reinsert a valid, unrenewed lease without publishing an event. Reading must
+    // use protocol ceilings even after writers adopt a lower local policy.
+    struct record_cleanup {
+        const verdandi::client& transport;
+        const std::string& key;
+        ~record_cleanup() {
+            static_cast<void>(transport.key().erase(key));
+        }
+    } cleanup{transport, record_key};
+    const auto encode = [](const std::string_view value) {
+        const auto* first = reinterpret_cast<const std::byte*>(value.data());
+        return verdandi::bytes(first, first + value.size());
+    };
+    leased_record->insert_or_assign("@ttl", encode("2500"));
+    leased_record->insert_or_assign("@future_metadata", encode("optional"));
+    auto stored = transport.hash().store(record_key, *leased_record);
+    if (!stored) {
+        return fail("unrenewed lease", stored.error());
+    }
+    auto indexed = transport.hash().store("verdandi:registry:" + std::string(zone) + ":Proxy",
+                                          {{std::string(handle->uuid()), encode(std::to_string(handle->revision()))}});
+    if (!indexed) {
+        return fail("unrenewed registry", indexed.error());
+    }
+    auto lowered = transport.hash().store("verdandi:config:" + std::string(zone), {{"registration_data_max_field_value_bytes", encode("1")}});
+    if (!lowered) {
+        return fail("lowered write policy", lowered.error());
+    }
+    auto reader = verdandi::registration::client::open(transport, configuration);
+    if (!reader) {
+        return fail("reader with lowered policy", reader.error());
+    }
+    auto expiring = verdandi::registration::selector<test_attr, test_data>::create(*reader, {"Proxy"});
+    if (!expiring) {
+        return fail("read old record and optional metadata", expiring.error());
+    }
+    auto visible = (*expiring)->snapshot();
+    if (!visible || visible->candidates.size() != 1 || visible->candidates.front().data.power != 2) {
+        std::cerr << "lowered policy or optional metadata hid a valid lease\n";
+        return 1;
+    }
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    while (std::chrono::steady_clock::now() < deadline) {
+        visible = (*expiring)->snapshot();
+        if (visible && visible->candidates.empty()) {
+            return reader->close() ? 0 : 1;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+    std::cerr << "natural expiry was not published without a new event\n";
+    static_cast<void>(reader->close());
+    return 1;
 }
 
 int test_catalog(const verdandi::client& transport, const std::string_view zone, const bool exact_subscription) {
@@ -235,6 +294,16 @@ int test_catalog(const verdandi::client& transport, const std::string_view zone,
 
     verdandi::catalog::subscription scope;
     if (exact_subscription) {
+        verdandi::catalog::subscription denied_scope;
+        denied_scope.parts.emplace_back("routing");
+        auto denied = verdandi::catalog::subscriber::create(*owner, std::move(denied_scope));
+        if (denied || denied.error().category() != verdandi::code::unavailable || denied.error().message().find("NOPERM") == std::string::npos) {
+            std::cerr << "restricted pattern subscription must return NOPERM without aborting\n";
+            return 1;
+        }
+        if (auto reachable = transport.ping(); !reachable) {
+            return fail("root after denied subscription", reachable.error());
+        }
         scope.paths.push_back(*target);
     } else {
         scope.parts.emplace_back("routing");
@@ -280,6 +349,44 @@ int test_catalog(const verdandi::client& transport, const std::string_view zone,
         return 1;
     }
 
+    verdandi::fields array;
+    for (std::size_t index = 0; index < 12; ++index) {
+        array.emplace(std::to_string(index), verdandi::bytes{std::byte{'x'}});
+    }
+    auto array_replaced = publisher->replace(*target, verdandi::catalog::kind::array, array);
+    if (!array_replaced) {
+        return fail("catalog array replace", array_replaced.error());
+    }
+    const auto observe_array = [&entry, &array](const std::uint64_t revision) {
+        for (std::size_t attempt = 0; attempt < 100; ++attempt) {
+            const auto current = entry->load<verdandi::fields>();
+            if (current && current->revision == revision && current->state == verdandi::catalog::status::present && current->value &&
+                *current->value == array) {
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds{10});
+        }
+        return false;
+    };
+    if (!observe_array(array_replaced->revision)) {
+        std::cerr << "catalog array replace was not observed\n";
+        return 1;
+    }
+    verdandi::catalog::patch array_change;
+    array_change.base_revision = array_replaced->revision;
+    array_change.set.emplace("2", verdandi::bytes{std::byte{'a'}});
+    array_change.set.emplace("10", verdandi::bytes{std::byte{'b'}, std::byte{0}});
+    array.at("2") = array_change.set.at("2");
+    array.at("10") = array_change.set.at("10");
+    auto array_patched = publisher->apply(*target, std::move(array_change));
+    if (!array_patched) {
+        return fail("catalog array patch", array_patched.error());
+    }
+    if (!observe_array(array_patched->revision)) {
+        std::cerr << "catalog array patch was not observed\n";
+        return 1;
+    }
+
     if (auto status = (*subscriber)->close(); !status) {
         return fail("catalog subscriber close", status.error());
     }
@@ -306,16 +413,17 @@ int test_catalog(const verdandi::client& transport, const std::string_view zone,
         return fail("catalog recovered subscriber", recovered_subscriber.error());
     }
     auto recovered_entry = (*recovered_subscriber)->find(*target);
-    auto recovered = recovered_entry ? recovered_entry->load<test_data>()
-                                     : verdandi::result<verdandi::catalog::snapshot<test_data>>(std::unexpected(verdandi::error(verdandi::code::unavailable)));
-    if (!recovered || recovered->revision != patched->revision || recovered->state != verdandi::catalog::status::present || !recovered->value ||
-        recovered->value->power != 11) {
-        std::cerr << "catalog checkpoint recovery failed\n";
+    auto recovered = recovered_entry
+                         ? recovered_entry->load<verdandi::fields>()
+                         : verdandi::result<verdandi::catalog::snapshot<verdandi::fields>>(std::unexpected(verdandi::error(verdandi::code::unavailable)));
+    if (!recovered || recovered->revision != array_patched->revision || recovered->state != verdandi::catalog::status::present || !recovered->value ||
+        *recovered->value != array) {
+        std::cerr << "catalog array checkpoint recovery failed\n";
         return 1;
     }
 
     auto erased = recovered_publisher->erase(*target);
-    if (!erased || erased->revision <= patched->revision) {
+    if (!erased || erased->revision <= array_patched->revision) {
         return erased ? 1 : fail("catalog.erase", erased.error());
     }
     bool observed_delete{false};
@@ -335,6 +443,82 @@ int test_catalog(const verdandi::client& transport, const std::string_view zone,
     }
     if (auto status = recovered_owner->close(); !status) {
         return fail("catalog client close", status.error());
+    }
+    verdandi::catalog::patch after_delete;
+    after_delete.base_revision = erased->revision;
+    after_delete.set = {{"field", verdandi::bytes{std::byte{'x'}}}};
+    auto patch_owner = verdandi::catalog::client::open(transport, configuration);
+    if (!patch_owner) {
+        return fail("catalog patch reopen", patch_owner.error());
+    }
+    auto patch_publisher = verdandi::catalog::publisher::create(*patch_owner);
+    if (!patch_publisher) {
+        return fail("catalog patch publisher", patch_publisher.error());
+    }
+    const auto missing_patch = patch_publisher->apply(*target, std::move(after_delete));
+    if (missing_patch || missing_patch.error().category() != verdandi::code::stale) {
+        std::cerr << "patch after delete must report Stale\n";
+        return 1;
+    }
+    if (auto status = patch_owner->close(); !status) {
+        return fail("catalog patch owner close", status.error());
+    }
+
+    for (std::size_t iteration = 0; iteration < 8; ++iteration) {
+        auto closing_owner = verdandi::catalog::client::open(transport, configuration);
+        if (!closing_owner) {
+            return fail("concurrent catalog reopen", closing_owner.error());
+        }
+        verdandi::catalog::subscription closing_scope;
+        if (exact_subscription) {
+            closing_scope.paths.push_back(*target);
+        } else {
+            closing_scope.parts.emplace_back("routing");
+        }
+        auto existing = verdandi::catalog::subscriber::create(*closing_owner, closing_scope);
+        if (!existing) {
+            return fail("concurrent existing subscriber", existing.error());
+        }
+        std::barrier start(4);
+        std::vector<std::shared_ptr<verdandi::catalog::entry>> entries;
+        verdandi::result<std::unique_ptr<verdandi::catalog::subscriber>> created = std::unexpected(verdandi::error(verdandi::code::closed));
+        verdandi::result<void> first_close, second_close;
+        {
+            std::jthread find([&] {
+                start.arrive_and_wait();
+                for (std::size_t index = 0; index < 128; ++index) {
+                    auto target = verdandi::catalog::path::create("routing", "race" + std::to_string(index));
+                    if (target) {
+                        entries.push_back((*existing)->find(*target));
+                    }
+                }
+            });
+            std::jthread create([&] {
+                start.arrive_and_wait();
+                created = verdandi::catalog::subscriber::create(*closing_owner, closing_scope);
+            });
+            std::jthread close_one([&] {
+                start.arrive_and_wait();
+                first_close = closing_owner->close();
+            });
+            std::jthread close_two([&] {
+                start.arrive_and_wait();
+                second_close = closing_owner->close();
+            });
+        }
+        if (!first_close || !second_close || (!created && created.error().category() != verdandi::code::closed)) {
+            std::cerr << "concurrent catalog create/close did not converge\n";
+            return 1;
+        }
+        if (created) {
+            entries.push_back((*created)->find(*target));
+        }
+        for (const auto& value : entries) {
+            if (value && value->state() != verdandi::catalog::status::closed) {
+                std::cerr << "late catalog entry survived completed Close\n";
+                return 1;
+            }
+        }
     }
     return 0;
 }
@@ -358,18 +542,32 @@ void cleanup_test_keys(const verdandi::client& client, const std::string_view re
 } // namespace
 
 int main() {
+    std::set_terminate([] {
+        std::cerr << "FAIL: unhandled native exception";
+        if (const auto exception = std::current_exception()) {
+            try {
+                std::rethrow_exception(exception);
+            } catch (const std::exception& error) {
+                std::cerr << ": " << error.what();
+            } catch (...) {
+                std::cerr << ": unknown exception";
+            }
+        }
+        std::cerr << '\n';
+        std::_Exit(3);
+    });
     const auto standalone = environment("VERDANDI_REDIS_ADDRESS");
     const auto sentinel = environment("VERDANDI_SENTINEL_ADDRS");
     if (standalone.empty() && sentinel.empty()) {
         return 77;
     }
     verdandi::redis_configuration configuration;
+    configuration.auth.username = environment("VERDANDI_REDIS_USERNAME");
+    configuration.auth.password = environment("VERDANDI_REDIS_PASSWORD");
     if (!sentinel.empty()) {
         configuration.mode = verdandi::redis_mode::sentinel;
         configuration.addresses = split_addresses(sentinel);
         configuration.master_name = environment("VERDANDI_SENTINEL_MASTER");
-        configuration.auth.username = environment("VERDANDI_REDIS_USERNAME");
-        configuration.auth.password = environment("VERDANDI_REDIS_PASSWORD");
         configuration.sentinel_auth.username = environment("VERDANDI_SENTINEL_USERNAME");
         configuration.sentinel_auth.password = environment("VERDANDI_SENTINEL_PASSWORD");
         configuration.timeout = std::chrono::seconds{3};

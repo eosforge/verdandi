@@ -80,7 +80,13 @@ public:
     registration(const registration&) = delete;
     registration& operator=(const registration&) = delete;
     registration(registration&&) noexcept = default;
-    registration& operator=(registration&&) noexcept = default;
+    registration& operator=(registration&& other) noexcept {
+        if (this != &other) {
+            registration previous(std::move(other));
+            core_.swap(previous.core_);
+        }
+        return *this;
+    }
     ~registration() {
         if (core_) {
             static_cast<void>(close());

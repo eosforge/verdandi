@@ -1,0 +1,1118 @@
+{
+  "date": "2026-09-05",
+  "base_commit": "81cb8b9",
+  "scope": "C++ Catalog validation only; native Windows smoke measurements",
+  "platform": "Windows-10-10.0.19044-SP0",
+  "cpu": "Intel Xeon E5-2680 v4 @ 2.40GHz",
+  "compiler": "MSVC 19.44.35228 x64 /O2 /W4 /WX",
+  "dependency_downloads": false,
+  "pairs": 7,
+  "baseline": "Unmodified validation helpers and wrappers extracted from base sdk/cpp/src/catalog.cpp; no Redis/runtime stubs.",
+  "qualifications_not_run": [
+    "full SDK build/link",
+    "Redis/Sentinel integration",
+    "C# managed binding",
+    "Linux race/sanitizers",
+    "clang-format/clang-tidy",
+    "long-duration campaigns"
+  ],
+  "source_sha256": {
+    "sdk/cpp/CMakeLists.txt": "9b4f218135d95494cca573f02f27aaa4801dff6cf0d5a0b898069f798a1209e1",
+    "sdk/cpp/src/catalog.cpp": "7f4f7abe3975e33fee5afeb7f83e91527b05d04cada65bfc9ee491ed6dae7273",
+    "sdk/cpp/src/catalog_value.cpp": "caf4e7e2c6d40c3a812ed515a8f1182e00e013d8a2cacc956fa880de160ad898",
+    "sdk/cpp/src/internal/catalog.hpp": "cd7d5b9c08c1d80ee81fdbfb1b0a4f380930fdbbf016f52ec7be1b6372a1e837",
+    "sdk/cpp/src/internal/catalog_value.hpp": "ccc2d1e65240daadd7f77f084c7c2a11e6030c15776fa7fe567659848dcd5320",
+    "sdk/cpp/tests/catalog_value_test.cpp": "abd881a5281998398673569eaabfce83416232b87b40f294c1186acf6f7b3b5e",
+    "sdk/cpp/tests/catalog_value_benchmark.cpp": "d383632cfe98cedd2e91be3b4f1c69dff5b50cb0ecbf8bc5c2a250af9aa291cb",
+    "sdk/cpp/tests/redis_integration_test.cpp": "1231467568821024bd29a611e373a721f65c1c66c1f1a1a8c051b2800be355e4",
+    "sdk/cpp/tests/offline/CMakeLists.txt": "4ca950f03635c540206e96a45c4786d1b2d32304ac6bee328d552bf9395f3b87"
+  },
+  "summary": [
+    {
+      "operation": "map",
+      "fields": 32,
+      "before_median_ns": 1111.35,
+      "after_median_ns": 615.2,
+      "time_reduction_percent": 44.64,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 512.0,
+      "after_allocated_bytes_per_op": 0.0
+    },
+    {
+      "operation": "patch",
+      "fields": 32,
+      "before_median_ns": 1030.05,
+      "after_median_ns": 538.0,
+      "time_reduction_percent": 47.77,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 512.0,
+      "after_allocated_bytes_per_op": 0.0
+    },
+    {
+      "operation": "map",
+      "fields": 512,
+      "before_median_ns": 17055.75,
+      "after_median_ns": 9714.75,
+      "time_reduction_percent": 43.04,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 8231.0,
+      "after_allocated_bytes_per_op": 0.0
+    },
+    {
+      "operation": "patch",
+      "fields": 512,
+      "before_median_ns": 13858.95,
+      "after_median_ns": 9364.75,
+      "time_reduction_percent": 32.43,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 8231.0,
+      "after_allocated_bytes_per_op": 0.0
+    },
+    {
+      "operation": "map",
+      "fields": 4096,
+      "before_median_ns": 164054.0,
+      "after_median_ns": 90036.33,
+      "time_reduction_percent": 45.12,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 65575.0,
+      "after_allocated_bytes_per_op": 0.0
+    },
+    {
+      "operation": "patch",
+      "fields": 4096,
+      "before_median_ns": 157259.0,
+      "after_median_ns": 89984.0,
+      "time_reduction_percent": 42.78,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 65575.0,
+      "after_allocated_bytes_per_op": 0.0
+    },
+    {
+      "operation": "map",
+      "fields": 65536,
+      "before_median_ns": 2619845.0,
+      "after_median_ns": 1555605.0,
+      "time_reduction_percent": 40.62,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 1048615.0,
+      "after_allocated_bytes_per_op": 0.0
+    },
+    {
+      "operation": "patch",
+      "fields": 65536,
+      "before_median_ns": 2500445.0,
+      "after_median_ns": 1509750.0,
+      "time_reduction_percent": 39.62,
+      "before_allocations_per_op": 1.0,
+      "after_allocations_per_op": 0.0,
+      "before_allocated_bytes_per_op": 1048615.0,
+      "after_allocated_bytes_per_op": 0.0
+    }
+  ],
+  "trials": [
+    {
+      "pair": 1,
+      "order": [
+        "before",
+        "after"
+      ],
+      "before": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 1341.65,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 1076.5,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 17055.75,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 13394.2,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 160395.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 148754.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 2830210.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 2350150.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 20
+        }
+      ],
+      "after": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 615.2,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 611.1,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 11284.15,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 9534.2,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 90036.33,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 89310.33,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 1423420.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 1392965.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 20
+        }
+      ]
+    },
+    {
+      "pair": 2,
+      "order": [
+        "after",
+        "before"
+      ],
+      "after": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 1078.6,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 1070.5,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 13895.95,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 8812.55,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 87672.67,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 84990.33,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 1419085.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 1415050.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 20
+        }
+      ],
+      "before": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 2492.55,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 2063.15,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 17930.55,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 13985.1,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 170070.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 164177.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 2464525.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 2176140.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 20
+        }
+      ]
+    },
+    {
+      "pair": 3,
+      "order": [
+        "before",
+        "after"
+      ],
+      "before": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 1111.35,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 1038.35,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 17979.15,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 16690.75,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 217950.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 206497.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 2619845.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 2500445.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 20
+        }
+      ],
+      "after": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 882.6,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 535.35,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 11822.75,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 11881.65,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 116356.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 118389.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 1618230.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 1482815.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 20
+        }
+      ]
+    },
+    {
+      "pair": 4,
+      "order": [
+        "after",
+        "before"
+      ],
+      "after": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 1075.3,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 774.6,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 9714.75,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 9904.75,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 98145.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 92003.67,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 1566130.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 1509750.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 20
+        }
+      ],
+      "before": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 1245.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 1030.05,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 17050.05,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 13858.95,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 157846.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 155613.33,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 2586750.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 2705145.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 20
+        }
+      ]
+    },
+    {
+      "pair": 5,
+      "order": [
+        "before",
+        "after"
+      ],
+      "before": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 1031.5,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 850.95,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 18951.25,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 16619.7,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 211160.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 201904.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 3045710.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 2639975.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 20
+        }
+      ],
+      "after": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 450.3,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 538.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 9520.85,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 9286.8,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 89968.67,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 88297.67,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 1555605.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 1509865.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 20
+        }
+      ]
+    },
+    {
+      "pair": 6,
+      "order": [
+        "after",
+        "before"
+      ],
+      "after": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 463.5,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 390.1,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 9403.7,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 9364.75,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 97092.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 93270.67,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 1429365.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 1514510.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 20
+        }
+      ],
+      "before": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 1006.45,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 773.55,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 13931.05,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 12909.15,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 158464.67,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 153479.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 2467620.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 2385165.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 20
+        }
+      ]
+    },
+    {
+      "pair": 7,
+      "order": [
+        "before",
+        "after"
+      ],
+      "before": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 914.55,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 748.75,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 512.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 13205.8,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 12658.65,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 8231.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 164054.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 157259.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 65575.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 2688600.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 3348625.0,
+          "allocations_per_op": 1.0,
+          "allocated_bytes_per_op": 1048615.0,
+          "checksum": 20
+        }
+      ],
+      "after": [
+        {
+          "operation": "map",
+          "fields": 32,
+          "ns_per_op": 418.7,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2476000
+        },
+        {
+          "operation": "patch",
+          "fields": 32,
+          "ns_per_op": 413.05,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 512,
+          "ns_per_op": 9334.8,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 40740000
+        },
+        {
+          "operation": "patch",
+          "fields": 512,
+          "ns_per_op": 9290.35,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 2000
+        },
+        {
+          "operation": "map",
+          "fields": 4096,
+          "ns_per_op": 87330.67,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 50047800
+        },
+        {
+          "operation": "patch",
+          "fields": 4096,
+          "ns_per_op": 89984.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 300
+        },
+        {
+          "operation": "map",
+          "fields": 65536,
+          "ns_per_op": 1628950.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 54828040
+        },
+        {
+          "operation": "patch",
+          "fields": 65536,
+          "ns_per_op": 1536530.0,
+          "allocations_per_op": 0.0,
+          "allocated_bytes_per_op": 0.0,
+          "checksum": 20
+        }
+      ]
+    }
+  ],
+  "benchmark_source": "sdk/cpp/tests/catalog_value_benchmark.cpp",
+  "baseline_helper_sha256": "04b04404603c92ca1526d1601b96605ca198a8af6a20eb88048981ab15d8059e",
+  "checks": {
+    "original_array_reproduction": {
+      "10": "accepted",
+      "11": "contract:array",
+      "100": "contract:array"
+    },
+    "msvc_release_unit": "pass",
+    "msvc_debug_rtc1_unit": "pass",
+    "standalone_cmake_release_ctest": "pass",
+    "lua_registration_generation": "pass",
+    "lua_catalog_generation": "pass",
+    "translation_unit_compile": {
+      "sdk/cpp/src/catalog.cpp": "pass",
+      "sdk/cpp/src/c/catalog.cpp": "pass",
+      "sdk/cpp/tests/redis_integration_test.cpp": "pass",
+      "sdk/cpp/src/catalog_subscriber.cpp": "blocked: openssl/evp.h is not installed"
+    },
+    "clang_format": "unavailable",
+    "clang_tidy": "unavailable",
+    "live_integration": "not run"
+  }
+}

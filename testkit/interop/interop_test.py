@@ -15,66 +15,9 @@ from pathlib import Path
 
 import redis
 
-
-class Peer:
-    def __init__(self, command: list[str], cwd: Path) -> None:
-        self.stderr: list[str] = []
-        self.lines: queue.Queue[str] = queue.Queue()
-        self.process = subprocess.Popen(
-            command,
-            cwd=cwd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-        )
-        threading.Thread(target=self._read_stdout, daemon=True).start()
-        threading.Thread(target=self._read_stderr, daemon=True).start()
-
-    def _read_stdout(self) -> None:
-        stream = self.process.stdout
-        if stream is None:
-            return
-        for line in stream:
-            self.lines.put(line.rstrip("\r\n"))
-
-    def _read_stderr(self) -> None:
-        stream = self.process.stderr
-        if stream is None:
-            return
-        self.stderr.extend(line.rstrip("\r\n") for line in stream)
-
-    def wait_line(self, prefix: str, timeout: float = 90.0) -> str:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if self.process.poll() is not None and self.lines.empty():
-                raise RuntimeError(f"peer exited with {self.process.returncode}: {' | '.join(self.stderr)}")
-            try:
-                line = self.lines.get(timeout=min(0.2, deadline - time.monotonic()))
-            except queue.Empty:
-                continue
-            if line.startswith(prefix):
-                return line
-            raise RuntimeError(f"unexpected peer output: {line!r}")
-        raise TimeoutError(f"timed out waiting for {prefix!r}: {' | '.join(self.stderr)}")
-
-    def send(self, command: str) -> None:
-        if self.process.stdin is None:
-            raise RuntimeError("peer stdin is closed")
-        self.process.stdin.write(command + "\n")
-        self.process.stdin.flush()
-
-    def stop(self) -> None:
-        if self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=5)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from testkit.support import Peer, build_peers
+from contextlib import ExitStack
 
 
 def zone_name() -> str:
@@ -95,29 +38,17 @@ def main() -> int:
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     zone = zone_name()
-    client = redis.Redis.from_url(arguments.redis_url)
+    client = redis.Redis.from_url(arguments.redis_url, socket_connect_timeout=5, socket_timeout=5)
     go_peer: Peer | None = None
     rust_peer: Peer | None = None
+    owned_zone = False
     try:
         if zone_keys(client, zone):
             raise RuntimeError("random interoperability Zone already exists")
-        go_peer = Peer(
-            ["go", "run", ".", arguments.redis_url, zone],
-            root / "testkit" / "interop" / "go-peer",
-        )
-        rust_peer = Peer(
-            [
-                "cargo",
-                "run",
-                "--quiet",
-                "--manifest-path",
-                str(root / "testkit" / "interop" / "rust-peer" / "Cargo.toml"),
-                "--",
-                arguments.redis_url,
-                zone,
-            ],
-            root,
-        )
+        owned_zone = True
+        go, rust = build_peers("interop")
+        go_peer = Peer([go, arguments.redis_url, zone], root)
+        rust_peer = Peer([rust, arguments.redis_url, zone], root)
         go_peer.wait_line("READY")
         rust_peer.wait_line("READY")
 
@@ -168,14 +99,18 @@ def main() -> int:
         print(f"PASS Go->Rust and Rust->Go live Registration/Catalog interoperability on Zone {zone}")
         return 0
     finally:
-        if go_peer is not None:
-            go_peer.stop()
-        if rust_peer is not None:
-            rust_peer.stop()
-        remaining = zone_keys(client, zone)
-        if remaining:
-            client.delete(*remaining)
-        client.close()
+        with ExitStack() as cleanup:
+            cleanup.callback(client.close)
+            if owned_zone:
+
+                def remove_keys():
+                    if keys := zone_keys(client, zone):
+                        client.unlink(*keys)
+
+                cleanup.callback(remove_keys)
+            for peer in (go_peer, rust_peer):
+                if peer is not None:
+                    cleanup.callback(peer.stop)
 
 
 if __name__ == "__main__":

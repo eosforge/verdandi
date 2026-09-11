@@ -1,0 +1,31 @@
+{
+  "status": "pass",
+  "platform": "win32",
+  "mode": "soak",
+  "mixed_hosts": false,
+  "cases": [
+    "service_cli_help_version_and_invalid_options",
+    "concurrent_three_peer_full_mesh",
+    "supervisor_offline_existing_mesh_and_new_peer_wait",
+    "persistent_supervisor_restart_and_waiting_peer_join",
+    "graceful_and_forced_peer_restart",
+    "invalid_identities_fail_closed",
+    "invalid_login_configuration_and_password_fail_closed",
+    "star_planet_account_roles_fail_closed",
+    "planet_prefers_local_group_without_joining_star_mesh",
+    "planet_cross_group_failover_while_supervisor_offline",
+    "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+    "one_active_upstream_per_planet",
+    "signals_process_exit_and_port_reuse"
+  ],
+  "soak": {
+    "requested_seconds": 120,
+    "elapsed_seconds": 120.384,
+    "restart_cycles": 17,
+    "minimum_available_mib": 18329,
+    "peers": 4,
+    "planets": 2
+  },
+  "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+  "elapsed_seconds": 152.255
+}

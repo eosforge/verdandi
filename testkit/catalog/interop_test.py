@@ -17,105 +17,22 @@ from typing import Any
 
 import redis
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from testkit.support import Peer, build_peers
+from contextlib import ExitStack
+
 REPOSITORY = Path(__file__).resolve().parents[2]
 
 
-class Peer:
-    def __init__(self, command: list[str], cwd: Path, environment: dict[str, str]) -> None:
-        self.stderr: list[str] = []
-        self.lines: queue.Queue[str] = queue.Queue()
-        self.process = subprocess.Popen(
-            command,
-            cwd=cwd,
-            env=environment,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-        )
-        threading.Thread(target=self._read_stdout, daemon=True).start()
-        threading.Thread(target=self._read_stderr, daemon=True).start()
-
-    def _read_stdout(self) -> None:
-        if self.process.stdout is None:
-            return
-        for line in self.process.stdout:
-            self.lines.put(line.rstrip("\r\n"))
-
-    def _read_stderr(self) -> None:
-        if self.process.stderr is None:
-            return
-        self.stderr.extend(line.rstrip("\r\n") for line in self.process.stderr)
-
-    def wait_line(self, prefix: str, timeout: float = 90.0) -> str:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if self.process.poll() is not None and self.lines.empty():
-                raise RuntimeError(f"peer exited with {self.process.returncode}: {' | '.join(self.stderr)}")
-            try:
-                line = self.lines.get(timeout=min(0.2, deadline - time.monotonic()))
-            except queue.Empty:
-                continue
-            if line.startswith("ERROR "):
-                raise RuntimeError(line)
-            if line.startswith(prefix):
-                return line
-            raise RuntimeError(f"unexpected peer output: {line!r}")
-        raise TimeoutError(f"timed out waiting for {prefix!r}: {' | '.join(self.stderr)}")
-
-    def send(self, command: str) -> None:
-        if self.process.stdin is None:
-            raise RuntimeError("peer stdin is closed")
-        self.process.stdin.write(command + "\n")
-        self.process.stdin.flush()
-
-    def command(self, command: str, prefix: str, timeout: float = 90.0) -> str:
-        self.send(command)
-        return self.wait_line(prefix, timeout)
-
-    def stop(self) -> None:
-        if self.process.poll() is None:
-            self.process.terminate()
-            try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=5)
-
-
-def start_peers(
-    zone: str,
-    go_environment: dict[str, str],
-    rust_environment: dict[str, str],
-) -> tuple[Peer, Peer]:
-    go_peer = Peer(
-        ["go", "run", ".", zone],
-        REPOSITORY / "testkit" / "catalog" / "go-peer",
-        go_environment,
-    )
-    try:
-        rust_peer = Peer(
-            [
-                "cargo",
-                "run",
-                "--quiet",
-                "--manifest-path",
-                str(REPOSITORY / "testkit" / "catalog" / "rust-peer" / "Cargo.toml"),
-                "--",
-                zone,
-            ],
-            REPOSITORY,
-            rust_environment,
-        )
-    except BaseException:
-        go_peer.stop()
-        raise
-    go_peer.wait_line("READY")
-    rust_peer.wait_line("READY")
-    return go_peer, rust_peer
+def start_peers(zone, go_environment, rust_environment):
+    go, rust = build_peers("catalog")
+    with ExitStack() as owners:
+        go_peer = owners.enter_context(Peer([go, zone], REPOSITORY, go_environment))
+        rust_peer = owners.enter_context(Peer([rust, zone], REPOSITORY, rust_environment))
+        go_peer.wait_line("READY")
+        rust_peer.wait_line("READY")
+        owners.pop_all()
+        return go_peer, rust_peer
 
 
 def revision(peer: Peer, command: str) -> int:
@@ -197,14 +114,16 @@ def main() -> int:
     parser.add_argument("--result-file")
     arguments = parser.parse_args()
     zone = zone_name()
-    client = redis.Redis.from_url(arguments.redis_url)
+    client = redis.Redis.from_url(arguments.redis_url, socket_connect_timeout=5, socket_timeout=5)
     go_peer: Peer | None = None
     rust_peer: Peer | None = None
     started = time.monotonic()
     result: dict[str, Any] = {"status": "starting", "zone": zone}
+    owned_zone = False
     try:
         if catalog_keys(client, zone):
             raise RuntimeError("random Catalog interoperability Zone already exists")
+        owned_zone = True
         go_environment = os.environ.copy()
         go_environment["VERDANDI_REDIS_URL"] = arguments.redis_url
         rust_environment = os.environ.copy()
@@ -239,14 +158,18 @@ def main() -> int:
         write_result(arguments.result_file, result)
         raise
     finally:
-        if go_peer is not None:
-            go_peer.stop()
-        if rust_peer is not None:
-            rust_peer.stop()
-        keys = catalog_keys(client, zone)
-        if keys:
-            client.unlink(*keys)
-        client.close()
+        with ExitStack() as cleanup:
+            cleanup.callback(client.close)
+            if owned_zone:
+
+                def remove_keys():
+                    if keys := catalog_keys(client, zone):
+                        client.unlink(*keys)
+
+                cleanup.callback(remove_keys)
+            for peer in (go_peer, rust_peer):
+                if peer is not None:
+                    cleanup.callback(peer.stop)
 
 
 if __name__ == "__main__":

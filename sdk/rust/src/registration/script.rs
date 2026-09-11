@@ -181,11 +181,11 @@ fn parse_registration_reply(value: Value) -> Result<RegistrationReply> {
             return Err(Error::field(Code::Corrupt, key));
         }
         match key.as_str() {
-            "&result" => result = value_string(value),
-            "&status" => status = value_string(value),
-            "&field" => field = value_string(value),
-            "@revision" => revision = value_u64(value),
-            "@timestamp" => timestamp = value_u64(value),
+            "&result" => result = Some(value_string(value).ok_or_else(|| Error::field(Code::Corrupt, &key))?),
+            "&status" => status = Some(value_string(value).ok_or_else(|| Error::field(Code::Corrupt, &key))?),
+            "&field" => field = Some(value_string(value).ok_or_else(|| Error::field(Code::Corrupt, &key))?),
+            "@revision" => revision = Some(value_u64(value).ok_or_else(|| Error::field(Code::Corrupt, &key))?),
+            "@timestamp" => timestamp = Some(value_u64(value).ok_or_else(|| Error::field(Code::Corrupt, &key))?),
             _ => {}
         }
     }
@@ -196,7 +196,23 @@ fn parse_registration_reply(value: Value) -> Result<RegistrationReply> {
         }),
         Some("error") => {
             let status = status.ok_or_else(|| Error::field(Code::Corrupt, "&status"))?;
-            let code = Code::from_status(&status).ok_or_else(|| Error::field(Code::Corrupt, "&status"))?;
+            let code = Code::from_status(&status)
+                .filter(|code| {
+                    matches!(
+                        code,
+                        Code::Invalid
+                            | Code::Protocol
+                            | Code::Contract
+                            | Code::Target
+                            | Code::Capacity
+                            | Code::Missing
+                            | Code::Stale
+                            | Code::Transition
+                            | Code::Immutable
+                            | Code::Corrupt
+                    )
+                })
+                .ok_or_else(|| Error::field(Code::Corrupt, "&status"))?;
             let mut error = field.map_or_else(|| Error::new(code), |field| Error::field(code, field));
             if let Some(revision) = revision {
                 error = error.with_revision(revision);
@@ -209,7 +225,7 @@ fn parse_registration_reply(value: Value) -> Result<RegistrationReply> {
 
 /// 把 Fred `value` 的拥有型字节转换为 UTF-8 String；类型或编码错误返回 `None`。
 pub(crate) fn value_string(value: Value) -> Option<String> {
-    String::from_utf8(value.into_owned_bytes()?).ok()
+    String::from_utf8(crate::redis::reply_bytes(value)?).ok()
 }
 
 /// 把 Fred `value` 转换为协议安全范围内的正 `u64`。
@@ -218,11 +234,17 @@ pub(crate) fn value_string(value: Value) -> Option<String> {
 pub(crate) fn value_u64(value: Value) -> Option<u64> {
     let value = match value {
         Value::Integer(value) if value > 0 => u64::try_from(value).ok()?,
-        Value::String(value) => value.parse().ok()?,
-        Value::Bytes(value) => std::str::from_utf8(&value).ok()?.parse().ok()?,
+        value @ (Value::String(_) | Value::Bytes(_)) => {
+            let text = value_string(value)?;
+            let parsed: u64 = text.parse().ok()?;
+            if parsed.to_string() != text {
+                return None;
+            }
+            parsed
+        }
         _ => return None,
     };
-    (value <= MAX_SAFE_INTEGER).then_some(value)
+    (value > 0 && value <= MAX_SAFE_INTEGER).then_some(value)
 }
 
 #[cfg(test)]

@@ -1,0 +1,24 @@
+// 许可证: MIT, 详见仓库根目录 LICENSE.
+// Star/Planet 的互联传输. Supervisor 准入使用 admission.proto 中的 gRPC 接口.
+syntax = "proto3";
+package verdandi.peer.v1;
+option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
+import "peer.proto";
+
+// 每次 RPC 建立一条逻辑会话. 双方第一条均为 Hello, 后续消息由当前阶段验证.
+// 角色索引按成员身份、代次和方向隔离重复会话, 不依赖底层连接是否复用.
+// 拨号方先发送 Hello, 接收方验证准入后再返回自己的 bearer 凭证.
+service PeerTransport {
+    rpc OpenSession(stream SessionPacket) returns (stream SessionPacket);
+}
+
+// 显式类型分派, 不把旧 MessageID 或六字节帧重新装进 bytes 隧道.
+// 当前仅实现控制会话, Catalog/Registry 业务同步另行定义有界消息.
+message SessionPacket {
+    oneof body {
+        Hello hello = 1;
+        Ping ping = 2;
+        Pong pong = 3;
+        ProtocolError rejection = 4;
+    }
+}

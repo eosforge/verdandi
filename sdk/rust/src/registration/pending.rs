@@ -191,7 +191,7 @@ fn merge_pending_update(current: &mut PendingChange, incoming: RegistrationEvent
         return;
     }
 
-    let previous_timestamp = current.event.timestamp;
+    let timestamp = current.event.timestamp.max(incoming.timestamp);
     if current.event.kind == "renew" {
         current.event = incoming;
     } else {
@@ -202,7 +202,7 @@ fn merge_pending_update(current: &mut PendingChange, incoming: RegistrationEvent
         }
         current.event.revision = incoming.revision;
     }
-    current.event.timestamp = previous_timestamp.max(current.event.timestamp);
+    current.event.timestamp = timestamp;
     current.latest_revision = current.event.revision;
 }
 

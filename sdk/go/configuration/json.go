@@ -197,6 +197,12 @@ func scanJSONValue(decoder *json.Decoder) error {
 			if !ok {
 				return errors.New("object field is not a string")
 			}
+			// 配置只使用小写 ASCII 字段名，拒绝 encoding/json 的大小写和 Unicode 折叠匹配。
+			for _, character := range name {
+				if !(character >= 'a' && character <= 'z' || character >= '0' && character <= '9' || character == '_') {
+					return fmt.Errorf("unknown field %q", name)
+				}
+			}
 			if _, exists := fields[name]; exists {
 				return fmt.Errorf("duplicate field %q", name)
 			}

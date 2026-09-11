@@ -1,0 +1,346 @@
+{
+  "date": "2026-09-08",
+  "status": "pass",
+  "scope": "Unified test entry points, regression, configurable short soak and cleanup qualification",
+  "source_sha256": "947bf7925e4a9a510988452098b56e8be3fd938f162cc2a8c4eae47ba2420632",
+  "source_files": 424,
+  "regression": {
+    "run_id": "c57fedac5de9e92f",
+    "status": "pass",
+    "elapsed_seconds": 977.025,
+    "cleanup": "cleaned",
+    "linux_cleanup": "cleaned",
+    "stages_by_platform": {
+      "win-x64": {
+        "pass": 26
+      },
+      "linux-x64": {
+        "pass": 26
+      }
+    },
+    "report": "build/testkit/runs/c57fedac5de9e92f/report.json"
+  },
+  "soak": {
+    "run_id": "e4df1e6a6b3db9f8",
+    "status": "pass",
+    "elapsed_seconds": 1206.204,
+    "cleanup": "cleaned",
+    "linux_cleanup": "cleaned",
+    "stages_by_platform": {
+      "win-x64": {
+        "pass": 20
+      },
+      "linux-x64": {
+        "pass": 20
+      }
+    },
+    "report": "build/testkit/runs/e4df1e6a6b3db9f8/report.json"
+  },
+  "workloads": [
+    {
+      "platform": "win-x64",
+      "domain": "registration",
+      "language": "go",
+      "status": "pass",
+      "requested_seconds": 210,
+      "redis_elapsed_seconds": 236.433,
+      "faults": [
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_pubsub",
+          "status": "pass"
+        },
+        {
+          "kind": "pause",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_normal",
+          "status": "pass"
+        },
+        {
+          "kind": "restart",
+          "status": "pass"
+        },
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        }
+      ],
+      "latency": {
+        "average_nanoseconds": 1094455,
+        "count": 105000,
+        "maximum_nanoseconds": 3090341100,
+        "p50_nanoseconds": 1114111,
+        "p95_nanoseconds": 1835007,
+        "p99_nanoseconds": 2883583,
+        "zero_samples": 1472
+      },
+      "remaining_keys": 0,
+      "report": "build/testkit/runs/e4df1e6a6b3db9f8/registration-soak.json"
+    },
+    {
+      "platform": "win-x64",
+      "domain": "catalog",
+      "language": "go",
+      "status": "pass",
+      "requested_seconds": 210,
+      "redis_elapsed_seconds": 213.534,
+      "faults": [
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_pubsub",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_normal",
+          "status": "pass"
+        },
+        {
+          "kind": "pause",
+          "status": "pass"
+        },
+        {
+          "kind": "restart",
+          "status": "pass"
+        },
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        }
+      ],
+      "latency": {
+        "average_nanoseconds": 1724566,
+        "count": 26603,
+        "maximum_nanoseconds": 3067741400,
+        "p50_nanoseconds": 1507327,
+        "p95_nanoseconds": 2752511,
+        "p99_nanoseconds": 4456447,
+        "zero_samples": 0
+      },
+      "remaining_keys": 0,
+      "report": "build/testkit/runs/e4df1e6a6b3db9f8/catalog-soak.json"
+    },
+    {
+      "platform": "linux-x64",
+      "domain": "registration",
+      "language": "go",
+      "status": "pass",
+      "requested_seconds": 210,
+      "redis_elapsed_seconds": 230.697,
+      "faults": [
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_pubsub",
+          "status": "pass"
+        },
+        {
+          "kind": "pause",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_normal",
+          "status": "pass"
+        },
+        {
+          "kind": "restart",
+          "status": "pass"
+        },
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        }
+      ],
+      "latency": {
+        "average_nanoseconds": 1245877,
+        "count": 105000,
+        "maximum_nanoseconds": 3076055068,
+        "p50_nanoseconds": 1114111,
+        "p95_nanoseconds": 2031615,
+        "p99_nanoseconds": 3014655,
+        "zero_samples": 0
+      },
+      "remaining_keys": 0,
+      "report": "build/testkit/runs/e4df1e6a6b3db9f8/linux-registration-soak.json"
+    },
+    {
+      "platform": "linux-x64",
+      "domain": "catalog",
+      "language": "go",
+      "status": "pass",
+      "requested_seconds": 210,
+      "redis_elapsed_seconds": 212.116,
+      "faults": [
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_pubsub",
+          "status": "pass"
+        },
+        {
+          "kind": "kill_normal",
+          "status": "pass"
+        },
+        {
+          "kind": "pause",
+          "status": "pass"
+        },
+        {
+          "kind": "restart",
+          "status": "pass"
+        },
+        {
+          "kind": "script_flush",
+          "status": "pass"
+        }
+      ],
+      "latency": {
+        "average_nanoseconds": 1956238,
+        "count": 26912,
+        "maximum_nanoseconds": 3074594388,
+        "p50_nanoseconds": 1703935,
+        "p95_nanoseconds": 2883583,
+        "p99_nanoseconds": 5505023,
+        "zero_samples": 0
+      },
+      "remaining_keys": 0,
+      "report": "build/testkit/runs/e4df1e6a6b3db9f8/linux-catalog-soak.json"
+    }
+  ],
+  "framework_tests": {
+    "win-x64": 23,
+    "linux-x64": 23
+  },
+  "native_ctest": {
+    "win-x64": 16,
+    "linux-x64": 16
+  },
+  "environments": {
+    "win-x64": {
+      "python": "3.14.7",
+      "tools": {
+        "go": {
+          "path": "C:\\Program Files\\Go\\bin\\go.EXE",
+          "version": "go version go1.27.1 windows/amd64"
+        },
+        "cargo": {
+          "path": "C:\\Users\\server\\.cargo\\bin\\cargo.EXE",
+          "version": "cargo 1.98.1 (797e8a9bc 2026-08-05)"
+        },
+        "cmake": {
+          "path": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+          "version": "cmake version 4.4.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake)."
+        },
+        "dotnet": {
+          "path": "C:\\Program Files\\dotnet\\dotnet.EXE",
+          "version": "10.0.400"
+        }
+      },
+      "packages": {
+        "redis": "7.4.1",
+        "msgpack": "1.2.2",
+        "paramiko": "4.0.0",
+        "cryptography": "50.0.0"
+      }
+    },
+    "linux-x64": {
+      "python": "3.14.4",
+      "tools": {
+        "go": {
+          "path": "/home/ubuntu/verdandi/build/tools/go-1.27.1/bin/go",
+          "version": "go version go1.27.1 linux/amd64"
+        },
+        "cargo": {
+          "path": "/home/ubuntu/verdandi/build/tools/rust-1.98.1/bin/cargo",
+          "version": "cargo 1.98.1 (797e8a9bc 2026-08-05)"
+        },
+        "cmake": {
+          "path": "/usr/bin/cmake",
+          "version": "cmake version 4.2.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake)."
+        },
+        "dotnet": {
+          "path": "/home/ubuntu/verdandi/build/tools/dotnet/dotnet",
+          "version": "10.0.400"
+        }
+      },
+      "packages": {
+        "redis": "7.4.1",
+        "msgpack": "1.2.2",
+        "paramiko": "4.0.0",
+        "cryptography": "50.0.0"
+      }
+    }
+  },
+  "cleanup_checks": {
+    "creator_crash": {
+      "status": "pass",
+      "case": "killed creator; next-run recovery removes owned container and directory",
+      "run_id": "5b232158",
+      "unrelated_container_unchanged": true
+    },
+    "launcher_death": {
+      "status": "pass",
+      "case": "Windows PowerShell 5.1 launcher killed during real Redis integration; Python recovered and cleaned",
+      "report": "D:\\projects\\verdandi\\build\\testkit\\runs\\b2594570120cc86f\\report.json",
+      "run_id": "b2594570120cc86f"
+    },
+    "source_conflict": {
+      "status": "pass",
+      "initial_sync": "pass",
+      "vm_edit_preserved": true,
+      "owned_resources_cleaned": true
+    },
+    "final_resources": {
+      "status": "pass",
+      "preserved_containers": [
+        "verdandi-audit-redis-20260907"
+      ],
+      "local_temporary_directories": [],
+      "remote_fixture_directories": [],
+      "remote_temporary_directories": [],
+      "pending_resource_manifests": [],
+      "memory": "               total        used        free      shared  buff/cache   available\nMem:            7422         760        1092           4        5876        6662\nSwap:           3907           0        3907\n"
+    }
+  },
+  "process_cleanup": {
+    "win-x64": "No remaining project test processes",
+    "linux-x64": "No remaining project test processes"
+  },
+  "source_checks": {
+    "black": "27 files passed",
+    "python_3_10_syntax": "27 files passed",
+    "git_diff_check": "pass"
+  },
+  "regressions_added": [
+    "Native denied subscription returns unavailable/NOPERM and keeps the root usable",
+    "Catalog promotion probes retry read-only PING, never ambiguous writes",
+    "Fault injection starts only on workload readiness",
+    "Failed commands retain partial observations",
+    "Owned scratch files are cleaned after failure and interruption",
+    "Complete latency sample counts allow measured zero durations"
+  ],
+  "full_protocol_qualification": false,
+  "coverage_limits": [
+    "The 210-second profiles validate automation and fault recovery, not two-hour or 24-hour endurance.",
+    "Continuous workloads currently exercise Go; Rust/C++/C# receive their listed regression checks.",
+    "Live mutual TLS, dedicated Rust/C++/C# continuous endurance, direct C++ two-promotion peers, and packaging/AOT remain separate qualification gates."
+  ],
+  "retained_earlier_runs": [
+    "fe33883549469fe8",
+    "f05d35f321873da0",
+    "8e4921ac8e5db37a",
+    "24c1b3c3e924c330"
+  ],
+  "git": "Working-tree changes remain uncommitted and unpushed."
+}

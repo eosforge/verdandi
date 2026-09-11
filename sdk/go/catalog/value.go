@@ -2,8 +2,9 @@ package catalog
 
 import (
 	"bytes"
+	"maps"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -172,19 +173,11 @@ func validFieldName(name string) bool {
 
 // sortedNames 返回字段 map 的字节字典序名称切片。
 func sortedNames(fields verdandi.Fields) []string {
-	names := make([]string, 0, len(fields))
-	for name := range fields {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(fields))
 }
 
-// cloneFields 深拷贝字段 map 和全部值缓冲区；空输入返回 nil。
+// cloneFields 深拷贝字段 map 和全部值缓冲区；包括空输入在内，结果始终可写。
 func cloneFields(source verdandi.Fields) verdandi.Fields {
-	if len(source) == 0 {
-		return nil
-	}
 	result := make(verdandi.Fields, len(source))
 	for name, value := range source {
 		result[name] = bytes.Clone(value)

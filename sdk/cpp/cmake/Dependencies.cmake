@@ -1,6 +1,6 @@
 include(FetchContent)
 
-find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto SSL)
+include("${CMAKE_CURRENT_LIST_DIR}/OpenSSL.cmake")
 find_package(Threads REQUIRED)
 
 # 为一个 fallback 依赖选择远程 URL 或经过摘要复核的本地缓存包。离线模式必须先

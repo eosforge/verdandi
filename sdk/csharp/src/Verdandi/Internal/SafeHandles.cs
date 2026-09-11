@@ -4,6 +4,32 @@ using System.Runtime.InteropServices;
 
 namespace Verdandi.Internal;
 
+/// <summary>把完整父依赖链绑定到原生句柄的实际释放，而非托管包装的存活时间。</summary>
+internal abstract class DependentSafeHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    private IDisposable? _parentLease;
+
+    /// <summary>创建由 SafeHandle 最终释放的子句柄。</summary>
+    protected DependentSafeHandle(bool ownsHandle) : base(ownsHandle) { }
+
+    /// <summary>发布包装前转入父引用；终结责任同时转交给本句柄的关键终结器。</summary>
+    internal void AttachParent(IDisposable parentLease)
+    {
+        _parentLease = parentLease;
+        GC.SuppressFinalize(parentLease);
+    }
+
+    /// <summary>子原生资源完全释放后才归还父引用；并发封送仍由 SafeHandle 引用计数保护。</summary>
+    protected sealed override bool ReleaseHandle()
+    {
+        try { return ReleaseNative(); }
+        finally { Interlocked.Exchange(ref _parentLease, null)?.Dispose(); }
+    }
+
+    /// <summary>释放当前子句柄对应的原生资源。</summary>
+    protected abstract bool ReleaseNative();
+}
+
 /// <summary>
 /// 为根 Client 提供唯一原生释放所有权。
 /// </summary>
@@ -77,7 +103,7 @@ internal sealed class FieldSetHandle : SafeHandleZeroOrMinusOneIsInvalid
 }
 
 /// <summary>为 Registration Client 提供唯一原生释放所有权。</summary>
-internal sealed class RegistrationClientHandle : SafeHandleZeroOrMinusOneIsInvalid
+internal sealed class RegistrationClientHandle : DependentSafeHandle
 {
     /// <summary>接管 C ABI 返回的 Registration Client 地址。</summary>
     /// <param name="value">非零原生地址。</param>
@@ -89,7 +115,7 @@ internal sealed class RegistrationClientHandle : SafeHandleZeroOrMinusOneIsInval
 
     /// <summary>尽力关闭并释放 Registration Client。</summary>
     /// <returns>释放入口没有可报告返回值，因此恒为真。</returns>
-    protected override bool ReleaseHandle()
+    protected override bool ReleaseNative()
     {
         NativeMethods.RegistrationClientRelease(handle);
         return true;
@@ -97,7 +123,7 @@ internal sealed class RegistrationClientHandle : SafeHandleZeroOrMinusOneIsInval
 }
 
 /// <summary>为单条 Registration 提供唯一原生释放所有权。</summary>
-internal sealed class RegistrationHandle : SafeHandleZeroOrMinusOneIsInvalid
+internal sealed class RegistrationHandle : DependentSafeHandle
 {
     /// <summary>接管 C ABI 返回的 Registration 地址。</summary>
     /// <param name="value">非零原生地址。</param>
@@ -109,7 +135,7 @@ internal sealed class RegistrationHandle : SafeHandleZeroOrMinusOneIsInvalid
 
     /// <summary>尽力注销并释放 Registration。</summary>
     /// <returns>释放入口没有可报告返回值，因此恒为真。</returns>
-    protected override bool ReleaseHandle()
+    protected override bool ReleaseNative()
     {
         NativeMethods.RegistrationRelease(handle);
         return true;
@@ -117,7 +143,7 @@ internal sealed class RegistrationHandle : SafeHandleZeroOrMinusOneIsInvalid
 }
 
 /// <summary>为 Selector 提供唯一原生释放所有权。</summary>
-internal sealed class SelectorHandle : SafeHandleZeroOrMinusOneIsInvalid
+internal sealed class SelectorHandle : DependentSafeHandle
 {
     /// <summary>接管 C ABI 返回的 Selector 地址。</summary>
     /// <param name="value">非零原生地址。</param>
@@ -129,7 +155,7 @@ internal sealed class SelectorHandle : SafeHandleZeroOrMinusOneIsInvalid
 
     /// <summary>尽力关闭并释放 Selector。</summary>
     /// <returns>释放入口没有可报告返回值，因此恒为真。</returns>
-    protected override bool ReleaseHandle()
+    protected override bool ReleaseNative()
     {
         NativeMethods.SelectorRelease(handle);
         return true;
@@ -177,7 +203,7 @@ internal sealed class SelectorSnapshotHandle : SafeHandleZeroOrMinusOneIsInvalid
 }
 
 /// <summary>为 Catalog Client 提供唯一原生释放所有权。</summary>
-internal sealed class CatalogClientHandle : SafeHandleZeroOrMinusOneIsInvalid
+internal sealed class CatalogClientHandle : DependentSafeHandle
 {
     /// <summary>接管 C ABI 返回的 Catalog Client 地址。</summary>
     /// <param name="value">非零原生地址。</param>
@@ -189,7 +215,7 @@ internal sealed class CatalogClientHandle : SafeHandleZeroOrMinusOneIsInvalid
 
     /// <summary>尽力关闭并释放 Catalog Client。</summary>
     /// <returns>释放入口没有可报告返回值，因此恒为真。</returns>
-    protected override bool ReleaseHandle()
+    protected override bool ReleaseNative()
     {
         NativeMethods.CatalogClientRelease(handle);
         return true;
@@ -197,7 +223,7 @@ internal sealed class CatalogClientHandle : SafeHandleZeroOrMinusOneIsInvalid
 }
 
 /// <summary>为无任务 Catalog Publisher 提供唯一原生释放所有权。</summary>
-internal sealed class CatalogPublisherHandle : SafeHandleZeroOrMinusOneIsInvalid
+internal sealed class CatalogPublisherHandle : DependentSafeHandle
 {
     /// <summary>接管 C ABI 返回的 Catalog Publisher 地址。</summary>
     /// <param name="value">非零原生地址。</param>
@@ -209,7 +235,7 @@ internal sealed class CatalogPublisherHandle : SafeHandleZeroOrMinusOneIsInvalid
 
     /// <summary>释放 Catalog Publisher。</summary>
     /// <returns>释放入口没有可报告返回值，因此恒为真。</returns>
-    protected override bool ReleaseHandle()
+    protected override bool ReleaseNative()
     {
         NativeMethods.CatalogPublisherRelease(handle);
         return true;
@@ -217,7 +243,7 @@ internal sealed class CatalogPublisherHandle : SafeHandleZeroOrMinusOneIsInvalid
 }
 
 /// <summary>为 Catalog Subscriber 提供唯一原生释放所有权。</summary>
-internal sealed class CatalogSubscriberHandle : SafeHandleZeroOrMinusOneIsInvalid
+internal sealed class CatalogSubscriberHandle : DependentSafeHandle
 {
     /// <summary>接管 C ABI 返回的 Catalog Subscriber 地址。</summary>
     /// <param name="value">非零原生地址。</param>
@@ -229,7 +255,7 @@ internal sealed class CatalogSubscriberHandle : SafeHandleZeroOrMinusOneIsInvali
 
     /// <summary>尽力关闭并释放 Catalog Subscriber。</summary>
     /// <returns>释放入口没有可报告返回值，因此恒为真。</returns>
-    protected override bool ReleaseHandle()
+    protected override bool ReleaseNative()
     {
         NativeMethods.CatalogSubscriberRelease(handle);
         return true;
@@ -237,7 +263,7 @@ internal sealed class CatalogSubscriberHandle : SafeHandleZeroOrMinusOneIsInvali
 }
 
 /// <summary>为稳定 Catalog Entry 提供唯一原生释放所有权。</summary>
-internal sealed class CatalogEntryHandle : SafeHandleZeroOrMinusOneIsInvalid
+internal sealed class CatalogEntryHandle : DependentSafeHandle
 {
     /// <summary>接管 C ABI 返回的 Catalog Entry 地址。</summary>
     /// <param name="value">非零原生地址。</param>
@@ -249,7 +275,7 @@ internal sealed class CatalogEntryHandle : SafeHandleZeroOrMinusOneIsInvalid
 
     /// <summary>释放 Catalog Entry。</summary>
     /// <returns>释放入口没有可报告返回值，因此恒为真。</returns>
-    protected override bool ReleaseHandle()
+    protected override bool ReleaseNative()
     {
         NativeMethods.CatalogEntryRelease(handle);
         return true;

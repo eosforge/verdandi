@@ -2,10 +2,26 @@
 
 ## 1. Scope and Source of Truth
 
+The C++26 Star/Planet replacement is specified in
+[the skeleton design](peer/cpp26-skeleton-design.md) and implemented under
+`peer-cpp/`: Rust service checks below remain active, and the C++23
+SDK baseline is unchanged. The plan defines service-local reflection,
+callback ownership, formatting and verification rules without applying them
+to existing SDKs. Actual C++ build, test results and remaining qualification
+gates are recorded in [its validation report](peer-cpp/validation.md).
+
 Verdandi follows the standard idioms and official formatters of each
 implementation language. This document defines cross-language quality,
 resource, API, testing, documentation, and comment expectations. It does not
 invent a common syntax or formatting dialect.
+
+These rules also apply to `peer/` and `supervisor/`. Their configuration and
+tests stay under the owning service root; the Rust white-box test placement
+rule means `peer/common/tests`, `peer/star/tests`, and `peer/planet/tests` for
+the corresponding workspace crates; cross-language public fixtures remain in
+`peer/tests/fixtures`. Use `scripts/check-services.ps1`
+or `scripts/check-services.sh` for offline gates. See
+[service-foundation.md](service-foundation.md) for ownership and process rules.
 
 For any SDK:
 
@@ -30,6 +46,14 @@ it whenever a handwritten file is created or materially edited. The root
 
 Repository-wide protocol behavior is owned by schemas, Lua, and conformance
 vectors, not by whichever SDK is implemented first.
+
+For this checkout's Go/Rust build and test commands, use the owning SDK's
+`go.ps1`/`go.sh` or `cargo.ps1`/`cargo.sh` entry point with the native arguments
+shown below. These scripts select project-local caches only for the launched
+tool; never activate or persist cache settings in the maintainer's terminal or
+user/system configuration. The root README documents the cache layout;
+Python harnesses apply the same policy through `testkit/support.py`.
+Download approval remains separate.
 
 Language and runtime evolution is part of implementation review. Before adding
 a custom abstraction, review the language, standard library, compiler, and
@@ -180,6 +204,10 @@ Use the language's standard forms:
 
 Normal prose comments use complete sentences and punctuation. Short labels may
 omit terminal punctuation when they are not sentences.
+
+During the Chinese review phase, handwritten source comments use Chinese words
+with ASCII punctuation such as `,`, `.`, `:`, `;`, `(`, and `)`. Do not mix
+full-width Chinese punctuation into source comments.
 
 `TODO` denotes a concrete follow-up whose current behavior is correct but
 incomplete. `FIXME` denotes known incorrect behavior. State the resolution
@@ -464,7 +492,7 @@ C#-specific rules:
   application directory, or the operating-system loader. Package release must
   include and qualify the matching C++ runtime for every advertised RID.
 
-## 13. Python Testkit Requirements
+## 13. Python Build and Testkit Requirements
 
 Python test harnesses are formatted from the repository root with:
 
@@ -475,11 +503,21 @@ python -m black --config testkit/pyproject.toml --check testkit
 
 Python-specific rules:
 
-- Black is authoritative for handwritten Python under `testkit`; its committed
-  configuration uses a 160-column line length.
+- Black is authoritative for handwritten Python under `testkit` and the C++
+  build entry/tests; the committed `testkit/pyproject.toml` configuration uses
+  a 160-column line length. Format the C++ entry explicitly with:
+  `python -m black --config testkit/pyproject.toml sdk/cpp/build.py sdk/cpp/build_support.py sdk/cpp/tests/dependency_policy_test.py`.
+- The native build entry requires Python 3.10+ and uses only its standard
+  library. Keep shared build policy in `sdk/cpp/build.py`, platform discovery
+  and process ownership in `build_support.py`, and shell adapters thin.
 - Keep subprocess, remote command, and fixture ownership explicit. Formatting
   must not split or reconstruct shell/ACL/protocol literals in a way that
   changes their bytes.
+- Routine qualification enters through `testkit/run.py regression` or
+  `soak --duration`, with thin PS/Bash adapters. Reuse its environment, process,
+  resource and report helpers instead of adding another orchestration layer.
+  Missing prerequisites, incomplete cleanup and unimplemented coverage must
+  remain visible; do not turn skipped required tests into passing rows.
 - Run the formatter immediately after every Python write, then perform a syntax
   or focused behavioral check without creating repository-local cache output.
 
@@ -521,6 +559,17 @@ Python-specific rules:
 
 ## 15. Tests and Benchmarks
 
+- Every bug fix includes a propagation review across all implementation
+  languages, shared native cores, bindings, and relevant test tooling. Trace
+  corresponding producer, consumer, validation, and recovery paths; do not
+  assume another language is unaffected because its implementation differs.
+- Record the reviewed files and, for each language/layer, whether it is
+  affected, has no matching defect in the reviewed path, is not applicable, or
+  could not be reviewed. Distinguish source reasoning from compilation and
+  executed tests. A shared-core fix requires reviewing every consuming binding.
+- Add regression coverage at the failing boundary and identify outstanding
+  cross-language/runtime checks. Missing tools do not authorize any download,
+  installation, upgrade, package restore, or implicit script-triggered fetch.
 - Unit tests name the scenario and expected result.
 - Table/vector tests use shared fixtures where protocol behavior is involved.
 - Every decoder has boundary, malformed, oversized, and fuzz/property coverage
@@ -571,3 +620,23 @@ Python-specific rules:
 - Related `codex.md`, `alpha.md`, `protocol.md`, or `worklog.md` facts are
   updated.
 - No commit or push is created without the maintainer's explicit instruction.
+
+## 18. Admin TypeScript and Vue Requirements
+
+The `admin/` frontend follows these repository-wide requirements plus its
+[contribution rules](admin/CONTRIBUTING.md). Prettier is the source formatter;
+use UTF-8, LF and two-space indentation with a 160-column upper bound.
+
+- Use strict TypeScript, checked indexed access, exact optional properties and
+  erasable type syntax. Node 24 tests import production `.ts` modules directly.
+- Keep readonly display snapshots separate from transport DTOs and Three.js
+  objects. Entity operations use stable IDs rather than object identity.
+- Keep Vue UI, lifecycle adaptation and rendering separate. Three.js objects
+  stay outside deep reactivity; per-frame work stays outside Vue.
+- Own every observer, event listener, RAF and GPU resource. Initialization
+  rollback and normal shutdown use the same idempotent cleanup path.
+- Run `pnpm check` for formatting, import boundaries, regression tests, strict
+  type checks and production build. Changed visual interactions also require
+  relevant browser checks; unit tests do not qualify WebGL drivers or capacity.
+- Use existing tools and dependencies. These checks do not authorize downloads,
+  installations, upgrades, commits or publication.

@@ -12,6 +12,14 @@ authoritative Redis state after an acknowledged subscribe/read/PING alignment.
 
 ## Project Status
 
+The [C++26 Star/Planet skeleton](peer-cpp/README.md) is being implemented and
+qualified on Linux / GCC 16.2, with the [Rust Peer](peer/README.md) retained as a
+comparison and [Go Supervisor](supervisor/README.md) providing admission.
+These backend foundations are under development. Their structure, lifecycle guarantees,
+offline checks and remaining production gates are documented in
+[Service Foundation](service-foundation.md). See [Contributing](CONTRIBUTING.md).
+These services do not yet replace the Redis SDK backend.
+
 Verdandi is at non-production Alpha version `0.1.0`. The four generated,
 operation-specific, positional-ABI Registration Lua programs and the Go, Rust,
 and C++23 Register/Selector SDK slices are implemented. A managed C# facade now
@@ -148,12 +156,84 @@ Redis Sentinel -> resolves and monitors the current Redis primary
 ```text
 lua/                  shared Lua sources and generated Redis atomic operations
 sdk/<language>/       independently versioned language SDKs
+peer/common/          shared Rust service protocol, admission and sessions
+peer/star/            Rust Star mesh and peer executable
+peer/planet/          Rust single-upstream Planet executable
+supervisor/           Go member admission and management skeleton
+proto/                service schema, stable message IDs and source generator
 testkit/              shared vectors and cross-language conformance tests
 *.md                   protocol, architecture, decisions, SDK, and test records
 ```
 
 Language manifests and toolchain configuration belong under the corresponding
 `sdk/<language>` directory. The repository root remains language-neutral.
+The independent service backend uses the `peer/` Rust workspace and
+`supervisor/` Go module. Its current [Star/Planet connection contract](peer/connection-rules.md)
+does not yet implement business replication, SDK bindings or persistent data.
+
+Use the project entry points for Go/Rust dependency and build caches. Pass the
+usual tool arguments; each command runs from its own SDK directory:
+
+```powershell
+./sdk/go/go.ps1 env GOMODCACHE GOCACHE
+./sdk/rust/cargo.ps1 metadata --no-deps --offline --locked --format-version 1
+```
+
+If Windows PowerShell 5.1 disallows scripts, invoke this one process with
+`powershell -NoProfile -ExecutionPolicy Bypass -File sdk/go/go.ps1 env GOMODCACHE GOCACHE`
+(or the Cargo entry point); no persistent execution policy change is needed.
+
+```bash
+bash sdk/go/go.sh env GOMODCACHE GOCACHE
+bash sdk/rust/cargo.sh metadata --no-deps --offline --locked --format-version 1
+```
+
+| Content | Repository-relative location | Setting |
+| --- | --- | --- |
+| Go module downloads | `build/deps/go/pkg/mod/` | `GOMODCACHE` |
+| Go compilation/test cache | `build/cache/go/` | `GOCACHE` |
+| Cargo registry and Git dependencies | `build/deps/cargo/` | `CARGO_HOME` |
+| Rust compilation output | `build/rust/target/` | `CARGO_TARGET_DIR` |
+| C++ downloaded source archives | `build/deps/common/downloads/fetchcontent/` | Existing native build entry points |
+| C++ prebuilt OpenSSL fallback | `build/deps/openssl/<platform>/x64/` | Existing native build entry points |
+
+The scripts resolve paths relative to themselves and work from any directory.
+Cache settings are passed only to the launched tool process and its children;
+the calling terminal's environment and working directory remain unchanged.
+Do not source/dot-source these scripts. All configuration lives in the project;
+there is no activation step or persistent user/system configuration. Installed
+toolchains and old shared caches stay in place. `CARGO_HOME` also owns Cargo
+config and credentials; global Cargo config or credentials are not copied.
+
+Everything under `build/` is Git-ignored. Windows and Linux keep independent
+local caches; exclude `build/` when synchronizing source to the test VM. Keep
+dependency manifests and lockfiles in Git. Plain `go`/`cargo` commands and IDEs
+that bypass these entry points still use their normal configuration; shared
+harnesses use the same child-process settings through `testkit/support.py`.
+The entry points configure locations, not dependency download permission: missing
+packages still require approval before a command may fetch them. C++ retains its
+system/vcpkg/project-cache policy, described in [`sdk/cpp/BUILD.md`](sdk/cpp/BUILD.md).
+
+C++ now shares a Python 3.10+ build implementation across Windows and Linux:
+`python -B sdk/cpp/build.py all --linkage shared --offline --jobs 1`.
+Its `build.ps1`/`build.sh` entries forward to the same standard-library code.
+Go/Rust retain their small native cache wrappers and do not require Python.
+Each language's own toolchain continues to compile and run its SDK tests.
+
+Routine testing has two project entry points:
+
+```powershell
+.\testkit\run.ps1 regression
+.\testkit\run.ps1 soak --duration 2h
+```
+
+On Ubuntu use `bash testkit/run.sh` with the same arguments and `--targets local`.
+The configured Windows runner can synchronize current source and run both
+Windows and Ubuntu. Duration is per domain and target; Registration and Catalog
+run serially. Reports and logs stay under `build/testkit/runs/`, and owned test
+containers, processes and temporary files are cleaned automatically. See
+[`testkit/README.md`](testkit/README.md) for configuration, prerequisites, recovery
+after interruption and the explicit scenario coverage matrix.
 
 Registration's four lifecycle actions execute four specialized atomic scripts
 generated deterministically from reviewed shared fragments. Each logical

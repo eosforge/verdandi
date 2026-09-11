@@ -8,7 +8,6 @@ namespace Verdandi.Catalog;
 public sealed unsafe class CatalogSubscriber : IDisposable
 {
     private readonly CatalogSubscriberHandle _handle;
-    private readonly SafeHandleLease<CatalogClientHandle> _ownerLease;
     private int _disposed;
 
     /// <summary>
@@ -19,7 +18,7 @@ public sealed unsafe class CatalogSubscriber : IDisposable
     private CatalogSubscriber(CatalogSubscriberHandle handle, SafeHandleLease<CatalogClientHandle> ownerLease)
     {
         _handle = handle;
-        _ownerLease = ownerLease;
+        _handle.AttachParent(ownerLease);
     }
 
     /// <summary>
@@ -203,7 +202,6 @@ public sealed unsafe class CatalogSubscriber : IDisposable
         }
 
         _handle.Dispose();
-        _ownerLease.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -217,7 +215,6 @@ public sealed unsafe class CatalogSubscriber : IDisposable
 public sealed unsafe class CatalogEntry : IDisposable
 {
     private readonly CatalogEntryHandle _handle;
-    private readonly SafeHandleLease<CatalogSubscriberHandle> _ownerLease;
     private int _disposed;
 
     /// <summary>
@@ -229,7 +226,7 @@ public sealed unsafe class CatalogEntry : IDisposable
     internal CatalogEntry(CatalogEntryHandle handle, SafeHandleLease<CatalogSubscriberHandle> ownerLease, CatalogPath path)
     {
         _handle = handle;
-        _ownerLease = ownerLease;
+        _handle.AttachParent(ownerLease);
         Path = path;
     }
 
@@ -304,7 +301,6 @@ public sealed unsafe class CatalogEntry : IDisposable
         }
 
         _handle.Dispose();
-        _ownerLease.Dispose();
         GC.SuppressFinalize(this);
     }
 

@@ -1,0 +1,478 @@
+{
+  "schema": 1,
+  "generated_at_utc": "2026-09-11T13:24:28.116561+00:00",
+  "scope": "Linux C++26 Star/Planet connection foundation, with Rust comparison and Go Supervisor",
+  "status": "regression_passed_work_paused",
+  "execution": "Stop after saving the successful TSan result, as explicitly requested by the maintainer; await further instruction",
+  "remaining_design_acceptance": [
+    "Independent metadata compile-failure cases and contracts-disabled behavior comparison",
+    "Additional control-plane scale, convergence and allocation measurements",
+    "Isolated C++/Rust push throughput and tail-latency comparison",
+    "Default service entry and complete M0-M4 acceptance remain pending"
+  ],
+  "compiler": "GCC 16.2.0 / Linux x64",
+  "source_fingerprint": {
+    "sha256": "36007fefe85277cea1afc88277ea09113f5971fab0437cb1403c522558cc4094",
+    "files": 105,
+    "meaning": "working source, generated protocol, build/test entry points and public fixtures"
+  },
+  "ctest_groups": [
+    "cpp_core",
+    "cpp_identity",
+    "cpp_session",
+    "cpp_admission",
+    "cpp_connect"
+  ],
+  "python_harness": {
+    "windows_passed": 30,
+    "linux_passed": 29,
+    "linux_platform_skipped": 1
+  },
+  "rust_go_harness": {
+    "file": "services-1789124987955485542.json",
+    "sha256": "2c20716fd871927ca2d287a0e5ac4067233a16adcbb5bc9324b574381de027a0",
+    "result": {
+      "status": "pass",
+      "platform": "linux",
+      "mode": "regression",
+      "mixed_hosts": false,
+      "peer_binaries": "/home/ubuntu/verdandi/build/peer/target/release",
+      "cases": [
+        "service_cli_help_version_and_invalid_options",
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "invalid_login_configuration_and_password_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 23.349
+    }
+  },
+  "release_rpc": {
+    "file": "peer-cpp-rpc-1789125171274001193.json",
+    "sha256": "5bc957439191a41a41836b38403cc12dada3660b5fe9eb715cb8fa4a69d4737d",
+    "result": {
+      "scope": "C++26 logical gRPC sessions and Rust compatibility",
+      "cases": [
+        "tls13_only_and_h2_negotiation",
+        "partial_tls_handshake_deadline_and_fd_cleanup",
+        "channel_reuse_duplicate_fencing_and_protocol_rejection",
+        "tls_without_http2_request_idle_cleanup",
+        "rpc_fixture_graceful_stop_and_listener_release",
+        "empty_candidates_refresh_when_star_joins",
+        "rust_cpp_star_mesh_and_both_planet_combinations",
+        "mixed_implementation_offline_supervisor_failover"
+      ],
+      "passed": true,
+      "binary_sha256": {
+        "/home/ubuntu/verdandi/build/peer-cpp/release/peer": "b2cbe638c264cab305efbde4a8dab25312ab05ddca77987a897c4bb3881ba367",
+        "/home/ubuntu/verdandi/build/peer-cpp/release/planet": "7e5088a1e57f84fb9081e33aa31360118e0b69621392536648cc27e738e58934",
+        "/home/ubuntu/verdandi/build/peer-cpp/release/peer_rpc_probe": "2c467d89dbb765545b76fa98994489da156afe09910e55eae0a3207f1cefe6c6",
+        "/home/ubuntu/verdandi/build/peer/target/release/peer": "f983f12ce6ffe9f77333d4779cfe8570481720ed8d8a672c07b8ab7158b105c9",
+        "/home/ubuntu/verdandi/build/peer/target/release/planet": "aa5999dbcf11153ae0d0d171d315a1e5907e4cbe60cbe563a8de75963b93fc60",
+        "/home/ubuntu/verdandi/build/supervisor/supervisor": "483ff92ad26db6cb55a72e349df3071f7caff15e5d1ba8049cbc6816a915193c"
+      },
+      "tls_descriptors": {
+        "baseline": 11,
+        "peak": 19,
+        "after_deadline": 8,
+        "connections": 24
+      },
+      "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":636.234,\"p95\":846.847,\"p99\":950.452,\"max\":1021.56}}\n{\"slow_reader\":{\"attempted_pings\":75,\"close_ms\":8}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+      "control_rtt_us": {
+        "samples": 500,
+        "p50": 636.234,
+        "p95": 846.847,
+        "p99": 950.452,
+        "max": 1021.56
+      },
+      "slow_reader": {
+        "attempted_pings": 75,
+        "close_ms": 8
+      },
+      "rpc_server_resources": {
+        "supervisor": {
+          "rss_kib": 16080,
+          "threads": 7,
+          "fds": 9
+        },
+        "star": {
+          "rss_kib": 19452,
+          "threads": 9,
+          "fds": 8
+        }
+      },
+      "idle_http2_connections": {
+        "count": 2,
+        "observed_closed_ms": 13322
+      }
+    }
+  },
+  "release_soak": {
+    "file": "services-1789125200056444977.json",
+    "sha256": "35caf45c0e154b77990f054b7bea5263b08702322ebf2f73eda58a4560d57085",
+    "result": {
+      "status": "pass",
+      "platform": "linux",
+      "mode": "soak",
+      "mixed_hosts": false,
+      "peer_binaries": "/home/ubuntu/verdandi/build/peer-cpp/release",
+      "cases": [
+        "service_cli_help_version_and_invalid_options",
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "invalid_login_configuration_and_password_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "resources_initial": {
+        "local": {
+          "peer-0": {
+            "rss_kib": 18896,
+            "threads": 9,
+            "fds": 14
+          },
+          "peer-1": {
+            "rss_kib": 18928,
+            "threads": 9,
+            "fds": 14
+          },
+          "peer-3": {
+            "rss_kib": 19064,
+            "threads": 9,
+            "fds": 15
+          },
+          "planet-0": {
+            "rss_kib": 17204,
+            "threads": 9,
+            "fds": 9
+          },
+          "planet-1": {
+            "rss_kib": 17112,
+            "threads": 9,
+            "fds": 10
+          },
+          "supervisor": {
+            "rss_kib": 16232,
+            "threads": 7,
+            "fds": 11
+          },
+          "peer-2": {
+            "rss_kib": 18596,
+            "threads": 9,
+            "fds": 16
+          }
+        }
+      },
+      "resources_final": {
+        "local": {
+          "planet-0": {
+            "rss_kib": 18884,
+            "threads": 9,
+            "fds": 9
+          },
+          "planet-1": {
+            "rss_kib": 18604,
+            "threads": 9,
+            "fds": 9
+          },
+          "peer-0": {
+            "rss_kib": 19180,
+            "threads": 9,
+            "fds": 16
+          },
+          "peer-2": {
+            "rss_kib": 18984,
+            "threads": 9,
+            "fds": 14
+          },
+          "peer-3": {
+            "rss_kib": 18756,
+            "threads": 9,
+            "fds": 14
+          },
+          "peer-1": {
+            "rss_kib": 18584,
+            "threads": 9,
+            "fds": 14
+          },
+          "supervisor": {
+            "rss_kib": 14316,
+            "threads": 6,
+            "fds": 9
+          }
+        }
+      },
+      "resources_peak": {
+        "local/peer-0": {
+          "rss_kib": 19456,
+          "threads": 9,
+          "fds": 16
+        },
+        "local/peer-1": {
+          "rss_kib": 19392,
+          "threads": 9,
+          "fds": 16
+        },
+        "local/peer-3": {
+          "rss_kib": 19436,
+          "threads": 9,
+          "fds": 16
+        },
+        "local/planet-0": {
+          "rss_kib": 19028,
+          "threads": 9,
+          "fds": 9
+        },
+        "local/planet-1": {
+          "rss_kib": 18696,
+          "threads": 9,
+          "fds": 10
+        },
+        "local/supervisor": {
+          "rss_kib": 16232,
+          "threads": 7,
+          "fds": 11
+        },
+        "local/peer-2": {
+          "rss_kib": 19392,
+          "threads": 9,
+          "fds": 16
+        }
+      },
+      "soak": {
+        "requested_seconds": 3600,
+        "elapsed_seconds": 3603.207,
+        "restart_cycles": 510,
+        "minimum_available_mib": 1189,
+        "peers": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 3627.467
+    }
+  },
+  "asan_ubsan": {
+    "status": "pass",
+    "rpc": {
+      "file": "peer-cpp-rpc-1789125328000877666.json",
+      "sha256": "0023bc61b2c9d83a686531a7334d239b87c71e07fc7f76b7196e5d4ad92b9217",
+      "result": {
+        "scope": "C++26 logical gRPC sessions and Rust compatibility",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins",
+          "rust_cpp_star_mesh_and_both_planet_combinations",
+          "mixed_implementation_offline_supervisor_failover"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/peer-cpp/asan/peer": "a1a9dccee13a6a6fda55ad2b0daa6c2a54572438835eff8cd6df13850003da89",
+          "/home/ubuntu/verdandi/build/peer-cpp/asan/planet": "f856b68a67a909753a0e7544bb3a6b41ec514b7521657d6b12a71d368b3d8d88",
+          "/home/ubuntu/verdandi/build/peer-cpp/asan/peer_rpc_probe": "14a9b51850b745e0d968944311e9a76df62e7dd409e6e2d6335e32bb2f3a1edc",
+          "/home/ubuntu/verdandi/build/peer/target/release/peer": "f983f12ce6ffe9f77333d4779cfe8570481720ed8d8a672c07b8ab7158b105c9",
+          "/home/ubuntu/verdandi/build/peer/target/release/planet": "aa5999dbcf11153ae0d0d171d315a1e5907e4cbe60cbe563a8de75963b93fc60",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "483ff92ad26db6cb55a72e349df3071f7caff15e5d1ba8049cbc6816a915193c"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 26,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":868.547,\"p95\":1172.46,\"p99\":1340.87,\"max\":1770.4}}\n{\"slow_reader\":{\"attempted_pings\":32,\"close_ms\":2}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 868.547,
+          "p95": 1172.46,
+          "p99": 1340.87,
+          "max": 1770.4
+        },
+        "slow_reader": {
+          "attempted_pings": 32,
+          "close_ms": 2
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16092,
+            "threads": 8,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 55320,
+            "threads": 9,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 13598
+        }
+      }
+    },
+    "processes": {
+      "file": "services-1789125358624515132.json",
+      "sha256": "b7740b758f5ba1754595b1f30e57ba0cf82976b3f0182ea0a06dc996f90b74e6",
+      "result": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "peer_binaries": "/home/ubuntu/verdandi/build/peer-cpp/asan",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 24.743
+      }
+    }
+  },
+  "tsan": {
+    "status": "pass",
+    "rpc": {
+      "file": "peer-cpp-rpc-1789132888205834959.json",
+      "sha256": "3dcbb5e00fb42707987b33c33884733db66338ca512693fdb5dcfc3ff39e5585",
+      "result": {
+        "scope": "C++26 logical gRPC sessions and Rust compatibility",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins",
+          "rust_cpp_star_mesh_and_both_planet_combinations",
+          "mixed_implementation_offline_supervisor_failover"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/peer-cpp/tsan/peer": "8baa098112de3c5ea7484eae98178ff5f6bbca957da003edee3e77c4d3588b2d",
+          "/home/ubuntu/verdandi/build/peer-cpp/tsan/planet": "882924d1e95619d90d6c5bd017c051307571de8cd7e20bc3ff3f00fdc4cd36f7",
+          "/home/ubuntu/verdandi/build/peer-cpp/tsan/peer_rpc_probe": "f727c0de9434067591abf7a2205f36a7ff7cbb9cb2024aee2e286b9d2d921b09",
+          "/home/ubuntu/verdandi/build/peer/target/release/peer": "f983f12ce6ffe9f77333d4779cfe8570481720ed8d8a672c07b8ab7158b105c9",
+          "/home/ubuntu/verdandi/build/peer/target/release/planet": "aa5999dbcf11153ae0d0d171d315a1e5907e4cbe60cbe563a8de75963b93fc60",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "483ff92ad26db6cb55a72e349df3071f7caff15e5d1ba8049cbc6816a915193c"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 20,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":2346.93,\"p95\":3100.37,\"p99\":3370.59,\"max\":3691.4}}\n{\"slow_reader\":{\"attempted_pings\":20,\"close_ms\":10}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 2346.93,
+          "p95": 3100.37,
+          "p99": 3370.59,
+          "max": 3691.4
+        },
+        "slow_reader": {
+          "attempted_pings": 20,
+          "close_ms": 10
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16160,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 62468,
+            "threads": 10,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 15498
+        }
+      }
+    },
+    "processes": {
+      "file": "services-1789132925763255264.json",
+      "sha256": "bbabd809b4833c1e9573a06cd0461c0e8c2db224d58101a6b9bdd269172720b6",
+      "result": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "peer_binaries": "/home/ubuntu/verdandi/build/peer-cpp/tsan",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 37.837
+      }
+    }
+  },
+  "historical_failures": [
+    {
+      "log": "tsan-regression.log",
+      "reason": "Initial partly instrumented dependency build; not accepted as a full TSan result"
+    },
+    {
+      "log": "asan-harness-final.log",
+      "reason": "One ASan SEGV; receive handoff audit then independently reproduced reuse of an unconsumed buffer"
+    },
+    {
+      "log": "receive-before.log",
+      "reason": "Old code failed the concurrent nonempty receive buffer check; receive-after.log records the corrected handoff"
+    },
+    {
+      "log": "release-hour.log",
+      "reason": "Explicitly interrupted for the receive fix at 2808.645 seconds / 396 cycles; excluded from the accepted hour"
+    }
+  ],
+  "limits": [
+    "No SDK migration, business replication, persistence or Catalog/Registry throughput qualification",
+    "Four Stars and two Planets; resource samples are not continuous worst-case bounds",
+    "Concurrent single-job dependency compilation; control RTT is not a language performance comparison",
+    "ASan covers handwritten project targets; system libraries and third-party assembly are not claimed instrumented",
+    "Upstream BoringSSL self-tests were not qualified; see validation.md for the GCC compiler diagnostic",
+    "Reusable bearer authentication retains its accepted replay properties; no exporter/PoP/online revocation"
+  ]
+}

@@ -185,58 +185,7 @@ func (publisher *Publisher) projectPatch(
 	if err != nil {
 		return 0, wrapDriver(verdandi.CodeUnavailable, err)
 	}
-	if len(values) != len(lookup) || values[0] == nil || values[1] == nil || values[2] == nil {
-		return 0, newError(verdandi.CodeCorrupt, "catalog_header", baseRevision, nil)
-	}
-	revisionText, ok := redisString(values[0])
-	if !ok {
-		return 0, newError(verdandi.CodeCorrupt, "@revision", baseRevision, nil)
-	}
-	revision, err := parseRevision(revisionText, false)
-	if err != nil {
-		return 0, err
-	}
-	if revision != baseRevision {
-		return 0, newError(verdandi.CodeStale, "@base_revision", revision, nil)
-	}
-	kindText, ok := redisString(values[1])
-	if !ok {
-		return 0, newError(verdandi.CodeCorrupt, "@kind", baseRevision, nil)
-	}
-	kind, ok := parseKind(kindText)
-	if !ok {
-		return 0, newError(verdandi.CodeCorrupt, "@kind", baseRevision, nil)
-	}
-	if kind == Value {
-		return 0, newError(verdandi.CodeTransition, "@kind", baseRevision, nil)
-	}
-	bytesText, ok := redisString(values[2])
-	if !ok {
-		return 0, newError(verdandi.CodeCorrupt, "@encoded_bytes", baseRevision, nil)
-	}
-	projected, err := parseInteger(bytesText, "@encoded_bytes", publisher.maximumBytes())
-	if err != nil {
-		return 0, err
-	}
-	for index, name := range names {
-		old := values[index+3]
-		if kind == Array && old == nil {
-			return 0, newError(verdandi.CodeTransition, name, baseRevision, nil)
-		}
-		if old == nil {
-			projected += len(name) + len(fields[name])
-		} else {
-			oldText, textOK := redisString(old)
-			if !textOK {
-				return 0, newError(verdandi.CodeCorrupt, name, baseRevision, nil)
-			}
-			projected += len(fields[name]) - len(oldText)
-		}
-		if projected < 0 || projected > publisher.maximumBytes() {
-			return 0, newError(verdandi.CodeCapacity, "value", baseRevision, nil)
-		}
-	}
-	return projected, nil
+	return projectPatchReply(values, baseRevision, names, fields, publisher.maximumBytes())
 }
 
 // mutate 执行一个已选择的 Catalog Lua，解析并返回 Redis 分配的 revision。

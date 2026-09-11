@@ -228,6 +228,9 @@ func (client *clientRuntime) readZoneConfig(ctx context.Context, installDefaults
 		return zoneConfig{}, wrapDriver(codeUnavailable, err)
 	}
 	// 只有完整快照才能进入解析；初始化阶段可补齐缺项，刷新阶段则把缺项视为损坏。
+	if len(values) != len(zoneConfigFields) {
+		return zoneConfig{}, protocolError(codeCorrupt, "verdandi:config", 0)
+	}
 	missing := false
 	for _, value := range values {
 		if value == nil {

@@ -1,0 +1,192 @@
+{
+  "date": "2026-09-10",
+  "scope": "Supervisor admission and authenticated Peer network; excludes business data replication",
+  "status": "pass",
+  "toolchains": {
+    "rust": "1.98.1",
+    "go": "1.27.1",
+    "protoc": "36.1",
+    "protoc_gen_go": "1.36.12"
+  },
+  "final_native_gates": {
+    "platforms": [
+      "windows-x64",
+      "linux-x64"
+    ],
+    "rust_tests_per_platform": 29,
+    "go_top_level_groups_per_platform": 24,
+    "generator_tests_per_platform": 4,
+    "checks": [
+      "format",
+      "clippy_warnings_denied",
+      "go_vet",
+      "go_tidy_diff",
+      "go_mod_verify",
+      "generated_source_drift",
+      "rustdoc",
+      "release_build",
+      "real_process_regression"
+    ],
+    "go_race": {
+      "linux": "pass",
+      "windows": "not_run_no_configured_cgo"
+    }
+  },
+  "evidence": {
+    "windows_regression": {
+      "path": "build/testkit/results/services-1788974957473047500.json",
+      "result": {
+        "status": "pass",
+        "platform": "win32",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "cases": [
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 14.312
+      }
+    },
+    "linux_regression": {
+      "path": "build/testkit/results/linux-services-1788975014155870225.json",
+      "result": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "cases": [
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 10.504
+      }
+    },
+    "windows_fault_loop": {
+      "path": "build/testkit/results/services-1788973898255982800.json",
+      "result": {
+        "status": "pass",
+        "platform": "win32",
+        "mode": "soak",
+        "mixed_hosts": false,
+        "cases": [
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "soak": {
+          "requested_seconds": 60,
+          "elapsed_seconds": 63.084,
+          "restart_cycles": 10,
+          "minimum_available_mib": 12344,
+          "peers": 4
+        },
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 83.967
+      }
+    },
+    "linux_fault_loop": {
+      "path": "build/testkit/results/linux-services-1788973900754705859.json",
+      "result": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "soak",
+        "mixed_hosts": false,
+        "cases": [
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "soak": {
+          "requested_seconds": 60,
+          "elapsed_seconds": 60.739,
+          "restart_cycles": 8,
+          "minimum_available_mib": 6753,
+          "peers": 4
+        },
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 90.288
+      }
+    },
+    "mixed_hosts_attempt": {
+      "path": "build/testkit/results/services-1788974036571231900.json",
+      "result": {
+        "status": "fail",
+        "platform": "win32",
+        "mode": "soak",
+        "mixed_hosts": true,
+        "cases": [],
+        "error": "peer-0 did not reach expected state: {'alive': True, 'exit': None, 'sequence': 20, 'status': {'inbound': 0, 'initialized': True, 'members': 1, 'outbound': 0, 'peer_id': '3f114f51e29247e48085fb421a6e1915'}, 'tail': ['{\"component\":\"peer\",\"event\":\"listening\",\"fields\":{\"address\":\"192.168.0.25:50643\",\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\",\"version\":\"0.1.0\"},\"level\":\"INFO\",\"time_unix_ms\":1788974038372}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":false,\"members\":0,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974038373}', '{\"component\":\"peer\",\"event\":\"initialized\",\"fields\":{\"members\":1},\"level\":\"INFO\",\"time_unix_ms\":1788974038394}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974039378}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974040390}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974041394}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974042394}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974043403}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974044412}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974045427}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974046439}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974047451}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974048452}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974049452}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974050464}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974051471}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974052487}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974053488}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974054501}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974055503}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974056506}', '{\"component\":\"peer\",\"event\":\"status\",\"fields\":{\"inbound\":0,\"initialized\":true,\"members\":1,\"outbound\":0,\"peer_id\":\"3f114f51e29247e48085fb421a6e1915\"},\"level\":\"INFO\",\"time_unix_ms\":1788974057509}'], 'pid': 3644}",
+        "elapsed_seconds": 21.777
+      }
+    },
+    "mixed_hosts_final": {
+      "path": "build/testkit/results/services-1789007545576233300.json",
+      "result": {
+        "status": "pass",
+        "platform": "win32",
+        "mode": "soak",
+        "mixed_hosts": true,
+        "cases": [
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "soak": {
+          "requested_seconds": 60,
+          "elapsed_seconds": 60.0,
+          "restart_cycles": 13,
+          "minimum_available_mib": 6753,
+          "peers": 4
+        },
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 75.955
+      }
+    },
+    "temporary_firewall_cleanup": {
+      "path": "build/testkit/firewall-ab5d4456.json",
+      "result": {
+        "error": null,
+        "rules": [
+          "VerdandiServiceTest-ab5d4456-supervisor",
+          "VerdandiServiceTest-ab5d4456-peer"
+        ],
+        "remaining_rules": [],
+        "remote_address": "192.168.0.119",
+        "status": "removed",
+        "local_address": "192.168.0.25"
+      }
+    }
+  },
+  "fault_loop_scope": "Earlier native fault windows preceded final predecode guards. Final native gates and regression were rerun; the final mixed-host regression and 60-second/13-cycle fault window also pass with those guards.",
+  "mixed_hosts_blocker": null,
+  "cleanup": {
+    "owned_processes_remaining": 0,
+    "owned_temporary_directories_remaining": 0,
+    "both_hosts_checked": true,
+    "linux_available_memory_mib": 6747,
+    "linux_swap_used_mib": 0,
+    "temporary_firewall_rules_remaining": 0,
+    "firewall_helper_exited": true
+  },
+  "report": "service-admission-validation-20260910.md",
+  "mixed_hosts_resolution": "Maintainer explicitly approved two temporary program/IP-scoped inbound rules. Mixed testing passed; both rules were removed and their absence verified in ActiveStore."
+}

@@ -67,7 +67,7 @@ func TestPendingChangesMergeContiguousUpdatesAndDetectGaps(t *testing.T) {
 		}
 	}
 	change := pending.drain()[0]
-	if change.repair || change.baseRevision != 4 || change.latestRevision != 7 ||
+	if change.repair || change.baseRevision != 4 || change.latestRevision != 7 || change.event.timestamp != 70 ||
 		!bytes.Equal(change.event.data["a"], []byte("last")) ||
 		!bytes.Equal(change.event.data["b"], []byte("second")) {
 		t.Fatalf("unexpected contiguous update: %#v", change)
@@ -161,7 +161,7 @@ func TestPendingChangesBoundLargeSingleRegistrationBurst(t *testing.T) {
 		}
 	}
 	change := pending.drain()[0]
-	if change.baseRevision != 1 || change.latestRevision != 10_001 || change.event.revision != 10_001 {
+	if change.baseRevision != 1 || change.latestRevision != 10_001 || change.event.revision != 10_001 || change.event.timestamp != 10_001 {
 		t.Fatalf("unexpected burst result: %#v", change)
 	}
 }

@@ -6,7 +6,43 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	redis "github.com/redis/go-redis/v9"
 )
+
+type zoneReplyHook struct {
+	values []any
+	writes int
+}
+
+func (hook *zoneReplyHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+func (hook *zoneReplyHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
+	return next
+}
+func (hook *zoneReplyHook) ProcessHook(_ redis.ProcessHook) redis.ProcessHook {
+	return func(_ context.Context, command redis.Cmder) error {
+		if reply, ok := command.(*redis.SliceCmd); ok && command.Name() == "hmget" {
+			reply.SetVal(hook.values)
+			return nil
+		}
+		hook.writes++
+		return errors.New("unexpected write during malformed bootstrap")
+	}
+}
+
+func TestZoneBootstrapRejectsMalformedLengthBeforeWriting(t *testing.T) {
+	for _, length := range []int{0, 1, 7, 9, 16} {
+		hook := &zoneReplyHook{values: make([]any, length)}
+		driver := redis.NewClient(&redis.Options{})
+		driver.AddHook(hook)
+		client := &clientRuntime{redis: driver}
+		_, err := client.readZoneConfig(context.Background(), true)
+		_ = driver.Close()
+		if !IsCode(err, CodeCorrupt) || hook.writes != 0 {
+			t.Errorf("length %d: err=%v writes=%d", length, err, hook.writes)
+		}
+	}
+}
 
 func requireInvalidConfigField(t *testing.T, err error, field string) {
 	t.Helper()

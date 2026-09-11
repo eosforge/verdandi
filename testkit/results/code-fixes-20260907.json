@@ -1,0 +1,1525 @@
+{
+  "report_date": "2026-09-07",
+  "generated_at": "2026-09-07T16:28:43.7720219+08:00",
+  "baseline_report": "code-audit-20260907.md",
+  "baseline_json": "testkit/results/code-audit-20260907.json",
+  "summary": {
+    "confirmed_findings": 25,
+    "source_fixes_applied": 23,
+    "user_deferred_python": 2,
+    "additional_source_risk_fix": "R03",
+    "full_sdk_qualification_complete": false
+  },
+  "constraints": {
+    "new_downloads_or_installs": false,
+    "python_source_unchanged": true,
+    "committed": false,
+    "pushed": false,
+    "automatic_external_build": false
+  },
+  "findings": [
+    {
+      "id": "A01",
+      "priority": "P1",
+      "title": "Catalog Patch 可把合法 Map 写成无法读取的超限记录",
+      "status": "source_fix_applied",
+      "files": [
+        "lua/src/catalog/actions/patch.lua.inc"
+      ],
+      "change": "Patch 在第一次写入前检查现有字段数与真正新增字段数之和，更新四份生成副本。",
+      "verified": "真实 Redis：65,535→65,536 成功；65,537 拒绝且 revision、字段与字段修订索引不变；上限内覆盖与完整 Read 成功。",
+      "pending": "各完整 SDK 的客户端集成矩阵未运行。",
+      "tests": [
+        "sdk/go/catalog/lua_limits_integration_test.go"
+      ],
+      "propagation_review": "Go、Rust、C++、C ABI、C#、Legacy 全部使用同源 Catalog Lua，因此全部受影响；32 份生成脚本与已审读源片段的一致性检查通过。",
+      "baseline_locations": [
+        [
+          "lua/src/catalog/actions/patch.lua.inc",
+          4
+        ],
+        [
+          "lua/src/catalog/actions/patch.lua.inc",
+          42
+        ],
+        [
+          "lua/src/catalog/actions/read.lua.inc",
+          127
+        ]
+      ]
+    },
+    {
+      "id": "A02",
+      "priority": "P1",
+      "title": "Go Catalog 对空 Map 应用 Patch 会 panic",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/go/catalog/value.go"
+      ],
+      "change": "空字段集合复制后保持可写，并继续复制字节内容；排序改用 maps.Keys 与 slices.Sorted。",
+      "verified": "实际 Read 代码的空 Map→首次 Patch 回归先红后绿，原快照保持不变。",
+      "pending": "Subscriber 正式回归已加入，完整包因缺失依赖未执行。",
+      "tests": [
+        "sdk/go/catalog/read_regression_test.go",
+        "sdk/go/catalog/subscriber_regression_test.go"
+      ],
+      "propagation_review": "确认为 Go 特有的 nil map 写入问题。Rust 的 BTreeMap 和 C++ 的 std::map 空容器仍可写；C#、Legacy 经 C++ 实现不继承这一具体问题。",
+      "baseline_locations": [
+        [
+          "sdk/go/catalog/value.go",
+          184
+        ],
+        [
+          "sdk/go/catalog/read.go",
+          125
+        ],
+        [
+          "sdk/go/catalog/subscriber.go",
+          374
+        ]
+      ]
+    },
+    {
+      "id": "A03",
+      "priority": "P1",
+      "title": "C++ 订阅队列满时会静默丢消息并保留 fence",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/src/internal/subscription_queue.hpp",
+        "sdk/cpp/src/driver.cpp"
+      ],
+      "change": "将 lagged 状态独立于可清空的队列保存，优先于后续控制事件交付。",
+      "verified": "实际队列实现覆盖满队列后的 fence、重连、失败、关闭及已有 lagged，全部通过。",
+      "pending": "完整 driver 网络线程和高频 Redis 订阅回归未运行。",
+      "tests": [
+        "sdk/cpp/tests/runtime_boundaries_test.cpp"
+      ],
+      "propagation_review": "C++ Registration 与 Catalog 共用 driver；C ABI、C#、Legacy 继承。Go 的同步 Receive/Pong 路径和 Rust 的显式 Lagged 处理未发现同形的无标记清队列行为。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/src/driver.cpp",
+          716
+        ],
+        [
+          "sdk/cpp/src/driver.cpp",
+          731
+        ],
+        [
+          "sdk/cpp/src/selector.cpp",
+          1443
+        ],
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          1162
+        ]
+      ]
+    },
+    {
+      "id": "A04",
+      "priority": "P1",
+      "title": "C++ 待处理事件合并掩盖修订缺口并低估占用",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/src/internal/registration_pending.hpp",
+        "sdk/cpp/src/selector.cpp"
+      ],
+      "change": "只合并修订连续且字段结构兼容的事件；重新计算合并后占用，接近容量时先准备副本，失败保留旧事件。",
+      "verified": "修订缺口、未知字段、连续合并及不重叠大字段超限回滚通过；实际 selector.cpp 通过编译。",
+      "pending": "完整订阅恢复集成未运行。",
+      "tests": [
+        "sdk/cpp/tests/runtime_boundaries_test.cpp"
+      ],
+      "propagation_review": "C++ 及其 C ABI/C#/Legacy Registration 选择器受影响。Go、Rust 明确检查修订相邻性并维护合并后大小，是可借鉴的实现。Catalog 使用另一套 pending 逻辑，不能按同名结构直接认定传播。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/src/selector.cpp",
+          534
+        ],
+        [
+          "sdk/cpp/src/selector.cpp",
+          571
+        ],
+        [
+          "sdk/go/registration/pending.go",
+          149
+        ],
+        [
+          "sdk/rust/src/registration/pending.rs",
+          158
+        ]
+      ]
+    },
+    {
+      "id": "A05",
+      "priority": "P1",
+      "title": "C++ Catalog 初始同步转入精确修复后丢失就绪状态",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/src/catalog_subscriber.cpp"
+      ],
+      "change": "scope 初始同步完成后、转入 exact repair 之前保留 aligned 状态；仍在修复全部完成后发送 ready。",
+      "verified": "完成控制流与其他原生 SDK 的源码对照。",
+      "pending": "缺少完整 C++ 依赖，Subscriber 编译与异步集成回归尚未完成。",
+      "tests": [],
+      "propagation_review": "C++ Catalog 及 C ABI/C#/Legacy 继承。Go、Rust 的 scope 同步等待者/批次上下文保留了初始就绪责任，未发现相同控制流缺口。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          1092
+        ],
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          1104
+        ],
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          1128
+        ]
+      ]
+    },
+    {
+      "id": "A06",
+      "priority": "P1",
+      "title": "C++ 将 SQLite 正常查询结束当作 checkpoint 故障",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/src/catalog_checkpoint.cpp",
+        "sdk/cpp/src/catalog_path.cpp"
+      ],
+      "change": "以 sqlite3_step 返回 SQLITE_DONE 判定正常结束；其他结束状态回滚并禁用存储。提取既有 Path 实现以链接实际 checkpoint 测试。",
+      "verified": "生产 load 实现配合系统 SQLite：正常双记录读取通过；第一行前和第一行后注入 SQLITE_IOERR 均返回失败并禁用存储。",
+      "pending": "完整 SDK 链接、指定发行依赖版本和 Linux SQLite 测试未运行。",
+      "tests": [
+        "sdk/cpp/tests/checkpoint_failure_test.cpp"
+      ],
+      "propagation_review": "C++ SQLite 实现及 C ABI/C#/Legacy 继承。Go 使用 bbolt，Rust 使用 redb，不共享这段 SQLite 错误判断。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/src/catalog_checkpoint.cpp",
+          417
+        ],
+        [
+          "sdk/cpp/src/catalog_checkpoint.cpp",
+          453
+        ],
+        [
+          "sdk/cpp/tests/redis_integration_test.cpp",
+          328
+        ]
+      ]
+    },
+    {
+      "id": "A07",
+      "priority": "P1",
+      "title": "Rust 截断非 ASCII 错误详情会 panic",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/rust/src/error.rs",
+        "sdk/rust/src/catalog/checkpoint.rs",
+        "sdk/cpp/src/error.cpp"
+      ],
+      "change": "Rust 共用 UTF-8 边界截断函数，checkpoint 复用；C++ 截断时退回完整码点边界。",
+      "verified": "Rust 实际 error.rs 独立测试覆盖 ASCII 边界、中文和 emoji；C++ UTF-8 边界回归通过。",
+      "pending": "完整 Rust crate 与 checkpoint 正式测试因依赖缺失未执行。",
+      "tests": [
+        "sdk/rust/tests/internal/error.rs",
+        "sdk/rust/tests/internal/catalog/checkpoint.rs",
+        "sdk/cpp/tests/runtime_boundaries_test.cpp"
+      ],
+      "propagation_review": "Rust 存在 panic。C++ 的按字节 resize 不会产生同种 panic，但可能输出被截坏的 UTF-8；C# Encoder.Convert 保持字符边界，Go 没有对应的 512 字节切割逻辑。",
+      "baseline_locations": [
+        [
+          "sdk/rust/src/error.rs",
+          104
+        ],
+        [
+          "sdk/rust/src/error.rs",
+          116
+        ],
+        [
+          "sdk/rust/src/catalog/checkpoint.rs",
+          340
+        ]
+      ]
+    },
+    {
+      "id": "A08",
+      "priority": "P2",
+      "title": "C++ 与 Rust 的 Choice 没有校验所属 Selector",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/include/verdandi/registration/selector.hpp",
+        "sdk/rust/src/registration/selector.rs"
+      ],
+      "change": "Choice 加入所属 Selector 的进程内唯一标识；Rust 用 valid_for 统一 owner、token 和索引校验。",
+      "verified": "实际 C++ 公共模板拒绝来自其他 Selector 的 Choice。",
+      "pending": "Rust 对应正式用例已加入，完整 crate 未执行。",
+      "tests": [
+        "sdk/cpp/tests/selector_transaction_test.cpp",
+        "sdk/rust/tests/internal/registration/selector.rs"
+      ],
+      "propagation_review": "原生 C++ 和 Rust 受影响。Go 校验 transaction 指针和 token；C# 使用进程范围的事务编号。C ABI 不向托管层暴露此原生 Choice；Legacy 的公开 index API 应单独说明其较弱约束，不能自动等同为这一 token 碰撞。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/include/verdandi/registration/selector.hpp",
+          90
+        ],
+        [
+          "sdk/cpp/include/verdandi/registration/selector.hpp",
+          492
+        ],
+        [
+          "sdk/rust/src/registration/selector.rs",
+          256
+        ],
+        [
+          "sdk/rust/src/registration/selector.rs",
+          405
+        ]
+      ]
+    },
+    {
+      "id": "A09",
+      "priority": "P1",
+      "title": "C++ Selector 提交遇到用户 Data 移动异常会部分成功",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/include/verdandi/registration/selector.hpp"
+      ],
+      "change": "先准备所有 staged 节点与返回对象，仅在返回构造成功后以节点转移提交；异常时不发布任何预测。",
+      "verified": "实际公共模板的 One/Any 在不同用户 Data 移动位置抛异常，20 个故障预算场景保持全提交或全回滚。",
+      "pending": "完整 native 库集成及分配失败注入未运行。",
+      "tests": [
+        "sdk/cpp/tests/selector_transaction_test.cpp"
+      ],
+      "propagation_review": "原生 C++ 泛型 API 已复现。C#、Legacy 走原生 Fields，不具备这个自定义 Data 移动触发器；它们的提交后解码问题另列 A10。Go、Rust 没有这种可抛 C++ 移动构造语义。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/include/verdandi/registration/selector.hpp",
+          526
+        ],
+        [
+          "sdk/cpp/include/verdandi/registration/selector.hpp",
+          292
+        ]
+      ]
+    },
+    {
+      "id": "A10",
+      "priority": "P1",
+      "title": "C# 与 Legacy 在提交后解码返回值，失败不会撤销预测",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/csharp/src/Verdandi/Registration/Selector.cs",
+        "sdk/cpp/include/verdandi/legacy/selector.hpp"
+      ],
+      "change": "C# 与 Legacy 均在事务回调内完成返回候选项解码；删除提交后重复解码。Legacy 候选项使用可无异常移动的拥有型状态。",
+      "verified": "Legacy 公共 facade 的解码失败回滚及提交后用户 Data 移动异常场景通过；C# 库与正式回归项目均通过 net8.0/net10.0 编译。",
+      "pending": "C# 返回解码回滚正式用例未运行；Legacy 使用 C ABI 夹具，尚非完整 native/Redis 集成。",
+      "tests": [
+        "sdk/cpp/tests/legacy_transaction_test.cpp",
+        "sdk/csharp/tests/Verdandi.Tests/Program.cs"
+      ],
+      "propagation_review": "C# 与 C++ Legacy 包装层都有此路径。Go、Rust 和原生 C++ 都在提交前准备类型化返回值；原生 C++ 的异常原子性另见 A09。C ABI 本身只处理 Fields，不能替包装层验证应用解码器。",
+      "baseline_locations": [
+        [
+          "sdk/csharp/src/Verdandi/Registration/Selector.cs",
+          131
+        ],
+        [
+          "sdk/csharp/src/Verdandi/Registration/Selector.cs",
+          155
+        ],
+        [
+          "sdk/csharp/src/Verdandi/Registration/Selector.cs",
+          205
+        ],
+        [
+          "sdk/cpp/include/verdandi/legacy/selector.hpp",
+          210
+        ],
+        [
+          "sdk/cpp/src/c/selector.cpp",
+          175
+        ]
+      ]
+    },
+    {
+      "id": "A11",
+      "priority": "P1",
+      "title": "Go Selector 创建过程中关闭父客户端可能永久等待",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/go/registration/selector_core.go"
+      ],
+      "change": "首次就绪前的所有退出路径由 defer 发送 Closed，消除父客户端关闭时的启动等待缺口。",
+      "verified": "完成 ready 发送路径及跨语言生命周期源码复查。",
+      "pending": "拨号期间关闭父客户端的正式回归已加入，完整 Go 包因依赖缺失未执行。",
+      "tests": [
+        "sdk/go/registration/selector_startup_test.go"
+      ],
+      "propagation_review": "Go Registration Selector 受影响。Go Registration 注册 worker、Go Catalog 的初始化上下文，以及 Rust 的最终 ready 完成路径未发现相同缺口；C++ 使用自身的 promise/同步超时路径。",
+      "baseline_locations": [
+        [
+          "sdk/go/registration/selector_core.go",
+          145
+        ],
+        [
+          "sdk/go/registration/selector_core.go",
+          224
+        ],
+        [
+          "sdk/go/registration/selector_core.go",
+          247
+        ]
+      ]
+    },
+    {
+      "id": "A12",
+      "priority": "P2",
+      "title": "Rust Catalog 构造 future 被取消时后台任务缺少取消守卫",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/rust/src/catalog/subscriber.rs",
+        "sdk/rust/src/registration/selector.rs"
+      ],
+      "change": "Catalog 构造期使用 CancellationToken 的 drop_guard，成功交付后 disarm；Registration 复用同一现有运行库机制以去掉自定义 guard。",
+      "verified": "完成取消路径源码复查，并核验所用 tokio-util DropGuard API。",
+      "pending": "完整 crate 类型检查与构造 future 取消的生命周期回归未运行。",
+      "tests": [],
+      "propagation_review": "Rust Catalog 特有的构造期取消路径。Rust Registration 对 ready 接收端消失有清理处理；Go 通过显式 context 结束初始化，C++/C# 不使用这一被丢弃 future 的模型。",
+      "baseline_locations": [
+        [
+          "sdk/rust/src/catalog/subscriber.rs",
+          123
+        ],
+        [
+          "sdk/rust/src/catalog/subscriber.rs",
+          152
+        ],
+        [
+          "sdk/rust/src/catalog/subscriber.rs",
+          160
+        ]
+      ]
+    },
+    {
+      "id": "A13",
+      "priority": "P2",
+      "title": "Rust 动态扩池期间取消会泄漏活跃命令计数",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/rust/src/client.rs"
+      ],
+      "change": "增加活跃命令计数后立即创建 CommandGuard，再进入可能等待的动态扩池路径。",
+      "verified": "完成 guard 创建、取消与 Drop 归还路径源码复查。",
+      "pending": "完整 crate 及确定性取消测试未运行；C++ 相近的分配异常归还风险 R01 仍未关闭。",
+      "tests": [],
+      "propagation_review": "Rust 根客户端影响两个业务域。C++ 在 creating++/slot 标记之后的可抛路径也缺少资源归还守卫，属于相近的异常风险，未运行内存故障注入；Go 由驱动管理连接池，没有相同手动计数路径。C#/Legacy 继承 C++ 相关风险。",
+      "baseline_locations": [
+        [
+          "sdk/rust/src/client.rs",
+          204
+        ],
+        [
+          "sdk/rust/src/client.rs",
+          209
+        ],
+        [
+          "sdk/rust/src/client.rs",
+          213
+        ]
+      ]
+    },
+    {
+      "id": "A14",
+      "priority": "P2",
+      "title": "C++ Catalog 保留的空 Map/Array 在状态变化后消失",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/include/verdandi/catalog/subscriber.hpp"
+      ],
+      "change": "保留值存在性改用 replace_revision，避免把合法空 Map/Array 当成不存在。",
+      "verified": "空 Map/Array 在 present、unavailable、synchronizing、closed 的保留语义及真正 absent/deleted 场景通过。",
+      "pending": "C ABI、C#、Legacy 的完整运行矩阵未运行。",
+      "tests": [
+        "sdk/cpp/tests/selector_transaction_test.cpp"
+      ],
+      "propagation_review": "C++、C ABI、C#、Legacy Catalog 继承。Go 使用 kind 判定、Rust 使用 Option 保留存在性，未发现同一缺口。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/include/verdandi/catalog/subscriber.hpp",
+          81
+        ],
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          835
+        ]
+      ]
+    },
+    {
+      "id": "A15",
+      "priority": "P1",
+      "title": "C++ Registration 移动赋值不会关闭被覆盖的注册",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/include/verdandi/registration/registration.hpp"
+      ],
+      "change": "移动赋值先交由临时拥有者接管，再交换 core，使旧注册确定执行关闭；保留自赋值保护。",
+      "verified": "实际公共 Registration 模板验证旧 owner 已关闭、新 owner 仍有效。",
+      "pending": "网络侧注销与租约回收集成未运行。",
+      "tests": [
+        "sdk/cpp/tests/selector_transaction_test.cpp"
+      ],
+      "propagation_review": "原生 C++ 特有。Legacy owned_handle 移动赋值先释放旧句柄，C ABI 显式 release 走析构关闭，Rust 对被替换值执行 Drop；Go 显式生命周期模型没有此移动赋值接口。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/include/verdandi/registration/registration.hpp",
+          83
+        ],
+        [
+          "sdk/cpp/src/registration.cpp",
+          701
+        ],
+        [
+          "sdk/cpp/include/verdandi/legacy/client.hpp",
+          36
+        ]
+      ]
+    },
+    {
+      "id": "A16",
+      "priority": "P2",
+      "title": "三种原生 SDK 的 Patch 容量预估错误拒绝合法交换",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/go/catalog/projection.go",
+        "sdk/go/catalog/publisher.go",
+        "sdk/rust/src/catalog/publisher.rs",
+        "sdk/cpp/src/catalog.cpp"
+      ],
+      "change": "三种原生 SDK 均按完整增减后的最终容量判断，避免中间增长误拒绝；Go 把纯容量计算与 I/O 分开。",
+      "verified": "Go 实际纯计算覆盖 Map/Array、两种字段顺序、合法交换、真实超限和错误旧字节数；C++ catalog.cpp 编译通过。",
+      "pending": "Rust 正式回归已加入但未运行；各 SDK Publisher 集成及 C++ 此计算的直接运行回归未完成。",
+      "tests": [
+        "sdk/go/catalog/projection_test.go",
+        "sdk/rust/tests/internal/catalog/publisher.rs"
+      ],
+      "propagation_review": "Go、Rust、C++ 都有，C#/Legacy 继承原生层。Lua 在完整增减后校验最终值，没有同样的中间值拒绝。",
+      "baseline_locations": [
+        [
+          "sdk/go/catalog/publisher.go",
+          221
+        ],
+        [
+          "sdk/rust/src/catalog/publisher.rs",
+          138
+        ],
+        [
+          "sdk/cpp/src/catalog.cpp",
+          426
+        ],
+        [
+          "lua/src/catalog/actions/patch.lua.inc",
+          48
+        ]
+      ]
+    },
+    {
+      "id": "A17",
+      "priority": "P2",
+      "title": "Go 严格配置解析仍接受错误大小写及折叠重名",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/go/configuration/json.go"
+      ],
+      "change": "对象成员名限定为契约使用的小写 ASCII、数字与下划线，阻断大小写和 Unicode 折叠匹配；字符串值仍允许 Unicode。",
+      "verified": "实际 json.go 扫描器的合法成员、错误大小写、ſ/K 折叠与 Unicode 值回归通过。",
+      "pending": "隔离包的无关 Config.check 使用夹具；这不代表完整配置语义或 SDK 通过。",
+      "tests": [
+        "sdk/go/configuration/json_boundaries_test.go"
+      ],
+      "propagation_review": "Go 特有。Rust serde 和 C++ 的封闭绑定按精确名字匹配；C#/Legacy 配置走 C++。探针保留实际 json.go/config.go，但语义 check 被置为成功，仅证明解码边界，未冒充完整配置 SDK 测试。",
+      "baseline_locations": [
+        [
+          "sdk/go/configuration/json.go",
+          55
+        ],
+        [
+          "configuration.schema.json",
+          1
+        ]
+      ]
+    },
+    {
+      "id": "A18",
+      "priority": "P2",
+      "title": "C++ Selector 截止时间堆随续租次数增长",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/src/internal/selector_state.hpp",
+        "sdk/cpp/src/selector.cpp"
+      ],
+      "change": "截止索引改为按时间与 UUID 排序、可删除旧条目的 std::set；更新、移除与保留迁移同步维护。",
+      "verified": "10,000 次续租仍只保留一项；同时间不同 UUID、到期迁移和移除回归通过；实际 selector.cpp 编译通过。",
+      "pending": "完整运行时长期内存曲线未测。",
+      "tests": [
+        "sdk/cpp/tests/runtime_boundaries_test.cpp"
+      ],
+      "propagation_review": "C++ Registration 及原生包装层受影响。Go、Rust 使用带索引的截止时间队列，每个 UUID 对应可更新条目。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/src/selector.cpp",
+          690
+        ],
+        [
+          "sdk/cpp/src/selector.cpp",
+          712
+        ],
+        [
+          "sdk/cpp/src/selector.cpp",
+          749
+        ]
+      ]
+    },
+    {
+      "id": "A19",
+      "priority": "P3",
+      "title": "合法的 retry factor=1 导致退避计算随失败次数变慢",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/src/internal/retry.hpp",
+        "sdk/go/registration/selector_core.go",
+        "sdk/rust/src/registration/selector.rs"
+      ],
+      "change": "factor=1 直接返回固定延迟；C++ Selector/Catalog 复用同一个退避与等待实现。",
+      "verified": "C++ 最大 size_t 失败计数下 factor=1、指数增长和上限回归通过。",
+      "pending": "Go/Rust 对应正式用例已加入但完整包未执行；其 Catalog 已有直接返回路径。",
+      "tests": [
+        "sdk/cpp/tests/runtime_boundaries_test.cpp",
+        "sdk/go/registration/selector_startup_test.go",
+        "sdk/rust/tests/internal/registration/selector.rs"
+      ],
+      "propagation_review": "Go/Rust Selector 以及 C++ Selector、Catalog 有同形逻辑，C#/Legacy 继承。Go/Rust Catalog 已有 factor<=1 的直接路径，可统一语义。",
+      "baseline_locations": [
+        [
+          "sdk/go/registration/selector_core.go",
+          1370
+        ],
+        [
+          "sdk/rust/src/registration/selector.rs",
+          2011
+        ],
+        [
+          "sdk/cpp/src/selector.cpp",
+          1169
+        ],
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          770
+        ]
+      ]
+    },
+    {
+      "id": "A20",
+      "priority": "P2",
+      "title": "仅修改 Lua 后增量构建 C++ 可能仍嵌入旧脚本",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/cmake/EmbedProtocol.cmake"
+      ],
+      "change": "将八个被嵌入 Lua 输入加入 CMAKE_CONFIGURE_DEPENDS。",
+      "verified": "隔离 CMake 工程只修改 Lua 后执行 cmake --build，即触发重新配置并更新嵌入内容。",
+      "pending": "完整依赖组合未运行。",
+      "tests": [
+        "sdk/cpp/tests/cmake_regression_test.cmake"
+      ],
+      "propagation_review": "C++ 及其二进制包装消费者受影响。Go embed 和 Rust include_str 由编译输入追踪；每次都主动重新 configure 的构建脚本也不会触发这个具体场景。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/cmake/EmbedProtocol.cmake",
+          11
+        ],
+        [
+          "sdk/cpp/cmake/EmbedProtocol.cmake",
+          18
+        ]
+      ]
+    },
+    {
+      "id": "A21",
+      "priority": "P2",
+      "title": "Windows 运行时 DLL 列表为空时构建后复制失败",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/cmake/CopyRuntimeDlls.cmake",
+        "sdk/cpp/CMakeLists.txt"
+      ],
+      "change": "运行时 DLL 复制脚本显式处理空列表，并保持列表参数与含空格路径。",
+      "verified": "空列表、单 DLL、多 DLL 与含空格路径的复制及内容比较全部通过。",
+      "pending": "各发行 DLL 依赖组合与打包测试未运行。",
+      "tests": [
+        "sdk/cpp/tests/cmake_regression_test.cmake"
+      ],
+      "propagation_review": "Windows C++ 构建及 C#/Legacy 使用的原生 DLL 交付受影响；Linux 不进入 WIN32 分支。此结果不表示所有依赖组合都会失败。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/CMakeLists.txt",
+          127
+        ]
+      ]
+    },
+    {
+      "id": "A22",
+      "priority": "P1",
+      "title": "Sentinel 夹具部署拒绝后仍可能删除原有同名资源",
+      "status": "user_deferred",
+      "files": [],
+      "change": "按用户要求暂缓 Python 修改与 Black 下载。",
+      "verified": "未修改原 Python 夹具。",
+      "pending": "Sentinel 清理所有权缺陷仍存在；未执行有风险的 Sentinel 夹具。",
+      "tests": [],
+      "propagation_review": "这是共享测试基础设施问题，所有使用该 Sentinel Topology 的语言资格测试均受影响。Standalone Fixture 已有创建记录/所有权标签，不存在相同的无条件清理路径。",
+      "baseline_locations": [
+        [
+          "testkit/sentinel/sentinel_test.py",
+          190
+        ],
+        [
+          "testkit/sentinel/sentinel_test.py",
+          232
+        ],
+        [
+          "testkit/sentinel/sentinel_test.py",
+          1035
+        ]
+      ]
+    },
+    {
+      "id": "A23",
+      "priority": "P2",
+      "title": "Python peer 启动失败存在未接管的子进程",
+      "status": "user_deferred",
+      "files": [],
+      "change": "按用户要求暂缓 Python 修改与 Black 下载。",
+      "verified": "未修改原 Python 夹具。",
+      "pending": "peer 启动失败后子进程接管与清理问题仍待修复。",
+      "tests": [],
+      "propagation_review": "Catalog interop 与复用它的 Catalog Sentinel，以及主 Sentinel 进程启动逻辑受影响；各语言本身的 SDK 运行时代码不应因此扣成同一个生命周期 bug。",
+      "baseline_locations": [
+        [
+          "testkit/catalog/interop_test.py",
+          94
+        ],
+        [
+          "testkit/sentinel/sentinel_test.py",
+          832
+        ]
+      ]
+    },
+    {
+      "id": "A24",
+      "priority": "P2",
+      "title": "C ABI Redis 测试失败清理会读取未初始化 key",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/cpp/tests/c_abi_redis_test.c"
+      ],
+      "change": "清理涉及的 key 数组零初始化，erase_key 仅在 client 有效且 key 非空时执行。",
+      "verified": "实际 C 测试文件通过 MSVC C11 /utf-8 /W4 /WX 编译。",
+      "pending": "连接建立中途失败的真实 C ABI/Redis 回归未执行。",
+      "tests": [
+        "sdk/cpp/tests/c_abi_redis_test.c"
+      ],
+      "propagation_review": "C ABI 的 C 测试特有。其他语言测试中的字符串已初始化，未发现同一未初始化读取。不能据此声称生产 C ABI 普通调用有相同问题。",
+      "baseline_locations": [
+        [
+          "sdk/cpp/tests/c_abi_redis_test.c",
+          86
+        ],
+        [
+          "sdk/cpp/tests/c_abi_redis_test.c",
+          136
+        ],
+        [
+          "sdk/cpp/tests/c_abi_redis_test.c",
+          263
+        ]
+      ]
+    },
+    {
+      "id": "A25",
+      "priority": "P2",
+      "title": "Go 引用代码生成器把遮蔽内建名字的切片当成标量",
+      "status": "source_fix_applied",
+      "files": [
+        "sdk/go/cmd/verdandi-refgen/main.go"
+      ],
+      "change": "解析标量前先检查本地类型声明，尊重对预声明标识符的合法遮蔽。",
+      "verified": "完整 refgen 包的 5 个顶层测试及子场景通过；包含 type uintptr []byte 生成切片视图与 Clone 的回归。",
+      "pending": "无本项额外依赖阻塞；不代表完整 Go SDK 通过。",
+      "tests": [
+        "sdk/go/cmd/verdandi-refgen/main_test.go"
+      ],
+      "propagation_review": "Go refgen 特有。Rust derive 与 C++ 模板使用各自类型系统，C# 不使用这个 Go AST 生成器。",
+      "baseline_locations": [
+        [
+          "sdk/go/cmd/verdandi-refgen/main.go",
+          275
+        ]
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "area": "C++",
+      "result": "通过",
+      "detail": "7/7 CTest：checkpoint、Legacy、Catalog 值与通知字段、运行时边界、Selector 事务、CMake 回归。",
+      "command": "ctest --test-dir build/fix-20260907/cpp-offline -C Release -j 1 --output-on-failure",
+      "limits": "标准库与系统 SQLite 的离线工程；包含公共模板/C ABI 夹具，未链接完整 native 库。"
+    },
+    {
+      "area": "C / C++ 编译",
+      "result": "通过",
+      "detail": "实际 catalog.cpp、selector.cpp 对象编译；C ABI C 测试文件 C11 /utf-8 /W4 /WX 编译。",
+      "limits": "编译通过不等于网络、包装层或集成运行通过。"
+    },
+    {
+      "area": "Go",
+      "result": "部分通过",
+      "detail": "实际源文件的 Read、Patch 容量、JSON 扫描边界 3 个测试通过；完整 refgen 包通过。",
+      "limits": "隔离目录中的生产源文件与仓库逐文件 SHA-256 一致；运输层与无关 Config.check 使用夹具。完整 SDK 缺少缓存依赖。"
+    },
+    {
+      "area": "Rust",
+      "result": "部分通过",
+      "detail": "实际 error.rs 以 rustc --test 独立编译并通过 UTF-8 边界测试；修改文件 rustfmt --check 通过。",
+      "limits": "cargo test --offline --locked --lib --no-default-features 因缺失 proc-macro2 等依赖未进入完整 crate 编译。"
+    },
+    {
+      "area": "C#",
+      "result": "编译通过",
+      "detail": "库与测试项目均通过 net8.0 / net10.0 Release 构建，0 警告、0 错误；格式检查通过。",
+      "limits": "使用清空包源的离线 restore 与已安装 targeting packs；没有下载。运行回归需要完整 native DLL。"
+    },
+    {
+      "area": "Lua / Redis",
+      "result": "通过",
+      "detail": "真实 Redis 上的聚合字段上限与原子拒绝、上限内覆盖、完整 Read 通过；全部自有测试键清理。",
+      "limits": "使用当前 canonical 生成脚本的独立协议探针；完整 SDK Lua 集成用例未执行。"
+    },
+    {
+      "area": "格式 / 生成物",
+      "result": "通过",
+      "detail": "Go 13 文件、Rust 10 文件、C/C++ 31 文件及两个 C# 文件格式检查通过；Catalog Lua 生成物 freshness 通过。",
+      "limits": "包含本轮以前已存在的工作区改动，不把它们归成本轮新增修改。"
+    }
+  ],
+  "live_redis": {
+    "lua": {
+      "accepts_65536_fields": true,
+      "cleaned_owned_keys": 4,
+      "endpoint": "VM Redis via SSH loopback",
+      "overflow_preserves_state_and_revision": true,
+      "overflow_reply": {
+        "&field": "fields",
+        "&result": "error",
+        "&status": "capacity",
+        "@revision": "2"
+      },
+      "overwrite_at_capacity_and_full_read_pass": true,
+      "passed": true,
+      "remaining_owned_keys": 0,
+      "started_at": "2026-09-07T16:22:47+08:00"
+    },
+    "redis": {
+      "checked_at": "2026-09-07T16:27:31.4953508+08:00",
+      "ping": "PONG",
+      "dbsize": 0,
+      "memory_bytes": {
+        "maxmemory": 268435456,
+        "used_memory_rss": 45101056,
+        "used_memory": 19219040,
+        "used_memory_peak": 36909768
+      }
+    },
+    "generated_at": "2026-09-07T16:28:43.7720219+08:00"
+  },
+  "vm": {
+    "host": "192.168.0.119",
+    "os": "Ubuntu 26.04.1",
+    "kernel": "7.0.0-30-generic",
+    "user_reported_dynamic_memory_disabled": true,
+    "final_mem_mib": {
+      "total": 7422,
+      "used": 585,
+      "available": 6837,
+      "swap_total": 3907,
+      "swap_used": 0
+    },
+    "last_balloon_kib": 0,
+    "software_installed_in_this_repair_turn": [],
+    "ssh_tunnel": "closed after testing",
+    "note": "前两次 OOM 与 SSH 中断发生于排查阶段，未启动 Ubuntu 编译或 SDK 测试。用户关闭动态内存并重启后，真实 Lua 回归通过；不把短时稳定性当成内核问题根因证明。"
+  },
+  "risks": [
+    {
+      "id": "R01",
+      "title": "内存分配失败下错误边界和连接池归还",
+      "detail": "C ABI noexcept 的 bad_alloc 分支仍构造带分配的 error/detail；C# unmanaged 回调的错误编码也可能再分配。C++ driver 在 creating++ 后创建连接、在占用 slot 后构建请求的路径缺少全程守卫。需要故障注入，不能把尚未执行的极端分配失败写成已复现崩溃。",
+      "locations": [
+        [
+          "sdk/cpp/src/c/internal.hpp",
+          141
+        ],
+        [
+          "sdk/cpp/src/driver.cpp",
+          453
+        ],
+        [
+          "sdk/cpp/src/driver.cpp",
+          514
+        ],
+        [
+          "sdk/csharp/src/Verdandi/Internal/NativeTypes.cs",
+          202
+        ]
+      ],
+      "status": "open"
+    },
+    {
+      "id": "R02",
+      "title": "C# 并发 Dispose 的 Result/异常边界",
+      "detail": "IsUsable 检查与 SafeHandle 参与 P/Invoke 之间存在时间窗口，可能出现 ObjectDisposedException 而不是预期 Result。SafeHandle 提供内存生命周期保护；本轮没有证据认定 use-after-free。需要用同步屏障验证公开操作与 Dispose 的交错。",
+      "locations": [
+        [
+          "sdk/csharp/src/Verdandi/Client.cs",
+          1
+        ],
+        [
+          "sdk/csharp/src/Verdandi/Internal/SafeHandles.cs",
+          1
+        ]
+      ],
+      "status": "open"
+    },
+    {
+      "id": "R03",
+      "title": "Rust Subscriber 关闭完成条件发布顺序",
+      "detail": "finish_worker 先把 workers 减到 0，再写 closed、标记 Entry Closed 和释放生命周期 guard；wait_finished 以 workers==0 返回。存在观察到计数归零但终态尚未发布的窗口，需要确定性并发测试，建议使用独立的完成标记而非工作计数承担两个含义。",
+      "locations": [
+        [
+          "sdk/rust/src/catalog/subscriber.rs",
+          700
+        ],
+        [
+          "sdk/rust/src/catalog/subscriber.rs",
+          715
+        ]
+      ],
+      "status": "source_fix_applied_awaiting_concurrency_test",
+      "change": "mark_scope(Closed) 与 Client Guard 释放完成后发布 closed；wait_finished 等待该完成标记，避免把 workers==0 当成清理完成。",
+      "propagation_review": "Go closeDone 与 C++ join 代表收尾完成；本项 Rust 路径源代码已调整，Tokio 确定性并发验证未完成。"
+    },
+    {
+      "id": "R04",
+      "title": "故障切换回滚与 checkpoint 修订单调性",
+      "detail": "内存恢复可以发现服务端 revision 回退后重新同步，而持久化实现通常拒绝降低 cursor；C++ 的 cursor 也使用 max 累积。需要先明确主从切换丢失已确认写入时的 epoch/reset 契约，再用未受 WAIT 保护的故障场景验证，现有有 WAIT 的测试不能证明此情况。该项没有列入 25 个已定位缺陷。",
+      "locations": [
+        [
+          "sdk/go/catalog/store.go",
+          1
+        ],
+        [
+          "sdk/rust/src/catalog/checkpoint.rs",
+          1
+        ],
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          1108
+        ]
+      ],
+      "status": "open"
+    },
+    {
+      "id": "R05",
+      "title": "C++ 恢复任务的整体截止时间",
+      "detail": "sync_timeout 明确用于构造和订阅确认，但恢复阶段的扫描/屏障等待还需验证是否始终受整体截止时间约束。Selector 并不存在所谓被忽略的 max_inflight_reads 配置，该猜测已排除；Catalog 才有对应配置。",
+      "locations": [
+        [
+          "sdk/cpp/src/selector.cpp",
+          1
+        ],
+        [
+          "sdk/cpp/src/catalog_subscriber.cpp",
+          999
+        ]
+      ],
+      "status": "open"
+    }
+  ],
+  "code_size": {
+    "baseline_files": 332,
+    "current_files": 353,
+    "baseline_physical_lines": 79711,
+    "current_physical_lines": 80895,
+    "delta": 1184,
+    "by_role": [
+      {
+        "role": "build_and_developer_tools",
+        "baseline_lines": 2852,
+        "current_lines": 2891,
+        "delta": 39
+      },
+      {
+        "role": "generated",
+        "baseline_lines": 6040,
+        "current_lines": 6060,
+        "delta": 20
+      },
+      {
+        "role": "handwritten_runtime",
+        "baseline_lines": 44834,
+        "current_lines": 44985,
+        "delta": 151
+      },
+      {
+        "role": "tests_and_fixtures",
+        "baseline_lines": 25985,
+        "current_lines": 26959,
+        "delta": 974
+      }
+    ],
+    "scope": "原审计的 332 个源文件加 21 个新源文件；排除 build 下的临时探针和文档。相对审计时的脏工作区基线，不相对 HEAD。"
+  },
+  "simplifications": [
+    "C++ 两处 retry/wait 实现合并；拆出队列、pending 与状态索引的实际实现供独立验证。",
+    "Rust 删除手写启动取消守卫，复用 CancellationToken::drop_guard；Choice 校验集中到 valid_for。",
+    "C# 与 Legacy 在提交前准备返回值，删除提交后的重复解码路径。",
+    "Go 用 maps.Keys + slices.Sorted 生成有序字段名，把容量计算从发布 I/O 中拆出。"
+  ],
+  "tradeoffs": [
+    "Legacy 每个 detached candidate 新增一个拥有型状态分配，以保证提交后移动返回不调用可能抛异常的应用 Data 移动构造。",
+    "C++ 新截止索引使存储与条目数绑定；未运行新的全 SDK 吞吐或延迟基准。",
+    "本轮优先正确性与必要回归；手写运行时代码净增 151 行，测试净增 974 行，不宣称已经显著缩小项目。"
+  ],
+  "harness_corrections": [
+    "独立 Lua 探针最初把嵌套 &fields 当作顶层字段；修正探针解析后重新执行通过，生产 Lua 无额外修改。",
+    "临时 MSVC C 编译命令最初漏传 /utf-8，补齐项目既定编码选项后严格编译通过。"
+  ],
+  "source_change_manifest": [
+    {
+      "path": "lua/catalog/patch.lua",
+      "language": "Lua",
+      "role": "generated",
+      "old_lines": 290,
+      "current_lines": 295,
+      "old_sha256": "edc74e2b59fac0376766f6442943f1f686f9f2b0417f8785ac5326428468f469",
+      "sha256": "3f3ec6edab231dc56012b02bcacb1f1b425a07a6cc340687fd9771fd0ec562ec"
+    },
+    {
+      "path": "lua/src/catalog/actions/patch.lua.inc",
+      "language": "Lua",
+      "role": "handwritten_runtime",
+      "old_lines": 89,
+      "current_lines": 94,
+      "old_sha256": "6563d04434074181c56bd7fd0635371f7b7fc6caa5149fd3172992ff6bf51184",
+      "sha256": "597dd0c650c2f9fe4e3710834bba33cf66a989f4e2fc17219ec34937b2c0769b"
+    },
+    {
+      "path": "sdk/cpp/CMakeLists.txt",
+      "language": "CMake",
+      "role": "build_and_developer_tools",
+      "old_lines": 279,
+      "current_lines": 308,
+      "old_sha256": "16184124d475f79bda24b655c30f39ee34dd0533acc16bcd32c10abf14453f28",
+      "sha256": "1c9c5e0382fcf431a3cc3e7855a0d3f30f888b64f06dc488c9ac4e1f8430571a"
+    },
+    {
+      "path": "sdk/cpp/cmake/EmbedProtocol.cmake",
+      "language": "CMake",
+      "role": "build_and_developer_tools",
+      "old_lines": 20,
+      "current_lines": 22,
+      "old_sha256": "cc088a6f4d184afd5a6e31b717aecf6480cced7b6aaaaea29ad5fccea7e51617",
+      "sha256": "245a3f764b177776fd30c92d2e567eecebdec92b1d0adcb2f1fdefe769a90c08"
+    },
+    {
+      "path": "sdk/cpp/include/verdandi/catalog/subscriber.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 137,
+      "current_lines": 137,
+      "old_sha256": "6c3bf01c6c9955f491e68e63a3ccc8309aee0f20d8f698785fba6a11dc92352c",
+      "sha256": "c81c3c463263889a054cea87b69bab4fa0b56209f4048d295453a75bfb1bfc05"
+    },
+    {
+      "path": "sdk/cpp/include/verdandi/legacy/selector.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 446,
+      "current_lines": 429,
+      "old_sha256": "833e64f49530ce24405912ac86cbfb34ba94a360e558c830c9012b5471ce251a",
+      "sha256": "4b45fc17d77708d055487ab60eac138c487597bb45e4842964822f9fc7c9f3fb"
+    },
+    {
+      "path": "sdk/cpp/include/verdandi/registration/registration.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 190,
+      "current_lines": 196,
+      "old_sha256": "5f9fdef249659591b66937b1c748bdb284ae63f1eb03afe3c8b036e2d92f291b",
+      "sha256": "6ac360cc32e2a56263e311a584f190eb021106750b47cf13854c11bcee655615"
+    },
+    {
+      "path": "sdk/cpp/include/verdandi/registration/selector.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 546,
+      "current_lines": 584,
+      "old_sha256": "984bd205ebb1d325bae408ac40c2fd7ee5310b382b1e9b32d4c0f7a6973c6140",
+      "sha256": "169934890d7672caeeb477a243c29eefbf3f848dab233031a5875af875a82382"
+    },
+    {
+      "path": "sdk/cpp/src/catalog.cpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 486,
+      "current_lines": 446,
+      "old_sha256": "7f4f7abe3975e33fee5afeb7f83e91527b05d04cada65bfc9ee491ed6dae7273",
+      "sha256": "6e60a0b0471791c794e4eb7bd1de4394511a5a4d7db2f6a2919b06d51c2f3944"
+    },
+    {
+      "path": "sdk/cpp/src/catalog_checkpoint.cpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 580,
+      "current_lines": 581,
+      "old_sha256": "1b830ebe50fd6bc4843e07b7e760871f46981943d0a2ebd840d6c5c16ae6922e",
+      "sha256": "2845043acd03b4b1037971acd6830657751f5e44361464e2a29832ddc7e97a18"
+    },
+    {
+      "path": "sdk/cpp/src/catalog_subscriber.cpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 1318,
+      "current_lines": 1292,
+      "old_sha256": "42e828c817680df95014f6c296ac36eb0ab4364d668266e49410498ea56cdde7",
+      "sha256": "7201afb47b0493400a48605531e1bc4bc930dbea9528d048427bda215587f1bf"
+    },
+    {
+      "path": "sdk/cpp/src/driver.cpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 1026,
+      "current_lines": 1001,
+      "old_sha256": "5757fe1a7c801420761e27df7266c5863c1f28cbf1365b78ff0c66d6f2da072b",
+      "sha256": "26fad221082404292e073ba087710edbd99ba58b23e79e048b7ca7616825c689"
+    },
+    {
+      "path": "sdk/cpp/src/error.cpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 119,
+      "current_lines": 123,
+      "old_sha256": "10d08a38f9faa95c885c7eb127fdebb7ef3abaf9bc86223fd8fd1aa4f2b0a772",
+      "sha256": "0b74389b555b7f7d906d2a2ea0f3eefb771b33648d3286afdc1bdbcd4d641aae"
+    },
+    {
+      "path": "sdk/cpp/src/internal/driver.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 165,
+      "current_lines": 145,
+      "old_sha256": "ec6a1b2a39c8081c828bef7b4376bd77bcbe555ed0e0952a115a030563fb8685",
+      "sha256": "02d4c6deeaaad6c223f986be2d30146dfb96b87196ed26e8edad87aad6304234"
+    },
+    {
+      "path": "sdk/cpp/src/protocol/catalog/patch.lua",
+      "language": "Lua",
+      "role": "generated",
+      "old_lines": 290,
+      "current_lines": 295,
+      "old_sha256": "edc74e2b59fac0376766f6442943f1f686f9f2b0417f8785ac5326428468f469",
+      "sha256": "3f3ec6edab231dc56012b02bcacb1f1b425a07a6cc340687fd9771fd0ec562ec"
+    },
+    {
+      "path": "sdk/cpp/src/selector.cpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 1514,
+      "current_lines": 1259,
+      "old_sha256": "25c7ec9f482d27d9dc302bed3aaa7631ef8a3de431291677e56a44682ba86718",
+      "sha256": "5a048512afa5f99eaa4ded2fb1b89c7ec7efdb6174589b4cc37303a76ea52c4e"
+    },
+    {
+      "path": "sdk/cpp/tests/c_abi_redis_test.c",
+      "language": "C",
+      "role": "tests_and_fixtures",
+      "old_lines": 283,
+      "current_lines": 283,
+      "old_sha256": "f08c7b8d7cc6e007ec2b727722607dc6943060c943026f5ad891b06ab69e9451",
+      "sha256": "3bc8d84e2b9b2c4018a6e83aeb77deac0d7c3e3d67383e4b0e9c9227d813316f"
+    },
+    {
+      "path": "sdk/cpp/tests/offline/CMakeLists.txt",
+      "language": "CMake",
+      "role": "tests_and_fixtures",
+      "old_lines": 33,
+      "current_lines": 61,
+      "old_sha256": "e1a05da68e4465b25279e17afd64fb1deadee5e1981414d5dacf307d1fe300c1",
+      "sha256": "754169d0c8d12b0d252624017c61dde08a26d21ee9608e9179885da05d612854"
+    },
+    {
+      "path": "sdk/csharp/src/Verdandi/Registration/Selector.cs",
+      "language": "C#",
+      "role": "handwritten_runtime",
+      "old_lines": 801,
+      "current_lines": 778,
+      "old_sha256": "2786a08e2402c3cb6fe615092ee8e239022cb7175c936285604897c3a539a17b",
+      "sha256": "1f3b33bb76a6086015a95c2d3c100dceb617638ede5a3846dbc8608050ef1230"
+    },
+    {
+      "path": "sdk/csharp/tests/Verdandi.Tests/Program.cs",
+      "language": "C#",
+      "role": "tests_and_fixtures",
+      "old_lines": 1012,
+      "current_lines": 1056,
+      "old_sha256": "f8b5fd9f4e887625cb81efd4096cef858144a9140f33ad0df84b17f8723e3470",
+      "sha256": "f933f18c99c9bf1f2bb0cae829c91c9bbe981f74e6c716280d472874dd18a809"
+    },
+    {
+      "path": "sdk/go/catalog/internal/protocol/patch.lua",
+      "language": "Lua",
+      "role": "generated",
+      "old_lines": 290,
+      "current_lines": 295,
+      "old_sha256": "edc74e2b59fac0376766f6442943f1f686f9f2b0417f8785ac5326428468f469",
+      "sha256": "3f3ec6edab231dc56012b02bcacb1f1b425a07a6cc340687fd9771fd0ec562ec"
+    },
+    {
+      "path": "sdk/go/catalog/publisher.go",
+      "language": "Go",
+      "role": "handwritten_runtime",
+      "old_lines": 266,
+      "current_lines": 215,
+      "old_sha256": "3915230b815e2738d6610248303cdf0cec5e16839e127d7e421601698bb9e607",
+      "sha256": "aa73a074718fefbdff3ef43dd58d52b4418a845e7aeb61c3b7d2e1233f335de1"
+    },
+    {
+      "path": "sdk/go/catalog/value.go",
+      "language": "Go",
+      "role": "handwritten_runtime",
+      "old_lines": 193,
+      "current_lines": 186,
+      "old_sha256": "ffab32ff1fb894070925ef232948b46e8390876c6654a1b9dd2a4564e125ee1c",
+      "sha256": "d0500e90ba79ddb05ee283f1e876b5dda39dd6659d059801bc564d43b7b6d482"
+    },
+    {
+      "path": "sdk/go/cmd/verdandi-refgen/main.go",
+      "language": "Go",
+      "role": "build_and_developer_tools",
+      "old_lines": 462,
+      "current_lines": 462,
+      "old_sha256": "d9f2ccb3bd5d8886354b8c2fec03e3bc6cc6122e80f87eb011965b6f1c9e6251",
+      "sha256": "fc37d6b415f4c178335286dc743b81e7db6489da7ab2f4dd2a89d734910769ce"
+    },
+    {
+      "path": "sdk/go/cmd/verdandi-refgen/main_test.go",
+      "language": "Go",
+      "role": "tests_and_fixtures",
+      "old_lines": 138,
+      "current_lines": 158,
+      "old_sha256": "fb48b819a3d60ca5709cd666ec924dd5bb8532cf101f4a1aaea958c42825c64b",
+      "sha256": "b50f371dd076d18d15dadc75e3a52a4f87c5b975e9571f8699d0e19308b54bac"
+    },
+    {
+      "path": "sdk/go/configuration/json.go",
+      "language": "Go",
+      "role": "handwritten_runtime",
+      "old_lines": 224,
+      "current_lines": 230,
+      "old_sha256": "51f7046e67157262890b0bb7cf9010741c8476e972439043f4e2c7c0e9c79b82",
+      "sha256": "456b266f99fb3bd532f84fd60d88a53d5f0069ab5a23ea283abfcbdb328af9b4"
+    },
+    {
+      "path": "sdk/go/registration/selector_core.go",
+      "language": "Go",
+      "role": "handwritten_runtime",
+      "old_lines": 1413,
+      "current_lines": 1413,
+      "old_sha256": "8cefa1a3930b05d8f3a3f0f8a194b6fbc6ac841b6428c0e27543740eda83646d",
+      "sha256": "e6ead0f47bf75c750b112e2990c65d6ce6eb2752b8d97ce14933644373cf15ec"
+    },
+    {
+      "path": "sdk/rust/src/catalog/checkpoint.rs",
+      "language": "Rust",
+      "role": "handwritten_runtime",
+      "old_lines": 346,
+      "current_lines": 344,
+      "old_sha256": "db5e5f37cc629276778ad52d2df1cc2966ccb2660f0f702304443329a016a2a6",
+      "sha256": "5332ed3e26fd9d2e474cedb30a8211db3d582ae2eaf94460fd130c8d24e3594f"
+    },
+    {
+      "path": "sdk/rust/src/catalog/protocol/patch.lua",
+      "language": "Lua",
+      "role": "generated",
+      "old_lines": 290,
+      "current_lines": 295,
+      "old_sha256": "edc74e2b59fac0376766f6442943f1f686f9f2b0417f8785ac5326428468f469",
+      "sha256": "3f3ec6edab231dc56012b02bcacb1f1b425a07a6cc340687fd9771fd0ec562ec"
+    },
+    {
+      "path": "sdk/rust/src/catalog/publisher.rs",
+      "language": "Rust",
+      "role": "handwritten_runtime",
+      "old_lines": 187,
+      "current_lines": 203,
+      "old_sha256": "9667560cf65a668bf3785352af55741beeb27ab95422d668eb54b487fbe221ce",
+      "sha256": "3617f54f505e929f202b4dd451939d73617270971a03e7ef095f463574031cf6"
+    },
+    {
+      "path": "sdk/rust/src/catalog/subscriber.rs",
+      "language": "Rust",
+      "role": "handwritten_runtime",
+      "old_lines": 1112,
+      "current_lines": 1117,
+      "old_sha256": "58aab0dd7fc7b1c8af28af93246ac795c8a660293bbfffacd913cd9524f81ae9",
+      "sha256": "f33eef25312276cc5d7f843f1cea6abc0a57ffecf1631320857d565a96ec32e8"
+    },
+    {
+      "path": "sdk/rust/src/client.rs",
+      "language": "Rust",
+      "role": "handwritten_runtime",
+      "old_lines": 266,
+      "current_lines": 267,
+      "old_sha256": "d53da036b3e5b202b305a05aa5beac345065512d21cf27edebc6547e3867074c",
+      "sha256": "bb22769950ea6fb2d880412ce359b3852bb8540fe3fc95fbdb4905e705f3ab09"
+    },
+    {
+      "path": "sdk/rust/src/error.rs",
+      "language": "Rust",
+      "role": "handwritten_runtime",
+      "old_lines": 176,
+      "current_lines": 189,
+      "old_sha256": "7c2a88d82c4f01b19def2444e7b9299ed0301c589a8248d2433b628754a8946d",
+      "sha256": "0ea8e11a6a680e69652e840df3f0b741c39a72132ff5114a0414dc73cf8f26ee"
+    },
+    {
+      "path": "sdk/rust/src/registration/selector.rs",
+      "language": "Rust",
+      "role": "handwritten_runtime",
+      "old_lines": 2035,
+      "current_lines": 2042,
+      "old_sha256": "e25f14d243dca7f7f084738fdd6576926b7ddc89066db94c9211ee8d9c8b91cf",
+      "sha256": "dd21f747fed7a14ddede4508a40f4676090082f535c762d761cc69076f8b8b54"
+    },
+    {
+      "path": "sdk/rust/tests/internal/catalog/checkpoint.rs",
+      "language": "Rust",
+      "role": "tests_and_fixtures",
+      "old_lines": 68,
+      "current_lines": 76,
+      "old_sha256": "c7262bd84bfd172be844b869e262a2605dd1b74465c68b446ac5c1943aca8a86",
+      "sha256": "0018964cf55f5cd3c27bf2061d0292bc3762788d5cfd299e9be551faf6e00fcc"
+    },
+    {
+      "path": "sdk/rust/tests/internal/registration/selector.rs",
+      "language": "Rust",
+      "role": "tests_and_fixtures",
+      "old_lines": 149,
+      "current_lines": 162,
+      "old_sha256": "f4b1609d1c0d2e2d32f5108e170b231f7aac7dcf990671512c3449e9a49d76d7",
+      "sha256": "16a61cfbcac4c8ef197c35d1bc4fc632d3cdba3f97a36d5d2b398a3f6cfc8100"
+    },
+    {
+      "path": "sdk/cpp/cmake/CopyRuntimeDlls.cmake",
+      "language": "CMake",
+      "role": "build_and_developer_tools",
+      "old_lines": 0,
+      "current_lines": 8,
+      "old_sha256": null,
+      "sha256": "bdb158b49b148ca3eb258a765d821392c4e7298ae395f2431d0b512be184beb1"
+    },
+    {
+      "path": "sdk/cpp/src/catalog_path.cpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 0,
+      "current_lines": 48,
+      "old_sha256": null,
+      "sha256": "c55dabd85a4c0b648f501f5fc63867e32cdc205c6a142d3d244febd99e4ac5d2"
+    },
+    {
+      "path": "sdk/cpp/src/internal/registration_pending.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 0,
+      "current_lines": 146,
+      "old_sha256": null,
+      "sha256": "c30ad8f2f26a555f7fd4e1ffd48bcf316c3a567ccea120e14d17f71121179580"
+    },
+    {
+      "path": "sdk/cpp/src/internal/retry.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 0,
+      "current_lines": 43,
+      "old_sha256": null,
+      "sha256": "e4114077a91ec6ca7ee6188279212e120c4545595da8be35791b06c3ae7d5bf8"
+    },
+    {
+      "path": "sdk/cpp/src/internal/selector_state.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 0,
+      "current_lines": 140,
+      "old_sha256": null,
+      "sha256": "38506b4a57467001ef2d0dd680f0a4aec153d19f055ac4538d733d9a4336efc5"
+    },
+    {
+      "path": "sdk/cpp/src/internal/subscription_queue.hpp",
+      "language": "C++",
+      "role": "handwritten_runtime",
+      "old_lines": 0,
+      "current_lines": 71,
+      "old_sha256": null,
+      "sha256": "9cea32a89e1e8ad73d0b767d2a531e6833c0fba166be90aa6a6c0aa3184d047f"
+    },
+    {
+      "path": "sdk/cpp/tests/checkpoint_failure_test.cpp",
+      "language": "C++",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 55,
+      "old_sha256": null,
+      "sha256": "9bb291946069d513ad86e150581aef8116c8b831dcd7f700e876398b282a10b7"
+    },
+    {
+      "path": "sdk/cpp/tests/cmake_regression_test.cmake",
+      "language": "CMake",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 37,
+      "old_sha256": null,
+      "sha256": "58bae60141adeba7a00a509e0a7e2f44ec82c8e07c1a190d8f74091daa2f3881"
+    },
+    {
+      "path": "sdk/cpp/tests/legacy_transaction_test.cpp",
+      "language": "C++",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 160,
+      "old_sha256": null,
+      "sha256": "e610d05a7ed53a229db273a6f971e1d33402593b18d3aa7b9c38dd9379f38dcd"
+    },
+    {
+      "path": "sdk/cpp/tests/offline/windows/sqlite3.h",
+      "language": "C",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 4,
+      "old_sha256": null,
+      "sha256": "47acdbb0d7a0d7854171253efec8cf3b8482bbae021be2645de2472dec80ef20"
+    },
+    {
+      "path": "sdk/cpp/tests/runtime_boundaries_test.cpp",
+      "language": "C++",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 138,
+      "old_sha256": null,
+      "sha256": "c58c5c265c18b3363e3f47bf2bd14f1b1ed3a3729304b986b204d8c89af4c7ca"
+    },
+    {
+      "path": "sdk/cpp/tests/selector_transaction_test.cpp",
+      "language": "C++",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 190,
+      "old_sha256": null,
+      "sha256": "10b603da31493f03dd83b8936df148e1951ccaf6aef52fea65a4275f52a1434b"
+    },
+    {
+      "path": "sdk/go/catalog/lua_limits_integration_test.go",
+      "language": "Go",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 85,
+      "old_sha256": null,
+      "sha256": "a30d9b2dbc6eadee7260a2c70a38c450eecc7315420e3c29a51c884ec575e000"
+    },
+    {
+      "path": "sdk/go/catalog/projection.go",
+      "language": "Go",
+      "role": "handwritten_runtime",
+      "old_lines": 0,
+      "current_lines": 67,
+      "old_sha256": null,
+      "sha256": "cf372465045b812070624311ecd674c1f1469359a07e99b3de96277b52ba6e54"
+    },
+    {
+      "path": "sdk/go/catalog/projection_test.go",
+      "language": "Go",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 30,
+      "old_sha256": null,
+      "sha256": "f71cc3baedb1915e0e2152ba718a7a601ae33fc3c48437a12f0dd5eb8003d4cf"
+    },
+    {
+      "path": "sdk/go/catalog/read_regression_test.go",
+      "language": "Go",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 27,
+      "old_sha256": null,
+      "sha256": "2365588ab74043a0212084d801ded091113874d9e741cc2913c38ed1853fcf11"
+    },
+    {
+      "path": "sdk/go/catalog/subscriber_regression_test.go",
+      "language": "Go",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 29,
+      "old_sha256": null,
+      "sha256": "a670a664f00b22b0baee7ac75f39563261a164546885f54afd39ad8273089320"
+    },
+    {
+      "path": "sdk/go/configuration/json_boundaries_test.go",
+      "language": "Go",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 23,
+      "old_sha256": null,
+      "sha256": "7a41ae5bcff71877c83ac28826cecc436afdbaf4670180799d4dcd68130ab476"
+    },
+    {
+      "path": "sdk/go/registration/selector_startup_test.go",
+      "language": "Go",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 43,
+      "old_sha256": null,
+      "sha256": "f665f0971e90caeddc6fc7b5768e237af8381bc2ddbbb4e912f8b09cef2f1385"
+    },
+    {
+      "path": "sdk/rust/tests/internal/catalog/publisher.rs",
+      "language": "Rust",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 13,
+      "old_sha256": null,
+      "sha256": "8a171fd8df1735fd4a92370763f6b9789779fb178754d79c4c3db9a425cfe7a2"
+    },
+    {
+      "path": "sdk/rust/tests/internal/error.rs",
+      "language": "Rust",
+      "role": "tests_and_fixtures",
+      "old_lines": 0,
+      "current_lines": 27,
+      "old_sha256": null,
+      "sha256": "8f42ff78854f6918be006473752cc98520951ebc5fa27f109f872e4625b3e9cc"
+    }
+  ]
+}

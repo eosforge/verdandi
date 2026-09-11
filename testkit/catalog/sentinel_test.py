@@ -46,6 +46,22 @@ def wait_replicas(topology: Topology, count: int) -> None:
         raise QualificationError(f"WAIT returned {value!r}, want {count}")
 
 
+def wait_command_connections(*peers):
+    """Probe read-only root commands before new writes after a killed primary."""
+    deadline = time.monotonic() + 30
+    for peer in peers:
+        while time.monotonic() < deadline:
+            peer.send("PING")
+            reply = peer.wait_line("", timeout=6)
+            if reply == "ROOT_READY":
+                break
+            if not reply.startswith("ERROR "):
+                raise QualificationError(f"Unexpected root readiness response: {reply}")
+            time.sleep(0.1)
+        else:
+            raise QualificationError("Catalog command connection did not recover after promotion")
+
+
 def cleanup_zone(topology: Topology, zone: str) -> int:
     master = topology.master_port()
     cursor = "0"
@@ -136,6 +152,7 @@ def qualify(topology: Topology, zone: str) -> dict[str, Any]:
         topology.wait_sentinel_agreement(first_promotion, timeout=30)
         remaining_replica = next(port for port in REDIS_PORTS if port not in {initial_master, first_promotion})
         topology.wait_replica_ready(first_promotion, remaining_replica, timeout=30)
+        wait_command_connections(go_peer, rust_peer)
         expect_revision(rust_peer, "REPLACE rust 4", 4)
         check(go_peer, "CHECK 4 rust 4")
         expect_revision(go_peer, "PATCH 4 go 5", 5)
@@ -155,6 +172,7 @@ def qualify(topology: Topology, zone: str) -> dict[str, Any]:
         topology.wait_sentinel_agreement(second_promotion, timeout=30)
         if second_promotion in {initial_master, first_promotion}:
             raise QualificationError("second promotion did not select the last live Redis")
+        wait_command_connections(go_peer, rust_peer)
         expect_revision(go_peer, "REPLACE go 6", 6)
         check(rust_peer, "CHECK 6 go 6")
         expect_revision(rust_peer, "PATCH 6 rust 7", 7)
@@ -201,7 +219,7 @@ def qualify(topology: Topology, zone: str) -> dict[str, Any]:
 
 def options() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="192.168.0.90")
+    parser.add_argument("--host", default="192.168.0.119")
     parser.add_argument("--ssh-user", default="ubuntu")
     parser.add_argument("--ssh-password-env", default="VERDANDI_TEST_SSH_PASSWORD")
     parser.add_argument("--keep-topology", action="store_true")

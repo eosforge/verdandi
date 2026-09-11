@@ -46,6 +46,10 @@ async fn run() -> Result<(), Box<dyn StdError>> {
             continue;
         };
         match *command {
+            "PING" => match transport.ping().await {
+                Ok(()) => output("ROOT_READY")?,
+                Err(error) => output(&format!("ERROR {error}"))?,
+            },
             "REPLACE" => {
                 let owner = fields.get(1).ok_or("REPLACE requires owner")?;
                 let generation = fields.get(2).ok_or("REPLACE requires generation")?;

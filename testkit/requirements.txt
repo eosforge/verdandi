@@ -1,0 +1,2 @@
+-r lua/requirements.txt
+-r sentinel/requirements.txt

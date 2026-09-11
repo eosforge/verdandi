@@ -40,6 +40,7 @@ internal static class Program
 
     private static void RunOffline()
     {
+        RunParentLeaseChain();
         Check(Require(Runtime.Supports(Runtime.RedisSentinelTls), "Sentinel TLS capability"), "Sentinel TLS capability present");
         Check(!Require(Runtime.Supports("future.capability"), "unknown capability"), "unknown capability absent");
         Check(!Require(Runtime.Supports(string.Empty), "empty capability"), "empty capability absent");
@@ -143,6 +144,54 @@ internal static class Program
             Check(Unsafe.SizeOf<NativeCatalogPathView>() == 32, "catalog path layout");
             Check(Unsafe.SizeOf<NativeCatalogSubscription>() == 40, "catalog subscription layout");
             Check(Marshal.OffsetOf<NativeError>(nameof(NativeError.HasRevision)).ToInt64() == 8, "native error flag offset");
+        }
+    }
+
+    private static void RunParentLeaseChain()
+    {
+        foreach (var disposeParents in new[] { false, true })
+        {
+            var released = new List<int>();
+            var leaf = CreateLeaseChain(released, disposeParents);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Check(released.Count == 0, "leaf retains every native ancestor through GC and parent Dispose");
+            leaf.Dispose();
+            GC.KeepAlive(leaf);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            Check(released.SequenceEqual(new[] { 3, 2, 1 }), "native handles release from leaf to root exactly once");
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static LeaseProbeHandle CreateLeaseChain(List<int> released, bool disposeParents)
+    {
+        var root = new LeaseProbeHandle(1, released);
+        var parent = new LeaseProbeHandle(2, released);
+        var leaf = new LeaseProbeHandle(3, released);
+        Check(SafeHandleLease<LeaseProbeHandle>.TryCreate(root, out var rootLease), "root lease admission");
+        parent.AttachParent(rootLease!);
+        Check(SafeHandleLease<LeaseProbeHandle>.TryCreate(parent, out var parentLease), "parent lease admission");
+        leaf.AttachParent(parentLease!);
+        if (disposeParents) { root.Dispose(); parent.Dispose(); }
+        return leaf;
+    }
+
+    private sealed class LeaseProbeHandle : DependentSafeHandle
+    {
+        private readonly List<int> _released;
+        internal LeaseProbeHandle(int id, List<int> released) : base(true)
+        {
+            SetHandle(id);
+            _released = released;
+        }
+        protected override bool ReleaseNative()
+        {
+            _released.Add((int)handle);
+            return true;
         }
     }
 
@@ -714,6 +763,7 @@ internal static class Program
 
     private static void RunSelectorCodecFailures(RegistrationClient client)
     {
+        RunPredictionDecodeRollback(client);
         using var raw = Require(
             client.NewRegistration<Fields, Fields>(
                 new RegistrationOptions("Malformed", TimeSpan.FromSeconds(5), 1, TimeSpan.FromSeconds(1))),
@@ -743,6 +793,31 @@ internal static class Program
             });
         Check(!exceptionFailure.IsSuccess && exceptionFailure.Error?.Field == "codec", "Selector decoder exception translated");
         Require(raw.Unregister(), "malformed Registration unregister");
+    }
+
+    private static void RunPredictionDecodeRollback(RegistrationClient client)
+    {
+        using var registration = Require(client.NewRegistration<Fields, RejectPrediction>(
+            new RegistrationOptions("DecodeAtomic", TimeSpan.FromSeconds(5), 1, TimeSpan.FromSeconds(1))), "decode atomic Registration");
+        Require(registration.Register(Require(Fields.CreateBuilder().Build(), "empty Attr"), new RejectPrediction(1)), "decode atomic Register");
+        using var selector = Require(client.NewSelector<Fields, RejectPrediction>("DecodeAtomic"), "decode atomic Selector");
+        var one = selector.One(candidates =>
+        {
+            var first = Require(candidates.Get(0), "decode atomic candidate");
+            Require(candidates.Mutate(first.Choice, new RejectPrediction(2)), "stage rejected prediction");
+            return Result<Choice?>.Success(first.Choice);
+        });
+        Check(!one.IsSuccess && one.Error?.Field == "prediction", "One rejects final decode before committing");
+        Check(Require(selector.Snapshot(), "snapshot after One failure").Active[0].Data.Power == 1, "One rolls back prediction on decode failure");
+        var any = selector.Any(candidates =>
+        {
+            var first = Require(candidates.Get(0), "decode atomic Any candidate");
+            Require(candidates.Mutate(first.Choice, new RejectPrediction(2)), "stage rejected Any prediction");
+            return Result<IReadOnlyList<Choice>>.Success([first.Choice]);
+        });
+        Check(!any.IsSuccess && any.Error?.Field == "prediction", "Any rejects final decode before committing");
+        Check(Require(selector.Snapshot(), "snapshot after Any failure").Active[0].Data.Power == 1, "Any rolls back prediction on decode failure");
+        Require(registration.Unregister(), "decode atomic unregister");
     }
 
     private static void RunCatalogShapesAndLimits(CatalogPublisher publisher)
@@ -999,6 +1074,24 @@ internal static class Program
             return fields.Count == 2 && power.IsSuccess && region.IsSuccess
                 ? Result<CatalogRecord>.Success(new CatalogRecord(power.Value, region.Value))
                 : Result<CatalogRecord>.Failure(new VerdandiError("invalid", "CatalogRecord"));
+        }
+    }
+
+    private readonly record struct RejectPrediction(long Power) : IFieldValue<RejectPrediction>
+    {
+        public Result<Fields> EncodeFields()
+        {
+            var builder = Fields.CreateBuilder();
+            var added = builder.Add("power", Power);
+            return added.IsSuccess ? builder.Build() : Result<Fields>.Failure(added.Error!);
+        }
+
+        public static Result<RejectPrediction> DecodeFields(Fields fields)
+        {
+            var power = fields.GetInt64("power");
+            return power.IsSuccess && power.Value != 2
+                ? Result<RejectPrediction>.Success(new RejectPrediction(power.Value))
+                : Result<RejectPrediction>.Failure(new VerdandiError("contract", "prediction"));
         }
     }
 

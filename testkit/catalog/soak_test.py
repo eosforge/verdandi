@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -39,77 +40,46 @@ class CatalogSoakInterrupted(Exception):
     """The managed Go test received an intentional console interrupt."""
 
 
+from testkit.support import run_command
+
+
 class CatalogDriver:
-    def __init__(self, command: list[str], directory: Path, environment: dict[str, str]) -> None:
-        self.command = command
-        self.directory = directory
-        self.environment = environment
-        self.process: subprocess.Popen[str] | None = None
-        self.heartbeats: list[dict[str, Any]] = []
-        self.output_tail: list[str] = []
+    def __init__(self, command, directory, environment, on_output=None):
+        self.command, self.directory, self.environment = command, directory, environment
+        self.heartbeats, self.output_tail = [], []
+        self.on_output = on_output
 
-    def run(self) -> tuple[dict[str, Any], dict[str, Any]]:
-        print("\n=== Go Catalog Publisher/Subscriber soak (WSL/Linux) ===", flush=True)
-        started = time.monotonic()
-        self.process = subprocess.Popen(
+    def observe(self, text):
+        if self.on_output is not None:
+            self.on_output(text)
+        for line in text.splitlines():
+            self.output_tail.append(line)
+            if match := HEARTBEAT.search(line):
+                self.heartbeats.append(json.loads(match.group(1)))
+        del self.output_tail[:-200]
+        del self.heartbeats[:-256]
+
+    def run(self):
+        result = run_command(
+            "Go Catalog Publisher/Subscriber soak",
             self.command,
-            cwd=self.directory,
-            env=self.environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
+            self.directory,
+            self.environment,
+            timeout=int(self.environment["VERDANDI_SOAK_SECONDS"]) + 1800,
+            on_output=self.observe,
         )
-        final_results: list[dict[str, Any]] = []
-        assert self.process.stdout is not None
-        for line in self.process.stdout:
-            if "\x00" in line:
-                continue
-            printable = line.encode(sys.stdout.encoding or "utf-8", errors="replace").decode(sys.stdout.encoding or "utf-8")
-            print(printable, end="", flush=True)
-            stripped = printable.rstrip("\r\n")
-            self.output_tail.append(stripped)
-            if len(self.output_tail) > 200:
-                del self.output_tail[: len(self.output_tail) - 200]
-            heartbeat = HEARTBEAT.search(stripped)
-            if heartbeat:
-                self.heartbeats.append(json.loads(heartbeat.group(1)))
-            final = FINAL_RESULT.search(stripped)
-            if final:
-                final_results.append(json.loads(final.group(1)))
-        status = self.process.wait()
-        if status != 0:
-            if any("signal: interrupt" in line for line in self.output_tail):
-                raise CatalogSoakInterrupted("Go Catalog soak interrupted")
-            raise subprocess.CalledProcessError(status, self.command)
-        if len(final_results) != 1:
-            raise QualificationError(f"Catalog soak emitted {len(final_results)} final results, want one")
-        return (
-            {
-                "name": "Go Catalog Publisher/Subscriber soak (WSL/Linux)",
-                "status": "pass",
-                "elapsed_seconds": round(time.monotonic() - started, 3),
-                "output_tail": self.output_tail,
-            },
-            final_results[0],
-        )
+        finals = [json.loads(match.group(1)) for line in self.output_tail if (match := FINAL_RESULT.search(line))]
+        if len(finals) != 1:
+            raise QualificationError(f"Catalog soak emitted {len(finals)} results, want one")
+        return result, finals[0]
 
-    def stop(self) -> None:
-        process = self.process
-        if process is None or process.poll() is not None:
-            return
-        process.terminate()
-        try:
-            process.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=10)
+    def stop(self):
+        # run_command owns the complete process lifetime even when it raises.
+        pass
 
 
 def build_catalog_faults(duration: int) -> list[Fault]:
-    if duration < 600:
+    if duration < 7200:
         return [
             Fault(max(5, duration * ratio), kind)
             for ratio, kind in (
@@ -168,24 +138,8 @@ def catalog_command(fixture: Fixture, options: argparse.Namespace) -> tuple[list
         "-v",
         "./catalog",
     ]
-    if os.name != "nt":
-        environment.update(forwarded)
-        return command, REPOSITORY / "sdk" / "go", environment
-    script = "env " + " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
-    script += " " + " ".join(map(shlex.quote, command))
-    return (
-        [
-            "wsl.exe",
-            "--cd",
-            str(REPOSITORY / "sdk" / "go"),
-            "--",
-            "bash",
-            "-lc",
-            script,
-        ],
-        REPOSITORY,
-        environment,
-    )
+    environment.update(forwarded)
+    return command, REPOSITORY / "sdk/go", environment
 
 
 def source_fingerprint() -> dict[str, Any]:
@@ -239,7 +193,7 @@ def median(values: list[int | float]) -> float:
 
 
 def reset_aware_delta(samples: list[dict[str, Any]], field: str) -> int:
-    return sum(max(0, int(current[field]) - int(previous[field])) for previous, current in zip(samples, samples[1:], strict=False))
+    return sum(max(0, int(current[field]) - int(previous[field])) for previous, current in zip(samples, list(samples)[1:], strict=False))
 
 
 def analyze_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
@@ -326,7 +280,7 @@ def write_result(path: str | None, value: dict[str, Any]) -> None:
 
 def options() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="192.168.0.90")
+    parser.add_argument("--host", default="192.168.0.119")
     parser.add_argument("--ssh-user", default="ubuntu")
     parser.add_argument("--port", type=int, default=36440)
     parser.add_argument("--duration-seconds", type=int, default=86_400)
@@ -409,9 +363,8 @@ def main() -> int:
         faults = [] if arguments.no_faults else build_catalog_faults(arguments.minimum_redis_seconds)
         injector = FaultInjector(fixture, fixture.url, started, faults)
         command, directory, environment = catalog_command(fixture, arguments)
-        driver = CatalogDriver(command, directory, environment)
+        driver = CatalogDriver(command, directory, environment, injector.observe)
         monitor.start()
-        injector.start()
         suite, go_result = driver.run()
         injector.stop()
         final_sample = monitor.sample_now()
@@ -458,7 +411,7 @@ def main() -> int:
                 "go_result": go_result,
                 "heartbeats": driver.heartbeats,
                 "faults": injector.results,
-                "redis_samples": monitor.samples,
+                "redis_samples": list(monitor.samples),
                 "redis_sample_failures": monitor.failures,
                 "redis_analysis": analysis,
                 "post_checks": checks,
@@ -475,42 +428,32 @@ def main() -> int:
     except BaseException as error:  # result evidence is retained before cleanup
         failure = error
     finally:
-        if driver is not None:
-            driver.stop()
-        if injector is not None:
-            injector.stop()
-        if monitor is not None and not completed:
-            if monitor._thread.is_alive():
-                try:
-                    sample = monitor.sample_now()
-                    monitor.samples.append(sample)
-                    monitor._append_sample("sample", sample)
-                except Exception as sample_error:
-                    monitor.failures.append(
-                        {
-                            "elapsed_seconds": round(time.monotonic() - started, 3),
-                            "error": str(sample_error),
-                        }
-                    )
-                monitor.stop()
-            result.update(
-                {
-                    "status": "interrupted" if interrupted else "failed",
-                    "elapsed_seconds": round(time.monotonic() - started, 3),
-                    "heartbeats": driver.heartbeats if driver is not None else [],
-                    "latest_heartbeat": (driver.heartbeats[-1] if driver is not None and driver.heartbeats else None),
-                    "driver_output_tail": driver.output_tail if driver is not None else [],
-                    "faults": injector.results if injector is not None else [],
-                    "redis_samples": monitor.samples,
-                    "redis_sample_failures": monitor.failures,
-                    "redis_analysis": analyze_samples(monitor.samples),
-                    "failure": type(failure).__name__ if interrupted else str(failure),
-                }
-            )
-            write_result(arguments.result_file, result)
-        if not arguments.keep_container:
-            fixture.cleanup()
-        remote.close()
+        with ExitStack() as cleanup:
+            cleanup.callback(remote.close)
+            if not arguments.keep_container:
+                cleanup.callback(fixture.cleanup)
+            if monitor is not None:
+                cleanup.callback(monitor.stop)
+            if injector is not None:
+                cleanup.callback(injector.stop)
+            if driver is not None:
+                cleanup.callback(driver.stop)
+            if not completed:
+                result.update(
+                    {
+                        "status": "interrupted" if interrupted else "failed",
+                        "elapsed_seconds": round(time.monotonic() - started, 3),
+                        "heartbeats": driver.heartbeats if driver is not None else [],
+                        "latest_heartbeat": driver.heartbeats[-1] if driver is not None and driver.heartbeats else None,
+                        "driver_output_tail": driver.output_tail if driver is not None else [],
+                        "faults": injector.results if injector is not None else [],
+                        "redis_samples": list(monitor.samples) if monitor is not None else [],
+                        "redis_sample_failures": monitor.failures if monitor is not None else [],
+                        "redis_analysis": analyze_samples(monitor.samples) if monitor is not None else {},
+                        "failure": type(failure).__name__ if interrupted else str(failure),
+                    }
+                )
+                write_result(arguments.result_file, result)
     if interrupted:
         print(json.dumps(result, indent=2, sort_keys=True))
         return 130

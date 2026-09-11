@@ -1,0 +1,195 @@
+{
+  "schema": "verdandi.service-grpc.validation.v1",
+  "status": "pass",
+  "checked_at": "2026-09-10T17:03:50.509134+00:00",
+  "source_sha256": "208511f65c89c5dbdf7ef7d82293d09f3f3dd780b1761cbb34a3ecb8a2a38236",
+  "source_files": 168,
+  "unit_tests": {
+    "rust_per_host": 36,
+    "go_top_level_per_host": 32,
+    "generator_per_host": 4,
+    "probe_per_host": 14,
+    "python_windows": "24 passed",
+    "python_linux": "23 passed, 1 platform skip"
+  },
+  "checks": {
+    "windows": "fmt, generation, Clippy, Go tidy/verify/vet, tests, release build passed",
+    "linux": "same checks and Go race passed"
+  },
+  "scenarios": {
+    "windows_regression": {
+      "status": "pass",
+      "platform": "win32",
+      "mode": "regression",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 28.284
+    },
+    "windows_soak": {
+      "status": "pass",
+      "platform": "win32",
+      "mode": "soak",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "soak": {
+        "requested_seconds": 60,
+        "elapsed_seconds": 62.978,
+        "restart_cycles": 9,
+        "minimum_available_mib": 18253,
+        "peers": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 90.902
+    },
+    "mixed_regression": {
+      "status": "pass",
+      "platform": "win32",
+      "mode": "regression",
+      "mixed_hosts": true,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 28.458
+    },
+    "mixed_soak": {
+      "status": "pass",
+      "platform": "win32",
+      "mode": "soak",
+      "mixed_hosts": true,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "soak": {
+        "requested_seconds": 60,
+        "elapsed_seconds": 63.536,
+        "restart_cycles": 9,
+        "minimum_available_mib": 910,
+        "peers": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 91.765
+    },
+    "linux_regression": {
+      "status": "pass",
+      "platform": "linux",
+      "mode": "regression",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 21.866
+    },
+    "linux_soak": {
+      "status": "pass",
+      "platform": "linux",
+      "mode": "soak",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "soak": {
+        "requested_seconds": 60,
+        "elapsed_seconds": 61.278,
+        "restart_cycles": 9,
+        "minimum_available_mib": 923,
+        "peers": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 85.044
+    }
+  },
+  "cleanup": {
+    "windows": {
+      "processes": [],
+      "temporary_directories": []
+    },
+    "linux": {
+      "processes": [],
+      "temporary_directories": [],
+      "memory": "MemTotal:        1613548 kB\nMemFree:          407992 kB\nMemAvailable:     856196 kB\nBuffers:            8796 kB\nCached:           850420 kB\nSwapCached:        35972 kB\nActive:           599184 kB\nInactive:         300992 kB\nActive(anon):      30080 kB\nInactive(anon):    21444 kB\nActive(file):     569104 kB\nInactive(file):   279548 kB\nUnevictable:       12704 kB\nMlocked:            9632 kB\nSwapTotal:       4001788 kB\nSwapFree:        3866536 kB\nZswap:                 0 kB\nZswapped:              0 kB\nDirty:               304 kB\nWriteback:             0 kB\nAnonPages:         52688 kB\nMapped:            44528 kB\nShmem:              3108 kB\nKReclaimable:      70056 kB\nSlab:             150236 kB\nSReclaimable:      70056 kB\nSUnreclaim:        80180 kB\nKernelStack:        4064 kB\nPageTables:         5320 kB\nSecPageTables:         0 kB\nNFS_Unstable:          0 kB\nBounce:                0 kB\nWritebackTmp:          0 kB\nCommitLimit:     4808560 kB\nCommitted_AS:    1189404 kB\nVmallocTotal:   34359738367 kB\nVmallocUsed:       37440 kB\nVmallocChunk:          0 kB\nPercpu:             4640 kB\nHardwareCorrupted:     0 kB\nAnonHugePages:         0 kB\nShmemHugePages:        0 kB\nShmemPmdMapped:        0 kB\nFileHugePages:     14336 kB\nFilePmdMapped:         0 kB\nCmaTotal:              0 kB\nCmaFree:               0 kB\nUnaccepted:            0 kB\nBalloon:          509952 kB\nHugePages_Total:       0\nHugePages_Free:        0\nHugePages_Rsvd:        0\nHugePages_Surp:        0\nHugepagesize:       2048 kB\nHugetlb:               0 kB\nDirectMap4k:      130312 kB\nDirectMap2M:     2490368 kB\nDirectMap1G:           0 kB\n",
+      "oom_kill": [
+        "oom_kill 0"
+      ]
+    }
+  },
+  "initial_failures": [
+    "Go gRPC slow TLS shutdown required owning raw sockets; fixed and regression passed.",
+    "Linux race exceeded old test budget; four-RPC scenario deadline adjusted to 15s and race package budget to 120s. Production RPC deadline remains 5s."
+  ],
+  "limitations": [
+    "No SDK migration or Catalog/Registry data replication.",
+    "Bearer credentials have no independent expiry or online revocation.",
+    "60-second fault loops are not endurance qualification.",
+    "Historical v3 capacity measurements were not rerun or reclassified."
+  ]
+}

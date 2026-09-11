@@ -76,7 +76,7 @@ impl Client {
     /// 此操作不关闭共享根传输，也不删除 Redis 数据；并发 Close 在异步关闭门汇合。
     pub async fn close(&self) -> Result<()> {
         self.inner.start_shutdown();
-        self.inner.finish_close().await;
+        self.inner.finish_close().await?;
         Ok(())
     }
 }
@@ -111,8 +111,14 @@ impl ClientInner {
     /// 串行等待所有 ActiveGuard 释放，并标记显式关闭完成。
     ///
     /// 此函数不依赖额外关闭观察任务；并发调用由 `close_gate` 串行且复用完成状态。
-    async fn finish_close(&self) {
+    async fn finish_close(&self) -> Result<()> {
         self.activity.finish_close().await;
+        if let Some(checkpoint) = self.checkpoint.clone() {
+            tokio::task::spawn_blocking(move || checkpoint.close())
+                .await
+                .map_err(|error| Error::driver(Code::Unavailable, error))?;
+        }
+        Ok(())
     }
 
     /// 借用共享 Fred 命令客户端；生命周期由根 Client 所有。

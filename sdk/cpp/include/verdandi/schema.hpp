@@ -1,5 +1,6 @@
 #pragma once
 
+#include "verdandi/detail/utf8.hpp"
 #include "verdandi/fields.hpp"
 
 #include <array>
@@ -41,7 +42,7 @@ struct member_descriptor {
     using owner_type = Owner;
     using member_type = Member;
 
-    Member Owner::*pointer;
+    Member Owner::* pointer;
 
     /// 返回该成员的稳定顶层 wire 名称。
     [[nodiscard]] static constexpr std::string_view name() noexcept {
@@ -51,7 +52,7 @@ struct member_descriptor {
 
 /// 构造一个由 `Name` 和 `pointer` 完整确定的成员描述符。
 template <class Owner, fixed_string Name, class Member>
-[[nodiscard]] consteval auto make_field(Member Owner::*pointer) noexcept {
+[[nodiscard]] consteval auto make_field(Member Owner::* pointer) noexcept {
     return member_descriptor<Owner, Member, Name>{pointer};
 }
 
@@ -65,13 +66,7 @@ namespace detail {
     if (value.empty() || value.size() > 64 || value.front() == '@' || value.front() == '.' || value.front() == '&') {
         return false;
     }
-    for (const char raw : value) {
-        const auto character = static_cast<unsigned char>(raw);
-        if (character < 0x21U || character > 0x7eU) {
-            return false;
-        }
-    }
-    return true;
+    return valid_utf8(value);
 }
 
 template <std::size_t Index, class Tuple, std::size_t... Rest>
@@ -149,58 +144,62 @@ concept structured_value = std::same_as<std::remove_cvref_t<T>, fields> || field
 /// 将 `value` 的全部 Schema 成员编码为拥有型 Fields；任一成员失败时不返回部分结果。
 template <field_value T>
 [[nodiscard]] result<fields> encode_fields(const T& value) {
-    fields encoded;
-    std::optional<error> failure;
-    detail::for_each_schema_member<T>([&](const auto& member) {
+    return detail::invoke_application("fields", [&]() -> result<fields> {
+        fields encoded;
+        std::optional<error> failure;
+        detail::for_each_schema_member<T>([&](const auto& member) {
+            if (failure) {
+                return;
+            }
+            using member_type = typename std::remove_cvref_t<decltype(member)>::member_type;
+            static_assert(field_scalar<member_type>, "Every schema member requires a verdandi::field_codec specialization");
+            auto converted = detail::invoke_application(member.name(), [&] { return field_codec<member_type>::encode(value.*(member.pointer)); });
+            if (!converted) {
+                failure = converted.error();
+                return;
+            }
+            encoded.emplace(std::string(member.name()), std::move(*converted));
+        });
         if (failure) {
-            return;
+            return std::unexpected(std::move(*failure));
         }
-        using member_type = typename std::remove_cvref_t<decltype(member)>::member_type;
-        static_assert(field_scalar<member_type>, "Every schema member requires a verdandi::field_codec specialization");
-        auto converted = detail::invoke_application(member.name(), [&] { return field_codec<member_type>::encode(value.*(member.pointer)); });
-        if (!converted) {
-            failure = converted.error();
-            return;
-        }
-        encoded.emplace(std::string(member.name()), std::move(*converted));
+        return encoded;
     });
-    if (failure) {
-        return std::unexpected(std::move(*failure));
-    }
-    return encoded;
 }
 
 /// 从完整 `source` 解码 `T`；缺失、额外或失败的成员均拒绝整次投影。
 template <field_value T>
 [[nodiscard]] result<T> decode_fields(const fields& source) {
-    constexpr auto expected = std::tuple_size_v<std::remove_cvref_t<decltype(schema<T>::members)>>;
-    if (source.size() != expected) {
-        return std::unexpected(error(code::contract, "fields"));
-    }
-    T decoded{};
-    std::optional<error> failure;
-    detail::for_each_schema_member<T>([&](const auto& member) {
+    return detail::invoke_application("fields", [&]() -> result<T> {
+        constexpr auto expected = std::tuple_size_v<std::remove_cvref_t<decltype(schema<T>::members)>>;
+        if (source.size() != expected) {
+            return std::unexpected(error(code::contract, "fields"));
+        }
+        T decoded{};
+        std::optional<error> failure;
+        detail::for_each_schema_member<T>([&](const auto& member) {
+            if (failure) {
+                return;
+            }
+            const auto iterator = source.find(member.name());
+            if (iterator == source.end()) {
+                failure = error(code::contract, std::string(member.name()));
+                return;
+            }
+            using member_type = typename std::remove_cvref_t<decltype(member)>::member_type;
+            static_assert(field_scalar<member_type>, "Every schema member requires a verdandi::field_codec specialization");
+            auto converted = detail::invoke_application(member.name(), [&] { return field_codec<member_type>::decode(iterator->second); });
+            if (!converted) {
+                failure = converted.error();
+                return;
+            }
+            decoded.*(member.pointer) = std::move(*converted);
+        });
         if (failure) {
-            return;
+            return std::unexpected(std::move(*failure));
         }
-        const auto iterator = source.find(member.name());
-        if (iterator == source.end()) {
-            failure = error(code::contract, std::string(member.name()));
-            return;
-        }
-        using member_type = typename std::remove_cvref_t<decltype(member)>::member_type;
-        static_assert(field_scalar<member_type>, "Every schema member requires a verdandi::field_codec specialization");
-        auto converted = detail::invoke_application(member.name(), [&] { return field_codec<member_type>::decode(iterator->second); });
-        if (!converted) {
-            failure = converted.error();
-            return;
-        }
-        decoded.*(member.pointer) = std::move(*converted);
+        return decoded;
     });
-    if (failure) {
-        return std::unexpected(std::move(*failure));
-    }
-    return decoded;
 }
 
 /// 在领域边界把 Schema 类型编码为完整 Fields；原始 Fields 取得独立拥有型副本。

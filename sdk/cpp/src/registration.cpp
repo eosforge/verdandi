@@ -1,5 +1,6 @@
 #include "internal/registration.hpp"
 #include "internal/selector.hpp"
+#include "verdandi/detail/utf8.hpp"
 
 #include <openssl/rand.h>
 
@@ -35,44 +36,7 @@ namespace {
     return output;
 }
 
-[[nodiscard]] bool valid_utf8(const std::string_view value) noexcept {
-    std::size_t index{};
-    while (index < value.size()) {
-        const auto lead = static_cast<unsigned char>(value[index++]);
-        if (lead <= 0x7fU) {
-            continue;
-        }
-        std::size_t continuation{};
-        std::uint32_t codepoint{};
-        if ((lead & 0xe0U) == 0xc0U) {
-            continuation = 1;
-            codepoint = lead & 0x1fU;
-        } else if ((lead & 0xf0U) == 0xe0U) {
-            continuation = 2;
-            codepoint = lead & 0x0fU;
-        } else if ((lead & 0xf8U) == 0xf0U) {
-            continuation = 3;
-            codepoint = lead & 0x07U;
-        } else {
-            return false;
-        }
-        if (continuation > value.size() - index) {
-            return false;
-        }
-        for (std::size_t count = 0; count < continuation; ++count) {
-            const auto next = static_cast<unsigned char>(value[index++]);
-            if ((next & 0xc0U) != 0x80U) {
-                return false;
-            }
-            codepoint = (codepoint << 6U) | (next & 0x3fU);
-        }
-        const auto minimum = continuation == 1 ? 0x80U : continuation == 2 ? 0x800U : 0x10000U;
-        if (codepoint < minimum || codepoint > 0x10ffffU || (codepoint >= 0xd800U && codepoint <= 0xdfffU)) {
-            return false;
-        }
-    }
-    return true;
-}
+using verdandi::detail::valid_utf8;
 
 [[nodiscard]] result<std::uint64_t> positive_integer(const verdandi::detail::response& value, const std::string_view field) {
     auto text = value.text();
@@ -136,10 +100,6 @@ namespace {
     return std::ranges::equal(
         left, right, {}, [](const auto& value) -> const std::string& { return value.first; },
         [](const auto& value) -> const std::string& { return value.first; });
-}
-
-[[nodiscard]] bool same_bytes(const bytes& left, const bytes& right) noexcept {
-    return left == right;
 }
 
 [[nodiscard]] bool uncertain(const error& value) noexcept {
@@ -548,12 +508,14 @@ void client_core::refresh_policy(const std::stop_token& stop) {
 }
 
 result<void> client_core::close() {
+    std::lock_guard close_lock(close_mutex_);
     if (closed_.exchange(true, std::memory_order_acq_rel)) {
         return {};
     }
     std::vector<std::shared_ptr<registration_core>> children;
     std::vector<std::shared_ptr<selector_core>> selectors;
     {
+        std::unique_lock admission(operations_);
         std::lock_guard lock(children_mutex_);
         for (const auto& weak : children_) {
             if (auto value = weak.lock()) {
@@ -615,6 +577,10 @@ std::shared_ptr<verdandi::detail::driver> client_core::transport() const noexcep
     return transport_;
 }
 
+std::shared_mutex& client_core::operations() noexcept {
+    return operations_;
+}
+
 registration_core::registration_core(std::shared_ptr<client_core> owner, options value, std::string uuid)
     : owner_(std::move(owner)), options_(std::move(value)), uuid_(std::move(uuid)) {}
 
@@ -624,6 +590,10 @@ registration_core::~registration_core() {
 
 result<std::shared_ptr<registration_core>> registration_core::create(const std::shared_ptr<client_core>& owner, options value) {
     if (!owner || !owner->open()) {
+        return std::unexpected(error(code::closed));
+    }
+    std::shared_lock admission(owner->operations());
+    if (!owner->open()) {
         return std::unexpected(error(code::closed));
     }
     if (!valid_type(value.type)) {
@@ -666,6 +636,7 @@ std::uint64_t registration_core::timestamp() const noexcept {
 }
 
 result<void> registration_core::publish(fields attr, fields data) {
+    std::shared_lock admission(owner_->operations());
     std::lock_guard lifecycle(lifecycle_mutex_);
     if (terminal_.load(std::memory_order_acquire) || !owner_->open()) {
         return std::unexpected(error(code::closed));
@@ -726,6 +697,20 @@ result<void> registration_core::update(std::optional<std::uint64_t> version, std
     }
     if (!version && !data) {
         return std::unexpected(error(code::contract, "update", revision(), {}));
+    }
+    if (data) {
+        const auto limits = owner_->limits();
+        if (!limits) {
+            return std::unexpected(error(code::unavailable, "policy"));
+        }
+        for (const auto& [name, value] : *data) {
+            if (name.size() > limits->field_name_max_bytes) {
+                return std::unexpected(error(code::invalid, name));
+            }
+            if (value.size() > limits->data_value_max_bytes) {
+                return std::unexpected(error(code::capacity, name));
+            }
+        }
     }
 
     auto request = std::make_shared<registration_core::request>();
@@ -827,7 +812,6 @@ void registration_core::run(const std::stop_token& stop, state current, const st
                 if (handle_pending(current, renewal)) {
                     renewal = std::chrono::steady_clock::now() + jittered(*options_.renew_interval, owner_->configuration().renew_jitter_percent);
                 }
-                continue;
             }
             if (should_close) {
                 break;
@@ -962,22 +946,24 @@ result<void> registration_core::register_state(state& current) {
 result<void> registration_core::update_state(state& current, const std::optional<std::uint64_t> version, const std::optional<fields>& data) {
     const auto next_version = version.value_or(current.version);
     fields changed;
-    fields next_data = current.data;
     if (data) {
         for (const auto& [name, value] : *data) {
             const auto previous = current.data.find(name);
             if (previous == current.data.end()) {
                 return std::unexpected(error(code::contract, name, current.revision, {}));
             }
-            if (!same_bytes(previous->second, value)) {
+            if (previous->second != value) {
                 changed.emplace(name, value);
-                next_data[name] = value;
             }
         }
     }
     const auto version_changed = next_version != current.version;
     if (!version_changed && changed.empty()) {
         return {};
+    }
+    fields next_data = current.data;
+    for (const auto& [name, value] : changed) {
+        next_data[name] = value;
     }
     if (current.revision >= safe_integer_max) {
         return std::unexpected(error(code::capacity, "@revision", current.revision, {}));

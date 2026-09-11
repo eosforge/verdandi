@@ -277,11 +277,11 @@ func classifyType(expression ast.Expr, types map[string]*ast.TypeSpec, visiting 
 	case *ast.ParenExpr:
 		return classifyType(value.X, types, visiting)
 	case *ast.Ident:
-		if isScalar(value.Name) {
-			return fieldValue, nil
-		}
 		declaration := types[value.Name]
 		if declaration == nil {
+			if isScalar(value.Name) {
+				return fieldValue, nil
+			}
 			return 0, fmt.Errorf("unsupported named type %s", value.Name)
 		}
 		if visiting[value.Name] {

@@ -1,0 +1,9 @@
+[package]
+name = "verdandi-transport-probe-generator"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+tonic-prost-build = "=0.14.6"
+prost-build = "=0.14.4"

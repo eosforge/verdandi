@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 
 use std::collections::BTreeMap;
 
@@ -11,7 +11,7 @@ use super::model::{Kind, MAX_REVISION, Path as CatalogPath, RawState, Status, va
 const RECORDS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("verdandi_catalog_v2_records");
 
 pub(super) struct Checkpoint {
-    database: Database,
+    database: RwLock<Option<Database>>,
     disabled: AtomicBool,
 }
 
@@ -28,7 +28,7 @@ impl Checkpoint {
         transaction.open_table(RECORDS).map_err(store_error)?;
         transaction.commit().map_err(store_error)?;
         Ok(Self {
-            database,
+            database: RwLock::new(Some(database)),
             disabled: AtomicBool::new(false),
         })
     }
@@ -43,6 +43,14 @@ impl Checkpoint {
         self.disabled.store(true, Ordering::Release);
     }
 
+    /// 等待已有存储操作并释放文件锁；即使旧公开句柄仍存活，显式关闭后也可重开文件。
+    pub(super) fn close(&self) {
+        self.disable();
+        let mut database = self.database.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+        // 在写锁内析构，保证并发 Close 也等到 Database 的最终释放完成。
+        drop(database.take());
+    }
+
     /// 加载 `zone`/`scope` 的单调 cursor 与全部 Path 状态。
     ///
     /// `maximum_bytes` 用于重新验证每个完整值。检查点停用时返回空状态；
@@ -51,7 +59,11 @@ impl Checkpoint {
         if self.disabled() {
             return Ok((0, BTreeMap::new()));
         }
-        let transaction = self.database.begin_read().map_err(store_error)?;
+        let database = self.database.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(database) = database.as_ref() else {
+            return Ok((0, BTreeMap::new()));
+        };
+        let transaction = database.begin_read().map_err(store_error)?;
         let table = transaction.open_table(RECORDS).map_err(store_error)?;
         let cursor_key = checkpoint_key(b'C', zone, scope, None);
         let cursor = match table.get(cursor_key.as_slice()).map_err(store_error)? {
@@ -96,7 +108,11 @@ impl Checkpoint {
         }
         let key = checkpoint_key(b'E', zone, scope, Some(&path.member()));
         let encoded = encode_state(state, maximum_bytes)?;
-        let transaction = self.database.begin_write().map_err(store_error)?;
+        let database = self.database.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(database) = database.as_ref() else {
+            return Ok(());
+        };
+        let transaction = database.begin_write().map_err(store_error)?;
         {
             let mut table = transaction.open_table(RECORDS).map_err(store_error)?;
             let keep_existing = match table.get(key.as_slice()).map_err(store_error)? {
@@ -125,7 +141,11 @@ impl Checkpoint {
         }
         let key = checkpoint_key(b'C', zone, scope, None);
         let encoded = revision.to_be_bytes();
-        let transaction = self.database.begin_write().map_err(store_error)?;
+        let database = self.database.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(database) = database.as_ref() else {
+            return Ok(());
+        };
+        let transaction = database.begin_write().map_err(store_error)?;
         {
             let mut table = transaction.open_table(RECORDS).map_err(store_error)?;
             let keep_existing = match table.get(key.as_slice()).map_err(store_error)? {
@@ -336,9 +356,7 @@ fn read_u32(value: &[u8], offset: usize) -> std::result::Result<u32, String> {
 
 /// 把任意存储 `error` 转成最长 512 字节的安全诊断文本。
 pub(super) fn store_error(error: impl std::fmt::Display) -> String {
-    let mut detail = error.to_string();
-    detail.truncate(512);
-    detail
+    crate::error::bounded_detail(error)
 }
 
 #[cfg(test)]

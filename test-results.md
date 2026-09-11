@@ -4,7 +4,75 @@
 
 Initial qualification date: 2026-09-01
 
-Last updated: 2026-09-03
+Last updated: 2026-09-08
+
+### 2026-09-08: Unified regression, configurable soak, and automatic cleanup
+
+The two public commands are `testkit/run.ps1 regression` and
+`testkit/run.ps1 soak --duration 2h`; Ubuntu uses the matching Bash entry.
+See [testkit/README.md](testkit/README.md) for project-only configuration,
+duration semantics, offline prerequisites and recovery behavior.
+
+Final source SHA-256:
+`947bf7925e4a9a510988452098b56e8be3fd938f162cc2a8c4eae47ba2420632`
+(424 source files; unchanged throughout both accepted campaigns).
+
+| Verification | Windows x64 | Ubuntu x64 |
+| --- | --- | --- |
+| Complete selected regression stages | 26/26 pass | 26/26 pass |
+| Python framework ownership tests | 23/23 pass | 23/23 pass |
+| C++ native / C ABI / Legacy CTest | 16/16 pass | 16/16 pass |
+| Go/Rust unit, Redis and interoperability | Pass | Pass, including Go race |
+| C# .NET 8/10 Redis and two-promotion Sentinel, plain/TLS | Pass | Pass |
+| Go/Rust Registration plain/TLS and Catalog plain two-promotion Sentinel | Pass | Pass |
+| C++ Sentinel plain/TLS, including denied subscriptions | Pass | Pass |
+| Registration / Catalog Go fault soak, 210 seconds per domain | Both pass | Both pass |
+| Owned resources and test processes released | Verified | Verified |
+
+Regression `c57fedac5de9e92f` took 977.025 seconds. Soak
+`e4df1e6a6b3db9f8` took 1,206.204 seconds including its prechecks and cleanup;
+its 40 stage rows pass. Each of the four workloads completed six injections
+covering script flush, Pub/Sub connection loss, ordinary connection loss,
+pause and restart. Every workload exceeded its Redis-time floor and left zero
+keys. The pre-existing audit Redis container was preserved, and final VM swap
+use was zero.
+
+The C++ NOPERM crash is fixed at the shared native receive boundary; permission
+denial now returns unavailable and leaves the root usable. Propagation review
+includes Go/Rust and the C ABI/Legacy/C# consumers. Python A22/A23 ownership
+fixes, process-tree timeout cleanup, crash recovery, launcher cancellation,
+partial failure reports, and refusal to overwrite conflicting VM edits have
+their own executed checks. Windows latency observations retain real zero
+values and validate complete sample counts.
+
+This supersedes the earlier A22/A23, Linux C# and tested Sentinel/TLS deferrals
+for the listed scenarios. The 210-second profiles validate the automation and
+fault recovery; they do not qualify two-hour or 24-hour endurance. Continuous
+load currently exercises Go, with Rust/C++/C# regression rows. Dedicated
+continuous tests for those languages, live mTLS, direct C++ two-promotion
+peers, packaging and AOT remain explicit separate gates.
+
+Evidence: [structured results](testkit/results/unified-test-runner-20260908.json)
+and [repair/propagation review](test-runner-review-20260908.md). Earlier failed
+or interrupted campaign reports remain under `build/testkit/runs`; none were
+rewritten as passing results. The older entries below retain their original
+checkpoint scope.
+
+Native entry update, 2026-09-08: C++ build policy now lives in a shared
+standard-library Python implementation, with thin PowerShell/Bash adapters.
+Windows Python 3.14.7/MSVC and Ubuntu Python 3.14.4/GCC each passed offline
+Debug shared configure/build and all 16 CTest cases, including real Redis,
+C ABI and Legacy integration. Each native build used one job.
+
+Both platforms passed 12 shared policy/process tests and the existing four
+CMake guard/package-boundary scenarios. PowerShell 5.1/7 and Bash passed
+argument/Unicode/exit-code adapter regressions; Windows success and failure
+preserved environment, working directory and console encoding. Go/Rust cache
+entry checks passed after the shared PowerShell stdout fix. Black and Python
+3.10 syntax checks passed. Results, source fingerprints, commands and evidence
+limits are in [native-build-unification-20260908.json](testkit/results/native-build-unification-20260908.json).
+This entry does not claim new Release/check, Ninja/Clang or Python
+Redis/Sentinel fixture qualification.
 
 Scope update, 2026-09-02: generic Campaign/Leader election was withdrawn from
 all release targets. Historical references below describe the scope at their
@@ -28,6 +96,111 @@ The 2026-08-28 Fields-mailbox/configuration revision passed the recorded
 one-hour owned campaign. The newer 2026-08-29 optimization fingerprint has its
 own microbenchmark, full short Redis, race, interoperability, and Sentinel
 evidence below; it does not inherit the earlier fingerprint's one-hour label.
+
+### 2026-09-08: Fresh source review, repairs, and bounded cross-platform regression
+
+- A fresh review covered 325 owned source files (75,027 lines), plus 32
+  generated Lua copies (5,912 lines), before SDK tests began. The immutable
+  pre-repair inventory and row-level findings are in `code-reaudit-20260907.md`.
+- B01-B29 source repairs and their exact verification boundaries are tracked
+  in `code-reaudit-fixes-20260908.md`; previous reports remain historical.
+- Windows: Go unit/Redis integration passes; Rust 84 library tests, 10 Redis
+  integration tests and strict workspace/all-target Clippy pass. Native shared
+  Debug builds and 16/16 CTest targets pass, including C ABI and Legacy Redis.
+  .NET 8 and .NET 10 build and pass offline/Redis tests with the current DLL.
+- Ubuntu 26.04: Go unit/Redis integration passes under the race detector;
+  Rust 85 library tests and 10 Redis integration tests pass; GCC 15.2 shared
+  Debug and 16/16 native/C ABI/Legacy CTest targets pass. All VM builds used
+  one job; observed swap usage was zero.
+- Added regressions cover C++ natural expiry without messages, reading old
+  records under lowered write limits, optional metadata, Patch after delete,
+  concurrent Catalog Find/create/two Close calls, Rust checkpoint reopening
+  while closed public handles remain alive, and Go/Rust empty Data no-ops.
+- Go/Rust bidirectional live Registration/Catalog interoperability passes.
+  Real Lua field-limit tests verify rejection of field 65,537 without changing
+  Hash, field-revision ZSET, or revision, and successful overwrite at capacity.
+- Raw logs and synchronization hashes are under `build/reaudit-20260907/`.
+  This is short regression evidence. It does not qualify current-source long
+  endurance, Sentinel/TLS/mTLS failover, sanitizers, every precise cancellation
+  interleaving, or Linux C#. Python A22/A23 remain explicitly deferred.
+
+### 2026-09-07: Audit fixes with bounded local and real-Lua regression
+
+- Source changes address 23 of 25 audited findings. A22/A23 Python fixture
+  fixes remain explicitly deferred. The separate Rust completion-order risk
+  R03 has a source change but still needs deterministic concurrency validation.
+- C++ Release passes 7/7 independent CTest targets: SQLite normal/error paths,
+  Legacy transaction boundaries, Catalog value/notification validation,
+  queue/pending/deadline/UTF-8/retry boundaries, public Selector transaction
+  rollback and ownership, and CMake incremental embedding/runtime DLL copies.
+  Actual catalog.cpp/selector.cpp objects and the C11 C ABI Redis test compile
+  under MSVC. Full native linking and network/Redis integration remain pending.
+- Go's actual Read, capacity projection and JSON scanner regressions pass in
+  an isolated standard-library-only package. Production/test copies match the
+  source tree; transport scaffolding and unrelated configuration semantic
+  checks are not full SDK coverage. The complete refgen package passes.
+- Rust's actual error.rs passes an independent rustc UTF-8 regression.
+  Full offline cargo resolution stops at absent cached dependencies. Go's
+  complete SDK has absent cached dependencies as well; no download occurred.
+- C# library and test projects build for both net8.0 and net10.0, with zero
+  warnings or errors. Restore used an empty-source offline NuGet configuration
+  and installed targeting packs. Native-dependent tests were not run.
+- Shared current Catalog Lua passes against real Redis 8.8 on the Ubuntu VM:
+  65,535 to 65,536 fields succeeds; the 65,537th is rejected without changing
+  content/revision/index; overwriting at capacity and full Read succeed.
+  The independent transport probe verifies Lua behavior, not every SDK client.
+- The maintainer disabled Hyper-V Dynamic Memory after repeated guest OOMs.
+  The later Lua test completed with 6,837 MiB available and zero Swap usage at
+  the final guest sample. Final Redis PING is PONG and DBSIZE is zero. The SSH
+  forwarding session is closed; the existing test container remains available.
+- Format checks and Catalog Lua generation freshness pass. Linux SDK builds,
+  full bindings, cancellation/race cases, Sentinel, TLS and endurance have not
+  been requalified for this source revision. Earlier runs below remain evidence
+  for their recorded source snapshots only.
+- Repair details: [`code-fixes-20260907.md`](D:/projects/verdandi/code-fixes-20260907.md).
+  Structured evidence: [`code-fixes-20260907.json`](D:/projects/verdandi/testkit/results/code-fixes-20260907.json).
+
+### 2026-09-05 follow-up: Array notification field decoding and propagation audit
+
+- Found and fixed the previously missed C++ Subscriber field-order check.
+  Array Replace uses numeric order; Map/Value Replace and all Patch fields
+  use lexical order. C ABI/Legacy/C# consume the affected shared native core.
+  Source review of Go, Rust, Lua, and Python found no corresponding ordering
+  defect in the reviewed paths; these languages were not re-executed.
+- The original production field reader fails eight checks with the new
+  regression. The fixed production reader passes strict MSVC Release and
+  Debug /RTC1 with 66,973 assertions per run, including width transitions,
+  malformed/truncated fields, protocol count bounds, and detached binary data.
+- The independent Release CMake project passes both CTest targets. Existing
+  clang-format 22.1.3 was used on all eleven C++ files changed by this task.
+  No software or dependency was downloaded or installed by the agent.
+- The complete notification envelope, Subscriber recovery loop, full native
+  library, Redis/Sentinel/TLS/checkpoint I/O, language bindings, Go/Rust,
+  clang-tidy, Linux/sanitizers, and endurance remain outside this run.
+- Evidence: [`catalog-array-propagation-20260905.json`](testkit/results/catalog-array-propagation-20260905.json).
+  Audit: [`optimization-review-20260905.md`](optimization-review-20260905.md).
+
+### 2026-09-05 initial offline C++ Catalog regression
+
+- Fixed the native Array validator's lexical-versus-numeric ordering error;
+  the original helper rejected valid eleven-entry and hundred-entry arrays.
+  The same pure validator is used by publication, subscription, and checkpoint
+  admission. Replace argument generation now explicitly uses numeric order.
+- Strict MSVC 19.44 x64 Release and Debug `/RTC1` tests pass for shapes,
+  canonical indices, UTF-8, binary ownership, 4 MiB, and 65,536-field boundaries.
+  The independent dependency-free CMake Release project passes CTest.
+- Native Catalog, C ABI Catalog, and the extended live-test translation units
+  pass `/c /W4 /WX`; these are compile checks, not full linking or runtime
+  qualification. The Subscriber compile was blocked by missing OpenSSL headers.
+- Seven alternating Windows microbenchmark pairs reduce successful Map/Patch
+  validation from one scratch allocation to zero; at 65,536 fields this avoids
+  roughly 1 MiB per validation. The 512-field Map median changes from 17.056 to
+  9.715 microseconds. These are local validation measurements, not SDK throughput.
+- Both Lua generators pass `--check`. No external dependencies were downloaded.
+  Complete native/binding builds, Redis/Sentinel/TLS/checkpoint I/O, Linux,
+  Go/Rust/.NET, clang-format/clang-tidy, and endurance were not run.
+- Detailed assessment: [`optimization-review-20260905.md`](optimization-review-20260905.md).
+  Raw measurements: [`optimization-offline-20260905.json`](testkit/results/optimization-offline-20260905.json).
 
 ### 2026-09-03 full-tree optimization and boundary regression
 

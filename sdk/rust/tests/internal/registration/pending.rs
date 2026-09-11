@@ -47,6 +47,7 @@ fn contiguous_updates_merge_and_gap_requires_authoritative_state() {
     assert!(!change.repair);
     assert_eq!(change.base_revision, 4);
     assert_eq!(change.latest_revision, 6);
+    assert_eq!(change.event.timestamp, 60);
     assert_eq!(change.event.data["a"], b"first");
     assert_eq!(change.event.data["b"], b"second");
 
@@ -132,4 +133,17 @@ fn large_single_registration_burst_remains_one_bounded_change() {
     assert_eq!(change.base_revision, 1);
     assert_eq!(change.latest_revision, 10_001);
     assert_eq!(change.event.revision, 10_001);
+    assert_eq!(change.event.timestamp, 10_001);
+}
+
+#[test]
+fn merging_updates_preserves_the_maximum_observed_timestamp() {
+    for first in ["update", "renew"] {
+        let mut pending = PendingChanges::new(8, 1 << 20);
+        assert!(pending.add(event(first, 4, 60, Fields::new())).is_ok());
+        assert!(pending.add(event("update", 5, 50, fields(&[("a", b"new")]))).is_ok());
+        let change = pending.drain().remove(0);
+        assert_eq!(change.event.timestamp, 60);
+        assert_eq!(change.latest_revision, 5);
+    }
 }

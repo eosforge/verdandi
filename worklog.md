@@ -19,17 +19,26 @@ Maintain this file with the work it describes:
 
 ## 2. Current Snapshot
 
-Last updated: 2026-09-03
+Last updated: 2026-09-11
+
+- Star/Planet target: C++26 / GCC 16.2.0 on Linux first, Supervisor remains Go.
+  The maintainer authorized implementation in the separate `peer-cpp/` directory.
+  The [skeleton plan](peer/cpp26-skeleton-design.md) now describes its actual layout;
+  full dependency linking is complete and final process qualification is in progress. Rust remains
+  the executable comparison, with the shared bearer handshake ordering fix tested
+  in 54 cases on both Windows and Linux. See [C++ evidence](peer-cpp/validation.md).
 
 - Project: Verdandi, a language-neutral distributed coordination protocol and
   SDK ecosystem.
 - Repository: public `git@github.com:eosforge/verdandi.git`.
-- Local path: `D:\laconis\verdandi`.
-- Git state: the prior public `alpha` baseline is
-  `00842fbbe2233ff3136549f3811fded8f10332b4` (`feat: harden multilingual alpha
-  SDK`). This change set publishes the 2026-09-03 optimization, boundary-test,
-  Windows PowerShell 5.1 probe fix, and review artifacts under the maintainer's
-  explicit 2026-09-05 approval.
+- Local path: `D:\projects\verdandi`.
+- Git state: the current `alpha` baseline is `81cb8b9`
+  (`perf: harden alpha parser and build checks`). The 2026-09-05 offline
+  Catalog correctness/optimization changes, the 2026-09-06 external OpenSSL
+  preparation policy, and the 2026-09-07 audit fixes and project-local cache
+  entry points described below are uncommitted and unpushed. The maintainer
+  has now authorized project Go/Rust/C++ dependency downloads locally and on
+  the Ubuntu VM, with a fresh static review required before runtime tests.
 - Release state: the maintainer selected `0.1.0` as the current
   non-production Alpha version for distributed development and controlled
   service integration. Its source and documentation are published only on the
@@ -189,6 +198,129 @@ Last updated: 2026-09-03
   public on `alpha`.
 
 ## 3. Active Work
+
+### P1 (paused by maintainer): Qualify and implement the C++26 Star/Planet skeleton after design review
+
+- Current maintainer instruction: finish this TSan regression, save its result,
+  then stop execution and pause all remaining implementation/qualification until
+  the maintainer explicitly resumes it. Do not launch additional soak or
+  performance work after TSan passes.
+- Follow M0-M4 in [the design](peer/cpp26-skeleton-design.md); implementation is
+  now authorized and underway in `peer-cpp/`. Preserve v4 behavior and Rust comparison binaries until
+  C++ passes its own gates. No SDK migration or business storage in stage one.
+- Qualify callback lifetime, slow TLS resource cleanup, logical session/epoch
+  fencing, framework flow control and typed-RPC byte/postdecode limits before
+  switching the service entry points. The maintainer superseded the physical
+  session lifetime, fixed 64 KiB and predecode scan requirements. Validate
+  [locked source versions](peer/cpp26-dependencies.md); obtain specific approval
+  before missing dependency acquisition. Reuse project-local GCC and caches.
+- Deliver native/mixed-language regression, sanitizer, bounded soak and
+  allocation/latency evidence, plus the actual reduction in duplicated logic.
+- The maintainer separately approved the named gRPC C++ dependency set in Ubuntu
+  project-local directories. Sources were fetched with recorded archive SHA-256;
+  ordinary dependency builds run one compiler job at a time with a 2 GiB virtual
+  address limit. A separate full TSan dependency prefix retains one compiler job
+  but needs unrestricted shadow address mapping. No global configuration changes.
+- Strengthened the shared service harness to reject sanitizer diagnostics and
+  unexpected rejection exit codes, and to clean owned directories even after a
+  stop check fails. Windows Python 30 cases and the Rust/Go 13-case Linux process
+  regression pass. A subsequent ASan SEGV prompted a receive-buffer ownership audit.
+- Added a concurrent receive handoff test: the old C++ code resubmitted a nonempty
+  buffer; 50,000 deliveries pass after the fix. Recheck pending data and late
+  transport failures before submitting another operation. The old 2,808.645-second,
+  396-cycle soak was explicitly interrupted; it is not a completed one-hour result.
+  The final changed binary passes Debug CTest and the full ASan/UBSan regression.
+  Its Release soak passes 3,603.207 seconds and 510 fault cycles with owned process,
+  port and directory cleanup. Full TSan dependencies then completed. Final TSan
+  passed all 5 CTest groups, 8 RPC/mixed groups and 13 process groups with owned
+  resource cleanup. The CMake prefix switch now also clears utf8_range_DIR, whose
+  cached value initially referenced the ordinary dependency prefix; final links
+  use the instrumented prefix. No additional soak was started. Results are saved
+  in `testkit/results/peer-cpp-foundation-20260911.json`; execution stops here at
+  the maintainer's request.
+- Acceptance review clarified that TSan is not the last gate in all of M0-M4.
+  Independent metadata compile-failure tests, a contracts-disabled behavior
+  comparison, and the remaining control-plane scale/allocation and isolated
+  push-comparison evidence are still outstanding. Keep those gaps explicit in
+  `peer-cpp/validation.md`; do not declare the complete design qualified or switch
+  default entry points merely because the sanitizer regression passes.
+
+### P1: Re-audit current source before approved dependency-backed qualification
+
+Outcome: repeat line-level review of the current working tree for unexpected
+bugs, simplification opportunities, and cross-language contract mismatches;
+then qualify it with approved Go/Rust/C++ dependencies locally and on Ubuntu.
+
+- Record a new source inventory, hashes, review ranges, and findings without
+  replacing the immutable first audit or repair evidence.
+- Use project command entry points and ignored `build/` caches. Download only
+  approved SDK dependencies, keeping existing lockfiles/checksums and recording
+  acquisition outcomes. No global environment changes or implicit tool installs.
+- Do not start runtime tests until the fresh static review is complete.
+  Check each issue for propagation across Go, Rust, C++, C ABI/Legacy, C#,
+  shared Lua, and test/build tooling; separate intentional language idioms.
+- The initial Python A22/A23 deferral was superseded by the later explicit
+  approvals. Their ownership fixes are implemented in the unified runner;
+  current evidence belongs to its completed qualification item below.
+- On Ubuntu, inspect current memory/available tools before dependency
+  preparation, keep build parallelism bounded, and synchronize only source.
+- Preparation completed on 2026-09-08: approved Go/Rust toolchains and their
+  locked VM dependencies are project-local; GCC/G++, CMake, and pkg-config are
+  installed from Ubuntu official sources. C++ archives are hash-verified on
+  both hosts, and prebuilt OpenSSL layouts are prepared without source builds.
+  The initial source-only VM snapshot contains 708 files. Fresh findings and
+  evidence remain in `code-reaudit-20260907.md`; static review completed on
+  2026-09-08 before any fresh SDK build or runtime test.
+- Current review coverage includes all owned SDK production implementations,
+  C++ build tooling, C# project files, and all Go/Rust/C++/C# SDK test sources.
+  The report records 28 source-confirmed findings and concrete gaps in the
+  existing regression assertions. All testkit sources and configuration
+  vectors are also reviewed. Both Lua generators passed their static --check;
+  325 manually reviewed source files and 32 generated Lua copies have a
+  pre-repair hash inventory in build/reaudit-20260907. Proceed with repairs,
+  formatting, bounded builds, and targeted cross-language qualification.
+  No fresh runtime pass is implied by this coverage.
+- Repairs now cover B01-B28 plus the confirmed C++ synchronization deadline
+  issue R05/B29. See `code-reaudit-fixes-20260908.md` for the exact verification
+  boundary. The current source passes Windows Go unit/Redis tests, Ubuntu Go
+  unit/Redis race tests, Rust library (Windows 84 / Ubuntu 85) and 10 Redis
+  integration tests on each platform, Windows Clippy, and C++ shared Debug
+  builds plus 16/16 CTest targets on both platforms. Windows net8.0/net10.0
+  C# offline/Redis tests pass, including parent lease GC ordering. Go/Rust
+  bidirectional Registration/Catalog interoperability also passes.
+- Added real Redis regressions for C++ natural expiry, lowered write-policy
+  reads, optional metadata, delete-then-Patch, and concurrent Find/create/two
+  Close calls; Rust retained closed handles can reopen the checkpoint; Go/Rust
+  public empty Data updates preserve revision/timestamp and reject after Close.
+  PowerShell restores absence of VSLANG as well as its value and console
+  encoding. Source-only VM deltas are hash-checked before application. VM
+  builds used one job; available memory stayed around 6.5 GiB with zero swap.
+- Remaining qualification is explicit in the repair table: selected precise
+  cancellation/ACL/malformed-server/fence-timeout injections and hours-long
+  endurance are not marked passed. The newer unified-runner evidence in Completed Work
+  covers Python A22/A23, Linux C# and its executed Sentinel/TLS scenarios.
+  Previous-source endurance evidence must not be inherited by this tree.
+
+### P1: Finish qualification of the 2026-09-07 audit fixes
+
+Outcome: qualify the 23 applied source fixes against complete SDK builds and
+the remaining deterministic lifecycle and Redis integration regressions. The
+original audit remains an immutable pre-fix snapshot; current evidence is in
+[`code-fixes-20260907.md`](D:/projects/verdandi/code-fixes-20260907.md) and its
+[`structured result`](D:/projects/verdandi/testkit/results/code-fixes-20260907.json).
+
+- Local C++ tests, isolated actual-source Go/Rust regressions, C# compilation,
+  and the real shared-Lua field-limit regression have the evidence recorded
+  below. These checks do not establish complete SDK qualification.
+- The 2026-09-08 work item above completed fresh review, approved dependency
+  preparation, complete Windows/Ubuntu SDK builds and short Redis regression.
+  Refer to its separate evidence for the current source; do not rewrite the
+  earlier 2026-09-07 result as if it included those later checks.
+- A05, A11, A12, A13 and R03 still require their complete asynchronous lifecycle
+  or cancellation verification; other per-finding gaps remain in the report.
+- The later approved unified runner implements the A22/A23 Python fixture
+  fixes. Its ownership regressions and live cleanup evidence supersede the
+  original deferral without rewriting the older audit result.
 
 ### P0: Review and freeze the project foundation
 
@@ -515,6 +647,11 @@ Acceptance criteria:
 
 ## 5. Blockers and Open Decisions
 
+- The 2026-09-07 fixes have incomplete full-SDK qualification because required
+  dependencies are absent locally and downloads remain disallowed. Python
+  A22/A23 are explicitly deferred; lack of Black does not authorize installing
+  it. The Ubuntu VM recovered after the maintainer disabled Dynamic Memory;
+  the subsequent real Lua regression passed, without a Linux SDK build.
 - Add byte-exact cross-language vectors for application-owned typed Attr/Data
   codecs as real consumers define their field encodings. The direct Go and Rust
   conversion contracts, raw Fields compatibility, fixed-structure top-level
@@ -533,6 +670,1264 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   checkpoint, timeout, and complete-value limits under the accepted workload.
 
 ## 6. Completed Work
+
+### 2026-09-11: Document the C++26 Star/Planet skeleton target
+
+- Incorporated all seven follow-up decisions: logical session identity and
+  generations, transport reuse/rebuild, variable HTTP2 windows, public gRPC
+  resource/lifecycle APIs, no extra Register predecode scan for this internal
+  service, framework I/O workers with a fixed application loop, and measured
+  optimization after bounded reuse. Updated qualification and regression rules
+  together; ordinary authentication and correctness checks remain required.
+- Added [the source-version lock](peer/cpp26-dependencies.md) using official
+  stable release/tag metadata: gRPC 1.84.0, Protobuf 36.1 and supporting releases,
+  plus gRPC's exact BoringSSL gitlink. Recorded differences from upstream bundled
+  revisions; selected versions are not a claim of verified build compatibility.
+- Follow-up TLS design uses the selected gRPC release's pinned BoringSSL for
+  transport and private identity crypto, replacing the initial OpenSSL reuse
+  recommendation. No download/build occurred; existing Redis SDK policy is
+  unchanged. BoringSSL API/ABI changes require a coordinated rebuild and tests.
+- Added [the detailed plan](peer/cpp26-skeleton-design.md): current-vs-target
+  scope, C++26 feature applications, common/star/planet structure, callback and
+  lock ownership, v4 parity, gRPC capability gates, dependency/generation policy,
+  staged acceptance, tests and performance/complexity measurements.
+- Read the existing protocol/configuration/identity/decoder and current service
+  rules; checked official GCC, gRPC and Protobuf documentation. Documented the
+  stale Supervisor-frame comment in peer_transport.proto for later source work.
+- Linked the plan from service documentation and updated the future language
+  decision while preserving historical Rust implementation and test facts.
+- Documentation only. No production/test source or .proto changed, no package
+  downloads, service migration, compilation or runtime tests in this task.
+  Verification is limited to document consistency, local links and diff review.
+
+### 2026-09-11: Harden and simplify the Star/Planet/Supervisor foundation
+
+- Common owns Rust process launch, CLI/runtime/exit handling and RPC status
+  classification. Role-specific loops remain separate. Go admission and
+  membership share canonical identity validation; both languages consume one
+  public fixture. Legacy Go frame code is test-only. Member commits reuse an
+  already validated owned snapshot, removing a second complete read/decode.
+- Fixed extreme Rust timer/channel capacities, transient gRPC errors being
+  treated as permanent candidate failures, local Supervisor certificate
+  validation, canceled KDF admission and invalid UTF-8 account provisioning.
+  Rust topology and Go persistence both reject role/address changes within a
+  principal slot. Related Redis SDK paths were reviewed read-only; no SDK
+  implementation or SDK test scope was added.
+- Tests cover real TLS/HTTP2 I/O ownership, a second RPC on one socket,
+  listener/Close races, canceled waits, stale leases, input budgets, slot
+  replacement, persistence recovery and snapshot independence. Native gates
+  passed 53 Rust tests, 44 ordinary Go top-level tests plus two fuzz seed
+  entrypoints, four generator and 14 probe tests on each host. Python passed
+  28 on Windows and 27 with one platform skip on Linux. Linux Go race passed;
+  Windows race was not run. Finite Go fuzz passed on both hosts.
+- Process regressions expanded from 11 to 13 groups. Windows/Ubuntu/mixed
+  deployments all passed, followed by requested 120/120/300-second fault
+  loops with 17/18/42 restarts. Both hosts have no remaining owned service
+  processes or temporary test directories; ports were reusable. Ubuntu's
+  final boot-wide OOM kill counter was zero.
+- One-key tests include Python harness unit tests. Check scripts accept
+  explicit bounded fuzz duration. Final Go/Rust line wrapping was verified
+  to change only whitespace; Go scanner tokens also match. Both source
+  hashes are preserved and final native builds refreshed. No dependency
+  downloads, version changes, global configuration changes, commits or pushes.
+- Supplemental Linux Black invocation could not run because that module is
+  absent. Existing Windows Black checked the identical Python source; Linux
+  Python unit tests then ran independently. No tool was installed.
+- Evidence: [detailed hardening report](peer/service-hardening-20260911.md)
+  and [machine-readable results](testkit/results/service-hardening-20260911.json).
+  Existing gRPC migration and historical performance reports are preserved.
+  Business replication/persistence, SDK Bind, bearer lifecycle and production
+  capacity/endurance qualification remain outside this service skeleton.
+
+### 2026-09-11: Complete gRPC service migration and account admission validation
+
+- Rust Star/Planet now use Tonic bidirectional streams; Go Supervisor uses
+  gRPC Challenge/Register and account/password login. One account can admit
+  multiple independent nodes. Signed bearer credentials replace TLS exporter
+  and process signing keys; TLS 1.3, role/scope checks and CAS epochs remain.
+- Generated Rust/Go RPC sources are stored with source. Approved grpc-go
+  1.83.2, protoc-gen-go-grpc 1.6.2 and necessary dependencies are cached only
+  inside both projects. Production custom frame readers/writers were removed.
+- Fixed ownership of slow pre-TLS sockets during Go shutdown; checked Rust's
+  cancellation path. Preserved pre-allocation Member limits and restored own
+  certificate validation after removing mutual TLS. Adjusted race test budgets
+  after an initial Linux timing failure without relaxing production deadlines.
+- Both hosts passed 36 Rust service tests, 32 top-level Go tests, four generator
+  tests, 14 probe tests, static checks and Release builds. Python: Windows 24
+  passed, Linux 23 passed/one platform skip. Linux Go race passed; Windows race
+  was not run without a configured cgo environment.
+- Windows, Ubuntu and direct mixed-host deployments each passed all 11 real
+  process scenarios and a requested 60-second fault loop with nine restarts.
+  Owned processes, temporary directories and listening ports were recovered.
+  Ubuntu's final boot-wide OOM kill counter was zero. No firewall/global changes.
+- Protocol v4 requires coordinated upgrade and a new member database path;
+  old data is preserved. Bearer expiry/revocation, business replication, SDK
+  migration and endurance/capacity qualification remain outside this result.
+- Evidence: [detailed report](peer/grpc-validation-20260911.md) and
+  [machine-readable results](testkit/results/service-grpc-20260911.json).
+
+### 2026-09-10: Complete the conditional gRPC push evaluation and detailed report
+
+- The isolated `testkit/transport` workspace retains existing locked versions
+  and adds 63 approved package versions in both project Cargo caches. Production
+  manifests and protocols are unchanged; no SDK tests or Go gRPC downloads.
+- The shared publisher exercises real string-key caches, Registry counts from
+  100 to 100,000, 64/256/1024 B Catalog updates, 1/4/16 receiving sessions,
+  sparse application progress, burst scheduling and a 200 ms receiver pause.
+  Final v3 uses up to 16 ready TCP frames per flushed batch; earlier echo,
+  per-frame-flush and no-flush results are excluded from its conclusions.
+- Finished 22 cases × two transports × five alternating rounds on each of
+  Windows, Ubuntu and Ubuntu-publisher/Windows-receiver sessions. Counts are
+  216/220, 220/220 and 214/220: 650 completed, 10 failed, 73,200,050 delivered
+  updates in completed samples. TCP completed 327/330 and gRPC 323/330.
+  Source maps and platform binary hashes match between environments.
+- Ordinary/Registry scenarios and Catalog rates up to 20,000/s all completed.
+  Linux high-load throughput is similar, but gRPC update P99 and process CPU
+  seconds are higher. Four Windows failures have receiver-lag diagnostics;
+  six cross-host failures retain client errors but lack detailed server logs,
+  so their root causes remain unresolved. No failures were replaced by reruns.
+- The maintainer's no-slowdown condition is not established; production stays
+  on TCP + Protobuf. This is a conditional evaluation outcome, not permanent
+  exclusion of gRPC. Full migration, capacity/SLA certification and long-term
+  recovery validation remain outside the completed experiment.
+- Fixed production common TLS tail flushing inside the existing write deadline
+  and checked propagation across both roles, Go Supervisor and SDK transports.
+  Both platforms pass 39 production Rust tests and 14 prototype tests plus
+  Clippy; Windows Python has 24 passing tests, Linux 23 plus one Windows-only skip.
+  Atomic report replacement now tolerates brief Windows readers with a bounded
+  retry; cleanup tests isolate their unrelated memory precondition.
+- Final process/temporary-directory checks are clean on both hosts. Removed
+  one ownership-verified stale Windows pre-experiment directory. Ubuntu's OOM
+  kill count did not increase; minor system swap activity is documented.
+- Evidence: [detailed report](peer/grpc-benchmark-results.md),
+  [TLS flush audit](peer/tls-flush-audit.md), the three
+  `testkit/results/transport-push-*-20260910-v3.json` matrices and
+  `testkit/results/transport-cleanup-20260910-v3.json`.
+
+### 2026-09-10: Star / Planet connection foundation and cross-platform validation
+
+- Organized Rust into `peer/common`, `peer/star`, `peer/planet`, preserving
+  `peer` for Star and adding `planet`. Shared protocol and session code is not
+  duplicated between roles; no new dependency downloads were needed.
+- Protocol v3 binds role/group into admission, preserves Star full-list
+  semantics and adds MessageID 10 for at most eight Planet candidates.
+  Planet keeps one upstream with local-group preference and offline failover;
+  Star mesh capacity and counts exclude Planets.
+- Fixed authenticated stable-window timing, candidate starvation and strict
+  legacy member-row decoding. Reviewed propagation across Rust roles, Go
+  Supervisor, Python harness and existing Redis SDK/binding boundaries.
+- Both hosts passed offline generation, formatting, static checks, Rust tests
+  (37 plus four generator tests), Go tests, docs and release builds; Linux
+  also passed Go race with one build job. Windows, Linux and mixed-host real
+  processes each passed regression and a 60-second, ten-cycle fault loop;
+  final decoder changes were followed by all three regressions again.
+  Owned processes, ports and temporary resources were cleaned up.
+- Updated [connection rules](peer/connection-rules.md), project memory and
+  service documentation. Evidence and limitations:
+  [validation](peer/star-planet-validation-20260910.md),
+  [JSON](testkit/results/star-planet-foundation-20260910.json).
+- Business cache/replication, persistence, SDK binding and Registry re-registration
+  remain unimplemented and are not claimed by this connection foundation.
+
+### 2026-09-10: Record full Planet replicas, selectable storage and grouped Star candidates
+
+- Recorded GQ-001 through GQ-005: running Planet failover with existing valid
+  authorization during Supervisor outages; full authorized Galaxy caches;
+  memory/disk modes for Stars and Planets; mixed Star modes; new processes
+  waiting for Supervisor authentication even after a previously joined deployment restarts.
+- Replaced demand-driven upstream subscriptions and memory-only Relay proposals.
+  Full replica data remains separate from managed active publications that are
+  re-registered on failover. Planet disks are not authoritative durable voters.
+- Flagged mixed-mode durable participant and write-confirmation rules for design;
+  memory acceptance cannot masquerade as persistence. Retained disk recovery
+  for persistent deployments without promising recovery of lost all-memory state.
+- Recorded GQ-006/GQ-007: group Stars by actual region or similar properties;
+  prefer the local group and allow authorized cross-group failover on failure.
+  Grouping does not partition Galaxy replication; offline fallback still needs
+  previously learned candidates and valid authorization.
+- Reconciled the shared architecture, service design entry points, Admin document
+  pointers and project memory. Documentation only; no dependencies downloaded,
+  runtime source changed or business recovery test evidence claimed.
+- Validation: existing Admin Prettier passed; checked nine Markdown files for
+  whitespace/conflict markers and 82 relative file links outside code examples.
+  Git diff whitespace checks passed; runtime tests are not applicable to this revision.
+
+### 2026-09-10: Review Galaxy documents and raise the first decision batch
+
+- Cross-checked the shared Galaxy design, Peer owner/replication draft,
+  Supervisor availability contract and durable project decisions.
+- Identified superseded fixed-Star routing and owner-equals-sender text as
+  document reconciliation work, not questions to ask the maintainer again.
+- Raised GQ-001 through GQ-003: Planet failover with Supervisor offline,
+  demand-scoped versus full authorized data caching, and memory versus disk cache.
+  These were unanswered when raised and are resolved by the newer decision entry above.
+- Deferred implementation-level epoch issuer, indexing and scheduling choices
+  until the product behavior is clear. No runtime code, dependencies or tests changed.
+
+### 2026-09-10: Accept re-registration at the new Star with propagated invalidation
+
+- The maintainer confirmed that a Planet changing Star registers its managed
+  data at the destination, which propagates new affiliation and invalidates old
+  affiliation. Recovery need not first contact the unavailable source Star.
+- Updated the shared architecture and Peer design to supersede fixed Star ingress,
+  while preserving business identities, logical writers and confirmed payloads.
+- Recorded versioned replacement as the recommended implementation shape, avoiding
+  unordered unconditional delete/register messages. Partial registration batches,
+  stale callbacks/leases and old-source recovery remain explicit validation cases.
+- Planet-initiated recovery is now accepted; proof scope, generation authority and
+  ACK semantics remain protocol questions. A read-only cached record is not a
+  registration managed by that Planet. Catalog durable recovery is still required.
+- Documentation-only revision; checked whitespace and local references. No runtime,
+  generated protocol, dependency, system setting or test result changed.
+
+### 2026-09-10: Clarify Star processing, Planet forwarding and Registry failover boundaries
+
+- Recorded the maintainer's direction: Stars process Publisher/Registry requests
+  and synchronize to other Stars and attached Planets; Planets forward those
+  requests only to the currently bound Star while reusing storage/sync semantics.
+- Planet authenticates with Supervisor but receives a subset of candidate Stars,
+  not full mesh membership. Candidate selection and its authorization semantics
+  remain recommendations, not a implemented partial member-list protocol.
+- Reviewed Registration identity preservation, stale candidate fallback, lagging
+  destination state, ambiguous replies and old expiry/unregister races. Added a
+  review flow with authenticated rebind and lease-generation fencing; the issuing
+  authority and Planet delegation remain open rather than introducing a global
+  per-Registration ownership service without a decision.
+- Identified the old fixed-owner conflict: routing back to A cannot recover
+  service at B while A is unavailable. Kept this Registry design change separate
+  from Catalog's authoritative persistence and controlled owner takeover.
+- Linked the expanded shared architecture from Peer/Supervisor drafts and project
+  memory. Read Chubby's sequencer discussion and etcd's ambiguous completion
+  contract as references; neither system nor any new dependency was installed.
+- Documentation-only work; checked local references and whitespace. Existing
+  network tests do not constitute evidence for unimplemented Planet/Registry recovery.
+
+### 2026-09-10: Validate collision-free planet motion during generation
+
+- Following the maintainer's clarification, perform collision checks only while
+  generating the orbits. Spatial paths may cross at different times; there is
+  no per-frame collision steering or positional correction.
+- Choose integer harmonics of a common repeat period and recompute semi-major
+  axes to retain the Kepler constant. Screen deterministic inclination/phase
+  candidates with synchronous swept segments, model bounds, a safety margin,
+  and a conservative acceleration-based interpolation error envelope.
+- Plan all available systems and entity types together, including stellar/core
+  obstacles. Treat snapshot positions as layout hints and retain input ownership.
+  Initial instance poses, picking and focus use planned orbits; larger layouts
+  adjust peer focus distance. Wrap the shared clock by the checked period.
+- Full Admin checks passed: 84 import boundaries, 53 tests, formatting, strict
+  types and production build. Independent full-cycle sampling of the 144-body
+  fixture found minimum surface clearance 0.346 at test radius 0.82. Tests also
+  cover coincident hints, spatial path reuse, deterministic order and recurrence.
+- Browser review verified overview, peer focus, planet selection/pause and focus
+  without console warnings/errors. Existing LAN service remains on port 5173;
+  no dependencies or GLB assets were downloaded or changed.
+
+### 2026-09-10: Document the revised Galaxy structure and aggregation Relay role
+
+- Reviewed Admin's GalaxyData/PeerStar/Planet types, demo snapshot, reference
+  validation and black-hole rendering. The current UI puts business entities
+  directly under Peer as planets and has no Relay or satellite layer.
+- Recorded the maintainer's mapping: Galaxy contains Peer stars; Relay planets
+  attach to stars; business satellites may bind either level; unavailable Peers
+  become black holes. Cross-Galaxy Catalog wormholes remain unimplemented future work.
+- The maintainer explicitly chose aggregation and cached downstream distribution
+  for Relay. Documented shared-state ownership, permission-safe aggregation,
+  bounded slow-consumer handling and invalidation/recovery requirements.
+- At this stage, satellite granularity, single active upstream and memory-only
+  caching were recommendations. Later entries confirm the Planet's single active
+  Star and replace the cache proposal with full authorized, selectable-mode storage;
+  Relay implementation language and packaging remain undecided.
+- Added [galaxy-architecture.md](galaxy-architecture.md) and linked service,
+  Peer/Supervisor and Admin design documents. Corrected stale current-memory
+  statements that still described registration and process UUIDs as unimplemented.
+- This is a design/documentation revision. No production source, executable,
+  Protobuf, dependencies or system configuration changed. Checked Admin Markdown
+  with its existing Prettier and checked document references and whitespace;
+  runtime tests are not new evidence for this unimplemented structure.
+
+### 2026-09-10: Enable a baseline stellar rotation speed
+
+- Set the default available-star rotation to 2*pi/60 radians per second,
+  one revolution per minute, in the existing runtime configuration.
+  Per-peer speed overrides and stopping remain available and independent of count.
+- Updated the existing rotation regression for quarter/full default revolutions
+  and independent overrides. All Admin checks passed: 81 import boundaries,
+  50 tests, formatting, strict types and production build.
+- Browser review confirmed default rotation with planet orbits paused and no
+  console warnings/errors. No dependency changes; the LAN service remains running.
+
+### 2026-09-10: Scale stars by planet count and expose independent rotation speeds
+
+- Added the requested piecewise linear size mapping: counts 10/30/60/120/180
+  map to scales 0.5/1/1.5/2/3, clamped outside that range. Stellar surfaces,
+  coronas and picking share the transform; peer positions, orbital coordinates
+  and black-hole scale remain independent. Demo scales are 1.1/1.3/1.5.
+- Added GalaxyController.setStarRotationSpeed(peerId, radiansPerSecond).
+  Following the maintainer's follow-up, speed defaults to zero and no business
+  rule derives it. Finite signed speeds support rotation, reversal and stopping;
+  invalid inputs, unavailable peers and inactive controllers are rejected.
+- Rotation uses the existing frame loop and only rotates the stellar model.
+  Added coverage for count landmarks, scaled picking, shared source ownership,
+  frame independence, stopped planet orbits, reversal and numerical bounds.
+- All Admin checks passed: 80 import boundaries, 50 tests, formatting, strict
+  types and production build. Browser review verified overview scale differences,
+  peer focus and explicit rotation/stop commands without console warnings/errors.
+  No dependencies or assets were downloaded; the LAN service remains on 5173.
+
+### 2026-09-10: Accelerate black-hole flow and rebalance its emission
+
+- Tripled the instance flow clock, including texture advection and bright-knot
+  lifetimes, without increasing shear accumulated within each virtual cycle.
+  Planet motion remains overview 5, peer 2, and selected planet 0.
+- Broke distant broad bands into angular clumps with finer breakup and retained
+  filtered filament energy. Raised hot inner emission toward warm white; restored
+  a small amount of orange-red to the outer palette after maintainer feedback.
+  Model dimensions, texture allocation and draw count remain unchanged.
+- Updated clock regression assertions; final Admin checks passed all 80 import
+  boundaries, 47 tests, formatting, strict types and the production build.
+  Browser review covered near and distant views and distant flow playback with
+  no shader warnings/errors; this is not a motion or performance qualification.
+- Discussed node proportions without changing model scale. No installations,
+  asset downloads or publication; the existing LAN service remains on port 5173.
+
+### 2026-09-10: Improve distant black-hole light separation
+
+- Replaced the distant broad-cloud emission fallback with sparse, irregular
+  luminous streams baked into the existing plasma texture's unused B channel.
+  Near-view filaments and temperature data remain in R/G. Rejected an initial
+  regular-band variant that looked like concentric neon rings.
+- Reduced extra distant derivative blur from 2 to 1.15 while retaining mipmaps,
+  anisotropy and seam filtering; raised the emission coefficient from 1.9 to
+  2.15 and concentrated distant energy in separated streams. No new textures,
+  draw calls, GLB changes or full-screen effects were introduced.
+- Fixed-view browser comparisons covered distances 48/96/192 at 12 degrees
+  and a distant 45-degree view; shader compilation produced no warnings/errors.
+  The background review window refreshed slowly, so these captures are not a
+  continuous-motion flicker or GPU performance qualification.
+- Full Admin checks passed: 80 import boundaries, 47 tests, formatting, strict
+  types and production build. No installs, downloads, commits or publication;
+  the existing LAN development service remains on port 5173.
+
+### 2026-09-10: Add elliptic planet motion and view-scoped selection
+
+- Replaced rigid shell rotation with deterministic inclined Kepler ellipses,
+  preserving initial snapshot positions and placing the owning star at a focus.
+  A bounded Newton solver produces faster periapsis and slower apoapsis motion.
+  The maintainer's final time multipliers are overview 5, peer view 2, and
+  planet selection 0. Selecting a planet pauses all orbital motion.
+- Overview rays only test stars; a peer view additionally tests its own planets.
+  Both selectPlanet and focusPlanet reject requests outside the owning peer view.
+  Picking, selection decoration and camera focus read current instance matrices.
+  Nine shared GLB batches remain; independent motion uploads about 9 KiB of
+  matrices per active frame for 144 planets, with no uploads while paused.
+- Added the requested subtle core shading to the black-hole optical material,
+  explicitly as an artistic volume cue. The foreground disc still occludes it.
+  Doubled disc and knot flow speed, retained broad cloud contrast and moving
+  highlights in distant views, and kept one black-hole draw with existing assets.
+- Full Admin checks passed: 80 import boundaries, 47 tests, formatting, strict
+  types and production build. Browser checks covered scene load, peer focus,
+  controller selection rejection/acceptance and paused canvas planet picking.
+  The current remote overview showed about 32 FPS; this is not GPU capacity
+  qualification. The moving-target click limitation and exact scope are recorded
+  in admin/docs/verification.md. Development-only visual pages remain available.
+- No downloads, installs, commits or publishing. The LAN development service
+  remains on 0.0.0.0:5173.
+
+### 2026-09-10: Correct black-hole emission and reduce its scene footprint
+
+- Rebuilt the original black-hole GLB with an inner edge at three Schwarzschild
+  radii, an outer radius of 24 and a 0.28 maximum half-height. Star and planet
+  assets remain unchanged. The complete black-hole instance now uses a 0.75
+  scene scale, including its picking proxy, at the maintainer's request.
+- Emission uses the curved ray's conserved angular momentum for frequency shift
+  and brightness. Both disc intersections share emission and occlusion rules.
+  A periodic two-dimensional density field replaces repeated radial noise;
+  unresolved image energy is integrated at initialization. Per-draw local camera
+  uniforms retain shared resource ownership and independent instance transforms.
+- Kept a development-only fixed-angle review page under
+  `admin/tests/visual/black-hole.html`. An experimental curved-volume integration
+  was rejected after visible banding and a significant frame-rate regression;
+  final rendering retains thin-disc intersections and a four-sample local rim.
+- `pnpm check` passed: formatting, 78 import boundaries, all 42 tests, strict
+  type checking and the production build. The development galaxy loaded with
+  no browser warnings or errors and about 32 FPS in the current remote browser.
+  This is not hardware-GPU performance qualification or a complete interaction
+  and failure-matrix rerun. Detailed evidence is in `admin/docs/verification.md`.
+- No dependencies or third-party assets were downloaded. The LAN development
+  service was restarted on `0.0.0.0:5173`; no changes were committed or published.
+
+### 2026-09-10: Preserve resolved black-hole disc images at intermediate distances
+
+- Reproduced the opaque upper arc at inclination -2 degrees and distance 96.
+  Whole-node distance detail was replacing a resolved secondary image with
+  fixed-radius emission, losing radial falloff and producing hard boundaries.
+  The previous visual pass had omitted negative-inclination intermediate views.
+- Secondary images now retain their actual disc intersection at every distance.
+  Only images near the pixel footprint blend with the coverage approximation;
+  emission is blended by coverage to keep transparent edges from picking up a
+  white rim. Distance detail still reduces knots and texture detail, but no
+  longer skips the secondary intersection lookup or replaces a broad arc.
+- Fixed-time browser comparisons at 1280x720 covered -2 degrees at distances
+  48, 96, 192 and 384, plus +2, 0 and +12 degrees at distance 96. The opaque arc
+  no longer appeared; logs were clean and the model still used one draw.
+  Perspective taper remains; this does not claim full volumetric relativistic
+  transfer. The temporary comparison page was removed.
+- Formatting, 77 import boundaries, 42 tests, strict types and production build
+  passed. No GLB, dependency or downloaded asset changed. Production browser
+  preview, the full interaction matrix and performance capacity were not
+  rerun. The existing LAN development service remains on port 5173.
+
+### 2026-09-10: Add finite black-hole rims, differential flow and distance detail
+
+- Added a four-sample foreground rim with a finite elliptical cross-section,
+  matching the original GLB's 0.16 half-height. Filter footprints follow ray
+  sample spacing to prevent edge-on barcode shimmer. The black-hole GLB is
+  1,217,688 bytes; star and planet hashes are unchanged.
+- Replaced rigid model rotation with two continuously blended differential
+  flow phases, three transient sheared bright knots and baked azimuthal density
+  variation. Each visible instance binds its own clock immediately before its
+  draw while retaining shared, scene-owned geometry, materials and textures.
+- Projected shadow size smoothly reduces distant secondary-image and knot
+  detail. Stabilized zero-inclination intersection selection against floating
+  point noise, removing close-up edge speckles. Finite thickness only augments
+  the local foreground; lensed images remain a thin-disc approximation.
+- Verification passed formatting, 77 import boundaries, 42 tests, strict types
+  and production build. Browser checks covered reference, both sides of the
+  disc plane, exact edge-on, elevated, close and far views; the far view reached
+  detail zero with one draw. Production checks covered model loading, isolated
+  Orion, focus without details and rotation. Final browser logs were clean.
+- Remote production overview and ordinary focus showed about 32 FPS; enlarged
+  isolated views showed about 15-18 FPS. Hardware 60 FPS and capacity remain
+  unqualified. The full browser failure matrix and planet details were not
+  rerun. No dependencies or third-party assets were downloaded. Removed the
+  temporary review page and stopped its production preview; LAN development
+  remains on port 5173.
+
+### 2026-09-10: Accelerate black-hole flow and preserve both images near the disc plane
+
+- Increased the display flow rate from 0.025 to 0.075 radians per second,
+  approximately 84 seconds per rotation, without additional draws or sampling.
+- Restored secondary-intersection visibility continuously near the disc plane,
+  where the first intersection can lie outside the emitting disc. This avoids
+  a false one-sided flip when the ordered intersections exchange sides.
+- Browser checks covered inclinations +2, +0.5, 0, -0.5, -2 and +12 degrees;
+  logs were clean and the temporary review page was removed. The infinitely
+  thin foreground disc still degenerates at exactly zero inclination; finite
+  thickness is documented as future work, not claimed as implemented.
+- Formatting, 74 import boundaries, 41 tests, strict types and production build
+  passed. No dependency was added. Production preview, the complete browser
+  failure matrix and hardware GPU capacity were not requalified in this pass;
+  the existing LAN development service remains on port 5173.
+
+### 2026-09-10: Unify Admin black-hole imaging to remove the protruding hemisphere
+
+- Replaced the combination of rasterized core/disc surfaces and separate
+  lensed arcs with one closed GLB optical volume. It composites two ordered
+  disc intersections and captured-ray shadows; the hidden Core mesh remains
+  pickable. Disc and Glow remain offline authoring geometry. The revised GLB
+  is 1,217,692 bytes; star and planet hashes are unchanged.
+- Extended the orbit grid across both sides of the critical impact, retained
+  captured rays at the horizon after termination, and added finite-observer
+  phase lookup. Corrected periodic texture derivatives and concentrated the
+  secondary image brightness near the shadow to reduce its broad lower ring.
+  Textures remain shared and scene-owned; no new dependency or downloaded
+  asset was used. External scene occlusion uses a documented virtual depth,
+  not curved-ray intersections with surrounding stars.
+- Verification: final formatting, 74 import boundaries, 41 tests, strict types
+  and production build passed. Isolated visual checks covered front, below,
+  45-degree and top views plus distance-8 closeups; the temporary viewer was
+  removed. Production checks covered topology isolation, hidden-core focus,
+  no automatic details, rotation and double-click return. Final browser logs
+  were clean. Remote FPS remained about 32; hardware capacity and the complete
+  browser fault matrix were not requalified. LAN development remains on 5173.
+
+### 2026-09-10: Refine the Admin black-hole model and render lensed disc images
+
+- Reauthored the original GLB with a finer shadow core and continuous accretion
+  disc. The black-hole asset is 1,217,704 bytes; star and planet hashes remain
+  unchanged. Unavailable Orion still has no planets, links or status marker.
+- Replaced preset light arcs with initialization-time RK4 light-orbit tables
+  and disc intersections. The physical disc and lensed images share a filtered,
+  original plasma texture; thin higher-order images use coverage filtering.
+  Inclination blending removes duplicate disc images at elevated viewpoints.
+  This is an art-directed hybrid, not a complete relativistic renderer.
+- Textures and geometry remain scene-owned and shared among model instances.
+  No dependency, external model, full-screen effect or extra frame loop was
+  added. Updated authoring provenance, architecture and verification notes.
+- Verification: 39 tests, 73 import boundaries, formatting, strict types and
+  production build passed. Browser checks covered near zoom, multiple viewing
+  angles, production asset loading, sidebar collapse, isolated unavailable
+  topology, focus without details and double-click return, with no warnings or
+  errors. The temporary isolated review page was removed. The remote browser
+  showed about 32 FPS; hardware capacity and the full browser fault matrix were
+  not requalified. The existing LAN development service remains on port 5173.
+
+### 2026-09-10: Replace the Admin black-hole wire appearance with a continuous disc
+
+- Responded to the maintainer's visual feedback by removing the eight luminous
+  tube streams. Reauthored the GLB with a continuous disc and a closed ellipsoid
+  Glow volume; added warm plasma texture, softened the lensed arc and adjusted
+  the viewing inclination. Star and planet GLB hashes remain unchanged.
+- Local glow uses six bounded density samples, core occlusion and separate
+  color/optical-depth blending to avoid an overbright sRGB haze. Resources
+  remain scene-owned, without new dependencies, external assets, additional
+  frame loops or full-screen effects. The black-hole GLB is now 403,752 bytes,
+  down from 578,952; this size reduction is not a GPU performance claim.
+- Verification: all 36 tests, 67 import boundaries, formatting, strict types
+  and production build passed. Browser checks covered focus, near zoom,
+  oblique rotation and double-click return without warnings or errors.
+  Production preview, the full browser failure matrix and hardware GPU
+  capacity were not requalified during this appearance revision.
+
+### 2026-09-10: Rebuild the Admin black hole around the accretion-disc reference
+
+- Reauthored the local black-hole GLB with a thin volumetric disc, tapered
+  spiral streams and a larger spherical optical shell. The opaque core,
+  independent model poses and unavailable-node isolation remain in place;
+  the star and planet model bytes are unchanged.
+- Added view-dependent upper/lower light arcs and a narrow bright rim on the
+  spherical shell. Disc brightness follows the viewing direction relative
+  to its orbital flow. These are bounded analytic visual approximations,
+  not general-relativistic ray tracing or fixed vertical ring geometry.
+- Shared the disc material between the disc and streams; retained the
+  existing resource scope and frame loop without external assets, new
+  dependencies, full-screen effects or per-frame uniform allocations.
+- Verification: `pnpm check` passed 67 import boundaries, all 36 tests,
+  strict types and production build. The GLB regression also checks that
+  the optical axis remains aligned with the rotating disc. Browser checks
+  covered focus, near-view zoom, oblique rotation and double-click return,
+  with no warnings or errors. Large-fleet GPU performance and the full
+  browser failure matrix were not requalified in this visual revision.
+
+### 2026-09-10: Complete direct Windows/Ubuntu service qualification
+
+- The maintainer explicitly approved temporary inbound rules for the already
+  built Peer and Supervisor, restricted to local 192.168.0.25 and remote
+  192.168.0.119. The administrator helper created exactly two owned rules;
+  no existing rules were edited and the firewall was not disabled.
+- Ran the final service binaries with two Peers on each host. All six real-process
+  regression groups passed, including full mesh, Supervisor outage/recovery,
+  durable membership, Peer normal/forced restart, invalid identities and cleanup.
+- The subsequent 60.000-second fault window completed 13 restart cycles;
+  minimum available memory across both hosts was 6753 MiB. Total regression,
+  fault loop and cleanup time was 75.955 seconds. This short run is not a
+  production endurance or large-cluster capacity qualification.
+- Port rebind assertions passed. Independent final checks found no owned service
+  processes or temporary test directories on either host. Ubuntu had 6747 MiB
+  available memory and zero swap usage at the final check.
+- Both temporary rules were removed; an elevated ActiveStore query confirmed
+  no matching rule remained. `build/testkit/firewall-ab5d4456.json` records
+  `removed`, an empty remaining-rules list and no error. The helper exited.
+- Evidence: `build/testkit/results/services-1789007545576233300.json`,
+  `build/testkit/mixed-services-final.log`, and the updated
+  [validation report](service-admission-validation-20260910.md).
+  The earlier failed network attempt remains recorded as failed. No dependencies
+  were downloaded, and no commit or push was performed during this follow-up.
+
+### 2026-09-10: Implement authenticated service membership and native qualification
+
+- Checked generated Rust/Go protocol source into each service source directory.
+  `proto/generator` owns its lockfile and append-only MessageID tests; normal
+  builds do not invoke protoc. Both service checks detect generator drift.
+- Integrated TLS 1.3 mutual authentication, certificate cluster/IP authorization,
+  signed admission returned with the complete transactional member list, and
+  per-process Ed25519 proof bound to the current TLS exporter and Hello.
+- Added bbolt member persistence, idempotent registration and fixed-baseline CAS
+  replacement. Peer installs the validated list atomically, then establishes
+  two directed sessions per pair. Discover and periodic topology queries are gone.
+  Initialized processes retain offline membership and reconnect without Supervisor.
+- Reused or downloaded only specifically approved Go modules into both project
+  caches: protobuf 1.36.12, bbolt 1.4.3, x/sys 0.48.0, x/sync 0.10.0,
+  testify 1.10.0, go-cmp 0.7.0 and necessary indirect dependencies. No global
+  configuration or installation was changed.
+- Completed functionality and tests, reviewed ownership and simplified code,
+  then ran both native full gates. Each passes 29 Rust tests, 24 Go top-level
+  groups and four generator tests, plus formatting, Clippy/vet, module verification,
+  generated-source comparison, documentation and Release builds. Linux Go race passes.
+- Added one-key real-process regression and configurable soak entry points with
+  owned PID/Job/process-group cleanup. Both platforms pass concurrent mesh,
+  Supervisor outage/recovery, durable restart, normal/forced Peer replacement,
+  invalid credentials, actual exit signals and port reuse. Final runtimes were
+  14.312 seconds on Windows and 10.504 seconds on Ubuntu, excluding build gates.
+- Native 60-second fault windows pass: Windows 10 cycles/63.084 seconds and
+  Ubuntu eight cycles/60.739 seconds. The final Protobuf predecode count/phase
+  guards were added afterward and passed fresh full gates and process regression;
+  those earlier fault windows are not claimed as rerun on the final guards.
+- Audited corresponding Go/Rust paths for each issue, including address canonicality,
+  error echo, message allocation, lifecycle fencing and fixture key formats.
+  Final independent checks found no owned test processes or temporary directories;
+  Ubuntu had 6768 MiB available memory and zero swap usage.
+- Direct mixed-host qualification was initially blocked and is completed in the newer entry above. Business
+  Catalog/Registry replication, Peer authoritative recovery, certificate rotation,
+  member retirement and Supervisor HA remain outside this network slice.
+- Evidence: [validation report](service-admission-validation-20260910.md).
+  No commit or push was performed.
+
+### 2026-09-10: Use GLB celestial models and isolate unavailable Admin nodes
+
+- Replaced runtime sphere/sprite construction with three original GLB assets
+  for stars, planets and black holes. Added an offline authoring script using
+  the existing Three.js exporter, with reproducible model files and asset
+  provenance. Star surfaces and corona shells are meshes; the black hole has
+  a solid core, horizon shell, volumetric disc and merged spiral streams.
+- Removed Orion's planets and incident links from the demo. Runtime also
+  suppresses stale entities, picking entries and links for any unavailable
+  Peer; available-neighbor counts follow the same visibility rule. The demo
+  now has four Peers, 144 planets in nine instance batches and three links.
+- Load same-origin GLB assets before creating the canvas; cancellation,
+  snapshot replacement and errors release resources through the scene scope.
+  Each model type is loaded once per scene and shared across instances. No
+  dependency installation, external model acquisition or extra RAF was added.
+- Verification: `pnpm check` passed 67 import boundaries, all 36 tests, strict
+  types and production build. Regression coverage uses the real GLB files for
+  instancing, planet ray picking, independent black-hole poses, ownership,
+  unavailable filtering, model errors and cancellation before/during loading.
+  Browser checks verified black-hole and star focus, disc depth during rotation,
+  double-click overview, and all three asset types in production preview with
+  no warnings or errors. Moving-planet detail opening was not requalified in
+  this browser pass; the GLB world-position/picking regression passed. Large
+  fleet performance and the full browser failure matrix remain unqualified.
+
+### 2026-09-09: Render the unavailable Admin peer as a black hole
+
+- Replaced Orion's dim rock and red cross with an opaque black core, a
+  camera-facing event-horizon rim and a tilted, slowly flowing accretion disc.
+  Retained the three available stars, dim static entities, dashed incident
+  links and existing peer/planet selection contracts. Removed the X marker.
+- Kept the effect in the Three.js runtime with owned ring geometries and
+  materials, shared core geometry and the existing frame loop. The stylized
+  shaders add no dependency, texture, full-screen postprocessing or ray tracing.
+  Updated the detail icon, accessibility description and Admin documentation.
+- Verification: `pnpm check` passed 62 import boundaries, all 34 tests, strict
+  type checks and the production build. Browser checks covered overview,
+  black-hole focus without automatic details, disc occlusion during rotation
+  and Orion's Publisher details with 24 entities and two neighbors; no browser
+  warnings or errors. This remote display still showed about 32 FPS; no hardware
+  performance claim is made.
+
+### 2026-09-09: Add an unavailable star to the Admin demo
+
+- Added Orion as a fourth, unavailable Peer while retaining Atlas, Lyra and
+  Vega as available with their original entities and links. Orion contributes
+  24 retained entities and two explicit neighbor links; the demo now has
+  168 planets in 12 instance batches.
+- Added explicit display-only Peer availability and validation. Unavailable
+  stars use a dim rock surface, no corona and a camera-facing red cross badge;
+  incident links are dashed and retained planets are dimmed and stationary.
+  Stars/planets remain selectable and focusable; details identify the unavailable
+  owner and retained demo information. No backend availability is inferred.
+- Validation: `pnpm check` passed with 60 import boundaries, 34 tests, strict
+  Vue/TypeScript and production build. Regressions verify one additional
+  unavailable Peer, retained picking, dashed edges and persistent orbit pause.
+  Browser checks verified all four stars together, Orion focus and its planet
+  details with the unavailable status, 24 entities and two neighbors.
+- Scope: browser demo/presentation only, no Peer/Supervisor/SDK wire change,
+  new dependency, installation, commit or publication.
+
+### 2026-09-09: Smooth focused-star dragging in Admin
+
+- Traced focused dragging through scene composition, CameraMotion,
+  canvasInput and the installed Three.js OrbitControls source. OrbitControls
+  applied damping in every pointer event as well as each render frame, making
+  motion depend on event density; focus cancellation also waited for a
+  five-pixel drag threshold.
+- Added a frame-owned OrbitControls adapter: input accumulates rotation/pan,
+  rendering consumes it once with a 90 ms time constant. Reduced rotation and
+  pan sensitivity to 0.65/0.8 for closer control. Pointer press now cancels
+  focus/zoom immediately; the threshold only classifies clicks. Starting focus
+  or hiding the page clears residual drag without changing the current pose.
+  No Three.js private fields or dependency changes were needed.
+- Validation: `pnpm check` passed with 57 imports checked and 32 tests, including
+  1-versus-16 input batches per frame, 30/60/120 FPS damping equivalence,
+  focus handoff without recoil and sub-threshold pointer takeover. Strict
+  Vue/TypeScript and production build passed. Browser smoke covered dragging
+  during focus and after focus, with a stable stellar rotation center and no
+  warnings/errors. This improves motion consistency, not the previously
+  measured remote/software-rendering refresh limit.
+- Propagation: shared camera input applies to stars, planets and overview;
+  this is browser presentation only and does not change Peer, Supervisor or
+  SDK protocol behavior. No install, commit or publication.
+
+### 2026-09-09: Establish the Admin frontend foundation
+
+- Reorganized `admin/` into app composition/layout/styles and a galaxy feature
+  with readonly model, injected demo snapshot, Vue UI/composable and isolated
+  Three.js runtime. Removed the former monolithic scene and mixed data/view
+  entry points; retained the three stars, 144 sphere instances, quiet FPS-only
+  overview, smooth camera controls and planet details.
+- Extracted camera motion, canvas input, frame scheduling, scene objects and
+  resource ownership. Stable IDs replace object-identity lookup; explicit links
+  replace inferred complete graphs. One selection owner now clears both scene
+  and details on overview. Dragging back to the pointer origin no longer counts
+  as a click.
+- Added initialization rollback, reverse/idempotent cleanup, stale async-load
+  fencing, snapshot replacement and a context-loss/render-error retry path.
+  The scene releases listeners, observers, RAF, instance/GPU resources and
+  canvas/context on disposal. Vue receives no per-frame Three.js objects.
+- Added strict indexed/optional-property/erasable-syntax checks, LF/editor
+  conventions, architecture import checks, Node 24 built-in tests and the
+  unified `pnpm check` gate. Added Admin architecture, contributor and browser
+  verification documents; linked the stable decisions from root conventions.
+- Validation: Node 24.21.0 / pnpm 12.3.4 `pnpm check` passed: formatting,
+  54 imports checked, 28 regressions, Vue/TypeScript and Vite production build.
+  Browser checks covered focus/zoom/details/list selection/double-click/sidebar;
+  detail-click smoke temporarily froze orbit to avoid automation latency, then
+  restored the production orbit path before the complete check. Real Three.js
+  tests cover rotating-world-position picking and selected-system pause.
+  A temporary UI harness verified real WebGL context loss/retry, unmount/remount,
+  empty/invalid/replacement snapshots, and zero/one canvas cleanup/recovery;
+  the harness was removed. Production preview also loaded the star field and
+  split renderer with no warnings/errors or development frame-count attribute.
+  Remaining browser fault-injection gaps are recorded
+  in `admin/docs/verification.md`; this is not hardware or capacity qualification.
+- Scope/propagation: fixes are confined to browser presentation and lifecycle;
+  no matching SDK/wire behavior was changed. Supervisor remains disconnected
+  from the demo. No new dependency, install, upgrade, commit, push or publication;
+  concurrent Peer/Supervisor/SDK changes were preserved.
+
+### 2026-09-09: Normalize Peer and Supervisor service foundations
+
+- Split the Rust executable into a thin `main` and private process composition,
+  CLI, signal and JSON logging modules; retained the existing concrete network
+  library. Renamed the binary to `peer`, added equals-style arguments, version,
+  bounded runtime workers and shutdown, and consistent 0/1/2 exit codes. Split
+  Go management handlers from app-owned listener/shutdown responsibility.
+- Removed stdin/EOF termination and the detached reporter/blocking stdin task.
+  Added cancellation-safe `Peer::wait` so root network failure reaches the
+  process; broken log output also cleans up without println panic. Verified
+  Supervisor's analogous Serve-result observation with a new regression.
+- Expanded Chinese/ASCII ownership, configuration and block comments; enabled
+  missing public Rust documentation and broken-doc-link denial. Added root
+  contributor guidance, service ownership/release gates and dependency metadata.
+- Ordinary Peer commands now default offline. Protocol IDs remain automatic,
+  but stale source locks fail normal builds; only explicit generation may write
+  them. Frozen one-command PowerShell/Bash checks force generation permission
+  off, bound jobs to 2 by default, and fail rather than silently skip tools.
+- Checked corresponding Go/Rust/C++/C# production stdin and generation paths.
+  Go generation is explicit, C++ embeds into binary output, and no SDK wire
+  semantics changed. `peer.proto` and `message-ids.lock` remain byte-identical.
+- Specifically approved downloads: signal-hook-registry 1.4.8 into project
+  Cargo caches, plus official Rust 1.98.1 rustfmt/Clippy components into Ubuntu's
+  project toolchain after SHA-256 checks. Reused existing serde_json dependencies.
+  No global settings, toolchain upgrades, other package downloads, commit or push.
+- Both native service-check entry points pass. Peer has 35 passing tests per
+  platform; Supervisor has 8 top-level test groups plus subcases. Windows
+  format/Clippy/docs/vet/tests/release build and Linux equivalents plus Go race
+  pass. Final targeted tests cover RAII cleanup and unexpected listener failure.
+- Linux real executables pass version/help/error codes, closed stdin survival,
+  JSON startup/shutdown logs, SIGTERM exit 0 and released ports. Peer broken
+  stdout exits 1 without panic/hang. Windows console-signal injection and race
+  execution remain unverified; all test processes/resources were cleaned up.
+- Registration, process UUID/Hello migration, legacy Discover replacement,
+  durable Catalog authority, TLS/authentication and capacity/endurance proof
+  remain explicit separate production gates, not placeholder implementations.
+
+### 2026-09-09: Identify remote-session refresh and software rendering limits
+
+- Ran a temporary browser diagnostic with six seconds of requestAnimationFrame
+  alone, followed by six seconds with the complete galaxy. Baseline measured
+  32.22 callbacks/s; the full scene measured 25.53 callbacks/s. This separates
+  the existing refresh ceiling from additional scene rendering cost.
+- The test browser reported ANGLE on Microsoft Basic Render Driver, device
+  0x0000008C, Direct3D11: a software renderer. Windows reported the remote display
+  at 32 Hz, NVIDIA hardware using Microsoft Basic Display Adapter, a Xeon
+  E5-2680 v4 (14 cores/28 threads), and 31.8 GiB RAM. These observations do not
+  establish performance on a hardware-accelerated client browser.
+- Removed the temporary diagnostic after recording results. No production code,
+  driver, remote-session settings or dependencies changed; no download/install.
+
+### 2026-09-09: Use netutil for Supervisor connection admission
+
+- With explicit maintainer approval, downloaded `golang.org/x/net v0.59.0`
+  from the official Go module proxy with checksum-database verification into
+  `build/deps/go/pkg/mod`. Pinned the module and `go.sum`; no toolchain or
+  other new module was downloaded. The imported `netutil` package only needs
+  standard-library packages.
+- Replaced the private `listener.go` with `netutil.LimitListener`. Kept the
+  full-capacity close regression and added a real HTTP test that verifies an
+  idle connection holds capacity and closing it resumes a queued request.
+  Existing drain, forced cancellation and port-release tests still apply.
+- Windows: offline module tidy check, vet, shuffled tests and native build
+  passed. Ubuntu: copied only Supervisor source and the verified module cache,
+  then passed offline tidy, vet, shuffled race tests and native build with
+  concurrency limited to 2. All test-owned connections and servers closed.
+- Updated dependency preparation commands and architecture memory. Ordinary
+  wrappers remain offline/read-only with project-local child-process caches;
+  no global configuration changes. chi/gnet remain unselected. This is a
+  Supervisor implementation simplification, not a shared SDK/protocol bug fix;
+  Rust/Proto and other language implementations did not change.
+
+### 2026-09-09: Smooth wheel zoom and target 60 FPS
+
+- Changed the shared animation scheduler from 30 to a 60 FPS target, requested
+  the high-performance adapter and capped render pixel ratio at 1.5. The FPS
+  display continues reporting actual rendered frames; the verification browser
+  currently reports about 32 FPS, so sustained 60 FPS is not marked verified.
+- Intercepted wheel input before OrbitControls' immediate dolly. Wheel events
+  accumulate a bounded target distance; the frame loop applies time-based smooth
+  approach around the cursor anchor. Dragging, focus changes and page hiding
+  cancel pending zoom. Middle-button dragging remains pan, not dolly.
+- Browser forward/reverse zoom preserved the cursor anchor and returned without
+  warnings/errors. Type checking, production build and formatting passed.
+- The user confirmed remote desktop/streaming and explicitly deferred the dark
+  rectangles. The earlier opaque-canvas adjustment did not solve that report;
+  neither a renderer root cause nor video compression is confirmed. No further
+  artifact fix is claimed. No dependencies installed, commits or pushes.
+
+### 2026-09-09: Animate planetary shells and simplify the overview
+
+- Added slow shell rotation in nine instanced batches with no per-frame instance
+  buffer upload. Targeted 30 FPS for ambient motion, display-rate scheduling for
+  interaction/damping/camera travel, and cancellation while the page is hidden.
+  Selected planets pause their own system; picking and focus use rotated world
+  coordinates. Resuming avoids accumulated hidden-time orbit jumps.
+- Mapped middle-button drag to pan, retaining left-button rotation and wheel
+  zoom. Changed the canvas to an opaque WebGL background, removed CSS gradients,
+  discarded empty corona texels and disabled transparent decoration depth writes
+  to address the supplied screenshot's rectangular compositing artifacts.
+- Removed overview titles, labels, counters, cards, legend and instructions.
+  Only the live FPS number remains at its upper right; planet details remain
+  available on selection. Removed unused HUD CSS and label projection work.
+- Browser sampling measured 1103 rendered frames over 36.744 seconds (30.02 FPS).
+  The final visible counter reads 30. Verified rotation with a clean background,
+  moving-planet picking and focus alignment. Type check, production build and
+  formatting passed. No dependency changes/downloads; no large-scale benchmark.
+
+### 2026-09-09: Keep planets spherical during direct zoom
+
+- Removed the overview Points representation, whose default square sprites grew
+  when zooming without selecting a star. All 144 planets now use the same shared
+  sphere models in three instanced batches, independently of selection state.
+- Verified direct wheel zoom from overview without selecting a star: nearby and
+  neighboring-system planets remained spherical. Browser warnings/errors were
+  empty; type checking, production build and formatting passed. No downloads.
+
+### 2026-09-09: Improve star surfaces and add simple planet models
+
+- Replaced the flat star grain shader with seamless three-dimensional turbulence,
+  hot/cool surface detail, limb darkening and a shared corona with a transparent
+  center. No animated time uniform or continuous rendering was introduced.
+- Added simple rocky planets with shallow craters, shared color/bump texture,
+  520-triangle sphere geometry and deterministic instance rotations. Preserved
+  purple Registry, teal Subscriber and gold Publisher colors and instancing.
+- All geometry and textures are generated locally with existing dependencies.
+  Browser close-up inspection, planet picking and camera focus passed; no WebGL
+  warnings/errors. Frame count stayed at 146 across 23 seconds idle. Type check,
+  production build and formatting passed; large-scale performance remains untested.
+
+### 2026-09-09: Implement the independent Go Supervisor skeleton
+
+- Added the standard-library-only `supervisor/` Go module, command entry point,
+  validated configuration, JSON logs, management `/healthz`, bounded listener
+  and graceful/forced HTTP shutdown. Comments use Chinese with ASCII punctuation.
+- Added project-local offline Go wrappers and exact build/run/test documentation.
+  Management HTTP is explicitly separate from the future Peer registration
+  endpoint; no fake membership, topology readiness or Catalog success responses.
+- Windows: gofmt/160-column/comment checks, go vet, tests, build and executable
+  help/invalid-configuration exit codes passed. The tests cover real HTTP,
+  occupied ports, capacity-blocked accept cancellation, active-request draining,
+  shutdown deadlines and port release. Windows race execution was unavailable
+  with current cgo disabled; no compiler was installed.
+- Ubuntu 192.168.0.119: synced only the new module, reused existing Go 1.27.1
+  and GCC, and passed vet, race tests and native build with concurrency limited
+  to 2. Actual binary startup with closed stdin, health, SIGTERM exit 0 and port
+  release passed. All test processes/connections were cleaned up.
+- No downloads, databases, Rust/Proto/SDK source changes, commit or push. Peer
+  registration, durable member storage, process replacement and Catalog/UI
+  integration remain unimplemented pending their separate protocol work.
+
+### 2026-09-09: Smooth star navigation and broaden double-click return
+
+- Replaced planet-only canvas double-click gating with scene-container handling
+  for both focused stars and planets, including HTML star labels. Star selection
+  now leaves details closed; planet details overlay the unchanged canvas.
+- Camera travel now interpolates for 1.2 seconds with gradual acceleration and
+  deceleration, preserving the current viewing direction for star approach.
+  Removed the immediate-position branch; only dragging or scrolling interrupts
+  travel, not a stationary pointer press.
+- Browser checks observed intermediate and final camera views, no details on
+  star selection, working planet picking, and canvas dimensions of 1060 x 619
+  before and after opening details. Double-clicking a focused star or its label
+  returned to overview. Browser warnings/errors were empty; production build,
+  type check and formatting passed. No dependency changes or downloads.
+
+### 2026-09-09: Return from a selected planet with a double-click
+
+- Added canvas double-click navigation from a selected planet to the global
+  overview, clearing details and restoring the overview camera. Preserved the
+  selection at the start of the click sequence so double-clicking a star also
+  returns correctly. Added a contextual gesture hint and listener cleanup.
+- Verified browser double-clicks on a star and scene background, single-click
+  planet picking and selection retention during dragging. Type check, production
+  build and Prettier passed; browser errors were empty. No dependencies added.
+
+### 2026-09-09: Add the three-star Supervisor UI demo
+
+- Added Three.js with explicitly approved dependencies to `admin/`. Atlas, Lyra
+  and Vega expose 36, 48 and 60 demo entities across Registry, Subscriber and
+  Publisher. Planets occupy three-dimensional spherical shells; removed orbit
+  guides and decorative background stars following user feedback.
+- Added star selection, entity details, camera focus, overview reset and a dark
+  collapsible sidebar. Peer links and all entities remain local demo data.
+- Used instanced planets, shared resources, on-demand rendering and separate
+  engine chunks. The browser frame counter stayed unchanged across a 42-second
+  idle observation; this does not qualify large-scale performance.
+- Verified type checking, production build, browser star/planet selection and
+  camera focus. Final visual inspection confirmed the simplified background and
+  spherical layout; browser warnings/errors were empty. No commit or push.
+
+### 2026-09-09: Record simplified Peer CLI and process UUID identity
+
+- Recorded `peer --listen=... --super=... --cluster=...` as the target interface,
+  with `--name=value`, no manually configured ID and no new Zone flag. Peer ID
+  is generated per process, retained across reconnects and changed on restart.
+- Reviewed propagation into Hello/boot ID, durable owner references, same-address
+  restarts, stale members, durable replica accounting and the optional join-order
+  proposal. Marked stable-ID recovery assumptions superseded and dependent
+  protocol choices unresolved; preserved the authoritative persistence goal.
+- Updated Core, product and Supervisor designs, connection comparison, README
+  pointers and durable decisions. Current CLI/network code remains documented
+  as implemented, distinct from the new target. No source, schema or dependency
+  changes, downloads or runtime tests. Documentation references and whitespace
+  checked; no commit or push.
+
+### 2026-09-09: Confirm Go Supervisor and Rust Peer
+
+- Recorded the independent Supervisor service language as Go and retained Rust
+  for Peer. Updated Supervisor/Peer designs, the README and durable decisions.
+- Kept membership/management/Catalog publishing separate from Peer replication
+  and authoritative persistence; the internal Rust connection supervisor stays
+  in Peer. Storage engines and remaining protocol details are still undecided.
+- Documentation whitespace checked. No backend scaffold, source changes,
+  downloads or runtime tests were needed for this language decision.
+
+### 2026-09-09: Clarify durable Peer authority and Supervisor Catalog publishing
+
+- Recorded the final explicit choice: Peer retains authoritative Catalog on disk
+  and recovers after whole-group restart with its Publisher offline. Superseded
+  the intermediate memory-only direction; preserved existing A-001/A-002.
+- Documented Supervisor as an ordinary authorized Catalog Publisher alongside
+  its membership/observer roles, without a second Catalog authority. Distinguished
+  durable acceptance, eventual replica convergence and SDK delivery.
+- Added recovery boundaries for Publisher cache loss, tombstones, disk failures
+  and Supervisor-offline bootstrap using persisted identity/known membership.
+  Core memory tests remain a separate phase and cannot qualify disk recovery.
+- Updated the design, Core/README pointers and durable decision record. Storage
+  engine, Supervisor language and connection-count decisions remain unfrozen.
+- Documentation references and whitespace checked. No source or Proto changes,
+  downloads, runtime tests, commit or push were performed for this decision.
+
+### 2026-09-09: Add sidebar icons and folding
+
+- Added inline SVG branding/Home icons and an accessible footer toggle using
+  existing Vue/Naive UI dependencies. The sidebar folds from 220 to 64 pixels,
+  retaining icon navigation while the main content stays blank.
+- Formatting, type checking and production build passed. Browser interaction
+  verified both toggle directions, measured both widths and found no warnings/errors.
+
+### 2026-09-09: Add the admin sidebar
+
+- Added a 220-pixel Naive UI sidebar with Verdandi/Supervisor branding and
+  one selected Home item; the main content remains blank. No new dependencies.
+- Prettier, vue-tsc and the production build passed. The running development
+  page displays the sidebar correctly with no browser warnings or errors.
+
+### 2026-09-09: Add the minimal Supervisor admin homepage
+
+- Added the independent `admin/` Vue 3, TypeScript, Vite and Naive UI project
+  with one blank homepage. No router, shared state store or backend calls.
+- The maintainer explicitly authorized its seven declared frontend packages
+  and transitive dependencies. Installed through pnpm 12.3.4 with fnm-managed
+  Node 24.21.0, using `D:\Program Data\pnpm\store` and `cache`; preserved
+  the generated lockfile and ignored `node_modules/` and `dist/`.
+- Prettier formatting, vue-tsc type checking and Vite production build passed.
+  Browser verification of the production preview showed a blank white page,
+  the expected document title and main region, and no console warnings/errors.
+- No backend or Peer protocol changes, commit or push were performed by this task.
+
+### 2026-09-09: Compare one full-duplex Peer connection with two mirrored connections
+
+- Added `peer/connection-model-review-20260909.md` and linked it from the Core
+  and Supervisor designs. Compared exact socket counts, join/reconnect behavior,
+  directional ownership, control/data queueing, duplicate arbitration and failure
+  scope against TCP, Tokio and Erlang primary documentation and local code.
+- Recommended considering one full-duplex socket with separate incoming/outgoing
+  replication modules; this is a proposal, not a replacement of accepted CORE-002.
+  Identified arbitration and bounded concurrent read/write as required design work.
+- Clarified that first contact depends on the newcomer in both connection models
+  when neither Supervisor push nor Peer introductions exist. Reverse dialing
+  cannot discover a newcomer that has not yet contacted that old peer. First
+  contact, later reconnect ownership and business request direction are separate.
+- Refined the recommendation to fixed later-registered-to-earlier-registered
+  dialing and reconnecting, using a persistent Supervisor-assigned join order.
+  Documented stable order on retry/restart, filtering newer entries from a retry
+  snapshot, directional reachability and remaining same-initiator stale sessions.
+  This is still a design recommendation, not an implemented or accepted switch.
+- No Rust/Proto edits, downloads or benchmark results. Documentation whitespace
+  and new local references checked; existing dual-connection behavior unchanged.
+
+### 2026-09-09: Simplify joining to Supervisor registration and a complete Peer list
+
+- Recorded the final clarified flow: register and receive a complete list,
+  actively connect, and let old peers learn the newcomer from Hello and create
+  the reverse connection. A newcomer with a complete list can finish joining
+  after Supervisor fails; one without it waits.
+- Removed Peer list reconciliation, Supervisor list-push/ACK machinery and an
+  independent admission-ticket step from the target design. Kept business sync,
+  connection validation, bounded dialing and production identity questions separate.
+- Updated Core/full design, Supervisor/UI design, README and protocol status;
+  preserved superseded decisions in codex.md and labeled current Discover as
+  implemented behavior pending replacement. Documented ordered concurrent
+  registration, durable/idempotent replies, partial-list failure and restart limits.
+- Documentation only; no Rust/Proto source changes or dependency downloads.
+  Checked changed documentation and new local references; no new runtime test
+  claim, commit or push.
+
+### 2026-09-09: Record the accepted discovery/Supervisor split and propose topology UI
+
+- Recorded pairwise join/reconnect discovery, sequential normal joins, and an
+  independent observer for alerts and bounded exceptional connection repair.
+  Kept current periodic Discover explicitly labeled as existing implementation.
+- Added `peer/supervisor-design.md` covering expected-node coverage, stale and
+  incomplete observations, two directed TCP connections per pair, shared graph
+  data, repair limits, and a proposed browser 3D/2D/table interface.
+- Distinguished connection health from future data convergence, and documented
+  the recovery dependency when Supervisor is the only discovery repair fallback.
+- Documentation only; no Rust/Proto changes, dependency downloads, Supervisor
+  implementation or new runtime-test claim. Checked touched documentation for
+  whitespace and newly added local link targets. No commit or push was created.
+
+### 2026-09-09: Integrate Peer Protobuf, keepalive and bounded topology discovery
+
+- Downloaded the explicitly approved official protoc 36.1 Windows/Linux ZIPs into each project's build area and verified their published SHA-256 digests. Added pinned Prost/prost-build 0.14.4 with project-local Cargo caches; no global environment or installation changed.
+- Followed the maintainer's corrected wire layout: big-endian uint16 MessageID, uint32 payload length, then the concrete Protobuf payload. Removed CoreEnvelope and automatically generated stable IDs from an append-only `proto/message-ids.lock`; existing IDs survive additions, removals and reordering. Applied the maintainer's four-space Proto clang-format configuration.
+- Implemented cancellable Hello, reusable bounded buffers, automatic Ping/Pong with exact request matching, absolute write/response deadlines, safe fragmented reads, timeout reconnect and complete task cleanup. Fixed the previous capped-backoff jitter and canceled-shutdown handle ownership defects.
+- Added bounded DiscoverRequest/DiscoverResponse pagination, direct verification of learned IDs, reverse connections, short-lock topology ownership, duplicate-address/ID suppression and generation protection. Periodic jittered queries supplement stale lists without deleting live members; candidate caps, request budgets and a shared dial cadence bound discovery amplification.
+- Passed all 31 tests on both Windows and the native Ubuntu VM, including three-node full mesh, late-node discovery, stale and duplicate lists, paging, flood limits, old sessions, shutdown cancellation and port release. Windows rustfmt/strict Clippy and both Release builds/help paths passed. No long-duration or 64-node capacity claim is made.
+- Rechecked the analogous Go/Rust Selector retry and PONG paths, C++ shared retry, and C# native delegation. The Peer framing has no other-language implementation to patch, and no existing Redis SDK contract changed. Database SDK regressions were not rerun for this Rust Peer-only change.
+- Updated Peer/protocol design documents and recorded exact scope in `peer/protobuf-network-validation-20260909.md`. State replication, SDK Bind, production authentication and daemon process lifecycle remain future work. No commit or push was created.
+
+### 2026-09-08: Complete unified regression/soak entries and owned-resource recovery
+
+- Added `testkit/run.py` with regression and configurable soak modes, thin
+  PowerShell/Bash entries, project-only caches/scratch/configuration, verified
+  source delta synchronization, and persistent JSON/Markdown reports.
+- Completed Python A22/A23 fixture ownership fixes, bounded logs/statistics,
+  workload readiness before fault timing, timeout/cancellation cleanup,
+  stale-run recovery and protection of foreign resources. The approved Python
+  dependencies are in both project environments; Ubuntu's approved .NET 10
+  SDK, .NET 8 runtime and NuGet references are project-local.
+- Fixed the C++ Pub/Sub failed-result access that caused native abort dialogs;
+  deliberately denied subscriptions now return unavailable/NOPERM and preserve
+  root use. Reviewed Go/Rust equivalents and the C ABI/Legacy/C# shared core.
+  Fixed Catalog post-promotion command readiness and Sentinel fixture timing.
+- Final regression `c57fedac5de9e92f`: Windows 26/26 and Ubuntu 26/26 pass,
+  including 23 framework checks and 16 CTest cases per platform, Go race on
+  Ubuntu, .NET 8/10, cross-language peers and plain/TLS Sentinel.
+- Final soak `e4df1e6a6b3db9f8`: 20/20 stages per platform; four Go workloads
+  each passed a 210-second Redis-time floor and six fault injections, with
+  zero residual keys. Windows measured zero durations are retained; update
+  sample counts are complete. This does not qualify hours of endurance.
+- Both campaigns used the same 424-file source fingerprint:
+  `947bf7925e4a9a510988452098b56e8be3fd938f162cc2a8c4eae47ba2420632`.
+  All 27 Python source files pass Black and Python 3.10 syntax checks.
+- Actual fixture-creator death, PowerShell 5.1 launcher death and conflicting
+  VM source edits have separate passing recovery/preservation checks. Final
+  inventories found no owned containers, fixture/scratch directories, pending
+  manifests or test processes; the audit Redis container was preserved.
+  Ubuntu ended with 6,662 MiB available and zero swap use.
+- Evidence: `testkit/results/unified-test-runner-20260908.json`,
+  `test-runner-review-20260908.md`, and the ignored campaign logs. Earlier
+  failures remain recorded. Dedicated Rust/C++/C# continuous workloads, mTLS,
+  direct C++ two-promotion peers, packaging/AOT and precise per-finding release
+  gates remain explicit; no commit or push was made.
+
+### 2026-09-08: Unify native build policy with thin PowerShell/Bash entries
+
+- Replaced the duplicated C++ entry implementations (1,042 PowerShell and
+  859 Bash lines) with `build.py` (386), `build_support.py` (199), and thin
+  PowerShell/Bash entries (50/21). The 656-line total includes comments and
+  blanks and excludes the preexisting shared SDK runner; that runner grew
+  from 40 to 45 lines for Unicode output handling.
+- Kept existing profiles, linkage choices, cache dimensions, OpenSSL
+  system/vcpkg/prebuilt-cache ordering, offline archive behavior and external
+  tool/OpenSSL preparation. CMake still owns targets and dependency builds.
+  Go/Rust retain native cache wrappers and C# retains dotnet.
+- Selected the user's existing uv-managed Python 3.14.7 on Windows; Ubuntu
+  uses its existing Python 3.14.4. Standard-library build/test code needs no
+  Python packages. With explicit approval, installed Black 26.5.1 and its
+  dependencies only in `build/tools/python-build`, using project pip/Black
+  caches; pinned the formatter in `sdk/cpp/requirements-dev.txt`.
+- Migrated the resolver regressions to 12 shared tests, including both
+  platform policies, malformed CLI input, failed configure short-circuiting,
+  child environment/cwd, argument forwarding and grandchild timeout cleanup.
+  Both platforms passed; PowerShell 5.1/7 and Bash passed real adapter checks,
+  including spaces, Unicode and trailing backslashes. Existing CMake early
+  install guards and package-boundary fixtures passed on both platforms.
+- The Unicode regression exposed the shared PowerShell stdout decoding
+  problem. Fixed it once for Go/Rust/C++ callers and verified Go cache paths,
+  Cargo offline metadata, and restoration of the original console encoding,
+  environment and cwd on both successful and failed C++ entry calls.
+- Windows/MSVC and Ubuntu/GCC each completed offline Debug shared configure,
+  build and 16/16 CTest cases, including live Redis/C ABI/Legacy tests. Native
+  builds used one job and the existing isolated Redis container. Black,
+  Python 3.10 syntax parsing and `git diff --check` passed. Linux test logs
+  were retrieved and all six changed build/test source hashes matched.
+- Evidence: `testkit/results/native-build-unification-20260908.json` and
+  `build/script-unification-20260908/`. This qualifies the tested Debug
+  configurations; Release/check, real Ninja/Clang builds and the older
+  deferred Python Redis/Sentinel fixture work are not claimed here.
+
+### 2026-09-07: Route Go/Rust caches through project-owned command entry points
+
+- Added `sdk/go/go.ps1`/`go.sh`, `sdk/rust/cargo.ps1`/`cargo.sh`, and a shared
+  PowerShell subprocess launcher. Cache paths remain under the ignored root
+  `build/`: Go modules in `deps/go/pkg/mod`, Go build/test cache in `cache/go`,
+  Cargo dependencies in `deps/cargo`, and Rust output in `rust/target`.
+- All settings are passed to the tool subprocess. The parent terminal's
+  environment and working directory, persistent user/machine settings, existing
+  toolchains, and shared caches remain unchanged. The final implementation has
+  no environment-activation scripts. Existing C++ cache rules remain intact.
+- Verified actual Go cache paths, offline `verdandi-refgen` tests, Cargo
+  toolchain reuse, and offline/no-dependency Cargo metadata targeting the
+  project directory. Windows PowerShell 5.1 and PowerShell 7.6.5 probes cover
+  argument boundaries (spaces, empty values, quotes, and backslashes), stdout/
+  stderr, nonzero exit status, and unchanged parent/user/machine settings.
+  JSON output also works through PowerShell pipelines. PowerShell files retain
+  UTF-8 BOMs for Windows PowerShell 5.1, matching the existing C++ entry point.
+- Bash syntax and actual Go/Cargo invocations passed under Windows Git Bash,
+  including nonzero status, rejected sourcing, and unchanged caller state.
+  Native Ubuntu execution was not repeated for this cache-only change.
+  `git check-ignore` confirms all cache locations are excluded. No dependency
+  download, tool installation, commit, or push occurred.
+- Plain `go`/`cargo` and IDE invocations bypass the project entry points and
+  retain their normal cache behavior. Existing Python harnesses still invoke
+  those plain commands; their migration remains deferred with Python changes.
+  Entry points choose cache locations and do not themselves authorize downloads.
+
+### 2026-09-07: Apply audited fixes and run available regressions
+
+- Applied source changes for A01-A21 and A24-A25, and corrected the Rust
+  Subscriber completion publication order described by R03. Cross-language
+  propagation and pending validation are recorded for every finding. A22/A23
+  Python source remains unchanged at the maintainer's instruction.
+- The independent C++ Release project passes 7/7 CTest targets, including real
+  SQLite query/fault handling, actual queue/pending/deadline implementations,
+  public-template transaction rollback, the Legacy C ABI fixture, and CMake
+  embedding/DLL-copy regressions. Actual catalog.cpp/selector.cpp and the C11
+  C ABI Redis test compile; this does not qualify full native linking.
+- Actual-source isolated Go Read, final-capacity and JSON boundary regressions
+  pass; copied production/test files match repository SHA-256. The complete
+  refgen package passes. Rust's actual error.rs UTF-8 regression passes as an
+  independent rustc test. Complete Go/Rust builds remain dependency-blocked.
+- C# library and test projects compile for net8.0 and net10.0 with zero warnings
+  or errors, using installed targeting packs and an offline configuration with
+  empty package sources. Native-dependent runtime tests remain pending.
+- After the maintainer disabled Hyper-V Dynamic Memory and restarted Ubuntu,
+  real Redis rejected the 65,537th Map field atomically, accepted the legal
+  boundary/overwrite, and returned a readable full value. Final PING is PONG,
+  DBSIZE is zero, only owned keys were cleaned, and the SSH tunnel was closed.
+- Formatting and generated Catalog Lua freshness pass. No software or
+  dependencies were downloaded in this repair work; no commit or push occurred.
+- Relative to the audit snapshot, runtime source grows by 151 physical lines
+  and tests by 974. Duplicate retry, guard and decode paths were simplified;
+  no unsupported net code-size or performance improvement is claimed.
+
+### 2026-09-06: Require externally prepared OpenSSL on Windows and Linux
+
+- The native wrappers now try system packages, local vcpkg installed triplets,
+  and extracted `build/deps/openssl/<platform>/x64` development packages.
+  A vcpkg executable alone no longer passes OpenSSL diagnostics. Missing or
+  incompatible candidates stop with package requirements and external-build
+  guidance; the agent downloaded/installed no software or dependencies.
+- Both SDK/probe CMake entry points disable manifest installation before
+  `project()`, including attempts to pass `VCPKG_MANIFEST_INSTALL=ON`.
+  Wrappers consume an existing install tree, with optional
+  `VCPKG_INSTALLED_DIR`, and no longer configure per-build vcpkg installs,
+  downloads, binary-cache restores, or app-local tool/deployment actions.
+- System/vcpkg/cache probes now use the selected Debug/Release profile.
+  Explicit package roots reject mixed-source headers/libraries. SQLite,
+  yyjson, and Boost keep existing source compilation; their downloads still
+  require specific prior approval. Build guidance and durable decisions match
+  this OpenSSL-only scope.
+- Fixed a related Bash failure path: when a probe function was called as an
+  `if` condition, implicit `errexit` could be suppressed, allowing a failed
+  configure to proceed to a successful build of an old tree. Explicit exit
+  checks now prevent that false success.
+- **Bug propagation review:** The vcpkg availability/implicit-install problem
+  affected both PowerShell and Bash plus direct native CMake. C ABI, Legacy,
+  and C# share that native configuration and inherit its guard, including the
+  C# Python Sentinel helper's direct CMake call. PowerShell already checked
+  configure exit status before building and was unaffected by the Bash
+  false-success bug. Go uses its own modules/TLS path; Rust selects rustls in
+  `Cargo.toml`; neither uses these native probes/vcpkg. Lua has no host build
+  resolver. Python testkit process helpers check subprocess status or raise;
+  no equivalent native configure/build probe was found. These are source
+  reviews, not new language-runtime qualification results.
+- **Verification:** PowerShell AST parsing, Git Bash `bash -n`, and
+  `git diff --check` passed. The standard-library-only
+  `sdk/cpp/tests/dependency_policy_test.py` passed 18 focused scenarios: six
+  provider scenarios and one failed-configure regression per shell, two early
+  CMake install guards, and two package-boundary scenarios. Test doubles do not
+  represent actual OpenSSL binaries. Generated artifacts are under ignored
+  `build/dependency-policy-test-20260906`.
+- **Real-host evidence/limits:** Windows `build.ps1 doctor -Offline` passed
+  the C++23 Debug compile/link probe, then exited 1 with the expected missing
+  OpenSSL development-package guidance. No full SDK/Redis tests ran. Bash
+  control-flow tests ran with installed Git Bash on Windows; no native Linux
+  environment or complete OpenSSL/vcpkg development package was available.
+  Black was unavailable and not installed; Python syntax and regression
+  execution were checked with the existing bundled Python.
+
+### 2026-09-05: Audit array bug propagation and fix Subscriber notification ordering
+
+- Cross-language review found a second C++ ordering defect: the notification
+  field decoder applied lexical order to Array Replace, rejecting valid
+  numeric sequences at index 10 and triggering generation recovery. C ABI,
+  Legacy, and C# inherit both native defects. The reviewed Go/Rust/Lua paths
+  distinguish the required orders; Python test inputs preserve list order.
+- Extracted the production MessagePack cursor and field reader into a private
+  standard-library module. Array Replace now validates consecutive canonical
+  numeric indices; Value/Map Replace and Array/Map Patch remain lexical.
+- The original field reader fails eight checks in the new regression; the
+  corrected reader passes strict MSVC Release and Debug /RTC1 runs. Both
+  standalone CMake Release CTest targets pass. Newly available local
+  clang-format 22.1.3 formats the eleven changed C++ files; no tool was installed.
+- Added the maintainer's mandatory every-fix language propagation review to
+  coding.md and codex.md. The detailed per-language review and testing gaps
+  are in optimization-review-20260905.md; current source fingerprints are in
+  testkit/results/catalog-array-propagation-20260905.json.
+- These are source and production field-reader checks, not full SDK,
+  Subscriber-envelope/recovery, Redis, binding, or Go/Rust runtime qualification.
+  No dependency download, package restore, commit, or push occurred.
+
+### 2026-09-05: Fix C++ Catalog array ordering and remove validation scratch allocation
+
+- Reproduced the original C++ validator accepting ten Array entries but
+  rejecting eleven and one hundred because it treated map lexical order as
+  numeric index order. Publisher, Subscriber, and checkpoint validation share
+  the affected helper; C ABI/Legacy/C# reach the same native core.
+- Isolated pure Catalog validation and Replace argument encoding in
+  `catalog_value.cpp`. Array completeness now follows canonical unique indices
+  in `[0,N)`, while Replace writes final argument slots in numeric order.
+  Successful value/Patch validation allocates no scratch vector, and Publisher
+  iteration no longer repeats name-based map searches.
+- Added direct shape, UTF-8, 4 MiB, 65,536-field, malformed-index, binary and
+  ownership tests, plus a dependency-free CMake test project and optional
+  microbenchmark. Extended the live native test to Array Replace/Patch and
+  checkpoint recovery; it was compiled but not executed in this task.
+- MSVC strict Release/Debug tests, the standalone CMake/CTest gate, affected
+  Publisher/C ABI/integration translation-unit checks, and both Lua freshness
+  checks pass. Seven alternating Windows benchmark pairs show successful
+  validation allocations falling from one to zero; the 512-field Map median
+  changes from 17.056 to 9.715 microseconds. These are local function measurements.
+- No dependencies were downloaded. Complete SDK/link/binding/live/Linux
+  qualification and clang-format/clang-tidy remain unexecuted because the
+  required local tools/dependencies are absent. An attempted Subscriber
+  translation-unit check stopped at missing `openssl/evp.h`.
+- Review: `optimization-review-20260905.md`; raw benchmark evidence:
+  `testkit/results/optimization-offline-20260905.json`. No commit or push.
 
 ### 2026-09-03: Re-optimize hot parsers and re-audit the complete Alpha tree
 
@@ -747,6 +2142,20 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   portability changes. At this checkpoint live Windows Redis/Sentinel TLS and
   automated packaging remained open; the later cross-platform TLS entry above
   closes the former. macOS is explicitly unsupported and is not a release gate.
+- Created no commit and performed no push.
+
+### 2026-09-09: Start the Rust Peer network skeleton
+
+- Added the independent `peer` crate with project-local Cargo wrappers and a locked Rust 1.85-compatible dependency graph. Tokio 1.53.1 and tokio-util 0.7.19 were resolved entirely from the existing project cache; no package was downloaded.
+- Named the executable target `verdandi` while retaining the `verdandi-peer` package and `verdandi_peer` library. Built the Windows Release executable offline, verified its help output, and passed strict Clippy and all three TCP tests with the renamed target.
+- Corrected the Peer Bash wrapper to enter its crate directory before forwarding Cargo arguments, verified Bash syntax and actual Cargo metadata under Git Bash, and confirmed its project-local cache paths. This is not a claim of a native Ubuntu build.
+- Added `proto/peer.proto` for server-side CoreEnvelope, Hello and finite ProtocolError messages, with Chinese comments, ASCII punctuation and a Proto clang-format configuration. Formatting passed using the existing Visual Studio tool. Protoc and Prost were not available in PATH/project caches; descriptor compilation, generated Rust types and runtime migration remain pending.
+- Recorded the Protobuf/FlatBuffers/Cap'n Proto tradeoffs in `proto/serialization-review-20260909.md`. Protobuf remains an engineering candidate without project-specific comparative benchmarks; no additional tools or libraries were downloaded.
+- Implemented bounded TCP listening, fixed-seed outbound supervisors, dial and Hello deadlines, per-process boot IDs, monotonic connection generations, per-Peer jittered exponential reconnect, global dial admission, bounded inbound sessions, diagnostic events, and joined shutdown.
+- Added a 4-byte-length-prefixed, 512-byte-bounded internal Hello that rejects protocol-major, cluster, peer-ID, self-connection, advertise, and frame-limit violations before a connection becomes verified. This bootstrap encoding is explicitly not the frozen Protobuf protocol.
+- Expanded the Rust module, API, field, and logical-block documentation in detailed Chinese with ASCII punctuation. The comments now explain ownership moves, `Arc`, child cancellation, `JoinSet`, semaphore permits, `select!`, nested `Result`, checked decoding, retry arithmetic, and the test flow; recorded the punctuation rule in `coding.md`.
+- Passed offline all-target compilation, strict Clippy with warnings denied, three real-localhost network tests covering connection, cluster rejection, delayed seed recovery and listener release, plus the executable help-path smoke check.
+- Automatic discovery, mirrored-session registry replacement, heartbeat, Protobuf, StateStore, OwnerPush, ReplicaRepair and SDK behavior remain outside this skeleton.
 - Created no commit and performed no push.
 
 ### 2026-09-01: Implement fixed-identity Sentinel TLS and C ABI capability discovery

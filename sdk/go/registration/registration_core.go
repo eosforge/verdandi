@@ -285,9 +285,6 @@ func (registration *registrationCore) Close(ctx context.Context) error {
 // validateBufferedUpdate 在修改邮箱前完成每个调用可独立判断的 Version、字段结构和值容量校验。
 // 完整记录大小与 revision 上限仍由 worker 在最终合并状态上验证。
 func (registration *registrationCore) validateBufferedUpdate(update registrationUpdateFields) error {
-	if update.Version == nil && len(update.Data) == 0 {
-		return protocolError(codeContract, "update", 0)
-	}
 	if update.Version != nil && (*update.Version == 0 || *update.Version > maxSafeInteger) {
 		return protocolError(codeInvalid, "@version", 0)
 	}
@@ -540,9 +537,6 @@ func (registration *registrationCore) complete() {
 // updateState 校验并写入一条 Version/Data 变化。
 // ctx 控制 Redis 调用；state 是唯一协程拥有的可变状态，失败时按确定/不确定结果分别处理。
 func (registration *registrationCore) updateState(ctx context.Context, state *registrationState, update registrationUpdateFields) error {
-	if update.Version == nil && len(update.Data) == 0 {
-		return protocolError(codeContract, "update", 0)
-	}
 	version := state.version
 	if update.Version != nil {
 		version = *update.Version

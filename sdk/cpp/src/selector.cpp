@@ -1,4 +1,8 @@
 #include "internal/selector.hpp"
+#include "internal/registration_pending.hpp"
+#include "internal/retry.hpp"
+#include "internal/selector_state.hpp"
+#include "verdandi/detail/utf8.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -12,8 +16,6 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <queue>
-#include <random>
 #include <ranges>
 #include <span>
 #include <string>
@@ -29,45 +31,10 @@ namespace verdandi::registration::detail {
 namespace {
 
 constexpr std::size_t max_event_bytes = 128ULL * 1'024ULL;
+// 存量记录按固定协议上限读取；管理员下调写入策略不应使有效旧记录失去可发现性。
+constexpr policy read_limits{128, 128, 64, 16 * 1024, 16 * 1024, 64 * 1024, std::chrono::seconds{30}};
 
-[[nodiscard]] bool valid_utf8(const std::string_view value) noexcept {
-    std::size_t index{};
-    while (index < value.size()) {
-        const auto lead = static_cast<unsigned char>(value[index++]);
-        if (lead <= 0x7fU) {
-            continue;
-        }
-        std::size_t continuation{};
-        std::uint32_t codepoint{};
-        if ((lead & 0xe0U) == 0xc0U) {
-            continuation = 1;
-            codepoint = lead & 0x1fU;
-        } else if ((lead & 0xf0U) == 0xe0U) {
-            continuation = 2;
-            codepoint = lead & 0x0fU;
-        } else if ((lead & 0xf8U) == 0xf0U) {
-            continuation = 3;
-            codepoint = lead & 0x07U;
-        } else {
-            return false;
-        }
-        if (continuation > value.size() - index) {
-            return false;
-        }
-        for (std::size_t count = 0; count < continuation; ++count) {
-            const auto next = static_cast<unsigned char>(value[index++]);
-            if ((next & 0xc0U) != 0x80U) {
-                return false;
-            }
-            codepoint = (codepoint << 6U) | (next & 0x3fU);
-        }
-        const auto minimum = continuation == 1 ? 0x80U : continuation == 2 ? 0x800U : 0x10000U;
-        if (codepoint < minimum || codepoint > 0x10ffffU || (codepoint >= 0xd800U && codepoint <= 0xdfffU)) {
-            return false;
-        }
-    }
-    return true;
-}
+using verdandi::detail::valid_utf8;
 
 [[nodiscard]] bool valid_uuid(const std::string_view value) noexcept {
     return value.size() == 32 &&
@@ -359,27 +326,6 @@ private:
     std::size_t offset_{};
 };
 
-enum class event_kind : std::uint8_t {
-    register_value,
-    update,
-    renew,
-    unregister,
-};
-
-struct registration_event {
-    event_kind kind{event_kind::register_value};
-    std::string uuid;
-    std::uint64_t revision{};
-    std::uint64_t base_revision{};
-    std::uint64_t timestamp{};
-    std::uint64_t ttl{};
-    std::uint64_t version{};
-    bool has_version{false};
-    fields attr;
-    fields data;
-    std::size_t size{};
-};
-
 /// 单遍解码受限 MessagePack 交替数组，并在分配应用字段前执行协议上限检查。
 [[nodiscard]] result<registration_event> decode_event(const std::string_view payload, const policy& limits) {
     if (payload.empty() || payload.size() > max_event_bytes) {
@@ -509,97 +455,6 @@ struct registration_event {
     return output;
 }
 
-class pending_events final {
-public:
-    pending_events(const std::size_t entry_limit, const std::size_t byte_limit) : entry_limit_(entry_limit), byte_limit_(byte_limit) {}
-
-    /// 按 UUID 合并连续 Update/Renew，保证高频单 Registration 不会线性占用同步缓存。
-    [[nodiscard]] result<void> add(registration_event value) {
-        const auto size = value.size;
-        auto [iterator, inserted] = values_.try_emplace(value.uuid);
-        if (inserted) {
-            if (values_.size() > entry_limit_) {
-                values_.erase(iterator);
-                return std::unexpected(error(code::capacity, "selector_pending"));
-            }
-        }
-        auto& sequence = iterator->second;
-        if (value.kind == event_kind::register_value || value.kind == event_kind::unregister) {
-            for (const auto& previous : sequence) {
-                bytes_ -= previous.size;
-            }
-            sequence.clear();
-            sequence.push_back(std::move(value));
-            bytes_ += size;
-        } else if (!sequence.empty() && merge(sequence.back(), value)) {
-            bytes_ -= sequence.back().size;
-            sequence.back().size = std::max(sequence.back().size, size);
-            bytes_ += sequence.back().size;
-        } else {
-            sequence.push_back(std::move(value));
-            bytes_ += size;
-        }
-        if (bytes_ > byte_limit_) {
-            return std::unexpected(error(code::capacity, "selector_pending"));
-        }
-        return {};
-    }
-
-    [[nodiscard]] std::vector<registration_event> drain() {
-        std::vector<registration_event> output;
-        for (auto& [uuid, sequence] : values_) {
-            static_cast<void>(uuid);
-            for (auto& value : sequence) {
-                output.push_back(std::move(value));
-            }
-        }
-        values_.clear();
-        bytes_ = 0;
-        return output;
-    }
-
-private:
-    [[nodiscard]] static bool merge(registration_event& current, const registration_event& next) {
-        if (next.kind == event_kind::renew && current.revision == next.revision &&
-            (current.kind == event_kind::register_value || current.kind == event_kind::update || current.kind == event_kind::renew)) {
-            current.timestamp = std::max(current.timestamp, next.timestamp);
-            return true;
-        }
-        if (next.kind != event_kind::update) {
-            return false;
-        }
-        if (current.kind == event_kind::register_value && next.revision > current.revision) {
-            for (const auto& [name, value] : next.data) {
-                current.data[name] = value;
-            }
-            current.revision = next.revision;
-            current.timestamp = next.timestamp;
-            if (next.has_version) {
-                current.version = next.version;
-            }
-            return true;
-        }
-        if (current.kind == event_kind::update && next.base_revision <= current.revision && next.revision > current.revision) {
-            for (const auto& [name, value] : next.data) {
-                current.data[name] = value;
-            }
-            current.revision = next.revision;
-            current.timestamp = next.timestamp;
-            if (next.has_version) {
-                current.version = next.version;
-                current.has_version = true;
-            }
-            return true;
-        }
-        return false;
-    }
-
-    std::map<std::string, std::vector<registration_event>, std::less<>> values_;
-    std::size_t entry_limit_;
-    std::size_t byte_limit_;
-    std::size_t bytes_{};
-};
-
 struct redis_clock {
     std::chrono::steady_clock::time_point anchor{};
     std::uint64_t upper{};
@@ -648,125 +503,6 @@ struct redis_clock {
         return std::unexpected(error(code::capacity, "redis_clock"));
     }
     return redis_clock{finished, server + margin_value};
-}
-
-struct deadline_entry {
-    std::uint64_t value{};
-    std::string uuid;
-
-    [[nodiscard]] bool operator>(const deadline_entry& other) const noexcept {
-        return value > other.value;
-    }
-};
-
-struct selector_state {
-    std::unordered_map<std::string, std::shared_ptr<const selector_record>> active;
-    std::unordered_map<std::string, retained_record> retained;
-    std::priority_queue<deadline_entry, std::vector<deadline_entry>, std::greater<>> active_deadlines;
-    std::priority_queue<deadline_entry, std::vector<deadline_entry>, std::greater<>> retained_deadlines;
-    std::size_t active_bytes{};
-    std::size_t retained_bytes{};
-};
-
-[[nodiscard]] std::shared_ptr<const selector_record> find_record(const selector_state& state, const std::string_view uuid) {
-    if (const auto active = state.active.find(std::string(uuid)); active != state.active.end()) {
-        return active->second;
-    }
-    if (const auto retained = state.retained.find(std::string(uuid)); retained != state.retained.end()) {
-        return retained->second.record;
-    }
-    return {};
-}
-
-void remove_retained(selector_state& state, const std::string_view uuid) {
-    const auto iterator = state.retained.find(std::string(uuid));
-    if (iterator == state.retained.end()) {
-        return;
-    }
-    state.retained_bytes -= iterator->second.record->size;
-    state.retained.erase(iterator);
-}
-
-void remove_record(selector_state& state, const std::string_view uuid) {
-    const auto iterator = state.active.find(std::string(uuid));
-    if (iterator != state.active.end()) {
-        state.active_bytes -= iterator->second->size;
-        state.active.erase(iterator);
-    }
-    remove_retained(state, uuid);
-}
-
-/// 安装活动记录并更新惰性截止堆；旧堆项由过期处理时丢弃。
-[[nodiscard]] result<void> set_active(selector_state& state, std::shared_ptr<const selector_record> record, const selector_configuration& configuration) {
-    std::size_t previous{};
-    if (const auto iterator = state.active.find(record->meta.uuid); iterator != state.active.end()) {
-        previous = iterator->second->size;
-    }
-    const auto next = state.active_bytes - previous + record->size;
-    if (next > configuration.max_active_bytes) {
-        return std::unexpected(error(code::capacity, "selector_view"));
-    }
-    remove_retained(state, record->meta.uuid);
-    state.active_bytes = next;
-    state.active.insert_or_assign(record->meta.uuid, record);
-    state.active_deadlines.push({record->deadline, record->meta.uuid});
-    return {};
-}
-
-/// 把记录移动到不可选择 retained 视图，并在超限时优先驱逐最早截止项。
-void set_retained(selector_state& state, const std::shared_ptr<const selector_record>& record, std::uint64_t until, const std::uint64_t now,
-                  const selector_configuration& configuration) {
-    if (const auto active = state.active.find(record->meta.uuid); active != state.active.end()) {
-        state.active_bytes -= active->second->size;
-        state.active.erase(active);
-    }
-    remove_retained(state, record->meta.uuid);
-    if (configuration.max_retained_bytes == 0 || until <= now) {
-        return;
-    }
-    state.retained.insert_or_assign(record->meta.uuid, retained_record{record, until});
-    state.retained_bytes += record->size;
-    state.retained_deadlines.push({until, record->meta.uuid});
-    while (state.retained_bytes > configuration.max_retained_bytes && !state.retained_deadlines.empty()) {
-        const auto earliest = state.retained_deadlines.top();
-        state.retained_deadlines.pop();
-        const auto iterator = state.retained.find(earliest.uuid);
-        if (iterator != state.retained.end() && iterator->second.until == earliest.value) {
-            state.retained_bytes -= iterator->second.record->size;
-            state.retained.erase(iterator);
-        }
-    }
-}
-
-void retain(selector_state& state, const std::shared_ptr<const selector_record>& record, const std::uint64_t now, const selector_configuration& configuration) {
-    const auto until = record->deadline > safe_integer_max - record->meta.ttl ? safe_integer_max : record->deadline + record->meta.ttl;
-    set_retained(state, record, until, now, configuration);
-}
-
-/// 驱动活动租约和 retained 第二截止；只处理仍与 Map 当前值匹配的惰性堆项。
-[[nodiscard]] bool expire(selector_state& state, const std::uint64_t now, const selector_configuration& configuration) {
-    bool changed{false};
-    while (!state.active_deadlines.empty() && state.active_deadlines.top().value <= now) {
-        const auto earliest = state.active_deadlines.top();
-        state.active_deadlines.pop();
-        const auto iterator = state.active.find(earliest.uuid);
-        if (iterator != state.active.end() && iterator->second->deadline == earliest.value) {
-            auto record = iterator->second;
-            retain(state, record, now, configuration);
-            changed = true;
-        }
-    }
-    while (!state.retained_deadlines.empty() && state.retained_deadlines.top().value <= now) {
-        const auto earliest = state.retained_deadlines.top();
-        state.retained_deadlines.pop();
-        const auto iterator = state.retained.find(earliest.uuid);
-        if (iterator != state.retained.end() && iterator->second.until == earliest.value) {
-            state.retained_bytes -= iterator->second.record->size;
-            state.retained.erase(iterator);
-            changed = true;
-        }
-    }
-    return changed;
 }
 
 [[nodiscard]] selector_state recovery_state(const selector_state& previous, const std::uint64_t now, const selector_configuration& configuration) {
@@ -834,6 +570,8 @@ void retain(selector_state& state, const std::shared_ptr<const selector_record>&
             }
             record->meta.version = *parsed;
             version_seen = true;
+        } else if (!name.empty() && name.front() == '@') {
+            continue;
         } else if (!name.empty() && name.front() == '.') {
             if (!record->attr.emplace(std::string(name.substr(1)), copy_bytes(value)).second) {
                 return std::unexpected(error(code::corrupt, std::string(name)));
@@ -888,9 +626,9 @@ struct fence_gate {
         changed.notify_all();
     }
 
-    [[nodiscard]] bool wait(const std::stop_token& stop, const std::uint64_t identifier) {
+    [[nodiscard]] bool wait(const std::stop_token& stop, const std::uint64_t identifier, const std::chrono::steady_clock::time_point deadline) {
         std::unique_lock lock(mutex);
-        return changed.wait(lock, stop, [&] { return observed >= identifier; });
+        return changed.wait_until(lock, stop, deadline, [&] { return observed >= identifier; });
     }
 };
 
@@ -902,14 +640,11 @@ struct sync_output {
 /// 临时任务执行完整 HSCAN + 分页 Pipeline HGETALL；它只构造私有快照，不修改监听任务状态。
 [[nodiscard]] result<sync_output> synchronize(const std::stop_token& stop, const std::shared_ptr<client_core>& owner, const selector_options& options,
                                               const projector& project, const selector_state& previous,
-                                              const std::shared_ptr<verdandi::detail::subscription>& subscription, const std::shared_ptr<fence_gate>& gate) {
+                                              const std::shared_ptr<verdandi::detail::subscription>& subscription, const std::shared_ptr<fence_gate>& gate,
+                                              const std::chrono::steady_clock::time_point deadline) {
     auto clock = calibrate_clock(owner);
     if (!clock) {
         return std::unexpected(clock.error());
-    }
-    const auto limits = owner->limits();
-    if (!limits) {
-        return std::unexpected(error(code::unavailable, "registration_policy"));
     }
     const auto& configuration = owner->configuration().selector;
     auto state = recovery_state(previous, clock->now(), configuration);
@@ -918,6 +653,9 @@ struct sync_output {
     do {
         if (stop.stop_requested()) {
             return std::unexpected(error(code::closed));
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return std::unexpected(error(code::deadline, "selector_sync"));
         }
         verdandi::detail::command scan("HSCAN");
         scan.add(registry).add(cursor).add("COUNT").add(static_cast<std::uint64_t>(configuration.scan_page_size));
@@ -955,7 +693,7 @@ struct sync_output {
                 return std::unexpected(records.error());
             }
             for (std::size_t index = 0; index < records->size(); ++index) {
-                auto record = parse_record(entries[index].first, (*records)[index], *limits, project);
+                auto record = parse_record(entries[index].first, (*records)[index], read_limits, project);
                 if (!record) {
                     return std::unexpected(record.error());
                 }
@@ -979,8 +717,8 @@ struct sync_output {
     if (!fence) {
         return std::unexpected(fence.error());
     }
-    if (!gate->wait(stop, *fence)) {
-        return std::unexpected(error(code::closed));
+    if (!gate->wait(stop, *fence, deadline)) {
+        return std::unexpected(error(stop.stop_requested() ? code::closed : code::deadline, "selector_sync"));
     }
     static_cast<void>(expire(state, clock->now(), configuration));
     return sync_output{std::move(state), *clock};
@@ -990,17 +728,20 @@ struct active_sync {
     std::shared_ptr<fence_gate> gate{std::make_shared<fence_gate>()};
     std::future<result<sync_output>> completed;
     std::jthread worker;
+    std::chrono::steady_clock::time_point deadline;
 };
 
 [[nodiscard]] std::unique_ptr<active_sync> start_sync(const std::shared_ptr<client_core>& owner, const selector_options& options, const projector& project,
                                                       const selector_state& previous, const std::shared_ptr<verdandi::detail::subscription>& subscription) {
     auto output = std::make_unique<active_sync>();
+    output->deadline = std::chrono::steady_clock::now() + owner->configuration().selector.sync_timeout;
     auto promise = std::make_shared<std::promise<result<sync_output>>>();
     output->completed = promise->get_future();
     const auto gate = output->gate;
-    output->worker = std::jthread([owner, options, project, previous, subscription, gate, promise](const std::stop_token& stop) {
+    const auto deadline = output->deadline;
+    output->worker = std::jthread([owner, options, project, previous, subscription, gate, promise, deadline](const std::stop_token& stop) {
         try {
-            promise->set_value(synchronize(stop, owner, options, project, previous, subscription, gate));
+            promise->set_value(synchronize(stop, owner, options, project, previous, subscription, gate, deadline));
         } catch (const std::exception& exception) {
             promise->set_value(std::unexpected(error(code::unavailable, "selector_sync").with_detail(exception.what())));
         } catch (...) {
@@ -1065,6 +806,9 @@ struct apply_result {
             (current->meta.version != (*next)->meta.version || current->meta.ttl != (*next)->meta.ttl || current->attr != (*next)->attr ||
              current->data != (*next)->data)) {
             return apply_result{false, true};
+        }
+        if (current && event.revision == current->meta.revision && event.timestamp <= current->meta.timestamp) {
+            return apply_result{};
         }
         if ((*next)->deadline <= clock.now()) {
             retain(state, *next, clock.now(), configuration);
@@ -1166,32 +910,6 @@ struct apply_result {
     return output;
 }
 
-[[nodiscard]] std::chrono::milliseconds retry_delay(const reconnect_configuration& configuration, const std::size_t failures) {
-    std::int64_t value = configuration.initial_delay.count();
-    for (std::size_t index = 0; index < failures && value < configuration.max_delay.count(); ++index) {
-        if (value > configuration.max_delay.count() / static_cast<std::int64_t>(configuration.multiplier)) {
-            value = configuration.max_delay.count();
-            break;
-        }
-        value *= configuration.multiplier;
-    }
-    value = std::min(value, configuration.max_delay.count());
-    const auto span = value * configuration.jitter_percent / 100;
-    if (span == 0) {
-        return std::chrono::milliseconds{value};
-    }
-    thread_local std::mt19937_64 generator(std::random_device{}());
-    std::uniform_int_distribution<std::int64_t> distribution(0, span);
-    return std::chrono::milliseconds{value - span + distribution(generator)};
-}
-
-[[nodiscard]] bool wait_stop(const std::stop_token& stop, const std::chrono::milliseconds delay) {
-    std::mutex mutex;
-    std::condition_variable_any changed;
-    std::unique_lock lock(mutex);
-    return !changed.wait_for(lock, stop, delay, [] { return false; });
-}
-
 } // namespace
 
 selector_core::selector_core(std::shared_ptr<client_core> owner, selector_options options, projector project)
@@ -1203,6 +921,10 @@ selector_core::~selector_core() {
 
 result<std::shared_ptr<selector_core>> selector_core::create(const std::shared_ptr<client_core>& owner, selector_options options, projector project) {
     if (!owner || !owner->open()) {
+        return std::unexpected(error(code::closed));
+    }
+    std::shared_lock admission(owner->operations());
+    if (!owner->open()) {
         return std::unexpected(error(code::closed));
     }
     if (!valid_type(options.type)) {
@@ -1304,7 +1026,7 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
             auto opened = owner_->transport()->subscribe({channel}, {}, owner_->configuration().selector.max_pending_entries + 16);
             if (!opened) {
                 report(opened.error());
-                if (!wait_stop(stop, retry_delay(owner_->configuration().selector.recovery, failures++))) {
+                if (!verdandi::detail::wait_stop(stop, verdandi::detail::retry_delay(owner_->configuration().selector.recovery, failures++))) {
                     break;
                 }
                 continue;
@@ -1328,7 +1050,7 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
             }
             if (!confirmed) {
                 static_cast<void>(subscription->close());
-                if (!wait_stop(stop, retry_delay(owner_->configuration().selector.recovery, failures++))) {
+                if (!verdandi::detail::wait_stop(stop, verdandi::detail::retry_delay(owner_->configuration().selector.recovery, failures++))) {
                     break;
                 }
                 continue;
@@ -1342,8 +1064,18 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
             auto clock_refresh = std::chrono::steady_clock::time_point::max();
             auto publish_at = std::chrono::steady_clock::time_point::max();
             bool dirty{false};
+            const auto mark_dirty = [&] {
+                dirty = true;
+                if (publish_at == std::chrono::steady_clock::time_point::max()) {
+                    publish_at = std::chrono::steady_clock::now() + owner_->configuration().selector.view_publish_interval;
+                }
+            };
 
             while (!stop.stop_requested() && owner_->open() && !generation_failed) {
+                if (synchronization && std::chrono::steady_clock::now() >= synchronization->deadline) {
+                    report(error(code::deadline, "selector_sync"));
+                    break;
+                }
                 if (synchronization && synchronization->completed.wait_for(std::chrono::milliseconds::zero()) == std::future_status::ready) {
                     auto result = synchronization->completed.get();
                     synchronization->worker.join();
@@ -1355,11 +1087,7 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
                     state = std::move(result->state);
                     clock = result->clock;
                     clock_valid = true;
-                    const auto limits = owner_->limits();
-                    if (!limits) {
-                        break;
-                    }
-                    auto applied = apply_events(state, pending.drain(), *limits, project_, clock, owner_->configuration().selector);
+                    auto applied = apply_events(state, pending.drain(), read_limits, project_, clock, owner_->configuration().selector);
                     if (!applied) {
                         report(applied.error());
                         break;
@@ -1388,10 +1116,9 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
                     }
                     clock = *calibrated;
                     clock_refresh = now + owner_->configuration().selector.clock_refresh_interval;
-                    dirty = expire(state, clock.now(), owner_->configuration().selector) || dirty;
                 }
-                if (synchronized && clock_valid) {
-                    dirty = expire(state, clock.now(), owner_->configuration().selector) || dirty;
+                if (synchronized && clock_valid && expire(state, clock.now(), owner_->configuration().selector)) {
+                    mark_dirty();
                 }
                 if (dirty && (owner_->configuration().selector.view_publish_interval == std::chrono::milliseconds::zero() || now >= publish_at)) {
                     view_.store(make_view(state, generation, true), std::memory_order_release);
@@ -1402,9 +1129,7 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
                 auto item = subscription->next(stop, synchronization ? std::chrono::milliseconds{10} : std::chrono::milliseconds{50});
                 switch (item.type) {
                 case verdandi::detail::subscription_item::kind::message: {
-                    const auto limits = owner_->limits();
-                    auto event = limits ? decode_event(item.payload, *limits)
-                                        : result<registration_event>(std::unexpected(error(code::unavailable, "registration_policy")));
+                    auto event = decode_event(item.payload, read_limits);
                     if (!event) {
                         report(event.error());
                         generation_failed = true;
@@ -1417,7 +1142,7 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
                         }
                         break;
                     }
-                    auto applied = apply_event(state, *event, *limits, project_, clock, owner_->configuration().selector);
+                    auto applied = apply_event(state, *event, read_limits, project_, clock, owner_->configuration().selector);
                     if (!applied) {
                         report(applied.error());
                         generation_failed = true;
@@ -1433,10 +1158,7 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
                         }
                         synchronization = start_sync(owner_, options_, project_, state, subscription);
                     } else if (applied->changed) {
-                        dirty = true;
-                        if (publish_at == std::chrono::steady_clock::time_point::max()) {
-                            publish_at = std::chrono::steady_clock::now() + owner_->configuration().selector.view_publish_interval;
-                        }
+                        mark_dirty();
                     }
                     break;
                 }
@@ -1472,7 +1194,8 @@ void selector_core::run(const std::stop_token& stop, const std::shared_ptr<std::
                 static_cast<void>(expire(state, clock.now(), owner_->configuration().selector));
             }
             view_.store(make_view(state, generation, false), std::memory_order_release);
-            if (!stop.stop_requested() && owner_->open() && !wait_stop(stop, retry_delay(owner_->configuration().selector.recovery, failures++))) {
+            if (!stop.stop_requested() && owner_->open() &&
+                !verdandi::detail::wait_stop(stop, verdandi::detail::retry_delay(owner_->configuration().selector.recovery, failures++))) {
                 break;
             }
         }

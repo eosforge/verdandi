@@ -116,47 +116,65 @@ impl Publisher {
                 Code::Unavailable,
             )
             .await?;
-        let Value::Array(values) = value else {
-            return Err(Error::field(Code::Corrupt, "catalog_header"));
-        };
-        if values.len() != 3 + fields.len() || values[..3].iter().any(Value::is_null) {
-            return Err(Error::field(Code::Corrupt, "catalog_header"));
-        }
-        let mut values = values.into_iter();
-        let revision = parse_revision(values.next().ok_or_else(|| Error::field(Code::Corrupt, "catalog_header"))?, false)?;
-        if revision != base_revision {
-            return Err(Error::field(Code::Stale, "@base_revision").with_revision(revision));
-        }
-        let kind = Kind::parse(&value_string(values.next().ok_or_else(|| Error::field(Code::Corrupt, "catalog_header"))?)?)
-            .ok_or_else(|| Error::field(Code::Corrupt, "@kind"))?;
-        if kind == Kind::Value {
-            return Err(Error::field(Code::Transition, "@kind").with_revision(revision));
-        }
-        let bytes_text = value_string(values.next().ok_or_else(|| Error::field(Code::Corrupt, "catalog_header"))?)?;
-        // HMGET 的后三项与 BTreeMap 字段顺序一致，可单遍用旧值长度计算精确增量。
-        let mut projected = canonical_usize(&bytes_text, self.maximum_bytes(), "@encoded_bytes")?;
-        for ((name, replacement), previous) in fields.iter().zip(values) {
-            if previous.is_null() {
-                if kind == Kind::Array {
-                    return Err(Error::field(Code::Transition, name).with_revision(revision));
-                }
-                projected = projected
-                    .checked_add(name.len())
-                    .and_then(|value| value.checked_add(replacement.len()))
-                    .ok_or_else(|| Error::field(Code::Capacity, "value"))?;
-            } else {
-                let previous = previous.into_owned_bytes().ok_or_else(|| Error::field(Code::Corrupt, name))?;
-                projected = projected
-                    .checked_sub(previous.len())
-                    .and_then(|value| value.checked_add(replacement.len()))
-                    .ok_or_else(|| Error::field(Code::Capacity, "value"))?;
-            }
-            if projected > self.maximum_bytes() {
-                return Err(Error::field(Code::Capacity, "value").with_revision(revision));
-            }
-        }
-        Ok(projected)
+        project_patch_reply(value, base_revision, fields, self.maximum_bytes())
     }
+}
+
+/// 在无 I/O 的回复校验中汇总所有字段增减，容量判断与遍历顺序无关。
+fn project_patch_reply(value: Value, base_revision: u64, fields: &Fields, maximum_bytes: usize) -> Result<usize> {
+    let Value::Array(values) = value else {
+        return Err(Error::field(Code::Corrupt, "catalog_header"));
+    };
+    if values.len() != 3 + fields.len() {
+        return Err(Error::field(Code::Corrupt, "catalog_header"));
+    }
+    if values.iter().all(Value::is_null) {
+        return Err(Error::field(Code::Stale, "@base_revision"));
+    }
+    if values[..3].iter().any(Value::is_null) {
+        return Err(Error::field(Code::Corrupt, "catalog_header"));
+    }
+    let mut values = values.into_iter();
+    let revision = parse_revision(values.next().ok_or_else(|| Error::field(Code::Corrupt, "catalog_header"))?, false)?;
+    if revision != base_revision {
+        return Err(Error::field(Code::Stale, "@base_revision").with_revision(revision));
+    }
+    let kind = Kind::parse(&value_string(values.next().ok_or_else(|| Error::field(Code::Corrupt, "catalog_header"))?)?)
+        .ok_or_else(|| Error::field(Code::Corrupt, "@kind"))?;
+    if kind == Kind::Value {
+        return Err(Error::field(Code::Transition, "@kind").with_revision(revision));
+    }
+    let bytes_text = value_string(values.next().ok_or_else(|| Error::field(Code::Corrupt, "catalog_header"))?)?;
+    // HMGET 的后三项与 BTreeMap 字段顺序一致，可单遍用旧值长度计算精确增量。
+    let original = canonical_usize(&bytes_text, maximum_bytes, "@encoded_bytes")?;
+    let (mut added, mut removed) = (0_usize, 0_usize);
+    for ((name, replacement), previous) in fields.iter().zip(values) {
+        if previous.is_null() {
+            if kind == Kind::Array {
+                return Err(Error::field(Code::Transition, name).with_revision(revision));
+            }
+            added = added
+                .checked_add(name.len())
+                .and_then(|value| value.checked_add(replacement.len()))
+                .ok_or_else(|| Error::field(Code::Capacity, "value"))?;
+        } else {
+            let previous = crate::redis::reply_bytes(previous).ok_or_else(|| Error::field(Code::Corrupt, name))?;
+            removed = removed
+                .checked_add(previous.len())
+                .ok_or_else(|| Error::field(Code::Corrupt, "@encoded_bytes"))?;
+            added = added.checked_add(replacement.len()).ok_or_else(|| Error::field(Code::Capacity, "value"))?;
+        }
+    }
+    // 字段容量只判断最终完整状态；先增长的字段可由同一 Patch 的缩减抵消。
+    let projected = original
+        .checked_sub(removed)
+        .ok_or_else(|| Error::field(Code::Corrupt, "@encoded_bytes"))?
+        .checked_add(added)
+        .ok_or_else(|| Error::field(Code::Capacity, "value"))?;
+    if projected > maximum_bytes {
+        return Err(Error::field(Code::Capacity, "value").with_revision(revision));
+    }
+    Ok(projected)
 }
 
 /// 按 `names` 的规范顺序把 `fields` 追加为交替名称/二进制值 Lua 参数。
@@ -185,3 +203,7 @@ fn canonical_names(kind: Kind, fields: &Fields) -> Vec<&str> {
         fields.keys().map(String::as_str).collect()
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/internal/catalog/publisher.rs"]
+mod tests;

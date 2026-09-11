@@ -1,0 +1,33 @@
+[package]
+name = "verdandi-planet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "planet"
+path = "src/main.rs"
+
+[dependencies]
+verdandi-peer-common.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tonic.workspace = true
+tokio-stream.workspace = true
+hyper-util.workspace = true
+tower.workspace = true
+verdandi-peer = { path = "../star" }
+prost.workspace = true
+ring.workspace = true
+rustls.workspace = true
+rustls-pemfile.workspace = true
+tokio-rustls.workspace = true
+
+[lints]
+workspace = true

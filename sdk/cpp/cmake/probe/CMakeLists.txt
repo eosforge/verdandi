@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
+set(VCPKG_MANIFEST_INSTALL OFF CACHE BOOL "Probe existing packages without installing them" FORCE)
+
 project(verdandi_build_probe LANGUAGES CXX)
 
 # 构建工具先用不带 OpenSSL 的模式确认编译器确实具备 Verdandi 所需的
@@ -16,7 +18,7 @@ if(MSVC)
 endif()
 
 if(VERDANDI_PROBE_OPENSSL)
-    find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto SSL)
+    include("${CMAKE_CURRENT_LIST_DIR}/../OpenSSL.cmake")
     target_compile_definitions(verdandi_build_probe PRIVATE VERDANDI_PROBE_OPENSSL=1)
     target_link_libraries(verdandi_build_probe PRIVATE OpenSSL::Crypto OpenSSL::SSL)
 endif()

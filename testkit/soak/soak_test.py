@@ -12,6 +12,7 @@ independent Sentinel fault matrix.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -33,6 +34,10 @@ import redis
 REPOSITORY = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY))
 
+from testkit.resources import Resources
+from testkit.support import run_command, environment as project_environment
+from collections import deque
+
 from testkit.sentinel.sentinel_test import (  # noqa: E402
     QualificationError,
     Remote,
@@ -48,7 +53,8 @@ class Fixture:
         self.run_id = run_id
         self.port = port
         self.name = f"verdandi-soak-{run_id}"
-        self.directory = f"/tmp/verdandi-soak-{run_id}"
+        self.directory = f"{remote.project}/build/testkit/fixtures/soak-{run_id}"
+        self.resources = Resources(remote, run_id)
         self.password = secrets.token_hex(24)
         self.created = False
         self.directory_created = False
@@ -63,17 +69,22 @@ class Fixture:
         existing = set(self.remote.run("docker ps -a --format '{{.Names}}'").splitlines())
         if self.name in existing:
             raise QualificationError(f"container collision: {self.name}")
-        self.remote.run(
-            "set -eu; "
-            f"test ! -e {shlex.quote(self.directory)}; "
-            f"install -d -m 0777 {shlex.quote(self.directory)}; "
-            f"printf %s {shlex.quote(self.run_id)} > "
-            f"{shlex.quote(self.directory + '/owner')}"
-        )
+        self.resources.directory(self.directory)
         self.directory_created = True
+        self.resources.container(self.name)
         command = [
             "docker",
             "run",
+            "--pull",
+            "never",
+            "--memory",
+            "512m",
+            "--memory-swap",
+            "512m",
+            "--cpus",
+            "1",
+            "--pids-limit",
+            "128",
             "-d",
             "--name",
             self.name,
@@ -146,34 +157,7 @@ class Fixture:
         self.wait_ready(15)
 
     def cleanup(self) -> None:
-        if not self.created and not self.directory_created:
-            return
-        label = self.remote.run(
-            "docker inspect -f " + shlex.quote('{{index .Config.Labels "verdandi.test"}}') + " " + shlex.quote(self.name),
-            check=False,
-        ).strip()
-        if label and label != self.run_id:
-            raise QualificationError(f"refusing to remove {self.name}: ownership label is {label!r}")
-        if label == self.run_id:
-            self.remote.run(f"docker rm -f {shlex.quote(self.name)}")
-        directory = shlex.quote(self.directory)
-        owner = shlex.quote(self.directory + "/owner")
-        self.remote.run(
-            "set -eu; "
-            f"if test -e {directory}; then "
-            f'test "$(cat {owner})" = {shlex.quote(self.run_id)}; '
-            "docker run --rm "
-            f"--mount type=bind,src={directory},dst=/cleanup "
-            "redis:8.8.0 sh -c " + shlex.quote("find /cleanup -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +") + "; "
-            f"rmdir {directory}; fi"
-        )
-        self.created = False
-        self.directory_created = False
-        deadline = time.monotonic() + 10
-        while port_open(self.remote.host, self.port) and time.monotonic() < deadline:
-            time.sleep(0.1)
-        if port_open(self.remote.host, self.port):
-            raise QualificationError(f"test listener remains on port {self.port}")
+        self.resources.cleanup()
 
 
 @dataclass(frozen=True)
@@ -194,7 +178,7 @@ class RedisMonitor:
         self.started = started
         self.interval = interval
         self.sample_file = sample_file
-        self.samples: list[dict[str, Any]] = []
+        self.samples = deque(maxlen=20000)
         self.failures: list[dict[str, Any]] = []
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="redis-monitor")
@@ -207,6 +191,8 @@ class RedisMonitor:
 
     def stop(self) -> None:
         self._stop.set()
+        if self._thread.ident is None:
+            return
         self._thread.join(timeout=max(10, self.interval * 2))
         if self._thread.is_alive():
             raise QualificationError("Redis monitor did not stop")
@@ -311,8 +297,17 @@ class FaultInjector:
     def start(self) -> None:
         self._thread.start()
 
+    def observe(self, line: str) -> None:
+        if line.rstrip().endswith("VERDANDI_SOAK_READY"):
+            if self._thread.ident is not None:
+                raise QualificationError("soak workload announced readiness twice")
+            self.started = time.monotonic()
+            self.start()
+
     def stop(self) -> None:
         self._stop.set()
+        if self._thread.ident is None:
+            return
         self._thread.join(timeout=45)
         if self._thread.is_alive():
             raise QualificationError("fault injector did not stop")
@@ -387,7 +382,7 @@ class FaultInjector:
 
 
 def build_faults(duration: int) -> list[Fault]:
-    if duration < 600:
+    if duration < 7200:
         points = (
             (0.15, "script_flush"),
             (0.28, "kill_pubsub"),
@@ -399,13 +394,13 @@ def build_faults(duration: int) -> list[Fault]:
         return [Fault(max(5, duration * ratio), kind) for ratio, kind in points]
 
     reserved: list[Fault] = []
-    for second in (1_200, 3_000, 4_800, 6_600):
+    for second in range(1_200, duration - 120, 1_800):
         if second < duration - 120:
             reserved.append(Fault(second, "pause"))
-    for second in (1_800, 3_600, 5_400):
+    for second in range(1_800, duration - 120, 1_800):
         if second < duration - 120:
             reserved.append(Fault(second, "restart"))
-    for second in (2_700, 6_300):
+    for second in range(2_700, duration - 120, 3_600):
         if second < duration - 120:
             reserved.append(Fault(second, "kill_normal"))
     for second in range(750, duration - 120, 600):
@@ -418,46 +413,8 @@ def build_faults(duration: int) -> list[Fault]:
     return sorted(reserved, key=lambda fault: fault.at_seconds)
 
 
-def run_streamed(
-    name: str,
-    command: list[str],
-    directory: Path,
-    environment: dict[str, str],
-) -> dict[str, Any]:
-    print(f"\n=== {name} ===", flush=True)
-    started = time.monotonic()
-    process = subprocess.Popen(
-        command,
-        cwd=directory,
-        env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-    )
-    output: list[str] = []
-    assert process.stdout is not None
-    for line in process.stdout:
-        # WSL may emit a localized UTF-16LE networking warning through a pipe
-        # opened as UTF-8. It contains NULs and is unrelated to the child test.
-        if "\x00" in line:
-            continue
-        console_encoding = sys.stdout.encoding or "utf-8"
-        printable = line.encode(console_encoding, errors="replace").decode(console_encoding)
-        print(printable, end="", flush=True)
-        output.append(printable)
-    status = process.wait()
-    combined = "".join(output)
-    if status != 0:
-        raise QualificationError(f"{name} exited with status {status}; output tail:\n" + combined[-16_384:])
-    return {
-        "name": name,
-        "status": "pass",
-        "elapsed_seconds": round(time.monotonic() - started, 3),
-        "output": combined.strip(),
-    }
+def run_streamed(name, command, directory, environment):
+    return run_command(name, command, directory, environment, timeout=int(environment.get("VERDANDI_SOAK_SECONDS", "0")) + 3600)
 
 
 def run_go_soak(
@@ -465,6 +422,7 @@ def run_go_soak(
     duration: int,
     fanout: int,
     lifecycle_interval: str,
+    injector: FaultInjector,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     environment = os.environ.copy()
     environment.update(
@@ -488,40 +446,7 @@ def run_go_soak(
         "-v",
         "./registration",
     ]
-    if os.name == "nt":
-        forwarded = {
-            name: environment[name]
-            for name in (
-                "VERDANDI_REDIS_URL",
-                "VERDANDI_SOAK_SECONDS",
-                "VERDANDI_SELECTOR_FANOUT",
-                "VERDANDI_SOAK_LIFECYCLE_INTERVAL",
-            )
-        }
-        script = "env " + " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
-        script += " " + " ".join(map(shlex.quote, command))
-        invocation = [
-            "wsl.exe",
-            "--cd",
-            str(REPOSITORY / "sdk" / "go"),
-            "--",
-            "bash",
-            "-lc",
-            script,
-        ]
-        result = run_streamed(
-            "Go Registration/Selector soak (WSL/Linux)",
-            invocation,
-            REPOSITORY,
-            os.environ.copy(),
-        )
-    else:
-        result = run_streamed(
-            "Go Registration/Selector soak (Linux)",
-            command,
-            REPOSITORY / "sdk" / "go",
-            environment,
-        )
+    result = run_command("Go Registration/Selector soak", command, REPOSITORY / "sdk/go", environment, timeout=duration + 3600, on_output=injector.observe)
     matches = re.findall(r"SOAK_RESULT (\{.*\})", result["output"])
     if len(matches) != 1:
         raise QualificationError(f"Go soak emitted {len(matches)} structured results, want one")
@@ -677,11 +602,7 @@ def source_fingerprint() -> dict[str, Any]:
     )
     go_root = REPOSITORY / "sdk" / "go"
     files = [go_root / "go.mod", go_root / "go.sum"]
-    files.extend(
-        path
-        for path in go_root.glob("*.go")
-        if path.is_file() and not path.name.endswith("_test.go")
-    )
+    files.extend(path for path in go_root.glob("*.go") if path.is_file() and not path.name.endswith("_test.go"))
     files.extend(REPOSITORY / "sdk" / "rust" / name for name in rust_sources)
     files.extend(
         (
@@ -743,7 +664,7 @@ def write_result(options: argparse.Namespace, result: dict[str, Any]) -> None:
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="192.168.0.90")
+    parser.add_argument("--host", default="192.168.0.119")
     parser.add_argument("--ssh-user", default="ubuntu")
     parser.add_argument("--port", type=int, default=16380)
     parser.add_argument("--duration-seconds", type=int, default=7_200)
@@ -827,12 +748,12 @@ def main() -> int:
             build_faults(options.minimum_redis_seconds),
         )
         monitor.start()
-        injector.start()
         go_suite, go_result = run_go_soak(
             fixture,
             options.duration_seconds,
             options.selector_fanout,
             options.lifecycle_interval,
+            injector,
         )
         injector.stop()
         final_soak_sample = monitor.sample_now()
@@ -897,7 +818,7 @@ def main() -> int:
             "go_suite": go_suite,
             "go_result": go_result,
             "faults": fault_results,
-            "redis_samples": monitor.samples,
+            "redis_samples": list(monitor.samples),
             "redis_sample_failures": monitor.failures,
             "redis_sample_file": (
                 str(sample_file.relative_to(REPOSITORY))
@@ -927,7 +848,7 @@ def main() -> int:
         serialized = json.dumps(result, indent=2, sort_keys=True)
         print(serialized)
         return 0
-    except Exception as error:
+    except (Exception, KeyboardInterrupt) as error:
         if result is None:
             result = {
                 "status": "failed",
@@ -945,17 +866,20 @@ def main() -> int:
             result["status"] = "standalone_pass_postcheck_failed"
             result["failure"] = str(error)
             result["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        if isinstance(error, KeyboardInterrupt):
+            result["status"] = "interrupted"
         write_result(options, result)
         print(f"FAIL: {error}", file=sys.stderr)
-        return 1
+        return 130 if isinstance(error, KeyboardInterrupt) else 1
     finally:
-        if injector is not None:
-            injector.stop()
-        if monitor is not None:
-            monitor.stop()
-        if not options.keep_container:
-            fixture.cleanup()
-        remote.close()
+        with ExitStack() as cleanup:
+            cleanup.callback(remote.close)
+            if not options.keep_container:
+                cleanup.callback(fixture.cleanup)
+            if monitor is not None:
+                cleanup.callback(monitor.stop)
+            if injector is not None:
+                cleanup.callback(injector.stop)
 
 
 if __name__ == "__main__":

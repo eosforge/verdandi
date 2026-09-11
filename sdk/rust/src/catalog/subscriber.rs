@@ -48,6 +48,7 @@ struct SubscriberInner {
     done: Notify,
     guard: Mutex<Option<ActiveGuard>>,
     closed: AtomicBool,
+    connection: crate::client::ConnectionTask,
 }
 
 #[derive(Default)]
@@ -101,7 +102,8 @@ impl Subscriber {
         let pubsub = client.inner.subscriber(client.inner.config.event_buffer_capacity)?;
         let mut messages = pubsub.message_rx();
         let mut reconnects = pubsub.reconnect_rx();
-        tokio::time::timeout(client.inner.config.timeout, pubsub.init())
+        let connection = crate::client::ConnectionTask::start(&pubsub);
+        tokio::time::timeout(client.inner.config.timeout, pubsub.wait_for_connect())
             .await
             .map_err(|error| Error::driver(Code::Deadline, error))?
             .map_err(|error| Error::driver(Code::Unavailable, error))?;
@@ -140,8 +142,10 @@ impl Subscriber {
             done: Notify::new(),
             guard: Mutex::new(Some(guard)),
             closed: AtomicBool::new(false),
+            connection,
         });
         // 检查点只提供陈旧起点，恢复的 Entry 统一标记为 Synchronizing 后再与 Redis 对齐。
+        let cancel_on_drop = inner.cancel.clone().drop_guard();
         inner.restore().await;
         for path in &inner.subscription.paths {
             let _ = inner.entry(path, Status::Synchronizing);
@@ -159,7 +163,10 @@ impl Subscriber {
         // 通过普通合并队列请求初始同步，使初始化与运行期修复遵循同一状态机。
         let result = tokio::time::timeout(inner.client.config.sync_timeout, receiver).await;
         match result {
-            Ok(Ok(Ok(()))) => Ok(Self { inner }),
+            Ok(Ok(Ok(()))) => {
+                cancel_on_drop.disarm();
+                Ok(Self { inner })
+            }
             Ok(Ok(Err(error))) => {
                 inner.cancel.cancel();
                 inner.wait_finished().await;
@@ -274,6 +281,12 @@ impl SubscriberInner {
             return entry.clone();
         }
         let mut entries = write_lock(&self.entries);
+        // 最终扫描先发布 Closed；在同一 entries 锁内复核，避免迟到 Find 创建开放状态。
+        let status = if self.scope_status.load(Ordering::Acquire) == status_byte(Status::Closed) {
+            Status::Closed
+        } else {
+            status
+        };
         entries.entry(path.clone()).or_insert_with(|| Entry::new(path.clone(), status)).clone()
     }
 
@@ -319,6 +332,7 @@ impl SubscriberInner {
             }
         }
         let _ = tokio::time::timeout(self.client.config.timeout, self.pubsub.quit()).await;
+        self.connection.close().await;
     }
 
     /// 非阻塞排空 `messages` 当前已排队的所有通知。
@@ -386,7 +400,7 @@ impl SubscriberInner {
             self.request_scope(false, None);
             return;
         }
-        let Some(payload) = message.value.into_owned_bytes() else {
+        let Some(payload) = crate::redis::reply_bytes(message.value) else {
             self.report(Error::field(Code::Corrupt, "notification"));
             self.request_path(path, None);
             return;
@@ -703,9 +717,10 @@ impl SubscriberInner {
         }
         let mut pending = self.drain_pending();
         notify_waiters(&mut pending.waiters, Err(Error::new(Code::Closed)));
-        self.closed.store(true, Ordering::Release);
         self.mark_scope(Status::Closed);
         mutex_lock(&self.guard).take();
+        // 完成标记必须晚于全部收尾；计数归零本身不表示 Client Guard 已释放。
+        self.closed.store(true, Ordering::Release);
         self.done.notify_waiters();
     }
 
@@ -713,11 +728,11 @@ impl SubscriberInner {
     ///
     /// Notify 在复查前启用，避免最后任务完成与 waiter 注册之间丢失唤醒。
     async fn wait_finished(&self) {
-        while self.workers.load(Ordering::Acquire) != 0 {
+        while !self.closed.load(Ordering::Acquire) {
             let notified = self.done.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            if self.workers.load(Ordering::Acquire) == 0 {
+            if self.closed.load(Ordering::Acquire) {
                 break;
             }
             notified.await;

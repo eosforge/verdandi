@@ -1,0 +1,20 @@
+{
+  "schema": "verdandi.transport.cleanup.v1",
+  "checked_at": "2026-09-10T14:18:59.129864+00:00",
+  "windows": {
+    "probe_processes": [],
+    "removed_stale_directories": [
+      "transport-measure-7aa629510355e064"
+    ],
+    "remaining_temporary_directories": []
+  },
+  "linux": {
+    "probe_processes": [],
+    "removed_stale_directories": [],
+    "remaining_temporary_directories": []
+  },
+  "notes": [
+    "Only transport-prefixed, ownership-verified, unlocked project temporary directories were removed.",
+    "Retained lock marker files, caches, binaries and raw reports; no global cleanup."
+  ]
+}

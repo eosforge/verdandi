@@ -502,8 +502,7 @@ def main() -> None:
 
     redis_version = client.info("server")["redis_version"]
     print(
-        "PASS Catalog Hash/ZSET revision, exact-base contention, 4-MiB ceiling, Replace/Patch/Delete, "
-        f"Pub/Sub, floor, and 2^53-1 on Redis {redis_version}"
+        "PASS Catalog Hash/ZSET revision, exact-base contention, 4-MiB ceiling, Replace/Patch/Delete, " f"Pub/Sub, floor, and 2^53-1 on Redis {redis_version}"
     )
 
 

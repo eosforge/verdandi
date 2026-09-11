@@ -83,6 +83,23 @@ async fn typed_registration_and_transactional_selector() -> Result<(), Box<dyn S
     };
     let client = RegistrationClient::open(&transport, registration_config).await?;
 
+    let empty = FieldsRegistration::new(
+        &client,
+        RegistrationOptions {
+            type_name: "Empty".to_owned(),
+            ttl: Duration::from_secs(15),
+            renew_interval: Some(Duration::from_secs(5)),
+            version: 1,
+        },
+    )?;
+    empty.register(&Fields::new(), &Fields::new()).await?;
+    let empty_counters = (empty.revision(), empty.timestamp());
+    empty.update(&Fields::new()).await?;
+    assert_eq!((empty.revision(), empty.timestamp()), empty_counters);
+    empty.close().await?;
+    assert!(matches!(empty.update(&Fields::new()).await, Err(error) if error.code() == Code::Closed));
+    let _: i64 = redis.del(format!("verdandi:registry:{zone}:Empty")).await?;
+
     let registration = Registration::<ProxyAttr, ProxyData>::new(
         &client,
         RegistrationOptions {

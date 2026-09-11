@@ -1,0 +1,86 @@
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { createHorizonMaterial } from "./materials/blackHole.ts";
+import { createBendingTexture, createImageBoundsTexture, createObserverTexture } from "./materials/blackHoleOptics.ts";
+import { createPlasmaTexture } from "./materials/blackHoleTexture.ts";
+import type { ResourceScope } from "./resourceScope.ts";
+import type { GalaxyData } from "../model/types.ts";
+
+export type CelestialModelKind = "blackHole" | "star" | "planet";
+export type CelestialModels = Partial<Record<CelestialModelKind, THREE.Group>>;
+
+// 解码自有且无外部引用的 GLB, 共享几何与材质归调用者作用域; 失败上抛由场景统一回滚.
+export async function parseCelestialModel(bytes: ArrayBuffer, kind: CelestialModelKind, scope: ResourceScope): Promise<THREE.Group> {
+  const { scene } = await new GLTFLoader().parseAsync(bytes, "");
+  const resources = new Set<THREE.BufferGeometry | THREE.Material>();
+  scene.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    resources.add(object.geometry);
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      resources.add(material);
+      if (material.transparent) material.depthWrite = false;
+    }
+  });
+  for (const resource of resources) scope.own(resource);
+  const required = kind === "blackHole" ? ["Core", "Horizon", "Disc", "Glow"] : kind === "star" ? ["Surface", "Corona"] : ["Surface"];
+  for (const name of required) {
+    if (!(scene.getObjectByName(name) instanceof THREE.Mesh)) throw new Error(`Invalid ${kind} model: ${name}`);
+  }
+  if (kind === "blackHole") {
+    const horizon = scene.getObjectByName("Horizon");
+    const accretion = scene.getObjectByName("Accretion");
+    if (!accretion) throw new Error("Invalid black-hole accretion group");
+    const discNormal = new THREE.Vector3(0, 1, 0).applyQuaternion(accretion.quaternion);
+    const discBasis = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(accretion.quaternion).invert());
+    const bending = scope.own(createBendingTexture());
+    const imageBounds = scope.own(createImageBoundsTexture(bending));
+    const observerTable = scope.own(createObserverTexture());
+    const plasma = scope.own(createPlasmaTexture());
+    if (horizon instanceof THREE.Mesh) horizon.material = scope.own(createHorizonMaterial(discNormal, discBasis, bending, imageBounds, observerTable, plasma));
+    // 原始盘体保留建模契约, 核心保留射线拾取; 光学体积统一成像, 避免普通几何产生半球和双盘.
+    for (const name of ["Core", "Disc", "Glow"]) {
+      const mesh = scene.getObjectByName(name);
+      if (mesh) mesh.visible = false;
+    }
+  }
+  return scene;
+}
+
+// 只读取随应用发布的模型文件; 取消或 HTTP 失败时拒绝, 不创建 WebGL 画布或下载第三方资产.
+async function loadModel(url: URL, kind: CelestialModelKind, scope: ResourceScope, signal?: AbortSignal): Promise<THREE.Group> {
+  const response = await fetch(url, signal ? { signal } : {});
+  if (!response.ok) throw new Error(`Cannot load ${kind} model: ${response.status}`);
+  const bytes = await response.arrayBuffer();
+  signal?.throwIfAborted();
+  const model = await parseCelestialModel(bytes, kind, scope);
+  signal?.throwIfAborted();
+  return model;
+}
+
+// 按快照实际需要加载同源 GLB, 每类仅一份; 等待全部加载收尾后才返回或抛错, 便于统一释放.
+export async function loadCelestialModels(data: GalaxyData, scope: ResourceScope, signal?: AbortSignal): Promise<CelestialModels> {
+  const models: CelestialModels = {};
+  const requests: Promise<void>[] = [];
+  if (data.peers.some((peer) => peer.status === "unavailable"))
+    requests.push(
+      loadModel(new URL("./assets/black-hole.glb", import.meta.url), "blackHole", scope, signal).then((model) => {
+        models.blackHole = model;
+      }),
+    );
+  if (data.peers.some((peer) => peer.status === "available"))
+    requests.push(
+      loadModel(new URL("./assets/star.glb", import.meta.url), "star", scope, signal).then((model) => {
+        models.star = model;
+      }),
+    );
+  if (data.peers.some((peer) => peer.status === "available" && peer.planets.length))
+    requests.push(
+      loadModel(new URL("./assets/planet.glb", import.meta.url), "planet", scope, signal).then((model) => {
+        models.planet = model;
+      }),
+    );
+  const results = await Promise.allSettled(requests);
+  for (const result of results) if (result.status === "rejected") throw result.reason;
+  signal?.throwIfAborted();
+  return models;
+}

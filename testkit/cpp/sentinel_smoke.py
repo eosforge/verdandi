@@ -9,12 +9,15 @@ import os
 import secrets
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY))
+
+from testkit.support import temporary_directory
+from testkit.support import popen, stop_process
+from testkit.suites import native_environment
 
 from testkit.sentinel.sentinel_test import (  # noqa: E402
     MASTER_NAME,
@@ -29,74 +32,42 @@ from testkit.sentinel.sentinel_test import (  # noqa: E402
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="192.168.0.90")
+    parser.add_argument("--host", default="192.168.0.119")
     parser.add_argument("--ssh-user", default="ubuntu")
     parser.add_argument("--ssh-password-env", default="VERDANDI_TEST_SSH_PASSWORD")
     parser.add_argument("--build", default="gcc-debug")
-    parser.add_argument("--runtime", choices=("linux-x64", "win-x64"), default="linux-x64")
+    parser.add_argument("--runtime", choices=("linux-x64", "win-x64"), default="win-x64" if os.name == "nt" else "linux-x64")
     parser.add_argument("--result-file")
     parser.add_argument("--keep-topology", action="store_true")
     parser.add_argument("--tls", action="store_true")
     return parser.parse_args()
 
 
-def wsl_path(path: Path) -> str:
-    completed = subprocess.run(
-        ["wsl.exe", "--", "wslpath", "-a", path.as_posix()],
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    return completed.stdout.strip()
-
-
-def run_client(
-    repository: Path,
-    build: str,
-    runtime: str,
-    environment: dict[str, str],
-    *,
-    expect_success: bool = True,
-) -> None:
-    if runtime == "win-x64":
-        if os.name != "nt":
-            raise RuntimeError("win-x64 C++ Sentinel tests require a Windows host")
-        executable = repository / "sdk" / "cpp" / "build" / build / "Release" / "verdandi_cpp_redis_tests.exe"
-        if not executable.is_file():
-            raise RuntimeError(f"C++ Sentinel client is missing: {executable}")
-        native_environment = {**os.environ, **environment}
-        yyjson_directory = executable.parents[1] / "_deps" / "yyjson-build" / "Release"
-        native_environment["PATH"] = os.pathsep.join(
-            (str(executable.parent), str(yyjson_directory), native_environment.get("PATH", ""))
-        )
-        completed = subprocess.run([str(executable)], check=False, timeout=90, env=native_environment)
-        if (completed.returncode == 0) != expect_success:
-            raise RuntimeError(f"C++ Sentinel client exit {completed.returncode}, expected success={expect_success}")
-        return
-
-    executable = repository / "sdk" / "cpp" / "build" / build / "verdandi_cpp_redis_tests"
-    if os.name == "nt":
-        wsl_environment = environment.copy()
-        if ca_file := wsl_environment.get("VERDANDI_TLS_CA_FILE"):
-            wsl_environment["VERDANDI_TLS_CA_FILE"] = wsl_path(Path(ca_file))
-        command = [
-            "wsl.exe",
-            "--cd",
-            wsl_path(repository),
-            "--",
-            "env",
-            *(f"{name}={value}" for name, value in wsl_environment.items()),
-            f"sdk/cpp/build/{build}/verdandi_cpp_redis_tests",
-        ]
-        completed = subprocess.run(command, check=False, timeout=90)
-        if (completed.returncode == 0) != expect_success:
-            raise RuntimeError(f"C++ Sentinel client exit {completed.returncode}, expected success={expect_success}")
-        return
-    completed = subprocess.run([str(executable)], check=False, timeout=90, env={**os.environ, **environment})
-    if (completed.returncode == 0) != expect_success:
-        raise RuntimeError(f"C++ Sentinel client exit {completed.returncode}, expected success={expect_success}")
+def run_client(repository, build, runtime, environment, *, expect_success=True):
+    expected = "win-x64" if os.name == "nt" else "linux-x64"
+    if runtime != expected:
+        raise RuntimeError("Use testkit/run.py to select the Linux VM")
+    directory = Path(build)
+    if not directory.is_absolute():
+        directory = repository / "sdk/cpp/build" / build
+    name = "verdandi_cpp_redis_tests.exe" if os.name == "nt" else "verdandi_cpp_redis_tests"
+    executable = next((p for p in (directory / name, directory / "Debug" / name, directory / "Release" / name) if p.is_file()), None)
+    if executable is None:
+        raise RuntimeError(f"C++ Sentinel executable missing in {directory}")
+    env, _ = native_environment()
+    env.update(environment)
+    process = popen([str(executable)], repository, env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    try:
+        output, _ = process.communicate(timeout=90)
+        code = process.returncode
+        if code != (0 if expect_success else 1):
+            raise RuntimeError(f"C++ Sentinel exit {code}, expected success={expect_success}: {output[-8192:]}")
+        if not expect_success:
+            print("PASS expected TLS identity rejection (normal error return, no native abort)", flush=True)
+        elif output:
+            print(output, end="", flush=True)
+    finally:
+        stop_process(process)
 
 
 def main() -> int:
@@ -109,10 +80,11 @@ def main() -> int:
     run_id = secrets.token_hex(4)
     credentials = Credentials.generate()
     remote = Remote(options.host, options.ssh_user, password)
+    options.host = remote.host
     tls = TLSMaterial.generate() if options.tls else None
     topology = Topology(remote, run_id, credentials, tls=tls)
     started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="verdandi-cpp-sentinel-tls-", ignore_cleanup_errors=True) as temporary:
+    with temporary_directory(prefix="verdandi-cpp-sentinel-tls-") as temporary:
         try:
             topology.deploy()
             environment = {

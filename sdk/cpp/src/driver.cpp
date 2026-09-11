@@ -612,6 +612,7 @@ struct driver::implementation {
     std::vector<std::shared_ptr<connection_slot>> slots;
     std::size_t creating{};
     std::mutex subscriptions_mutex;
+    std::mutex lifecycle_mutex;
     std::vector<std::weak_ptr<subscription>> subscriptions;
 };
 
@@ -623,7 +624,7 @@ struct subscription::implementation {
 
     implementation(asio::io_context& owner, redis_configuration source, redis::config wire_configuration, std::shared_ptr<redis::connection> wire_connection,
                    const std::size_t queue_capacity, const std::size_t confirmations)
-        : io(owner), configuration(std::move(source)), wire(std::move(wire_configuration)), connection(std::move(wire_connection)), capacity(queue_capacity),
+        : io(owner), configuration(std::move(source)), wire(std::move(wire_configuration)), connection(std::move(wire_connection)), queue(queue_capacity),
           expected_confirmations(confirmations) {}
 
     void start(const std::shared_ptr<subscription>& owner, const std::vector<std::string>& channels, const std::vector<std::string>& patterns) {
@@ -672,6 +673,11 @@ struct subscription::implementation {
                 return;
             }
             state.consume_pushes();
+            if (state.receive.has_error()) {
+                // Redis 拒绝订阅时没有成功值；向领域交付错误后停止该连接，不能继续 value() 或重挂接收。
+                state.connection->cancel();
+                return;
+            }
             state.receive.value().clear();
             state.arm_receive(owner);
         });
@@ -679,7 +685,7 @@ struct subscription::implementation {
 
     void consume_pushes() {
         if (receive.has_error()) {
-            enqueue({subscription_item::kind::failure, {}, {}, {}, 0, error(code::protocol, "redis.subscription").with_detail(receive.error().diagnostic)});
+            enqueue({subscription_item::kind::failure, {}, {}, {}, 0, error(code::unavailable, "redis.subscription").with_detail(receive.error().diagnostic)});
             return;
         }
         const auto& nodes = receive.value();
@@ -719,19 +725,7 @@ struct subscription::implementation {
             return;
         }
 
-        if (item.type == subscription_item::kind::message && queue.size() >= capacity) {
-            if (!lagged) {
-                queue.clear();
-                queue.push_back({subscription_item::kind::lagged, {}, {}, std::nullopt, 0, std::nullopt});
-                lagged = true;
-                changed.notify_all();
-            }
-            return;
-        }
-        if (queue.size() >= capacity) {
-            queue.clear();
-        }
-        queue.push_back(std::move(item));
+        queue.push(std::move(item));
         changed.notify_all();
     }
 
@@ -743,7 +737,6 @@ struct subscription::implementation {
         {
             std::lock_guard lock(mutex);
             queue.clear();
-            lagged = false;
         }
         changed.notify_all();
         try {
@@ -761,12 +754,10 @@ struct subscription::implementation {
     redis::generic_flat_response receive;
     std::mutex mutex;
     std::condition_variable_any changed;
-    std::deque<subscription_item> queue;
-    std::size_t capacity;
+    subscription_queue queue;
     std::size_t expected_confirmations;
     std::unordered_set<std::string> confirmations;
     std::uint64_t next_fence{};
-    bool lagged{false};
     std::atomic_bool closed{false};
 };
 
@@ -826,6 +817,10 @@ result<std::shared_ptr<subscription>> driver::subscribe(std::vector<std::string>
     if (!implementation_ || !open()) {
         return std::unexpected(error(code::closed));
     }
+    std::lock_guard lifecycle(implementation_->lifecycle_mutex);
+    if (!open()) {
+        return std::unexpected(error(code::closed));
+    }
     if ((channels.empty() && patterns.empty()) || capacity == 0 || std::ranges::any_of(channels, [](const auto& value) { return value.empty(); }) ||
         std::ranges::any_of(patterns, [](const auto& value) { return value.empty(); })) {
         return std::unexpected(error(code::invalid, "redis.subscription"));
@@ -854,6 +849,7 @@ result<void> driver::close() noexcept {
     if (!implementation_) {
         return {};
     }
+    std::lock_guard lifecycle(implementation_->lifecycle_mutex);
     {
         std::lock_guard lock(implementation_->subscriptions_mutex);
         for (const auto& weak : implementation_->subscriptions) {
@@ -898,12 +894,7 @@ subscription_item subscription::next(const std::stop_token& stop) {
     if (state.queue.empty()) {
         return {subscription_item::kind::closed, {}, {}, std::nullopt, 0, std::nullopt};
     }
-    auto output = std::move(state.queue.front());
-    state.queue.pop_front();
-    if (output.type == subscription_item::kind::lagged) {
-        state.lagged = false;
-    }
-    return output;
+    return state.queue.pop();
 }
 
 subscription_item subscription::next(const std::stop_token& stop, const std::chrono::milliseconds wait) {
@@ -922,12 +913,7 @@ subscription_item subscription::next(const std::stop_token& stop, const std::chr
     if (state.queue.empty()) {
         return {subscription_item::kind::closed, {}, {}, std::nullopt, 0, std::nullopt};
     }
-    auto output = std::move(state.queue.front());
-    state.queue.pop_front();
-    if (output.type == subscription_item::kind::lagged) {
-        state.lagged = false;
-    }
-    return output;
+    return state.queue.pop();
 }
 
 result<std::uint64_t> subscription::fence() {

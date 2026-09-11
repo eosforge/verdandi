@@ -187,13 +187,16 @@ func (selector *selectorCore) Close(ctx context.Context) error {
 // run 是 Selector 唯一的长期协程，依次建立连接代、运行同步/监听并在失败后退避重试。
 // owner 由 Selector.Close 或 Client.Close 取消；ready 只汇报首次同步是否可用。
 func (selector *selectorCore) run(owner context.Context, ready chan<- error) {
+	first := true
 	defer func() {
+		if first {
+			ready <- protocolError(codeClosed, "", 0)
+		}
 		selector.view.Store(emptySelectorView(0, false))
 		close(selector.errors)
 		selector.release()
 		close(selector.done)
 	}()
-	first := true
 	failures := uint(0)
 	generationNumber := uint64(0)
 	state := newSelectorState(0)
@@ -248,9 +251,6 @@ func (selector *selectorCore) run(owner context.Context, ready chan<- error) {
 			return
 		}
 		failures++
-	}
-	if first {
-		ready <- protocolError(codeClosed, "", 0)
 	}
 }
 
@@ -1369,7 +1369,7 @@ func newNonce() (string, error) {
 // selectorRetryDelay 计算配置化指数退避，并在 delay-jitter 至 delay 范围加入均匀抖动。
 func selectorRetryDelay(failures uint, initial time.Duration, maximum time.Duration, multiplier int, jitterPercent int) time.Duration {
 	delay := initial
-	for index := uint(0); index < failures && delay < maximum; index++ {
+	for index := uint(0); multiplier > 1 && index < failures && delay < maximum; index++ {
 		if delay > maximum/time.Duration(multiplier) {
 			delay = maximum
 			break

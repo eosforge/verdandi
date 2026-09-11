@@ -28,25 +28,37 @@ template <class Attr, class Data>
 class candidate {
 public:
     /// 接管一份已脱离 Selector 锁和 C 句柄生命周期的完整候选。
-    candidate(registration_metadata metadata, Attr attr, Data data) : metadata_(std::move(metadata)), attr_(std::move(attr)), data_(std::move(data)) {}
+    candidate(registration_metadata metadata, Attr attr, Data data) : value_(new state{std::move(metadata), std::move(attr), std::move(data)}) {}
+    /// 深拷贝保持拥有型语义；应用类型复制失败时不改变原候选。
+    candidate(const candidate& other) : value_(other.value_ ? new state(*other.value_) : NULL) {}
+    /// 返回已解码结果时仅转移所有权，不在原生事务提交后调用应用移动构造。
+    candidate(candidate&&) noexcept = default;
+    /// 先准备完整副本或移动值，再无异常替换；被移动对象只用于销毁或重新赋值。
+    candidate& operator=(candidate other) noexcept {
+        value_.swap(other.value_);
+        return *this;
+    }
 
     /// 返回拥有型 Registration 元数据。
     const registration_metadata& metadata() const {
-        return metadata_;
+        return value_->metadata;
     }
     /// 返回拥有型不可变 Attr。
     const Attr& attr() const {
-        return attr_;
+        return value_->attr;
     }
     /// 返回本次选择事务提交后的拥有型 Data。
     const Data& data() const {
-        return data_;
+        return value_->data;
     }
 
 private:
-    registration_metadata metadata_;
-    Attr attr_;
-    Data data_;
+    struct state {
+        registration_metadata metadata;
+        Attr attr;
+        Data data;
+    };
+    std::unique_ptr<state> value_;
 };
 
 template <class Attr, class Data>
@@ -204,24 +216,14 @@ public:
             return result<optional<candidate<Attr, Data>>>(error("invalid", "selector"));
         }
         typedef typename std::remove_reference<Policy>::type policy_type;
-        one_policy_context<policy_type> context = {&policy};
+        one_policy_context<policy_type> context = {&policy, {}};
         verdandi_candidate_list* output = NULL;
         verdandi_error failure = {};
         if (verdandi_selector_one(handle_.get(), &one_policy<policy_type>, &context, &output, &failure) == 0) {
             return result<optional<candidate<Attr, Data>>>(error::from_native(failure));
         }
         detail::owned_handle<verdandi_candidate_list, verdandi_candidate_list_release> list(output);
-        if (output == NULL) {
-            return result<optional<candidate<Attr, Data>>>(optional<candidate<Attr, Data>>());
-        }
-        if (verdandi_candidate_list_size(output) != 1U) {
-            return result<optional<candidate<Attr, Data>>>(error("corrupt", "selection"));
-        }
-        result<candidate<Attr, Data>> decoded = list_candidate(output, 0U);
-        if (!decoded) {
-            return result<optional<candidate<Attr, Data>>>(decoded.failure());
-        }
-        return result<optional<candidate<Attr, Data>>>(optional<candidate<Attr, Data>>(std::move(*decoded)));
+        return result<optional<candidate<Attr, Data>>>(std::move(context.output));
     }
 
     /// 策略返回互不重复的 Choice；空集合不提交本地预测。
@@ -232,24 +234,14 @@ public:
             return result<std::vector<candidate<Attr, Data>>>(error("invalid", "selector"));
         }
         typedef typename std::remove_reference<Policy>::type policy_type;
-        any_policy_context<policy_type> context = {&policy};
+        any_policy_context<policy_type> context = {&policy, {}};
         verdandi_candidate_list* output = NULL;
         verdandi_error failure = {};
         if (verdandi_selector_any(handle_.get(), &any_policy<policy_type>, &context, &output, &failure) == 0) {
             return result<std::vector<candidate<Attr, Data>>>(error::from_native(failure));
         }
         detail::owned_handle<verdandi_candidate_list, verdandi_candidate_list_release> list(output);
-        std::vector<candidate<Attr, Data>> values;
-        const std::size_t size = verdandi_candidate_list_size(output);
-        values.reserve(size);
-        for (std::size_t index = 0; index < size; ++index) {
-            result<candidate<Attr, Data>> decoded = list_candidate(output, index);
-            if (!decoded) {
-                return result<std::vector<candidate<Attr, Data>>>(decoded.failure());
-            }
-            values.push_back(std::move(*decoded));
-        }
-        return result<std::vector<candidate<Attr, Data>>>(std::move(values));
+        return result<std::vector<candidate<Attr, Data>>>(std::move(context.output));
     }
 
     /// 创建活动与 retained 完整脱离视图；这是显式 O(N) 重型操作。
@@ -314,11 +306,13 @@ private:
     template <class Policy>
     struct one_policy_context {
         Policy* value;
+        optional<candidate<Attr, Data>> output;
     };
 
     template <class Policy>
     struct any_policy_context {
         Policy* value;
+        std::vector<candidate<Attr, Data>> output;
     };
 
     template <class Policy>
@@ -332,6 +326,12 @@ private:
                 return 0;
             }
             if (*selected) {
+                result<candidate<Attr, Data>> detached = values.get((*selected)->index);
+                if (!detached) {
+                    detail::write_native_error(failure, detached.failure());
+                    return 0;
+                }
+                context->output.emplace(std::move(*detached));
                 if (verdandi_selection_add(selection, (*selected)->index, failure) == 0) {
                     return 0;
                 }
@@ -357,8 +357,15 @@ private:
                 detail::write_native_error(failure, selected.failure());
                 return 0;
             }
-            for (typename std::vector<choice>::const_iterator iterator = selected->begin(); iterator != selected->end(); ++iterator) {
-                if (verdandi_selection_add(selection, iterator->index, failure) == 0) {
+            context->output.reserve(selected->size());
+            for (const auto& selected_choice : *selected) {
+                result<candidate<Attr, Data>> detached = values.get(selected_choice.index);
+                if (!detached) {
+                    detail::write_native_error(failure, detached.failure());
+                    return 0;
+                }
+                context->output.push_back(std::move(*detached));
+                if (verdandi_selection_add(selection, selected_choice.index, failure) == 0) {
                     return 0;
                 }
             }
@@ -371,30 +378,6 @@ private:
             detail::write_native_error(failure, "corrupt", "callback", "");
         }
         return 0;
-    }
-
-    static result<fields> list_fields(const verdandi_candidate_list* value, std::size_t index, bool read_attr) {
-        detail::field_collector collector;
-        verdandi_error failure = {};
-        const int succeeded = read_attr ? verdandi_candidate_list_visit_attr(value, index, detail::collect_field, &collector, &failure)
-                                        : verdandi_candidate_list_visit_data(value, index, detail::collect_field, &collector, &failure);
-        return detail::collected_fields(succeeded, failure, collector);
-    }
-
-    static result<candidate<Attr, Data>> list_candidate(const verdandi_candidate_list* value, std::size_t index) {
-        verdandi_registration_metadata native_metadata = {};
-        if (value == NULL || verdandi_candidate_list_metadata(value, index, &native_metadata) == 0) {
-            return result<candidate<Attr, Data>>(error("invalid", "candidate"));
-        }
-        result<fields> attr_fields = list_fields(value, index, true);
-        if (!attr_fields) {
-            return result<candidate<Attr, Data>>(attr_fields.failure());
-        }
-        result<fields> data_fields = list_fields(value, index, false);
-        if (!data_fields) {
-            return result<candidate<Attr, Data>>(data_fields.failure());
-        }
-        return decoded_candidate(native_metadata, *attr_fields, *data_fields);
     }
 
     static result<fields> snapshot_fields(const verdandi_selector_snapshot* value, bool retained, std::size_t index, bool read_attr) {

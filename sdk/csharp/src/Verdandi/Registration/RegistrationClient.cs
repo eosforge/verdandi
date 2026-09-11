@@ -8,7 +8,6 @@ namespace Verdandi.Registration;
 public sealed unsafe class RegistrationClient : IDisposable
 {
     private readonly RegistrationClientHandle _handle;
-    private readonly SafeHandleLease<ClientHandle> _rootLease;
     private int _disposed;
 
     /// <summary>
@@ -19,7 +18,7 @@ public sealed unsafe class RegistrationClient : IDisposable
     private RegistrationClient(RegistrationClientHandle handle, SafeHandleLease<ClientHandle> rootLease)
     {
         _handle = handle;
-        _rootLease = rootLease;
+        _handle.AttachParent(rootLease);
     }
 
     /// <summary>
@@ -111,7 +110,6 @@ public sealed unsafe class RegistrationClient : IDisposable
         }
 
         _handle.Dispose();
-        _rootLease.Dispose();
         GC.SuppressFinalize(this);
     }
 

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"sort"
+
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	verdandi "github.com/eosforge/verdandi/sdk/go"
+	"github.com/eosforge/verdandi/sdk/go/internal/teststats"
 	redis "github.com/redis/go-redis/v9"
 )
 
@@ -96,15 +97,7 @@ func (value *soakData) Decode(source Fields) error {
 	return nil
 }
 
-type soakDurationStats struct {
-	Count       int           `json:"count"`
-	P50         time.Duration `json:"p50_nanoseconds"`
-	P95         time.Duration `json:"p95_nanoseconds"`
-	P99         time.Duration `json:"p99_nanoseconds"`
-	Maximum     time.Duration `json:"maximum_nanoseconds"`
-	Average     time.Duration `json:"average_nanoseconds"`
-	ZeroSamples int           `json:"zero_samples"`
-}
+type soakDurationStats = teststats.Summary
 
 type soakProcessStats struct {
 	InitialGoroutines int    `json:"initial_goroutines"`
@@ -143,7 +136,7 @@ type soakResult struct {
 }
 
 type soakSelectionWorkerResult struct {
-	latencies    []time.Duration
+	latencies    teststats.Histogram
 	transactions int64
 	mutations    int64
 	retries      int64
@@ -151,7 +144,7 @@ type soakSelectionWorkerResult struct {
 }
 
 type soakSelectionResult struct {
-	latencies    []time.Duration
+	latencies    teststats.Histogram
 	transactions int64
 	mutations    int64
 	retries      int64
@@ -159,8 +152,8 @@ type soakSelectionResult struct {
 }
 
 type soakUpdateResult struct {
-	latencies    []time.Duration
-	scheduleLags []time.Duration
+	latencies    teststats.Histogram
+	scheduleLags teststats.Histogram
 	retries      int64
 	elapsed      time.Duration
 	err          error
@@ -309,6 +302,11 @@ func TestRegistrationSelectorSoak(t *testing.T) {
 	runtimeStop := make(chan struct{})
 	runtimeDone := make(chan struct{})
 	go runtimeMonitor.run(runtimeStop, runtimeDone)
+	stopRuntimeMonitor := sync.OnceFunc(func() {
+		close(runtimeStop)
+		<-runtimeDone
+	})
+	t.Cleanup(stopRuntimeMonitor)
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(ctx)
 	lifecycleStats := &soakLifecycleStats{}
@@ -334,6 +332,7 @@ func TestRegistrationSelectorSoak(t *testing.T) {
 
 	runCtx, stopRun := context.WithCancel(ctx)
 	defer stopRun()
+	t.Log("VERDANDI_SOAK_READY")
 	selectionDone := make(chan struct {
 		result soakSelectionResult
 		err    error
@@ -431,8 +430,13 @@ func TestRegistrationSelectorSoak(t *testing.T) {
 
 	updateStats := summarizeSoakDurations(updates.latencies)
 	lagStats := summarizeSoakDurations(updates.scheduleLags)
-	if updateStats.ZeroSamples != 0 {
-		t.Errorf("update latency contains %d zero samples", updateStats.ZeroSamples)
+	// Equal clock readings are valid on Windows. Verify complete observations
+	// without replacing real zero durations with invented positive samples.
+	if expected := uint64(soakRegistrationCount * duration); updateStats.Count != expected {
+		t.Errorf("update latency samples=%d, want %d", updateStats.Count, expected)
+	}
+	if updateStats.Maximum <= 0 {
+		t.Errorf("update latency clock did not advance")
 	}
 	if updateStats.P99 > time.Second {
 		t.Errorf("update p99 exceeded one second: %s", updateStats.P99)
@@ -507,8 +511,7 @@ func TestRegistrationSelectorSoak(t *testing.T) {
 	}
 	closed = true
 
-	close(runtimeStop)
-	<-runtimeDone
+	stopRuntimeMonitor()
 	runtime.GC()
 	time.Sleep(500 * time.Millisecond)
 	runtime.GC()
@@ -544,7 +547,7 @@ func TestRegistrationSelectorSoak(t *testing.T) {
 		UpdateElapsed:         updates.elapsed,
 		Registrations:         soakRegistrationCount,
 		Selectors:             fanout,
-		Updates:               len(updates.latencies),
+		Updates:               int(updates.latencies.Count),
 		UpdateRetries:         updates.retries,
 		UpdateLatency:         updateStats,
 		ScheduleLag:           lagStats,
@@ -604,7 +607,6 @@ func runSoakSelections(
 	selectors []*Selector[soakAttr, soakData],
 	seconds int,
 ) (soakSelectionResult, error) {
-	attempts := seconds * soakSelectionRate
 	workers := make([]soakSelectionWorkerResult, len(selectors))
 	start := time.Now().Add(250 * time.Millisecond)
 	var wait sync.WaitGroup
@@ -613,7 +615,6 @@ func runSoakSelections(
 		go func(index int, selector *Selector[soakAttr, soakData]) {
 			defer wait.Done()
 			worker := &workers[index]
-			worker.latencies = make([]time.Duration, 0, attempts+attempts/10)
 			for attempt := 0; ; attempt++ {
 				target := start.Add(time.Duration(attempt) * time.Second / soakSelectionRate)
 				if err := waitUntil(ctx, target); err != nil {
@@ -638,7 +639,7 @@ func runSoakSelections(
 					worker.err = err
 					return
 				}
-				worker.latencies = append(worker.latencies, time.Since(started))
+				worker.latencies.Observe(time.Since(started))
 				worker.transactions++
 				worker.mutations += int64(mutations)
 			}
@@ -651,13 +652,13 @@ func runSoakSelections(
 		if worker.err != nil {
 			return soakSelectionResult{}, fmt.Errorf("selector[%d] policy loop: %w", index, worker.err)
 		}
-		result.latencies = append(result.latencies, worker.latencies...)
+		result.latencies.Merge(worker.latencies)
 		result.transactions += worker.transactions
 		result.mutations += worker.mutations
 		result.retries += worker.retries
 		result.perSelector[index] = worker.mutations
 	}
-	if len(result.latencies) == 0 {
+	if int(result.latencies.Count) == 0 {
 		return soakSelectionResult{}, fmt.Errorf("no Selector policy transaction succeeded")
 	}
 	return result, nil
@@ -743,16 +744,14 @@ func runSoakCadencedUpdates(
 	registrations []*Registration[soakAttr, soakData],
 	seconds int,
 	payload string,
-) ([]time.Duration, []time.Duration, int64, time.Duration, error) {
-	count := len(registrations) * seconds
-	latencies := make([]time.Duration, count)
-	lags := make([]time.Duration, count)
+) (teststats.Histogram, teststats.Histogram, int64, time.Duration, error) {
+	var latencies, lags teststats.Histogram
 	runStarted := time.Now()
 	var retries atomic.Int64
 	for round := range seconds {
 		redisTarget := redisStart.Add(time.Duration(round) * time.Second)
 		if err := waitForSoakRedisTime(ctx, raw, redisTarget); err != nil {
-			return nil, nil, retries.Load(), time.Since(runStarted), err
+			return latencies, lags, retries.Load(), time.Since(runStarted), err
 		}
 		roundStart := time.Now()
 		for index, registration := range registrations {
@@ -760,13 +759,10 @@ func runSoakCadencedUpdates(
 				time.Duration(index) * time.Second / time.Duration(len(registrations)),
 			)
 			if err := waitUntil(ctx, target); err != nil {
-				return nil, nil, retries.Load(), time.Since(runStarted), err
+				return latencies, lags, retries.Load(), time.Since(runStarted), err
 			}
 			operationStarted := time.Now()
-			slot := round*len(registrations) + index
-			if operationStarted.After(target) {
-				lags[slot] = operationStarted.Sub(target)
-			}
+			lags.Observe(max(operationStarted.Sub(target), 0))
 			if err := updateSoakRegistration(
 				ctx,
 				registration,
@@ -774,9 +770,9 @@ func runSoakCadencedUpdates(
 				payload,
 				&retries,
 			); err != nil {
-				return nil, nil, retries.Load(), time.Since(runStarted), err
+				return latencies, lags, retries.Load(), time.Since(runStarted), err
 			}
-			latencies[slot] = time.Since(operationStarted)
+			latencies.Observe(time.Since(operationStarted))
 		}
 	}
 	if err := waitForSoakRedisTime(
@@ -784,7 +780,7 @@ func runSoakCadencedUpdates(
 		raw,
 		redisStart.Add(time.Duration(seconds)*time.Second),
 	); err != nil {
-		return nil, nil, retries.Load(), time.Since(runStarted), err
+		return latencies, lags, retries.Load(), time.Since(runStarted), err
 	}
 	return latencies, lags, retries.Load(), time.Since(runStarted), nil
 }
@@ -1331,30 +1327,6 @@ func (monitor *soakRuntimeMonitor) finish() soakProcessStats {
 	return monitor.result
 }
 
-func summarizeSoakDurations(values []time.Duration) soakDurationStats {
-	var total time.Duration
-	zero := 0
-	for _, value := range values {
-		total += value
-		if value == 0 {
-			zero++
-		}
-	}
-	sort.Slice(values, func(left int, right int) bool { return values[left] < values[right] })
-	percentile := func(value int) time.Duration {
-		index := (len(values)*value + 99) / 100
-		if index > 0 {
-			index--
-		}
-		return values[index]
-	}
-	return soakDurationStats{
-		Count:       len(values),
-		P50:         percentile(50),
-		P95:         percentile(95),
-		P99:         percentile(99),
-		Maximum:     values[len(values)-1],
-		Average:     total / time.Duration(len(values)),
-		ZeroSamples: zero,
-	}
+func summarizeSoakDurations(values teststats.Histogram) soakDurationStats {
+	return values.Snapshot()
 }

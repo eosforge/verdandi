@@ -27,11 +27,24 @@ fn subscriber_pong_accepts_resp2_and_resp3_shapes_only() {
 
 #[test]
 fn retry_delay_is_bounded() {
+    assert_eq!(
+        retry_delay(u32::MAX, Duration::from_millis(10), Duration::from_secs(5), 1, 0),
+        Duration::from_millis(10)
+    );
     for failures in 0..100 {
         let delay = retry_delay(failures, Duration::from_millis(100), Duration::from_secs(5), 2, 50);
         assert!(delay >= Duration::from_millis(50));
         assert!(delay <= Duration::from_secs(5));
     }
+}
+
+#[test]
+fn choice_rejects_foreign_owner_even_when_token_and_index_match() {
+    let choice = Choice { owner: 1, token: 7, index: 0 };
+    assert!(choice.valid_for(1, 7, 1));
+    assert!(!choice.valid_for(2, 7, 1));
+    assert!(!choice.valid_for(1, 8, 1));
+    assert!(!choice.valid_for(1, 7, 0));
 }
 
 #[test]

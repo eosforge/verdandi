@@ -41,7 +41,7 @@ not a Bifrost submodule and does not belong to Hermes. It lives in its own
 public GitHub repository:
 
 ```text
-Local:  D:\laconis\verdandi
+Local:  D:\projects\verdandi
 Remote: git@github.com:eosforge/verdandi.git
 ```
 
@@ -409,6 +409,96 @@ commit and does not become standing permission for later pushes.
 
 ## 13. Current Repository Snapshot
 
+Peer target update, 2026-09-11: the maintainer selected C++26 for the future
+Star/Planet implementation, keeping Supervisor in Go and temporarily excluding
+MSVC from the new service target. The maintainer has now authorized implementation
+in the separate `peer-cpp/` directory; the runnable Rust/Tonic implementation remains
+available as a comparison. C++ qualification is in progress, not yet complete.
+Stage one retains the existing v4 admission/connection skeleton, without adding
+business replication, storage or SDK migration. See
+[C++26 skeleton design](peer/cpp26-skeleton-design.md) for feature use, ownership,
+locked source versions, gRPC qualification gates and acceptance tests.
+The accepted C++ rules use logical session identity/generations, allow gRPC
+transport reuse/rebuild, and do not freeze 64 KiB windows. Typed admission RPCs
+keep byte and postdecode member limits without the earlier predecode scan.
+GCC 16.2.0 is installed project-locally on Ubuntu and passed focused feature
+probes; this is not evidence of a completed C++ service or full compiler qualification.
+
+Peer development update, 2026-09-11: this is a separate backend track and does
+not replace the existing Redis SDK contracts described below. Rust `peer`
+is now a workspace with `common`, `star`, and `planet` crates. It implements
+account-authorized Supervisor admission, gRPC protocol v4, process UUIDs, signed bearer Hello,
+Ping/Pong, mirrored Star connections, single Planet upstream, bounded group
+candidates, offline failover, retry and owned shutdown. Executables are `peer`
+(Star) and `planet`; generated Rust is in `peer/common/src/generated`.
+The current contract is [`peer/connection-rules.md`](peer/connection-rules.md).
+State replication, business persistence and SDK Bind remain unimplemented.
+The isolated Rust gRPC push evaluation is complete: 660 v3 trials across
+Windows, Ubuntu and cross-host sessions, with 650 completed and 10 failed.
+This did not establish the maintainer's condition of no performance loss;
+the initial conditional hold was subsequently superseded by the maintainer's explicit choice of gRPC. No second production backend is retained.
+The historical TCP writer was fixed to flush within its deadline; v3 passed
+39 production and 14 prototype tests on both platforms. Those are historical counts. See
+[`peer/grpc-benchmark-results.md`](peer/grpc-benchmark-results.md) and
+[`peer/tls-flush-audit.md`](peer/tls-flush-audit.md). Cross-host failure root
+causes remain unresolved because remote detailed diagnostics were not retained.
+Later on 2026-09-10 the maintainer explicitly chose gRPC for maintainability,
+superseding the evaluation's conditional hold. The current implementation work
+also replaces TLS-exporter/process-private-key proofs with account/password
+Supervisor login and per-process signed bearer credentials. One account may
+run multiple independent Star/Planet nodes. See
+[`peer/grpc-implementation.md`](peer/grpc-implementation.md). The new service
+foundation initially passed its own Windows, Ubuntu and mixed-host 11-case regressions
+and 60-second fault loops, with nine restart cycles per deployment. Each host
+passed 36 Rust service tests, 32 top-level Go tests, four generator tests and
+14 probe tests; Linux Go race passed. See the independent
+[v4 validation report](peer/grpc-validation-20260911.md), not the old transport's qualification status.
+The subsequent service hardening pass shares process launch and identity
+validation, bounds all network timers/capacities, preserves transient gRPC
+failure categories, validates local Supervisor certificates, and removes a
+duplicate membership snapshot scan. Both hosts passed 53 Rust service tests,
+44 ordinary Go top-level tests plus two fuzz seed entrypoints, four generator
+tests and 14 probe tests. Python passed 28 on Windows and 27 with one platform
+skip on Linux; Linux Go race passed. Both Go fuzz targets ran for a requested
+10 seconds per host without failures. Native and mixed regressions now cover
+13 groups; 120/120/300-second fault loops completed 17/18/42 restart cycles.
+The final source only adds verified whitespace wrapping to the tested version;
+both versions and fresh final builds are recorded separately. No dependencies
+were downloaded or upgraded. See [hardening evidence](peer/service-hardening-20260911.md).
+The Galaxy design now selects full authorized state caches for Planets, shared
+memory/disk storage modes for Stars and Planets, and mixed Star modes per Galaxy.
+Running Planets may fail over using valid existing authorization during Supervisor
+outages; new Star/Planet processes still wait for Supervisor admission.
+
+The independent Go `supervisor/` module provides standard-library HTTP
+management and a separate gRPC/TLS admission listener: validated CLI
+configuration, JSON logging, bounded connections and graceful shutdown.
+Its `/healthz` reports management health, not cluster readiness. Authenticated
+registration and a transactional bbolt member table are implemented; Catalog
+Publisher and live topology APIs remain unimplemented. Both native gates and
+Windows/Ubuntu mixed-process regression and short fault loops pass. See
+[`supervisor/README.md`](supervisor/README.md) for exact commands and boundaries.
+
+The historical six-byte MessageID/length header was replaced by gRPC framing
+in v4. Peer OpenSession carries generated SessionPacket messages; Supervisor
+uses generated unary RPCs. `proto/message-ids.lock` retains old assignments
+as history and does not dispatch v4 messages. Handwritten Rust/Proto comments use Chinese with
+ASCII punctuation, and Proto uses the maintainer's four-space clang-format
+configuration. Tools, dependencies and generated output remain project-local.
+Peer installs a complete Supervisor list before initialization and verifies
+direct connections. Legacy Discover and periodic topology queries are removed;
+dial pacing, jitter and generation fencing remain. See
+[`peer/README.md`](peer/README.md), [`proto/README.md`](proto/README.md), and
+[`peer/service-hardening-20260911.md`](peer/service-hardening-20260911.md)
+for the current implemented boundary and Windows/Ubuntu/mixed-host evidence.
+
+The revised target is [Galaxy architecture](galaxy-architecture.md): a Galaxy
+contains Peer stars; Relay planets aggregate subscriptions and cache state;
+business satellites attach directly to a Peer or through a Relay. Unavailable
+Peers appear as black holes. Cross-Galaxy Catalog wormholes are explicitly future
+work. The Admin demo still depicts business entities as planets; neither the
+new display model nor Relay runtime is implemented by this design revision.
+
 As of 2026-09-02:
 
 - GitHub repository `eosforge/verdandi` exists and is public; package and source
@@ -514,6 +604,575 @@ As of 2026-09-02:
 Keep only decisions that materially constrain future work. Never delete a
 superseded entry; mark it superseded and link to its replacement.
 
+### 2026-09-11: Design a C++26 replacement for the Star/Planet skeleton
+
+- **Accepted target:** Star/Planet move toward C++26 with GCC 16.2.0 / Linux x64
+  first; Supervisor remains Go. MSVC support is temporarily not required for
+  this new service target. Existing Redis SDK/C ABI platform and language
+  contracts are unchanged.
+- **Current task boundary:** The maintainer stopped implementation and then
+  requested detailed documentation. This documentation-only boundary was later
+  superseded by an explicit instruction to start the C++ implementation in a new
+  directory. Use `peer-cpp/common`, `peer-cpp/star`, and `peer-cpp/planet`; retain
+  the Rust comparison and do not remove it before C++ qualification.
+- **Dependency authorization:** The maintainer explicitly approved acquisition
+  and building of the named C++ source set in Ubuntu project-local
+  `build/deps/peer-cpp`, with generators under `build/tools`. No global or Windows
+  dependency installation is implied. The VM uses dynamic memory; build one job
+  at a time and observe actual memory, rather than assuming maximum allocation.
+- **Scope:** Stage one preserves gRPC v4, signed bearer admission, Star mirrored
+  logical sessions, Planet single-upstream failover and owned shutdown.
+  Business storage/replication, SDK Bind and Admin changes remain later work.
+- **Engineering direction:** Apply reflection/annotations to private option
+  metadata, expansion statements to field traversal and inplace_vector to the
+  bounded candidate set. Do not create a second Protobuf codec or custom async
+  framework merely to use new language features. Benchmark allocation/copy
+  changes and retain explicit input validation independently of contracts.
+- **Accepted simplification:** Identity/member epoch and local session generation
+  belong to logical sessions; gRPC may reuse or rebuild transports. Retain two
+  directed Star sessions and one active Planet upstream, without a physical TCP
+  lifetime/session restriction. 64 KiB is not a protocol requirement. Count
+  logical topology and physical transports separately in diagnostics and tests.
+- **Internal-service validation:** Drop the proposed Register predecode Member
+  scan and raw unary adapter. Use generated typed RPCs with byte limits, then
+  member-count, authentication, role and epoch validation. This accepts temporary
+  allocation amplification before postdecode rejection; no performance benefit
+  has yet been measured. Keep lifecycle and correctness checks.
+- **Runtime and optimization:** Prefer public gRPC resource/lifecycle APIs and
+  measure slow-handshake cleanup before considering a small adapter. gRPC owns
+  I/O workers; one application control loop initially. Explicitly reject the old
+  Tokio worker option; expose separately named budgets only after qualification.
+  Start with ordinary messages and bounded reuse; Arena/shared encoding require
+  comparative evidence before becoming defaults.
+- **TLS and version lock:** Use the selected gRPC release's BoringSSL commit for
+  transport and private identity crypto, without an additional OpenSSL provider.
+  Lock current stable source versions as of 2026-09-11: gRPC C++ 1.84.0,
+  Protobuf/protoc 36.1 and the exact remaining versions/commits in
+  [the dependency lock](peer/cpp26-dependencies.md). No floating latest or
+  automatic upgrades. Independently latest dependencies differ from gRPC's
+  bundled revisions, so build compatibility remains unproven.
+- **Evidence:** GCC feature probes passed; the C++ service and callback/resource
+  integration remain unimplemented. Version selection is accepted, while complete
+  dependency qualification, resource measurements and performance remain pending.
+- **Supersession:** Replaces the Rust language target in earlier Peer/Planet
+  choices and the initial C++ physical-session/window/predecode requirements.
+  Preserve v4 fields, role/storage decisions and historical Rust validation records.
+  Full plan: [C++26 skeleton design](peer/cpp26-skeleton-design.md).
+
+### 2026-09-10: Revise the system as Galaxies, Peer stars, Relay planets and business satellites
+
+- **Accepted mapping:** Multiple equal Peer stars form a Galaxy. Relay planets
+  attach to Peers; Catalog/Subscriber/Registry satellites may bind either to
+  a Peer or a Relay. Unavailable stars appear as black holes, preserving their
+  identity rather than becoming another service type.
+- **Accepted Relay role:** A Planet caches the Galaxy's complete authorized
+  state even without downstream subscribers, then filters and fans out to each
+  authorized binding. This supersedes demand-driven upstream subscriptions and
+  last-subscriber cache eviction. Peer retains business-version and authority
+  responsibilities. Relay does not become a Peer mesh member or durable voter.
+- **Future scope:** Wormholes may eventually synchronize Catalog across Galaxies.
+  Do not implement cross-Galaxy routing, protocols or background tasks now.
+- **Later clarification:** A Planet forwards Publisher/Registry requests only
+  to its current bound Star. Stars accept requests and synchronize their lawful
+  state to other Stars and their attached Planets. Replicas can serve their own
+  Planets without rebroadcasting each received record to the Star mesh.
+- **Planet admission:** A Planet authenticates with Supervisor and obtains a
+  local subset of candidate Stars rather than full Star membership. Already
+  running Planets may switch and re-register using still-valid existing
+  authorization while Supervisor is offline. New Star/Planet processes, even
+  previously admitted deployments with disks, wait for Supervisor authentication.
+- **Logical Star groups:** The maintainer wants Stars grouped by properties such
+  as actual region. Treat this as candidate organization within the Galaxy's
+  full authorized replication scope, not business Zone or data sharding.
+  GQ-007 confirms local-group preference with cross-group failover when the
+  local group is unavailable. Galaxy-wide authorized replication is unchanged;
+  group labels do not grant cross-scope access. Supervisor-offline failover
+  still needs previously learned candidates and valid existing authorization.
+- **Shared implementation direction:** Star and Planet should reuse state storage,
+  merge, snapshot/differential sync and downstream flow control. Role authority
+  and request forwarding remain separate; Planet receipt is not a business ACK.
+- **Accepted storage modes:** Star and Planet both support memory or disk storage;
+  Stars in the same Galaxy may mix modes. Share record/merge/recovery semantics,
+  but Planet disks and memory Star receipts do not count as durable Star ACKs.
+  Persistent deployments retain the Publisher-offline disk recovery goal;
+  all-memory deployments cannot recover after losing every live copy. The
+  durable participant set, memory ingress and all-memory ACK rules still need
+  a concrete design. Do not silently weaken durable success on node failure.
+- **Design recommendations, not frozen choices:** One active parent per satellite
+  binding and satellites representing logical bindings. Relay language and
+  packaging were subsequently selected as Rust `peer/planet`, sharing
+  `peer/common` with `peer/star`. Memory-only cache and demand-driven upstream
+  aggregation recommendations are superseded by the maintainer's answers.
+- **Accepted re-registration:** When Planet changes its bound Star, it registers
+  its managed active publication/Registration state at the new Star. That Star
+  propagates the replacement and invalidates the old Star affiliation, without
+  depending on the old Star being reachable. This supersedes the earlier fixed
+  Star ingress restriction; it does not change the logical Publisher or delete
+  the business key and all replicas. Preserve a running service's Registration UUID.
+- **Remaining protocol work:** Prefer one versioned replacement over independent
+  unconditional Delete/Register messages. Old updates, unregisters and expiry
+  actions must be fenced; per-record recovery must handle partial batches.
+  The order/epoch issuer, delegation proof and confirmation rules are undecided.
+  Current Star membership Epoch is not a business lease epoch. Full cached
+  replicas and dead downstreams do not become managed active registrations.
+  Any epoch scheme must permit running Planet failover without contacting
+  Supervisor for each switch; its existing authorization must remain valid.
+  Catalog confirmed-state recovery and durable ACK rules still require design;
+  no implementation is claimed by this accepted responsibility change.
+- **Observation boundary:** Monitoring staleness and Supervisor unavailability
+  must not be treated as proof all Peer stars are unavailable. Black-hole display
+  is not deletion, data loss or authority transfer.
+- **Implementation status:** Star/Planet connection rules, role admission,
+  bounded group candidates and failover are now migrated to gRPC protocol v4.
+  See [current connection contract](peer/connection-rules.md) and
+  [validation](peer/star-planet-validation-20260910.md). No new dependencies
+  were downloaded for this role split. Business storage/sync remain pending.
+  Admin still has the earlier Registry/Subscriber/Publisher planet model.
+  See [shared structure and implementation sequence](galaxy-architecture.md).
+
+### 2026-09-11: gRPC and account-authorized service admission
+
+- The Rust implementation below remains current; its future language target
+  is superseded by the C++26 design decision above. Protocol v4 remains current.
+- Accepted: Rust Tonic Star/Planet and Go gRPC Supervisor; same account may run
+  multiple nodes, each with an independent UUID and signed bearer credential.
+- Account passwords travel only to Supervisor over TLS. No TLS exporter or
+  process signing key remains. TLS still verifies server roots, names and validity.
+- Current implementation identifies a membership slot by SHA256(username + NUL +
+  Galaxy + NUL + canonical endpoint). Different endpoints remain independent;
+  same endpoint restart retains CAS fencing and response-loss idempotence.
+- Supervisor accounts.json contains role permissions and salted PBKDF2 hashes;
+  node login.json contains username/password. --make-account reads stdin and
+  emits one account record. No password CLI argument or global configuration.
+- Credentials have no independent expiry or online revocation. Password changes
+  do not invalidate existing credentials. Address/account changes create new
+  slots; retirement, HA and business storage remain unimplemented.
+- v4 is incompatible with v3 wire/signature format. Old public_key member stores
+  fail closed; deploy with a new database path, preserve the old database.
+- Approved project-local dependencies: tonic/tonic-prost/tonic-prost-build 0.14.6,
+  grpc-go 1.83.2, protoc-gen-go-grpc 1.6.2 and necessary dependencies on both hosts.
+  Rust minimum is now 1.88; actual verified toolchain remains 1.98.1.
+- New implementation and validation status: [gRPC contract](peer/grpc-implementation.md).
+  Historical v3 benchmark output is preserved and cannot qualify this version.
+- Service hardening keeps v4 unchanged. Common owns shared Rust process launch
+  and RPC error classification; temporary transport errors do not quarantine
+  Planet candidates. All network durations are bounded to 1 ms..24 h before
+  tasks are created, with explicit connection/dial/event limits.
+- Go admission and membership share identity validation; Rust/Go consume the
+  same public identity vectors. Slot replacements cannot change role/address.
+  Membership commits reuse the validated owned snapshot instead of reading and
+  decoding the full member bucket again. Tests remain with their owning layer.
+- One-key service tests include Python harness unit tests; service checks can
+  run bounded Go fuzz with `-FuzzSeconds` / `--fuzz-seconds`. All use existing
+  project-local tools/caches and never imply authorization to download.
+
+### 2026-09-10: Check in generated protocol source and prepare authenticated membership
+
+- **Accepted workflow:** The maintainer approved explicit Rust/Go protocol
+  generation with checked-in service-local generated source, Supervisor
+  admission and mesh integration, and comprehensive tests. Finish features
+  and test cases, simplify/review the code, then execute tests.
+- **Generation:** `proto/generator` owns protoc/Prost invocation and append-only
+  MessageIDs. Outputs live in `peer/common/src/generated` and
+  `supervisor/internal/generated`. Ordinary service builds do not invoke
+  protoc; one-key service checks independently compare regenerated output.
+- **Tools:** protobuf-go/protoc-gen-go 1.36.12 were specifically approved and
+  installed on both hosts under project build/. This does not approve new
+  unrelated dependencies or global changes.
+- **Historical v3 admission (superseded by the later v4 decision):** The maintainer approved signed admission in the complete
+  registration response, with no separate application. TLS 1.3 mutual authentication
+  binds the deployment certificate; a fresh process key signs the TLS exporter and
+  Hello negotiation. Supervisor signs raw member protobuf. Retries retain the first
+  CAS baseline and the same process UUID/key.
+- **Dependency authorization:** bbolt 1.4.3, x/sys 0.48.0, x/sync 0.10.0,
+  testify 1.10.0, go-cmp 0.7.0 and necessary indirect dependencies are approved
+  in both project-local Go caches. No global installation is authorized.
+- **Progress:** Both native toolchains pass 29 Peer, 24 Go top-level and four
+  generator tests; Linux Go race, actual-process regressions and 60-second
+  fault loops pass. After explicit maintainer approval, two temporary Windows
+  inbound rules enabled direct mixed-host qualification: two Peers per host,
+  six regression groups and 13 fault cycles in 60 seconds passed on the final
+  predecode count/phase guards. Both owned rules were removed and their absence
+  verified in ActiveStore; test processes and owned temporary directories are gone.
+  The earlier native fault loops remain historical runs before those input guards.
+  See [Validation](service-admission-validation-20260910.md).
+
+### 2026-09-09: Normalize the service foundation and process lifecycle
+
+- **Structure:** Rust binary `peer` delegates CLI/logging/signals to `src/app`
+  and borrows the existing network library. Go app owns server lifetime while
+  `internal/management` owns HTTP handlers. Do not impose identical language
+  trees or add empty domain/persistence abstractions.
+- **Runtime:** Peer no longer stops on stdin/EOF. Observe Ctrl+C/SIGTERM and
+  root-task termination; always request cleanup on error. Default worker count
+  is 2, shutdown deadline 5 seconds. Exit codes are 0/1/2 for normal/runtime/
+  configuration outcomes in both services. Diagnostic events remain lossy.
+- **Build:** Normal Cargo commands are offline; service checks use frozen
+  locks. Message IDs are still automatic but only an explicit
+  `VERDANDI_UPDATE_MESSAGE_IDS=1` command may update their source lockfile.
+  Checks force that switch off. No schema or existing ID changed in this pass.
+- **Scope:** Binary naming and equals-style CLI are implemented, superseding
+  their earlier design-only status below. Explicit `--id` and legacy Discover
+  remain until the separate registration/process-identity migration. This
+  foundation does not approve TLS, persistence, membership or capacity claims.
+- **Dependencies:** Maintainer approved signal-hook-registry for Tokio signal;
+  JSON logging reuses existing serde_json caches. Versions stay in Cargo.lock.
+  [Service foundation](service-foundation.md) owns commands and release gates;
+  [Contributing](CONTRIBUTING.md) owns the contributor entry point.
+
+### 2026-09-09: Establish the Admin frontend foundation
+
+- **Scope:** `admin/` remains a Vue 3 / TypeScript / Vite / Naive UI / Three.js
+  Alpha frontend with three available stars and one isolated unavailable black
+  hole in the local demo, not a live Supervisor
+  topology or authorization implementation.
+- **Boundaries:** App composition injects a readonly `GalaxyData` snapshot.
+  The galaxy feature separates model, demo data, Vue UI/composable and Three.js
+  runtime. Runtime has no Vue, Supervisor API or demo-data dependency; scene
+  loading stays dynamic. A local asset loader reads the bundled GLB models.
+  Stable IDs identify selections and explicit links identify adjacency.
+  All celestial bodies use shared GLB geometry; unavailable nodes expose no
+  planets or incident links, including when an input snapshot retains old data.
+- **Ownership:** One scene owns selection, one RAF loop and a reverse-order
+  resource scope. Snapshot replacement, retry, failed initialization and unmount
+  release old resources; cancelled imports and GLB loads cannot mount a scene.
+- **Quality gates:** Node 24 built-in regression tests, strict Vue/TypeScript,
+  Prettier and an import-boundary check run through `pnpm check`. No new
+  dependency or automatic install/publish workflow was introduced.
+- **References:** [Admin README](admin/README.md),
+  [architecture](admin/docs/architecture.md) and
+  [contribution rules](admin/CONTRIBUTING.md). Full snapshot replacement resets
+  the scene; incremental synchronization and large-scale GPU qualification are
+  separate future work. Root branch/publication rules remain unchanged.
+
+### 2026-09-09: Start Supervisor with a bounded management service skeleton
+
+- **Dependency update:** The maintainer subsequently approved replacing the
+  private listener limiter with `golang.org/x/net/netutil`. Pin `x/net v0.59.0`
+  and its `go.sum` checksums; this supersedes only the standard-library-only
+  choice below. Ordinary wrappers stay offline. Explicit acquisition uses
+  project-local caches and the Go module proxy/checksum database; chi and gnet
+  are not selected dependencies.
+- **Implemented scope:** Independent Go module `supervisor/`, executable
+  `supervisor`, management HTTP listener, CLI validation, structured JSON logs,
+  bounded connection admission and owned shutdown. Use the existing Go 1.27
+  baseline and standard library only, with no new dependency or framework.
+- **Boundary:** Management `/healthz` is not Peer/cluster readiness. Its HTTP
+  listener is not the future TCP/Protobuf `peer --super` registration endpoint.
+  Do not expose successful registration or persistent member responses before
+  those protocols and storage are implemented. Peer UUID replacement, durable
+  membership, Catalog publishing and admin integration remain separate work.
+- **Operations:** `supervisor/go.ps1` and `go.sh` preserve project-local cache
+  locations and force local-toolchain, offline, readonly-module operation in
+  child processes only. No global environment/config changes or downloads.
+- **Validation:** Native Windows vet, HTTP/lifecycle tests and binary build;
+  native Ubuntu vet, race tests and build using existing Go/GCC. Linux executable
+  also verified closed stdin, health, SIGTERM and released port. This qualifies
+  the skeleton, not production topology or persistence. See
+  [Supervisor README](supervisor/README.md).
+
+### 2026-09-09: Simplify Peer launch and use process-scoped UUIDs
+
+- **Target interface (CORE-012):** `peer --listen=IP[:PORT]
+  --super=HOST[:PORT] --cluster=ID`, using `--name=value`. Name the local-address
+  placeholder `--listen`; the target executable is `peer` / `peer.exe`.
+  Keep cluster separate from business Zone and do not add a `--zone` flag.
+  Port defaults remain proposals; explicit ports are shown in examples.
+- **Process identity:** Generate one Peer UUID at process startup. Reconnects
+  and registration retries in that process reuse it; restarting generates a new
+  UUID. Do not require `--id`, persist/recover the previous Peer ID, or silently
+  substitute an additional fixed Peer ID. A process UUID is not authentication.
+- **Persistent state:** Business Key/version/deletion state survives unchanged.
+  Separate process identity from durable ownership and replica accounting before
+  implementing StateStore/OwnerPush. A new UUID does not authorize taking over an
+  old owner or counting the same disk twice in durable confirmations.
+- **Remaining identity work:** Review new UUID at an existing address, stale
+  process cleanup, Hello/boot_id consolidation and connection generations.
+  The old Supervisor-offline restart proposal relied on stable Peer identity;
+  it is superseded, and how a new process reuses legitimate deployment authority
+  while Supervisor is offline remains unresolved. Do not infer admission from IP
+  or a cached list. The Publisher-offline durable Catalog recovery goal remains.
+- **Status:** Design only. Current code still builds `verdandi`, uses explicit
+  `--id`, and implements Discover rather than Supervisor registration. Current
+  `next_boot_id` is not a UUID generator. No source/schema changes or downloads.
+  See [Core identity/configuration](peer/core-design.md#4-peer-身份与配置).
+
+### 2026-09-09: Use Go for Supervisor and Rust for Peer
+
+- **Language target superseded 2026-09-11:** Future Star/Planet select C++26;
+  current Rust code remains until the separately authorized migration qualifies.
+  See [C++26 design](peer/cpp26-skeleton-design.md). Supervisor remains Go.
+- **Confirmed languages:** The independent Supervisor service uses Go; the Peer
+  service uses Rust. This resolves the earlier pending Supervisor language choice.
+- **Responsibilities:** Supervisor handles membership registration, management
+  and observation APIs, and may act as an authorized Catalog Publisher. Peer
+  owns business replication, authoritative Catalog persistence and SDK sync.
+  Rust's internal per-connection supervisor remains part of the Rust Peer.
+- **Scope:** Language selection only; storage engines and remaining protocol
+  decisions are not selected by implication. The Go Supervisor backend is not
+  implemented yet. No tool or dependency downloads are authorized by this entry.
+- **References:** [Supervisor design](peer/supervisor-design.md) and
+  [Peer design](peer/design.md), P-004/P-012.
+
+### 2026-09-09: Keep authoritative Catalog persistence in Peers
+
+- **Updated 2026-09-10:** The Galaxy decision above allows memory/disk modes and
+  mixed Stars. The following durable recovery goal applies to persistent
+  deployments; memory mode cannot promise recovery after every copy is lost.
+  New Star/Planet processes must now wait for Supervisor authentication, even
+  when restarting a previously joined deployment. This supersedes the offline
+  bootstrap suggestion below; business disk recovery does not grant admission.
+- **Final clarification:** Peer must durably retain authoritative Catalog state
+  and recover after the whole Peer group restarts while the Publisher is offline.
+  This supersedes the intermediate chat choice of memory-only Peer business
+  state. A discardable disk cache alone does not meet this requirement.
+- **Supervisor role:** Supervisor may also act as Catalog Publisher for its
+  authorized keys, using the normal Publisher interface and per-key single-writer
+  rule. It reconciles with Peer authority before continuing updates; do not add
+  a second independent authoritative Catalog database to Supervisor by default.
+  Its durable membership/management identity remains a separate responsibility.
+- **Recovery scope:** Peer stores complete current State, versions, deletion and
+  necessary ownership metadata. Registration remains Publisher/lease based and
+  Registry remains derived. Preserve A-001/A-002; quorum membership, owner
+  recovery and write fencing still require protocol review. Durable ACK does not
+  imply every Peer or SDK has already received the update.
+- **Offline bootstrap:** If Supervisor is also offline, previously joined Peers
+  need recoverable identities and persisted successful-join/known-member records
+  to reconnect. New boot IDs still distinguish sessions. First-time nodes still
+  need Supervisor's complete list; corrupt or missing local membership cannot
+  be treated as successful prior admission. Exact persistence format is pending.
+  **Superseded assumption:** CORE-012 above replaces cross-restart Peer identity
+  with process UUIDs; offline admission must be redesigned, not inferred here.
+- **Limits:** Surviving valid disks/backups are required; losing every durable
+  copy is not ordinary process restart. Memory-only Core tests do not qualify
+  production persistence. No storage engine, Supervisor language, single-socket
+  switch, automatic leader election or new dependency is selected here.
+  The later language decision above resolves Supervisor to Go and Peer to Rust.
+- **Status:** Documentation only; current Peer code still lacks business state
+  replication and storage. See [Supervisor Catalog role](peer/supervisor-design.md#7-supervisor-兼任-catalog-publisher)
+  and [Peer design](peer/design.md). Existing Redis SDK contracts are unchanged.
+
+### 2026-09-09: Bootstrap Peer membership through Supervisor registration
+
+- **Latest accepted flow (CORE-011):** A new Peer registers its identity/address
+  with Supervisor and obtains a complete Peer list before joining. It actively
+  connects to listed peers. Existing peers learn that new peer from its own
+  Hello and establish the reverse connection, even if their old lists omit it.
+- **Outage boundary:** Peers that already obtained a complete list keep
+  communicating and may finish joining while Supervisor is unavailable. Peers
+  that have not obtained a complete list wait for Supervisor recovery. This is
+  not a rule to reject an unfamiliar but valid new peer merely due to an old list.
+- **Simplicity:** Remove all Peer-to-Peer topology reconciliation, list exchange
+  and third-party introductions. Do not add an independent admission-ticket
+  step, Supervisor-wide member-list push, or delta ACK/replay state machine.
+  Keep Hello validation, mirrored TCP, bounded retries and business data sync.
+- **Ordering:** Supervisor registration and complete-list snapshot must have
+  a consistent order, so the later member of each pair knows the earlier one.
+  Persist registrations before successful responses and make retries idempotent.
+  Concurrent starts do not need Peer gossip when these conditions hold.
+- **Boundaries:** Membership registration is centralized; the data plane remains
+  peer-to-peer. Peer offline restart/persisted identity (subsequently refined by
+  the authoritative Catalog recovery decision above), production admission
+  security, member removal/address migration and business quorum changes remain
+  separate decisions. Fetching a list is an initialization gate, not itself an
+  authentication proof that a remote plain Hello can verify.
+- **Status:** Design only. Current code still implements periodic Discover;
+  Supervisor and UI are not implemented. The previous observer/pairwise design
+  below is superseded, as are intermediate ideas for full-list push and tickets.
+  See [Supervisor design](peer/supervisor-design.md). No new download permission.
+
+### 2026-09-09: Separate Peer join discovery from cluster supervision
+
+**Superseded by [Supervisor registration](#2026-09-09-bootstrap-peer-membership-through-supervisor-registration).**
+Preserved as decision history; pairwise discovery and observer-only repair are
+not the current target.
+
+- **Accepted direction:** Reconcile topology between the connected pair on join
+  and reconnect; retain deduplicated mirrored TCP connections, Ping/Pong and
+  bounded retries of known targets. Normal deployments add one Peer at a time
+  and wait for completed interconnection with an already complete network.
+- **Exceptional repair:** An independent Supervisor observes the cluster and
+  alerts or schedules bounded, targeted missing-connection repair. Do not
+  implement topology revision changes as all-neighbor full-list query triggers.
+  Sequential startup alone is not a general convergence guarantee; if the
+  Supervisor is the sole fallback, exceptional discovery recovery depends on
+  its eventual availability and complete observation coverage.
+- **Scope:** Peer business replication remains separate and still needs its
+  own reconciliation guarantees. The cluster Supervisor is not the internal
+  per-connection task supervisor or a business data leader.
+- **Status:** This supersedes periodic all-neighbor discovery as the target
+  repair design, not as a description of current code. Existing jittered
+  periodic Discover remains implemented until replacement and fault validation.
+  Supervisor, management APIs and 3D UI are not implemented. UI details are
+  proposals, not frozen decisions or permission to download dependencies.
+- **Design:** See [Supervisor design](peer/supervisor-design.md) for expected
+  inventory, stale observations, directed TCP accounting, bounded repair and
+  shared graph data for browser 3D, 2D and connection-table views.
+
+### 2026-09-08: Consolidate automated testing into regression and soak modes
+
+- **Accepted interface:** One Python controller exposes `regression` and
+  `soak --duration`. PS/Bash remain thin entries. SDK tests stay native and can
+  be selected independently; a narrowed selection is never full-project evidence.
+- **Duration:** Effective load time is per selected domain; serial domains add
+  their times. Preparation/build/cleanup are additional, and the Redis TIME
+  floor remains mandatory. Interrupted or shortened runs cannot pass. The
+  public range is 210 seconds through 24 hours per domain and target; fault
+  timing starts on workload readiness rather than process/compilation startup.
+- **Ownership:** Cleanup runs on success, failure, timeout and cancellation.
+  Register creation intent durably; verify run labels and immutable container
+  IDs before removal. Keep resource manifests for verified recovery after a dead
+  controller, while protecting active runs. Retain reports/logs/dependency caches.
+- **Isolation:** All caches, local configuration and reports are under ignored
+  project `build/`. Existing approved Redis images use `--pull never`. Test
+  commands do not install tools or restore from remote package feeds implicitly.
+  Windows dispatches Linux work to the Ubuntu VM, replacing WSL branches.
+  Child-only TEMP/TMP/TMPDIR/GOTMPDIR use each campaign's owned scratch directory.
+  The source-only Ubuntu copy has its own project-local Git metadata for direct
+  Bash source inventory; synchronization does not copy Git history or remotes.
+- **Authorization:** The maintainer specifically approved redis, msgpack,
+  Paramiko, cryptography and runtime dependencies in both project Python venvs;
+  existing pip reuse on Ubuntu; and its project-only .NET 10 SDK, .NET 8 runtime
+  and NuGet reference packages. These supersede the earlier Python deferrals;
+  they are not a general future download grant.
+- **Evidence:** Keep exact source fingerprints, platform/language/scenario
+  outcomes, partial results and cleanup status. Missing coverage remains visible.
+  Implementation and current verification belong in `worklog.md`.
+
+### 2026-09-08: Share native build policy in Python and keep thin platform entries
+
+- **Decision:** The maintainer installed Python and approved implementing the
+  reviewed shared-core approach. `sdk/cpp/build.py` is the standard-library
+  C++ build orchestrator; `build_support.py` owns native discovery and process
+  lifetime. `build.ps1`/`build.sh` preserve the existing platform command forms.
+  Python 3.10+ is required for these entries; native CMake presets remain
+  available. Go/Rust retain their small SDK cache wrappers; C# uses dotnet.
+- **Boundaries:** Preserve the existing profile/linkage flags, per-platform
+  cache layout, offline contract and system -> installed vcpkg -> project
+  prebuilt OpenSSL search order. Build policy lives once in Python; CMake
+  remains authoritative for targets, dependency definitions and native tests.
+  No toolchain/package installation is added to the entries. Diagnostic
+  environment overrides apply only to child processes.
+- **Python selection:** Use an existing user interpreter, with `-Python PATH`
+  on PowerShell or leading `--python PATH` on Bash when necessary. Never
+  hardcode a Codex runtime path. The Windows adapter can find uv's existing
+  `~/.local/bin/python.exe` without modifying PATH and skips empty Store
+  placeholders. PowerShell 5.1 source retains a UTF-8 BOM.
+- **Formatting authorization:** The maintainer explicitly approved Black and
+  its runtime dependencies from PyPI, installed in `build/tools/python-build`.
+  Black 26.5.1 was selected; pip downloads use `build/deps/pip` and Black cache
+  uses `build/cache/black`. This grants no other Python package downloads.
+  Ordinary C++ builds and policy tests use only the standard library. Earlier
+  Redis/Sentinel Python fixture work was separate at this decision point and
+  was subsequently approved by the unified-test decision above.
+- **Propagation review:** C++ reuses `sdk/run-tool.ps1` for PowerShell 5.1
+  argument quoting. Its Unicode stdout handling was fixed centrally for all
+  Go/Rust/C++ callers, with the console encoding restored after the command.
+  Bash and direct Python forwarding are checked separately; SDK/Lua protocol
+  source and the C# build path are unaffected.
+
+### 2026-09-07: Authorize SDK dependency acquisition after adopting project cache entry points
+
+- **Maintainer authorization:** The maintainer explicitly approved downloading
+  this project's Go, Rust, and C++ dependencies on Windows and the Ubuntu test
+  VM at `192.168.0.119`. This supersedes the earlier no-download constraint for
+  those SDK dependencies. Use the versions/manifests/checksums already selected
+  by the project; record sources, cache locations, and results. Unrelated tools
+  and Python dependencies are not covered by this authorization.
+- **Persistent working rule:** Use the owning SDK project entry points for
+  dependency restoration, building, and testing. Go/Cargo settings must remain
+  limited to launched tool processes; never change the maintainer's terminal,
+  user/system environment, or global tool configuration. Retain the cache
+  locations and C++ system/vcpkg/project-cache order documented below.
+- **Review before testing:** Before resuming runtime tests, perform a fresh
+  line-by-line static review of current owned source, tests, and build tooling.
+  Check unexpected errors, opportunities for idiomatic simplification, and
+  cross-language differences. Record reviewed file hashes/ranges and distinguish
+  confirmed defects, contractual language differences, and unverified risks.
+  Each fix still requires a propagation review across all SDKs/bindings/Lua.
+- **VM boundary:** Keep VM caches/build output local to its checkout and omit
+  them from source synchronization. Retain the external OpenSSL-build policy;
+  dependency download authorization does not turn on automatic OpenSSL source
+  compilation. Python fixture fixes and downloads were deferred at this point;
+  the later unified-test decision above explicitly authorizes that work.
+- **Subsequent explicit VM tool approval:** The maintainer also approved Go
+  1.27.1 and Rust 1.98.1 from official sources under the VM project's
+  `build/tools`, plus Ubuntu official `build-essential`, `cmake`, and
+  `pkg-config` in system directories. This named approval covers their required
+  installation dependencies; it is not a general tool-installation grant.
+
+### 2026-09-07: Keep this project's Go/Rust caches under its own build directory
+
+- **Decision:** Go uses `build/deps/go/pkg/mod` for `GOMODCACHE` and
+  `build/cache/go` for `GOCACHE`. Rust uses `build/deps/cargo` for `CARGO_HOME`
+  and `build/rust/target` for `CARGO_TARGET_DIR`. All four are ignored by the
+  existing repository-level `/build/` rule; manifests and lockfiles stay tracked.
+- **Entry points:** Go provides `go.ps1`/`go.sh`; Rust provides
+  `cargo.ps1`/`cargo.sh`. They pass native cache settings only to the launched
+  tool and its children and run it from the owning SDK directory. All changes
+  stay in the project: no activation, parent-terminal environment/working
+  directory changes, or persistent user/system settings. Existing toolchains,
+  `PATH`, `RUSTUP_HOME`, and shared caches stay intact. Cargo config/credentials
+  in the old Cargo home are not copied implicitly. Plain tool invocations and
+  IDEs bypassing these entry points retain their usual defaults. The later
+  approved unified-test decision supersedes the initial Python deferral:
+  migrated harnesses apply the same child-process cache policy directly.
+- **Boundaries:** The initial cache-only change did not authorize downloads;
+  SDK dependency acquisition was subsequently authorized in the decision above.
+  It does not change C++'s system/vcpkg/project-cache discovery policy. Windows and Linux
+  each populate their own ignored `build/`; source synchronization excludes it.
+
+### 2026-09-06: Consume prebuilt OpenSSL and leave its construction external
+
+- **Decision:** Windows and Linux native entry points try system OpenSSL,
+  already installed local vcpkg packages, then extracted development packages
+  under `build/deps/openssl/<platform>/x64`. Missing compatible packages produce
+  requirements and external-preparation guidance only. A specific download
+  requires explicit maintainer approval; no suitable binary means an external
+  source build, never an automatic OpenSSL build or tool installation.
+- **Scope:** Only OpenSSL requires this external build boundary. Boost,
+  SQLite amalgamation, and yyjson retain their checksum-locked source fallbacks
+  and compilation through the existing C/C++ toolchain. No download is implied
+  by a request to build, test, or organize the project.
+- **Enforcement:** SDK and probe CMake entry points force
+  `VCPKG_MANIFEST_INSTALL=OFF` before `project()`. Both native wrappers validate
+  installed packages with the selected profile's compile/link probe; finding
+  the vcpkg executable alone is insufficient. Package roots are checked to
+  reject mixed system/cache artifacts. Native wrappers disable vcpkg app-local
+  deployment; dependent DLLs must be externally available at runtime.
+- **Supersession:** Replaces the OpenSSL acquisition/cache portion of the
+  2026-09-02 native-build decision below. The retained vcpkg manifest supports
+  external preparation. Detailed locations, limitations, and commands are in
+  `sdk/cpp/BUILD.md`; actual offline evidence is in `worklog.md`.
+
+### 2026-09-05: Review every bug fix for propagation across languages
+
+- **Maintainer requirement:** Every bug fix must review corresponding logic
+  in all languages, shared cores, bindings, and test tooling. Record affected
+  paths and the evidence for unaffected paths; source review is not a runtime
+  pass. The recurring workflow is specified in `coding.md`, section 15.
+- **Catalog example:** The original value validator fix did not cover the
+  notification field decoder. Array Replace fields use numeric index order,
+  while Map/Value and sparse Patch fields use lexical order. C#/C ABI/Legacy
+  inherit defects in the shared C++ core; Go/Rust/Lua require separate review.
+
+### 2026-09-05: Separate C++ Catalog value validation from transport
+
+- **Correctness:** Canonical unique Array indices in `[0,N)` prove complete
+  coverage regardless of `std::map` lexical iteration. Replace must separately
+  encode numeric argument order; an eleven-entry regression covers the first
+  decimal-width transition. Publisher, Subscriber, and checkpoint recovery
+  continue to share one validator.
+- **Implementation:** Pure validation and Replace argument encoding live in
+  private `catalog_value.cpp`/`internal/catalog_value.hpp`. Validation does not
+  allocate a temporary name vector. Final arguments remain owned and bounded;
+  public APIs, C ABI signatures, Redis storage, and Lua bytes are unchanged.
+- **Evidence boundary:** The standalone test project needs only C++23 and
+  CMake. It is not a replacement for native/binding/Redis qualification. The
+  current offline review and remaining gates are in
+  `optimization-review-20260905.md`; no dependency download, commit, or push was
+  authorized or performed for this work.
+
 ### 2026-09-02: Standardize the Windows and Linux native build entry points
 
 - **Decision:** `sdk/cpp/build.ps1` on Windows x64 and `sdk/cpp/build.sh` on
@@ -525,7 +1184,8 @@ superseded entry; mark it superseded and link to its replacement.
   SDKs, CMake, build generators, OpenSSL, and vcpkg, but never install a
   toolchain or package manager. They do not require .NET. Ninja is optional;
   macOS remains unsupported.
-- **Dependency boundary:** OpenSSL 3.0 or newer comes from the system or an
+- **Dependency boundary (OpenSSL portion superseded by the 2026-09-06
+  prebuilt-OpenSSL decision above):** OpenSSL 3.0 or newer comes from the system or an
   existing vcpkg installation and is never built directly by Verdandi. Boost,
   SQLite, and yyjson use compatible system packages or checksum-locked source
   archives. Offline mode permits only verified caches and cannot fall back to

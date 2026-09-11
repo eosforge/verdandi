@@ -25,6 +25,9 @@ import redis
 REPOSITORY = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY))
 
+from testkit.resources import Resources
+from testkit.support import run_command
+
 from testkit.sentinel.sentinel_test import (  # noqa: E402
     QualificationError,
     Remote,
@@ -40,6 +43,7 @@ class Fixture:
         self.name = f"verdandi-it-{run_id}-standalone"
         self.password = secrets.token_hex(24)
         self.created = False
+        self.resources = Resources(remote, run_id)
 
     @property
     def url(self) -> str:
@@ -51,9 +55,20 @@ class Fixture:
         existing = set(self.remote.run("docker ps -a --format '{{.Names}}'").splitlines())
         if self.name in existing:
             raise QualificationError(f"container collision: {self.name}")
+        self.resources.container(self.name)
         command = [
             "docker",
             "run",
+            "--pull",
+            "never",
+            "--memory",
+            "512m",
+            "--memory-swap",
+            "512m",
+            "--cpus",
+            "1",
+            "--pids-limit",
+            "128",
             "-d",
             "--name",
             self.name,
@@ -96,138 +111,23 @@ class Fixture:
         raise QualificationError(f"Redis did not become ready: {last_error}")
 
     def cleanup(self) -> None:
-        if not self.created:
-            return
-        label = self.remote.run(
-            "docker inspect -f " + shlex.quote('{{index .Config.Labels "verdandi.test"}}') + " " + shlex.quote(self.name),
-            check=False,
-        ).strip()
-        if label and label != self.run_id:
-            raise QualificationError(f"refusing to remove {self.name}: ownership label is {label!r}")
-        if label == self.run_id:
-            self.remote.run(f"docker rm -f {shlex.quote(self.name)}")
-        deadline = time.monotonic() + 10
-        while port_open(self.remote.host, self.port) and time.monotonic() < deadline:
-            time.sleep(0.1)
-        if port_open(self.remote.host, self.port):
-            raise QualificationError(f"test listener remains on port {self.port}")
+        self.resources.cleanup()
 
 
-def run_command(
-    name: str,
-    command: list[str],
-    directory: Path,
-    environment: dict[str, str],
-    required_output: str | None = None,
-) -> dict[str, object]:
-    print(f"\n=== {name} ===", flush=True)
-    started = time.monotonic()
-    process = subprocess.Popen(
-        command,
-        cwd=directory,
-        env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-    )
-    output: list[str] = []
-    assert process.stdout is not None
-    for line in process.stdout:
-        console_encoding = sys.stdout.encoding or "utf-8"
-        printable = line.encode(console_encoding, errors="replace").decode(console_encoding)
-        print(printable, end="", flush=True)
-        output.append(printable)
-    status = process.wait()
-    serialized = "".join(output)
-    if status != 0:
-        raise subprocess.CalledProcessError(
-            status,
-            command,
-            output=serialized,
-        )
-    if required_output is not None and required_output not in serialized:
-        raise QualificationError(f"{name} did not execute its expected test count")
-    elapsed = round(time.monotonic() - started, 3)
-    return {
-        "name": name,
-        "status": "pass",
-        "elapsed_seconds": elapsed,
-        "output": serialized.strip(),
-    }
-
-
-def run_go_load(
-    environment: dict[str, str],
-) -> dict[str, object]:
-    load_seconds = int(environment["VERDANDI_LOAD_SECONDS"])
-    command = [
-        "go",
-        "test",
-        "-tags=integration,load",
-        "-run",
-        "TestRegistrationSelector",
-        "-count=1",
-        f"-timeout={load_seconds * 2 + 1_200}s",
-        "-v",
-        "./registration",
-    ]
-    if os.name != "nt":
-        return run_command(
-            "Go sustained and scale qualification (Linux)",
-            command,
-            REPOSITORY / "sdk" / "go",
-            environment,
-        )
-
-    windows_directory = str(REPOSITORY / "sdk" / "go")
-    forwarded = {
-        name: environment[name]
-        for name in (
-            "VERDANDI_REDIS_URL",
-            "VERDANDI_LOAD_SECONDS",
-            "VERDANDI_SELECTOR_FANOUT",
-            "VERDANDI_SCALE_REGISTRATIONS",
-        )
-    }
-    script = "env " + " ".join(f"{name}={shlex.quote(value)}" for name, value in forwarded.items())
-    script += " " + " ".join(map(shlex.quote, command))
+def run_go_load(environment):
     return run_command(
-        "Go sustained and scale qualification (WSL/Linux)",
-        ["wsl.exe", "--cd", windows_directory, "--", "bash", "-lc", script],
-        REPOSITORY,
-        os.environ.copy(),
+        "Go sustained update and renewal qualification",
+        ["go", "test", "-tags=integration,load", "-run", "Qualification|Load|Scale", "-count=1", "-timeout=90m", "-v", "./registration"],
+        REPOSITORY / "sdk/go",
+        environment,
+        timeout=5400,
     )
 
 
-def run_go_race_integration(environment: dict[str, str]) -> dict[str, object]:
-    command = ["go", "test", "-race", "-tags=integration", "-count=1", "./..."]
-    if os.name != "nt":
-        return run_command(
-            "Go standalone integration with race detector (Linux)",
-            command,
-            REPOSITORY / "sdk" / "go",
-            environment,
-        )
-
-    redis_url = shlex.quote(environment["VERDANDI_REDIS_URL"])
-    script = "env VERDANDI_REDIS_URL=" + redis_url + " " + " ".join(map(shlex.quote, command))
-    return run_command(
-        "Go standalone integration with race detector (WSL/Linux)",
-        [
-            "wsl.exe",
-            "--cd",
-            str(REPOSITORY / "sdk" / "go"),
-            "--",
-            "bash",
-            "-lc",
-            script,
-        ],
-        REPOSITORY,
-        os.environ.copy(),
-    )
+def run_go_race_integration(environment):
+    if os.name == "nt":
+        return {"name": "Go race detector", "status": "not_applicable", "reason": "Runs on the Linux target"}
+    return run_command("Go integration race", ["go", "test", "-race", "-tags=integration", "-count=1", "./..."], REPOSITORY / "sdk/go", environment)
 
 
 def qualify(fixture: Fixture, options: argparse.Namespace) -> dict[str, object]:
@@ -414,7 +314,7 @@ def qualify(fixture: Fixture, options: argparse.Namespace) -> dict[str, object]:
 
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default="192.168.0.90")
+    parser.add_argument("--host", default="192.168.0.119")
     parser.add_argument("--ssh-user", default="ubuntu")
     parser.add_argument("--port", type=int, default=16380)
     parser.add_argument("--load-seconds", type=int, default=120)

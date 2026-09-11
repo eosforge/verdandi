@@ -1,0 +1,35 @@
+[workspace]
+members = ["generator"]
+resolver = "3"
+
+[package]
+name = "verdandi-transport-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+autotests = false
+default-run = "verdandi-transport-probe"
+
+[dependencies]
+verdandi-peer-common = { path = "../../peer/common" }
+tonic = { version = "=0.14.6", default-features = false, features = ["transport", "codegen", "router"] }
+tonic-prost = "=0.14.6"
+prost = "=0.14.4"
+tokio = { version = "=1.53.1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-util = { version = "=0.7.19", features = ["rt"] }
+tokio-stream = { version = "=0.1.19", features = ["net"] }
+hyper-util = { version = "=0.1.20", features = ["tokio"] }
+tower = { version = "=0.5.3", default-features = false, features = ["util"] }
+rustls = { version = "=0.23.43", default-features = false, features = ["ring", "std"] }
+tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring"] }
+rustls-pemfile = "=2.2.0"
+ring = "=0.17.14"
+serde_json = "=1.0.151"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+unwrap_used = "deny"
+expect_used = "deny"

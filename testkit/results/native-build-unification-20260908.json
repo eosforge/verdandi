@@ -1,0 +1,193 @@
+{
+  "date": "2026-09-08",
+  "scope": "Shared standard-library C++ build orchestration and thin PowerShell/Bash adapters",
+  "status": "passed",
+  "line_counts": {
+    "before_cpp_entries": 1901,
+    "after_cpp_entries_and_shared_python": 656,
+    "before_existing_sdk_runner": 40,
+    "after_sdk_runner": 45,
+    "includes_comments_and_blank_lines": true
+  },
+  "python_minimum": "3.10",
+  "python_validation": "Python 3.10 syntax parsed; Python 3.12 help smoke passed; runtime matrix used existing Windows 3.14.7 and Ubuntu 3.14.4.",
+  "windows_tools": {
+    "cmake": {
+      "path": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      "version": "4.4.3"
+    },
+    "cpp": {
+      "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe",
+      "version": "14.51.36231"
+    },
+    "visual_studio": {
+      "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community",
+      "version": "18.9.12120.119"
+    },
+    "clang_format": {
+      "path": "C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Tools\\Llvm\\x64\\bin\\clang-format.exe",
+      "version": "clang-format version 22.1.3 (https://github.com/llvm/llvm-project e9846648fd6183ee6d8cbdb4502213fcf902a211)"
+    },
+    "python": {
+      "path": "C:\\Users\\server\\AppData\\Roaming\\uv\\python\\cpython-3.14-windows-x86_64-none\\python.exe",
+      "version": "3.14.7"
+    }
+  },
+  "linux_tools": {
+    "cmake": {
+      "path": "/usr/bin/cmake",
+      "version": "4.2.3"
+    },
+    "c": {
+      "path": "/usr/bin/gcc",
+      "version": "15.2.0"
+    },
+    "cpp": {
+      "path": "/usr/bin/g++",
+      "version": "15.2.0"
+    },
+    "python": {
+      "path": "/usr/bin/python3",
+      "version": "3.14.4"
+    }
+  },
+  "formatter": {
+    "version": "black==26.5.1",
+    "environment": "build/tools/python-build",
+    "download_cache": "build/deps/pip",
+    "formatter_cache": "build/cache/black",
+    "packages": [
+      "black==26.5.1",
+      "click==8.5.0",
+      "mypy_extensions==1.1.0",
+      "packaging==26.3",
+      "pathspec==1.1.1",
+      "pip==26.2.1",
+      "platformdirs==4.11.7",
+      "pytokens==0.4.1"
+    ]
+  },
+  "sources": [
+    {
+      "path": "sdk/cpp/build.py",
+      "sha256": "e071247402a54d55b902d984861fc27b46014106d5a62858d05f664858d5eb36",
+      "bytes": 19523
+    },
+    {
+      "path": "sdk/cpp/build_support.py",
+      "sha256": "f0485505b579b35a1905ed7da7a308fe33ca426ee3dfbb535bbcb92f0948df2d",
+      "bytes": 10325
+    },
+    {
+      "path": "sdk/cpp/build.ps1",
+      "sha256": "08b94727dca8a94d1428a8f8369e0be7346b61c06f97680774e895838655b963",
+      "bytes": 2242
+    },
+    {
+      "path": "sdk/cpp/build.sh",
+      "sha256": "44a3826f66dae7d9033e9eca1b55fe550832ede9a84b43f1a6fcff3c1596f981",
+      "bytes": 759
+    },
+    {
+      "path": "sdk/run-tool.ps1",
+      "sha256": "72e9973edfe906cb285af1c9ce1c2c5cd9ec437972c506ac0e4ec63350d4f3cf",
+      "bytes": 2082
+    },
+    {
+      "path": "sdk/cpp/tests/dependency_policy_test.py",
+      "sha256": "b6edb4d536ecb82008c3f0bf81da19e1bdc1ef00f4c6e507c77baf921d6caf5c",
+      "bytes": 20436
+    }
+  ],
+  "linux_source_hashes_match": true,
+  "tests": [
+    {
+      "name": "shared-policy-and-process",
+      "windows_passed": 12,
+      "linux_passed": 12,
+      "includes": "Provider ordering, strict selection, offline flags, failure stops, arguments, cwd/environment, timeout process-tree cleanup and platform tool selection"
+    },
+    {
+      "name": "shell-entry-transport",
+      "passed": [
+        "Windows PowerShell 5.1",
+        "PowerShell 7",
+        "Bash"
+      ],
+      "includes": "Space/Unicode paths, trailing backslash and exit code 17; Bash also forwards empty arguments and embedded quotes"
+    },
+    {
+      "name": "cmake-dependency-guards",
+      "windows_passed": 4,
+      "linux_passed": 4,
+      "includes": "Two early manifest-install guards and two selected-package boundary cases"
+    },
+    {
+      "name": "native-configure-build-ctest",
+      "profile": "dev",
+      "configuration": "Debug",
+      "linkage": "shared",
+      "offline": true,
+      "jobs": 1,
+      "windows_passed": 16,
+      "linux_passed": 16,
+      "skipped": 0,
+      "includes": "Redis integration, C ABI and Legacy consumers"
+    },
+    {
+      "name": "windows-parent-state",
+      "status": "passed",
+      "includes": "Success/failure preserve environment, cwd and console encoding"
+    },
+    {
+      "name": "go-rust-cache-entry-propagation",
+      "status": "passed",
+      "includes": "Go GOMODCACHE/GOCACHE and Cargo offline locked metadata/target directory"
+    },
+    {
+      "name": "format-syntax-diff",
+      "status": "passed",
+      "includes": "Black, Python 3.10 syntax parsing and git diff --check"
+    }
+  ],
+  "native_commands": {
+    "windows": "powershell -NoProfile -ExecutionPolicy Bypass -File sdk/cpp/build.ps1 all -Profile dev -Linkage shared -Offline -Jobs 1",
+    "linux": "bash sdk/cpp/build.sh all --profile dev --linkage shared --offline --jobs 1",
+    "redis": "Each command received VERDANDI_REDIS_ADDRESS=127.0.0.1:16379 only in its process environment; Windows used an owned SSH tunnel to the existing test container."
+  },
+  "limitations": [
+    "No new release/check or real Ninja/Clang matrix",
+    "No new Python Redis/Sentinel fixture work",
+    "No Python 3.10 runtime was installed for this change"
+  ],
+  "logs": [
+    {
+      "path": "build/script-unification-20260908/windows-policy-final.log",
+      "sha256": "8c619dcff8ba875299f61043d2e8d66a615e5f371e8986ae1af2f486037303b4"
+    },
+    {
+      "path": "build/script-unification-20260908/windows-native-final.log",
+      "sha256": "3e5896681ebb21c4531f7c6a42149582feb4cb45d41dc423a4ccce5c397db3ad"
+    },
+    {
+      "path": "build/script-unification-20260908/windows-environment.log",
+      "sha256": "872a4a7d52c3338d1a7c1558bfbf49ec3aff0784240425c7c0717ccbc2262efe"
+    },
+    {
+      "path": "build/script-unification-20260908/linux-policy-final.log",
+      "sha256": "8dda3634095a08856e2f826eaa76f2591f812b9789ca7b86fb21ed22957a1343"
+    },
+    {
+      "path": "build/script-unification-20260908/linux-native.log",
+      "sha256": "e1a125659fb560f82765df72cac992e252f34a1a53f77514f34a12af6f9be5ed"
+    },
+    {
+      "path": "build/script-unification-20260908/go-cache-paths.log",
+      "sha256": "c9e01e837cface18ee4d032dafb0bb3f590fe206a05ab4e5d48d37da588e193e"
+    },
+    {
+      "path": "build/script-unification-20260908/rust-metadata.json",
+      "sha256": "012265dde8367e000f3246fa6dc0700763f08627e35eb8382fc4c730b5c89e9f"
+    }
+  ]
+}

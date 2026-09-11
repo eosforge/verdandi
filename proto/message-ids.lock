@@ -1,0 +1,13 @@
+# Automatically assigned MessageIDs. Commit this file with peer.proto. Never reuse an ID.
+1	verdandi.peer.v1.Hello
+2	verdandi.peer.v1.Ping
+3	verdandi.peer.v1.Pong
+4	verdandi.peer.v1.ProtocolError
+5	verdandi.peer.v1.DiscoverRequest
+6	verdandi.peer.v1.DiscoverResponse
+7	verdandi.peer.v1.RegistrationChallenge
+8	verdandi.peer.v1.RegistrationRequest
+9	verdandi.peer.v1.RegistrationResponse
+10	verdandi.peer.v1.PlanetRegistrationResponse
+11	verdandi.peer.v1.SessionPacket
+12	verdandi.peer.v1.LoginRequest

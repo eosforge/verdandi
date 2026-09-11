@@ -83,7 +83,47 @@ fn duplicate_reply_fields_and_noncanonical_numbers_are_corrupt() {
         parse_registration_reply(duplicate),
         Err(error) if error.code() == Code::Corrupt
     ));
-    assert_eq!(value_u64("01".into()), Some(1));
+    assert_eq!(value_u64("01".into()), None);
+    assert_eq!(value_u64("0".into()), None);
     assert_eq!(value_u64(Value::Integer(0)), None);
     assert_eq!(value_u64(Value::Integer(-1)), None);
+}
+
+#[test]
+fn present_metadata_and_statuses_must_match_the_registration_protocol() {
+    for result in ["ok", "error"] {
+        for (key, value) in [
+            ("@revision", "01".into()),
+            ("@revision", "0".into()),
+            ("@revision", Value::Null),
+            ("@timestamp", "01".into()),
+            ("@timestamp", "0".into()),
+            ("@timestamp", Value::Null),
+            ("&field", Value::Integer(1)),
+            ("&field", Value::Array(vec!["field".into()])),
+        ] {
+            let reply = parse_registration_reply(Value::Array(vec![
+                "&result".into(),
+                result.into(),
+                "&status".into(),
+                "stale".into(),
+                key.into(),
+                value,
+            ]));
+            assert!(matches!(reply, Err(error) if error.code() == Code::Corrupt), "{result}: {key}");
+        }
+    }
+    for status in ["closed", "deadline", "ambiguous", "unavailable", "unknown"] {
+        let reply = parse_registration_reply(Value::Array(vec!["&result".into(), "error".into(), "&status".into(), status.into()]));
+        assert!(matches!(reply, Err(error) if error.code() == Code::Corrupt), "{status}");
+    }
+}
+
+#[test]
+fn protocol_text_never_coerces_non_text_resp_values() {
+    for value in [Value::Integer(1), Value::Queued, Value::Array(vec!["ok".into()]), Value::Null] {
+        assert_eq!(value_string(value), None);
+    }
+    assert_eq!(value_string(Value::Bytes(vec![0xff].into())), None);
+    assert_eq!(value_string("ok".into()).as_deref(), Some("ok"));
 }

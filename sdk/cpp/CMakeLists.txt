@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.28)
 
+# 必须在 project() 加载 toolchain 前关闭隐式安装；已有源码缓存也不允许自动编译 OpenSSL。
+set(VCPKG_MANIFEST_INSTALL OFF CACHE BOOL "Use existing vcpkg packages without installing or building them" FORCE)
+
 project(verdandi_cpp VERSION 0.1.0 LANGUAGES C CXX)
 
 option(VERDANDI_BUILD_TESTS "Build the Verdandi C++ tests" ON)
@@ -58,8 +61,11 @@ add_library(verdandi_cpp
     src/c/registration.cpp
     src/c/selector.cpp
     src/catalog.cpp
+    src/catalog_path.cpp
     src/catalog_checkpoint.cpp
+    src/catalog_event_fields.cpp
     src/catalog_subscriber.cpp
+    src/catalog_value.cpp
     src/client.cpp
     src/configuration.cpp
     src/configuration_json.cpp
@@ -120,10 +126,10 @@ if(BUILD_SHARED_LIBS)
         # 把 CMake 已知的运行时 DLL 放到 Verdandi DLL 同目录，使 CTest、C# 和
         # 下游源码构建无需依赖生成器或包管理器偶然注入的 PATH。
         add_custom_command(TARGET verdandi_cpp POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                $<TARGET_RUNTIME_DLLS:verdandi_cpp>
-                $<TARGET_FILE_DIR:verdandi_cpp>
-            COMMAND_EXPAND_LISTS
+            COMMAND "${CMAKE_COMMAND}"
+                "-DVERDANDI_RUNTIME_DLLS=$<TARGET_RUNTIME_DLLS:verdandi_cpp>"
+                "-DVERDANDI_RUNTIME_DIRECTORY=$<TARGET_FILE_DIR:verdandi_cpp>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyRuntimeDlls.cmake"
             VERBATIM
         )
     endif()
@@ -138,6 +144,46 @@ endif()
 
 if(VERDANDI_BUILD_TESTS)
     enable_testing()
+    add_executable(verdandi_cpp_legacy_transaction_tests tests/legacy_transaction_test.cpp)
+    target_include_directories(verdandi_cpp_legacy_transaction_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    set_target_properties(verdandi_cpp_legacy_transaction_tests PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    verdandi_enable_test_warnings(verdandi_cpp_legacy_transaction_tests)
+    add_test(NAME verdandi_cpp_legacy_transaction_tests COMMAND verdandi_cpp_legacy_transaction_tests)
+    add_test(NAME verdandi_cpp_cmake_regression_tests COMMAND "${CMAKE_COMMAND}"
+        "-DCPP_ROOT=${CMAKE_CURRENT_SOURCE_DIR}" "-DWORK_ROOT=${CMAKE_CURRENT_BINARY_DIR}/fixtures"
+        "-DGENERATOR=${CMAKE_GENERATOR}" -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake_regression_test.cmake")
+    add_executable(verdandi_cpp_checkpoint_failure_tests tests/checkpoint_failure_test.cpp src/catalog_path.cpp src/catalog_value.cpp src/error.cpp)
+    target_include_directories(verdandi_cpp_checkpoint_failure_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_compile_features(verdandi_cpp_checkpoint_failure_tests PRIVATE cxx_std_23)
+    target_link_libraries(verdandi_cpp_checkpoint_failure_tests PRIVATE SQLite::SQLite3)
+    verdandi_enable_test_warnings(verdandi_cpp_checkpoint_failure_tests)
+    add_test(NAME verdandi_cpp_checkpoint_failure_tests COMMAND verdandi_cpp_checkpoint_failure_tests)
+    # 公开模板测试使用可控核心夹具，不链接真实核心，避免替身与生产符号重名。
+    add_executable(verdandi_cpp_selector_transaction_tests tests/selector_transaction_test.cpp src/error.cpp)
+    target_include_directories(verdandi_cpp_selector_transaction_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_features(verdandi_cpp_selector_transaction_tests PRIVATE cxx_std_23)
+    verdandi_enable_test_warnings(verdandi_cpp_selector_transaction_tests)
+    add_test(NAME verdandi_cpp_selector_transaction_tests COMMAND verdandi_cpp_selector_transaction_tests)
+
+    add_executable(verdandi_cpp_runtime_boundaries_tests tests/runtime_boundaries_test.cpp)
+    target_include_directories(verdandi_cpp_runtime_boundaries_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(verdandi_cpp_runtime_boundaries_tests PRIVATE verdandi::verdandi)
+    verdandi_enable_test_warnings(verdandi_cpp_runtime_boundaries_tests)
+    add_test(NAME verdandi_cpp_runtime_boundaries_tests COMMAND verdandi_cpp_runtime_boundaries_tests)
+    set_tests_properties(verdandi_cpp_runtime_boundaries_tests PROPERTIES TIMEOUT 15)
+
+    add_executable(verdandi_cpp_catalog_value_tests tests/catalog_value_test.cpp)
+    target_include_directories(verdandi_cpp_catalog_value_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(verdandi_cpp_catalog_value_tests PRIVATE verdandi::verdandi)
+    verdandi_enable_test_warnings(verdandi_cpp_catalog_value_tests)
+    add_test(NAME verdandi_cpp_catalog_value_tests COMMAND verdandi_cpp_catalog_value_tests)
+
+    add_executable(verdandi_cpp_catalog_event_fields_tests tests/catalog_event_fields_test.cpp)
+    target_include_directories(verdandi_cpp_catalog_event_fields_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(verdandi_cpp_catalog_event_fields_tests PRIVATE verdandi::verdandi)
+    verdandi_enable_test_warnings(verdandi_cpp_catalog_event_fields_tests)
+    add_test(NAME verdandi_cpp_catalog_event_fields_tests COMMAND verdandi_cpp_catalog_event_fields_tests)
+
     add_executable(verdandi_cpp_tests
         tests/schema_test.cpp
     )

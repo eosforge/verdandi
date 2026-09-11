@@ -1,0 +1,146 @@
+{
+  "date": "2026-09-05",
+  "baseline_commit": "81cb8b9",
+  "scope": "Catalog array ordering propagation audit and production notification field-reader regression; not a full SDK qualification",
+  "downloads_installs_restores_performed": false,
+  "committed_or_pushed": false,
+  "existing_tools": {
+    "compiler": "MSVC 19.44.35228 x64",
+    "cmake": "4.4.3",
+    "clang_format": "22.1.3, discovered in the existing Visual Studio LLVM x64 directory",
+    "python": "3.12.14, existing bundled runtime, standard-library-only tooling"
+  },
+  "original_reader_reproduction": {
+    "origin": "event_cursor and event_fields extracted from the pre-fix production catalog_subscriber.cpp; only an unused mode parameter was added to run the new test interface",
+    "complete_original_sdk": false,
+    "exit_code": 1,
+    "failed_assertions": 8,
+    "rejected_valid_array_lengths": [
+      11,
+      12,
+      100,
+      101,
+      1024,
+      65536
+    ],
+    "other_failures": [
+      "accepted lexical Array Replace order",
+      "publisher Array field output could not be decoded as a Replace notification"
+    ]
+  },
+  "fixed_reader": {
+    "msvc_release": "passed /O2 /W4 /WX",
+    "msvc_debug": "passed /Od /RTC1 /W4 /WX",
+    "assertions_per_run": 66973,
+    "array_lengths": [
+      0,
+      1,
+      10,
+      11,
+      12,
+      100,
+      101,
+      1024,
+      65536
+    ],
+    "cases": [
+      "numeric Array Replace",
+      "lexical Map and sparse Array Patch",
+      "wrong-mode order rejection",
+      "leading-zero/sign/overflow/hole/duplicate indices",
+      "truncated MessagePack fields",
+      "odd and oversized element counts",
+      "detached binary data",
+      "publisher argument to notification field-reader boundary"
+    ],
+    "full_envelope_and_subscriber_loop_executed": false
+  },
+  "checks": {
+    "standalone_cmake_release_ctest": {
+      "passed": 2,
+      "failed": 0
+    },
+    "clang_format_dry_run_werror": {
+      "passed": true,
+      "files": [
+        "sdk/cpp/src/catalog.cpp",
+        "sdk/cpp/src/catalog_subscriber.cpp",
+        "sdk/cpp/src/catalog_value.cpp",
+        "sdk/cpp/src/catalog_event_fields.cpp",
+        "sdk/cpp/src/internal/catalog.hpp",
+        "sdk/cpp/src/internal/catalog_value.hpp",
+        "sdk/cpp/src/internal/catalog_event_fields.hpp",
+        "sdk/cpp/tests/catalog_value_test.cpp",
+        "sdk/cpp/tests/catalog_value_benchmark.cpp",
+        "sdk/cpp/tests/catalog_event_fields_test.cpp",
+        "sdk/cpp/tests/redis_integration_test.cpp"
+      ]
+    },
+    "git_diff_check": "passed",
+    "registration_lua_generator_check": "passed",
+    "catalog_lua_generator_check": "passed"
+  },
+  "propagation_review": {
+    "cpp": "two affected paths fixed: value validation/argument encoding and Subscriber notification field decoding",
+    "c_abi_legacy_cpp_csharp": "affected through the shared native core; source chain reviewed, no binding runtime pass claimed",
+    "go": "no matching defect found in reviewed value/producer/notification/read/checkpoint paths; 512-entry validation benchmark exists but was not run",
+    "rust": "no matching defect found in reviewed value/producer/notification/read/checkpoint paths; 512-entry unit case exists but was not run",
+    "lua": "Replace enforces numeric index order, Patch enforces lexical order; authoritative read order is distinct from notification order",
+    "python": "test harness preserves supplied ordered field pairs; existing basic Lua array fixture has only 3 entries",
+    "powershell_bash_cmake": "build orchestration has no Catalog field ordering implementation; both CMake test graphs include the new regression"
+  },
+  "not_run": [
+    "complete SDK linking",
+    "full Subscriber translation unit with external OpenSSL headers",
+    "complete notification envelope and recovery loop",
+    "Redis/Sentinel/TLS/checkpoint I/O",
+    "C ABI/Legacy/C# runtime tests",
+    "Go/Rust tests",
+    "clang-tidy",
+    "Linux/sanitizers",
+    "endurance"
+  ],
+  "prior_benchmark_evidence": "testkit/results/optimization-offline-20260905.json remains the initial measured source snapshot; no new performance claim or historical evidence rewrite",
+  "sha256": {
+    "sdk/cpp/src/catalog.cpp": "7f4f7abe3975e33fee5afeb7f83e91527b05d04cada65bfc9ee491ed6dae7273",
+    "sdk/cpp/src/catalog_subscriber.cpp": "42e828c817680df95014f6c296ac36eb0ab4364d668266e49410498ea56cdde7",
+    "sdk/cpp/src/catalog_value.cpp": "b4a6083caf413866a36807a66eae0a0d0efcceaa655ca07259410bef75118d2f",
+    "sdk/cpp/src/catalog_event_fields.cpp": "ddd227f894327b6b34177f6485b0ff2872a9ce15fb0ba9f5b4b7754bf86f8cad",
+    "sdk/cpp/src/internal/catalog.hpp": "cd7d5b9c08c1d80ee81fdbfb1b0a4f380930fdbbf016f52ec7be1b6372a1e837",
+    "sdk/cpp/src/internal/catalog_value.hpp": "ccc2d1e65240daadd7f77f084c7c2a11e6030c15776fa7fe567659848dcd5320",
+    "sdk/cpp/src/internal/catalog_event_fields.hpp": "a7cd43984dc52c485b488e64d8d3028644e0778457add2f7eff1d33c02633e19",
+    "sdk/cpp/tests/catalog_value_test.cpp": "0fc6a0fa2cb6349d57907e6c73a7c97b4fc24e7a710a0e051e3b0e67e4a288fe",
+    "sdk/cpp/tests/catalog_value_benchmark.cpp": "5d187e3a56e3ae8707b33e0c8daa4a3d63dae8458920d47c1f1db654db3a05df",
+    "sdk/cpp/tests/catalog_event_fields_test.cpp": "41139a070f3fd4f65f122bea95adec565c447c5a488d3ccb23126307d094ab5f",
+    "sdk/cpp/tests/redis_integration_test.cpp": "34a1eaaf3ea7f632e8df9f5f02cd7924fad994f4cd663f86249d06f5a99ff6ff",
+    "sdk/cpp/CMakeLists.txt": "4efcc23983f634a601d76f5242dbf856f42036062e4e9b6687599bdfabd6dc1d",
+    "sdk/cpp/tests/offline/CMakeLists.txt": "e1a05da68e4465b25279e17afd64fb1deadee5e1981414d5dacf307d1fe300c1",
+    "sdk/go/catalog/value.go": "ffab32ff1fb894070925ef232948b46e8390876c6654a1b9dd2a4564e125ee1c",
+    "sdk/go/catalog/publisher.go": "3915230b815e2738d6610248303cdf0cec5e16839e127d7e421601698bb9e607",
+    "sdk/go/catalog/event.go": "4ab868217758e19fc669b30ce6f955218653977241ce80e134775f55b194d972",
+    "sdk/go/catalog/protocol.go": "e4ed1759f5b9d4b70f9d0492d5aec5660b2a6e81743ab359e3d696e93e36274a",
+    "sdk/go/catalog/read.go": "117d2ba6c2270753d75bd7ec3ee048e8dbde886aa80d68d1b34e2cccc737a729",
+    "sdk/go/catalog/store.go": "f8f449f9a5a68d9f441d4c0df7fbf9236bb4118575235fc540f20c42a74c206a",
+    "sdk/go/catalog/benchmark_test.go": "05935e8058d1f7483d41d5738ce172795bdc4ee5eeb8588fbb184ecf6896fc08",
+    "sdk/rust/src/catalog/model.rs": "38da45ecc96c532835b79194e22a24edb8247baf4f027f9149a313b445198592",
+    "sdk/rust/src/catalog/publisher.rs": "9667560cf65a668bf3785352af55741beeb27ab95422d668eb54b487fbe221ce",
+    "sdk/rust/src/catalog/event.rs": "2fa2f5d02c976f65d58b22b85fdcac14fce919587b608197018ae065073831c2",
+    "sdk/rust/src/catalog/subscriber_read.rs": "0b0883df8ce7340b9d8e9ca38b6d83c49dcd5797b8dd8238887edc9f14526976",
+    "sdk/rust/src/catalog/checkpoint.rs": "db5e5f37cc629276778ad52d2df1cc2966ccb2660f0f702304443329a016a2a6",
+    "sdk/rust/tests/internal/catalog/model.rs": "aa3cb04e48f411c3e121c48014294d728e18ea84739c3b74384dacd20d5beb33",
+    "sdk/cpp/src/c/catalog.cpp": "9de5423bd80faed632f1b81eed9cc392d6e84722e6e8cd740d779c7e2fde89bf",
+    "sdk/cpp/include/verdandi/legacy/catalog.hpp": "945ff128d4813bef5f676d2cefb9353bd83644797ca1c9f5c50a9a739edca045",
+    "sdk/csharp/src/Verdandi/Catalog/CatalogPublisher.cs": "0a692331e53d7c87ec73892d172798f6f07a159795535239c0c6c37c677baa12",
+    "sdk/csharp/src/Verdandi/Internal/NativeMethods.cs": "a0c84af81afd1533cd28a4eaec8508bdda81fa6268d1e036eadf88be01c6d658",
+    "sdk/csharp/tests/Verdandi.Tests/Program.cs": "f8b5fd9f4e887625cb81efd4096cef858144a9140f33ad0df84b17f8723e3470",
+    "lua/src/catalog/actions/replace.lua.inc": "acdd51b6f87a1c1f7ef8ae01bbc1c19268138c0da2a6568c0435634002f79103",
+    "lua/src/catalog/actions/patch.lua.inc": "6563d04434074181c56bd7fd0635371f7b7fc6caa5149fd3172992ff6bf51184",
+    "lua/src/catalog/actions/read.lua.inc": "bc52a9e31a47c3c3a8ac260d2820d87749a55486b926ece33c8084a495fd4172",
+    "testkit/lua/catalog_test.py": "1411d79a144b7e1c7daabe14bd99b3a91bfe4539b031f5392136c25cad17187c",
+    "coding.md": "59c839480857300ad49f441c47793621781f55f021a98887d55b75984695421a",
+    "codex.md": "0e5ed57104f31c8e028a560aa2d331e7d93b838f53c4409fa8f4676507ece948",
+    "worklog.md": "3fbd273a6eca61898e4ae2b6f37e1009a406f5646e659c0b2ed9937e83d4af3d",
+    "test-results.md": "8f6794d9c8eb88c283cddfbc8fc08197a2d0307998993f7289cd69f01f457b90",
+    "optimization-review-20260905.md": "b28a2ab617c3a2a4e08eeb1928c8ec7bbd80fa50f17160fce3327a51cf2bd42a"
+  }
+}

@@ -397,12 +397,14 @@ impl ClientInner {
         };
         // worker 串行拥有 desired/confirmed 状态和续期计时器；调用方只在短临界区合并 Fields。
         let (ready, ready_receiver) = oneshot::channel();
-        let worker = Arc::clone(&shared);
+        // 在启动任务前建立 Drop 关闭责任；ready 已发送但构造 future 未再次 poll 时取消也能终止 worker。
+        let registration = RegistrationCore { shared };
+        let worker = Arc::clone(&registration.shared);
         tokio::spawn(async move {
             run_registration(worker, guard, receiver, state, ready).await;
         });
         receive_result(ready_receiver).await?;
-        Ok(RegistrationCore { shared })
+        Ok(registration)
     }
 }
 
@@ -676,9 +678,6 @@ impl RegistrationShared {
     ///
     /// 合并后完整记录大小和 revision 上限仍由唯一 worker 针对最终 desired state 校验。
     fn validate_buffered_update(&self, update: &Update) -> Result<()> {
-        if update.version.is_none() && update.data.is_empty() {
-            return Err(Error::field(Code::Contract, "update"));
-        }
         if update.version.is_some_and(|version| version == 0 || version > MAX_SAFE_INTEGER) {
             return Err(Error::field(Code::Invalid, "@version"));
         }
@@ -721,9 +720,6 @@ impl RegistrationShared {
     /// `state` 同时保存期望和最近确认状态；`update` 只含可选 Version 与 Data 候选。
     /// 确定失败不改变 desired；Ambiguous/Corrupt 会提交 desired 并标记 uncertain，供下次完整 Register 对齐。
     async fn update_state(&self, state: &mut RegistrationState, update: Update) -> Result<()> {
-        if update.version.is_none() && update.data.is_empty() {
-            return Err(Error::field(Code::Contract, "update"));
-        }
         let version = update.version.unwrap_or(state.version);
         if version == 0 || version > MAX_SAFE_INTEGER {
             return Err(Error::field(Code::Invalid, "@version"));

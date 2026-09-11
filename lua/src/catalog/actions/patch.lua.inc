@@ -19,6 +19,7 @@ end
 
 local first_field = 5
 local projected_bytes = tonumber(current_encoded_bytes)
+local projected_fields = redis_call("HLEN", catalog_key) - 4
 local previous_name = nil
 for index = 0, set_count - 1 do
     local name = ARGV[first_field + index * 2]
@@ -43,7 +44,11 @@ for index = 0, set_count - 1 do
         projected_bytes = projected_bytes + #value - #old
     else
         projected_bytes = projected_bytes + #name + #value
+        projected_fields = projected_fields + 1
     end
+end
+if projected_fields > maximum_fields then
+    return fail("capacity", "fields", current_revision)
 end
 if projected_bytes ~= encoded_bytes then
     return fail("contract", "@encoded_bytes", current_revision)

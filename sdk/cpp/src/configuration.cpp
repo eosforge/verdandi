@@ -1,4 +1,5 @@
 #include "verdandi/configuration.hpp"
+#include "verdandi/detail/utf8.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -23,52 +24,7 @@ template <class T>
            (value >= 0x2000U && value <= 0x200aU) || value == 0x2028U || value == 0x2029U || value == 0x202fU || value == 0x205fU || value == 0x3000U;
 }
 
-/// 校验标准 UTF-8，拒绝截断、过长编码、代理项和超过 Unicode 上限的码点，并可返回首尾码点。
-[[nodiscard]] bool valid_utf8(const std::string_view value, std::uint32_t* first_codepoint = nullptr, std::uint32_t* last_codepoint = nullptr) noexcept {
-    bool has_first = false;
-    for (std::size_t index = 0; index < value.size();) {
-        const auto first = static_cast<unsigned char>(value[index]);
-        std::size_t width{1};
-        std::uint32_t codepoint{first};
-        if (first <= 0x7fU) {
-            // ASCII 已经是完整码点。
-        } else if (first >= 0xc2U && first <= 0xdfU) {
-            width = 2;
-            codepoint = first & 0x1fU;
-        } else if (first >= 0xe0U && first <= 0xefU) {
-            width = 3;
-            codepoint = first & 0x0fU;
-        } else if (first >= 0xf0U && first <= 0xf4U) {
-            width = 4;
-            codepoint = first & 0x07U;
-        } else {
-            return false;
-        }
-        if (index + width > value.size()) {
-            return false;
-        }
-        for (std::size_t offset = 1; offset < width; ++offset) {
-            const auto next = static_cast<unsigned char>(value[index + offset]);
-            if ((next & 0xc0U) != 0x80U) {
-                return false;
-            }
-            codepoint = (codepoint << 6U) | (next & 0x3fU);
-        }
-        if ((width == 3 && codepoint < 0x800U) || (width == 4 && codepoint < 0x1'0000U) || (codepoint >= 0xd800U && codepoint <= 0xdfffU) ||
-            codepoint > 0x10'ffffU) {
-            return false;
-        }
-        if (!has_first && first_codepoint != nullptr) {
-            *first_codepoint = codepoint;
-        }
-        has_first = true;
-        if (last_codepoint != nullptr) {
-            *last_codepoint = codepoint;
-        }
-        index += width;
-    }
-    return true;
-}
+using verdandi::detail::valid_utf8;
 
 [[nodiscard]] bool valid_zone(const std::string_view value) noexcept {
     return !value.empty() && value.size() <= 32 && std::ranges::all_of(value, [](const char raw) {

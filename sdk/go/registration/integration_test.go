@@ -380,6 +380,29 @@ func TestTypedRegistrationAndTransactionalSelectorIntegration(t *testing.T) {
 		cleanupZone(t, raw, zone)
 	})
 
+	empty, err := client.Registration[Fields, Fields](RegistrationOptions{
+		Type: "Empty", TTL: 15 * time.Second, RenewInterval: 5 * time.Second, Version: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := empty.Register(ctx, Fields{}, Fields{}); err != nil {
+		t.Fatal(err)
+	}
+	emptyRevision, emptyTimestamp := empty.Revision(), empty.Timestamp()
+	if err := empty.Update(ctx, Fields{}); err != nil {
+		t.Fatalf("empty Data no-op: %v", err)
+	}
+	if empty.Revision() != emptyRevision || empty.Timestamp() != emptyTimestamp {
+		t.Fatal("empty Data no-op changed revision or timestamp")
+	}
+	if err := empty.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := empty.Update(ctx, Fields{}); !IsCode(err, CodeClosed) {
+		t.Fatalf("closed empty Data Update: %v", err)
+	}
+
 	registration, err := client.Registration[apiAttr, apiData](RegistrationOptions{
 		Type:          "proxy",
 		TTL:           3 * time.Second,

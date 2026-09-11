@@ -14,7 +14,11 @@ constexpr std::size_t max_detail_bytes = 512;
 
 void truncate_detail(std::string& value) {
     if (value.size() > max_detail_bytes) {
-        value.resize(max_detail_bytes);
+        auto end = max_detail_bytes;
+        while (end != 0 && (static_cast<unsigned char>(value[end]) & 0xC0U) == 0x80U) {
+            --end;
+        }
+        value.resize(end);
     }
 }
 

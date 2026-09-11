@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <stop_token>
 #include <string>
 #include <thread>
@@ -56,6 +57,7 @@ public:
     [[nodiscard]] const registration_configuration& configuration() const noexcept;
     [[nodiscard]] std::shared_ptr<const policy> limits() const noexcept;
     [[nodiscard]] std::shared_ptr<verdandi::detail::driver> transport() const noexcept;
+    [[nodiscard]] std::shared_mutex& operations() noexcept;
 
     [[nodiscard]] result<registration_reply> call(verdandi::detail::registration_operation operation, std::string_view type, std::string_view uuid,
                                                   std::span<const std::string> arguments, bool mutation = true);
@@ -77,6 +79,8 @@ private:
     verdandi::detail::script unregister_script_;
     std::atomic<std::shared_ptr<const policy>> policy_;
     std::atomic_bool closed_{false};
+    std::mutex close_mutex_;
+    std::shared_mutex operations_;
     std::mutex children_mutex_;
     std::vector<std::weak_ptr<registration_core>> children_;
     std::vector<std::weak_ptr<selector_core>> selectors_;

@@ -444,7 +444,7 @@ pub(crate) fn parse_zone_config(value: Value) -> Result<ZoneConfig> {
         if value.is_null() {
             return Err(Error::field(Code::Missing, ZONE_CONFIG_FIELDS[index]));
         }
-        let Some(bytes) = value.into_owned_bytes() else {
+        let Some(bytes) = crate::redis::reply_bytes(value) else {
             return Err(Error::field(Code::Corrupt, ZONE_CONFIG_FIELDS[index]));
         };
         let value = String::from_utf8(bytes).map_err(|_| Error::field(Code::Corrupt, ZONE_CONFIG_FIELDS[index]))?;

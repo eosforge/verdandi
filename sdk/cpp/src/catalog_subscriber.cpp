@@ -1,5 +1,7 @@
 #include "internal/catalog_subscriber.hpp"
 #include "internal/catalog_checkpoint.hpp"
+#include "internal/catalog_event_fields.hpp"
+#include "internal/retry.hpp"
 
 #include <openssl/evp.h>
 
@@ -17,7 +19,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <random>
 #include <ranges>
 #include <set>
 #include <shared_mutex>
@@ -210,100 +211,6 @@ struct normalized_subscription {
     return path_from_member(channel.substr(prefix.size()));
 }
 
-class event_cursor final {
-public:
-    explicit event_cursor(const std::string_view source) noexcept : source_(source) {}
-
-    [[nodiscard]] result<std::size_t> array_size() {
-        auto marker = byte();
-        if (!marker) {
-            return std::unexpected(marker.error());
-        }
-        if ((*marker & 0xf0U) == 0x90U) {
-            return static_cast<std::size_t>(*marker & 0x0fU);
-        }
-        std::size_t width{};
-        if (*marker == 0xdcU) {
-            width = 2;
-        } else if (*marker == 0xddU) {
-            width = 4;
-        } else {
-            return std::unexpected(error(code::corrupt, "notification"));
-        }
-        auto encoded = take(width);
-        if (!encoded) {
-            return std::unexpected(encoded.error());
-        }
-        std::uint64_t output{};
-        for (const char raw : *encoded) {
-            output = (output << 8U) | static_cast<unsigned char>(raw);
-        }
-        if (output > std::numeric_limits<std::size_t>::max()) {
-            return std::unexpected(error(code::capacity, "notification"));
-        }
-        return static_cast<std::size_t>(output);
-    }
-
-    [[nodiscard]] result<std::string_view> binary() {
-        auto marker = byte();
-        if (!marker) {
-            return std::unexpected(marker.error());
-        }
-        std::size_t length{};
-        if ((*marker & 0xe0U) == 0xa0U) {
-            length = static_cast<std::size_t>(*marker & 0x1fU);
-        } else {
-            std::size_t width{};
-            if (*marker == 0xc4U || *marker == 0xd9U) {
-                width = 1;
-            } else if (*marker == 0xc5U || *marker == 0xdaU) {
-                width = 2;
-            } else if (*marker == 0xc6U || *marker == 0xdbU) {
-                width = 4;
-            } else {
-                return std::unexpected(error(code::corrupt, "notification"));
-            }
-            auto encoded = take(width);
-            if (!encoded) {
-                return std::unexpected(encoded.error());
-            }
-            std::uint64_t decoded{};
-            for (const char raw : *encoded) {
-                decoded = (decoded << 8U) | static_cast<unsigned char>(raw);
-            }
-            if (decoded > source_.size()) {
-                return std::unexpected(error(code::capacity, "notification"));
-            }
-            length = static_cast<std::size_t>(decoded);
-        }
-        return take(length);
-    }
-
-    [[nodiscard]] bool done() const noexcept {
-        return offset_ == source_.size();
-    }
-
-private:
-    [[nodiscard]] result<unsigned char> byte() {
-        if (offset_ >= source_.size()) {
-            return std::unexpected(error(code::corrupt, "notification"));
-        }
-        return static_cast<unsigned char>(source_[offset_++]);
-    }
-
-    [[nodiscard]] result<std::string_view> take(const std::size_t length) {
-        if (length > source_.size() - offset_) {
-            return std::unexpected(error(code::corrupt, "notification"));
-        }
-        const auto output = source_.substr(offset_, length);
-        offset_ += length;
-        return output;
-    }
-
-    std::string_view source_;
-    std::size_t offset_{};
-};
-
 enum class event_kind : std::uint8_t {
     replace,
     patch,
@@ -347,25 +254,6 @@ struct catalog_event {
     return {first, first + value.size()};
 }
 
-[[nodiscard]] result<fields> event_fields(event_cursor& cursor) {
-    auto elements = cursor.array_size();
-    if (!elements || *elements % 2 != 0 || *elements / 2 > maximum_fields) {
-        return std::unexpected(error(code::corrupt, "fields"));
-    }
-    fields output;
-    std::string previous;
-    for (std::size_t index = 0; index < *elements; index += 2) {
-        auto name = cursor.binary();
-        auto value = cursor.binary();
-        if (!name || !value || name->empty() || (!previous.empty() && previous >= *name)) {
-            return std::unexpected(error(code::corrupt, "fields"));
-        }
-        previous.assign(*name);
-        output.emplace(previous, copy_bytes(*value));
-    }
-    return output;
-}
-
 /// 解码 Catalog 固定位置 MessagePack 通知，并严格匹配实际频道 Path。
 [[nodiscard]] result<catalog_event> decode_event(const std::string_view payload, const path& expected, const std::size_t maximum_bytes) {
     const auto field_allowance = std::min(maximum_bytes, maximum_fields) * 10ULL;
@@ -397,8 +285,8 @@ struct catalog_event {
         auto revision = event_revision(cursor, "@revision");
         auto shape = cursor.binary();
         auto encoded = event_size(cursor, maximum_bytes);
-        auto value = event_fields(cursor);
         auto parsed_shape = shape ? parse_catalog_kind(*shape) : std::nullopt;
+        auto value = event_fields(cursor, parsed_shape == kind::array);
         if (!revision || !parsed_shape || !encoded || !value) {
             return std::unexpected(error(code::corrupt, "notification"));
         }
@@ -419,7 +307,7 @@ struct catalog_event {
         auto revision = event_revision(cursor, "@revision");
         auto shape = cursor.binary();
         auto encoded = event_size(cursor, maximum_bytes);
-        auto value = event_fields(cursor);
+        auto value = event_fields(cursor, false);
         if (!base || !revision || *revision <= *base || !shape || !encoded || !value || !validate_catalog_patch(*value, maximum_bytes)) {
             return std::unexpected(error(code::corrupt, "notification"));
         }
@@ -661,10 +549,32 @@ struct zone_metadata {
         return std::unexpected(error(code::corrupt, "read_reply"));
     }
     if (*result_text == "error") {
-        const auto code_value = values->find("&status");
-        auto category_text = code_value != values->end() ? code_value->second->text() : result<std::string_view>(std::unexpected(error(code::corrupt)));
-        auto category = category_text ? parse_code(*category_text) : std::nullopt;
-        return std::unexpected(error(category.value_or(code::protocol), "catalog_read"));
+        auto category = catalog_script_status(*status_text);
+        if (!category) {
+            return std::unexpected(category.error());
+        }
+        std::string field;
+        std::uint64_t revision{};
+        for (const auto& [name, value] : *values) {
+            if (name == "&result" || name == "&status") {
+                continue;
+            }
+            auto text = value->text();
+            if (!text || (name != "&field" && name != "@revision")) {
+                return std::unexpected(error(code::corrupt, "read_reply"));
+            }
+            if (name == "&field") {
+                field.assign(*text);
+            } else {
+                auto number = verdandi::detail::parse_unsigned(*text, "@revision", true);
+                if (!number) {
+                    return std::unexpected(number.error());
+                }
+                revision = *number;
+            }
+        }
+        auto failure = error(*category, std::move(field));
+        return std::unexpected(revision == 0 ? std::move(failure) : failure.with_revision(revision));
     }
     if (*result_text != "ok") {
         return std::unexpected(error(code::corrupt, "&result"));
@@ -674,18 +584,18 @@ struct zone_metadata {
         return std::unexpected(revision.error());
     }
     if (*status_text == "absent") {
-        if (*revision != 0) {
+        if (*revision != 0 || values->size() != 3) {
             return std::unexpected(error(code::corrupt, "read_reply"));
         }
         return std::make_shared<const entry_state>(entry_state{0, 0, status::absent, kind::value, 0, {}});
     }
     if (*status_text == "deleted") {
-        if (*revision == 0) {
+        if (*revision == 0 || values->size() != 3) {
             return std::unexpected(error(code::corrupt, "read_reply"));
         }
         return std::make_shared<const entry_state>(entry_state{*revision, 0, status::deleted, kind::value, 0, {}});
     }
-    if (*status_text != "present" || *revision == 0) {
+    if (*status_text != "present" || *revision == 0 || values->size() != 8) {
         return std::unexpected(error(code::corrupt, "&status"));
     }
     const auto mode_value = values->find("&mode");
@@ -714,14 +624,13 @@ struct zone_metadata {
         return std::unexpected(error(code::corrupt, "read_reply"));
     }
     const auto entry_shape = *shape;
-    std::size_t encoded_bytes{};
-    const auto [end, conversion] = std::from_chars(bytes_text->data(), bytes_text->data() + bytes_text->size(), encoded_bytes);
-    if (!mode || *mode != "replace" || !replace_revision || *replace_revision > *revision || conversion != std::errc{} ||
-        end != bytes_text->data() + bytes_text->size() || encoded_bytes > maximum_bytes ||
+    const auto encoded = verdandi::detail::parse_unsigned(*bytes_text, "@encoded_bytes", true);
+    if (!mode || *mode != "replace" || !replace_revision || *replace_revision > *revision || !encoded || *encoded > maximum_bytes ||
         fields_value->second->type != verdandi::detail::response::kind::array || fields_value->second->children.size() % 2 != 0 ||
         fields_value->second->children.size() / 2 > maximum_fields) {
         return std::unexpected(error(code::corrupt, "read_reply"));
     }
+    const auto encoded_bytes = static_cast<std::size_t>(*encoded);
     fields value;
     for (std::size_t index = 0; index < fields_value->second->children.size(); index += 2) {
         auto name = fields_value->second->children[index].text();
@@ -879,32 +788,6 @@ struct active_sync {
     return output;
 }
 
-[[nodiscard]] std::chrono::milliseconds retry_delay(const reconnect_configuration& configuration, const std::size_t failures) {
-    std::int64_t value = configuration.initial_delay.count();
-    for (std::size_t index = 0; index < failures && value < configuration.max_delay.count(); ++index) {
-        if (value > configuration.max_delay.count() / static_cast<std::int64_t>(configuration.multiplier)) {
-            value = configuration.max_delay.count();
-            break;
-        }
-        value *= configuration.multiplier;
-    }
-    value = std::min(value, configuration.max_delay.count());
-    const auto span = value * configuration.jitter_percent / 100;
-    if (span == 0) {
-        return std::chrono::milliseconds{value};
-    }
-    thread_local std::mt19937_64 generator(std::random_device{}());
-    std::uniform_int_distribution<std::int64_t> distribution(0, span);
-    return std::chrono::milliseconds{value - span + distribution(generator)};
-}
-
-[[nodiscard]] bool wait_stop(const std::stop_token& stop, const std::chrono::milliseconds delay) {
-    std::mutex mutex;
-    std::condition_variable_any changed;
-    std::unique_lock lock(mutex);
-    return !changed.wait_for(lock, stop, delay, [] { return false; });
-}
-
 } // namespace
 
 struct subscriber_core::implementation {
@@ -914,7 +797,8 @@ struct subscriber_core::implementation {
         std::lock_guard lock(entries_mutex);
         auto [iterator, inserted] = entries.try_emplace(target);
         if (inserted) {
-            iterator->second = std::shared_ptr<entry>(new entry(target, initial));
+            const auto terminal = closed.load(std::memory_order_acquire) || scope_state.load(std::memory_order_acquire) == status::closed;
+            iterator->second = std::shared_ptr<entry>(new entry(target, terminal ? status::closed : initial));
         }
         return iterator->second;
     }
@@ -1122,7 +1006,7 @@ struct subscriber_core::implementation {
                 auto opened = owner->transport()->subscribe(scope.channels, scope.patterns, owner->configuration().event_buffer_capacity + 16);
                 if (!opened) {
                     report(opened.error());
-                    if (!wait_stop(stop, retry_delay(owner->configuration().recovery, failures++))) {
+                    if (!verdandi::detail::wait_stop(stop, verdandi::detail::retry_delay(owner->configuration().recovery, failures++))) {
                         break;
                     }
                     continue;
@@ -1146,7 +1030,7 @@ struct subscriber_core::implementation {
                 }
                 if (!confirmed) {
                     static_cast<void>(subscription->close());
-                    if (!wait_stop(stop, retry_delay(owner->configuration().recovery, failures++))) {
+                    if (!verdandi::detail::wait_stop(stop, verdandi::detail::retry_delay(owner->configuration().recovery, failures++))) {
                         break;
                     }
                     continue;
@@ -1201,6 +1085,8 @@ struct subscriber_core::implementation {
                         if (generation_failed) {
                             break;
                         }
+                        // 初始范围读取的完成责任要跨越后续精确修复，直到全部修复结束再发布就绪。
+                        aligned = aligned || !exact;
                         if (!repairs.empty()) {
                             std::vector<path> paths(repairs.begin(), repairs.end());
                             for (const auto& target : paths) {
@@ -1212,9 +1098,6 @@ struct subscriber_core::implementation {
                             }
                             synchronization = start_sync(owner, scope, std::move(paths), {}, cursor, subscription);
                             continue;
-                        }
-                        if (!exact) {
-                            aligned = true;
                         }
                         if (aligned) {
                             cursor = std::max(cursor, observed_cursor);
@@ -1299,7 +1182,8 @@ struct subscriber_core::implementation {
                     static_cast<void>(subscription->close());
                 }
                 mark_all(status::unavailable);
-                if (!stop.stop_requested() && owner->open() && !wait_stop(stop, retry_delay(owner->configuration().recovery, failures++))) {
+                if (!stop.stop_requested() && owner->open() &&
+                    !verdandi::detail::wait_stop(stop, verdandi::detail::retry_delay(owner->configuration().recovery, failures++))) {
                     break;
                 }
             }
@@ -1338,6 +1222,10 @@ subscriber_core::~subscriber_core() {
 
 result<std::shared_ptr<subscriber_core>> subscriber_core::create(const std::shared_ptr<client_core>& owner, subscription value) {
     if (!owner || !owner->open()) {
+        return std::unexpected(error(code::closed));
+    }
+    std::shared_lock admission(owner->operations());
+    if (!owner->open()) {
         return std::unexpected(error(code::closed));
     }
     auto normalized = normalize(owner->configuration().zone, std::move(value));

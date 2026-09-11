@@ -7,7 +7,7 @@ fn parse_read_reply(value: Value, base: &RawState, maximum: usize) -> Result<Raw
     // 先分离 Lua error，再要求 ok/status/revision 组合精确匹配一个合法状态。
     if result == "error" {
         let status = take_string(&mut values, "&status")?;
-        let code = Code::from_status(&status).ok_or_else(|| Error::field(Code::Corrupt, "&status"))?;
+        let code = super::scripts::script_status(&status)?;
         let field = values.remove("&field").map(value_string).transpose()?.unwrap_or_default();
         let revision = values.remove("@revision").map(|value| parse_revision(value, true)).transpose()?.unwrap_or(0);
         if !values.is_empty() {
@@ -131,7 +131,7 @@ fn decode_redis_fields(value: Value) -> Result<Fields> {
         if name.is_empty() || name.starts_with('@') {
             return Err(Error::field(Code::Corrupt, "fields"));
         }
-        let value = value.into_owned_bytes().ok_or_else(|| Error::field(Code::Corrupt, "fields"))?;
+        let value = crate::redis::reply_bytes(value).ok_or_else(|| Error::field(Code::Corrupt, "fields"))?;
         match fields.entry(name) {
             BTreeEntry::Vacant(entry) => {
                 entry.insert(value);

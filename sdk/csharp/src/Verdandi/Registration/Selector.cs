@@ -53,7 +53,6 @@ public sealed unsafe class Selector<TAttr, TData> : IDisposable
     where TData : IFieldValue<TData>
 {
     private readonly SelectorHandle _handle;
-    private readonly SafeHandleLease<RegistrationClientHandle> _ownerLease;
     private int _disposed;
 
     /// <summary>
@@ -64,7 +63,7 @@ public sealed unsafe class Selector<TAttr, TData> : IDisposable
     private Selector(SelectorHandle handle, SafeHandleLease<RegistrationClientHandle> ownerLease)
     {
         _handle = handle;
-        _ownerLease = ownerLease;
+        _handle.AttachParent(ownerLease);
     }
 
     /// <summary>
@@ -141,21 +140,7 @@ public sealed unsafe class Selector<TAttr, TData> : IDisposable
             return Result<Candidate<TAttr, TData>?>.Failure(error.ToManaged());
         }
 
-        if (output == nint.Zero)
-        {
-            return Result<Candidate<TAttr, TData>?>.Success(null);
-        }
-
-        var count = NativeMethods.CandidateListSize(candidates);
-        if (count != 1)
-        {
-            return Result<Candidate<TAttr, TData>?>.Failure(new VerdandiError("corrupt", "selection"));
-        }
-
-        var decoded = DecodeCandidate(candidates, 0);
-        return decoded.IsSuccess
-            ? Result<Candidate<TAttr, TData>?>.Success(decoded.Value)
-            : Result<Candidate<TAttr, TData>?>.Failure(decoded.Error!);
+        return Result<Candidate<TAttr, TData>?>.Success(context.Output);
     }
 
     /// <summary>
@@ -191,30 +176,7 @@ public sealed unsafe class Selector<TAttr, TData> : IDisposable
             return Result<IReadOnlyList<Candidate<TAttr, TData>>>.Failure(error.ToManaged());
         }
 
-        if (output == nint.Zero)
-        {
-            return Result<IReadOnlyList<Candidate<TAttr, TData>>>.Success(Array.Empty<Candidate<TAttr, TData>>());
-        }
-
-        var count = NativeMethods.CandidateListSize(candidates);
-        if (count > int.MaxValue)
-        {
-            return Result<IReadOnlyList<Candidate<TAttr, TData>>>.Failure(new VerdandiError("capacity", "selection"));
-        }
-
-        var values = new Candidate<TAttr, TData>[checked((int)count)];
-        for (nuint index = 0; index < count; index++)
-        {
-            var decoded = DecodeCandidate(candidates, index);
-            if (!decoded.IsSuccess)
-            {
-                return Result<IReadOnlyList<Candidate<TAttr, TData>>>.Failure(decoded.Error!);
-            }
-
-            values[checked((int)index)] = decoded.Value;
-        }
-
-        return Result<IReadOnlyList<Candidate<TAttr, TData>>>.Success(Array.AsReadOnly(values));
+        return Result<IReadOnlyList<Candidate<TAttr, TData>>>.Success(context.Output);
     }
 
     /// <summary>
@@ -330,34 +292,7 @@ public sealed unsafe class Selector<TAttr, TData> : IDisposable
         }
 
         _handle.Dispose();
-        _ownerLease.Dispose();
         GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    /// 从脱离候选列表复制元数据和 Fields，再调用应用 Codec 构造拥有型候选。
-    /// </summary>
-    /// <param name="list">拥有候选列表的 SafeHandle。</param>
-    /// <param name="index">候选索引。</param>
-    /// <returns>完整候选或稳定错误。</returns>
-    private static Result<Candidate<TAttr, TData>> DecodeCandidate(CandidateListHandle list, nuint index)
-    {
-        NativeRegistrationMetadata native = default;
-        if (NativeMethods.CandidateListMetadata(list, index, &native) == 0)
-        {
-            return Result<Candidate<TAttr, TData>>.Failure(new VerdandiError("corrupt", "candidate"));
-        }
-
-        var attr = Interop.CopyCandidateListFields(list, index, true);
-        if (!attr.IsSuccess)
-        {
-            return Result<Candidate<TAttr, TData>>.Failure(attr.Error!);
-        }
-
-        var data = Interop.CopyCandidateListFields(list, index, false);
-        return data.IsSuccess
-            ? CandidateDecoder<TAttr, TData>.Decode(native, attr.Value, data.Value)
-            : Result<Candidate<TAttr, TData>>.Failure(data.Error!);
     }
 
     /// <summary>
@@ -434,25 +369,7 @@ internal sealed unsafe class CandidateSession<TAttr, TData>
             return Result<CandidateView<TAttr, TData>>.Success(cached);
         }
 
-        NativeRegistrationMetadata native = default;
-        if (NativeMethods.CandidatesMetadata(_candidates, index, &native) == 0)
-        {
-            return Result<CandidateView<TAttr, TData>>.Failure(new VerdandiError("corrupt", "candidate"));
-        }
-
-        var attrFields = Interop.CopyCandidateFields(_candidates, index, true);
-        if (!attrFields.IsSuccess)
-        {
-            return Result<CandidateView<TAttr, TData>>.Failure(attrFields.Error!);
-        }
-
-        var dataFields = Interop.CopyCandidateFields(_candidates, index, false);
-        if (!dataFields.IsSuccess)
-        {
-            return Result<CandidateView<TAttr, TData>>.Failure(dataFields.Error!);
-        }
-
-        var decoded = CandidateDecoder<TAttr, TData>.Decode(native, attrFields.Value, dataFields.Value);
+        var decoded = Read(index);
         if (!decoded.IsSuccess)
         {
             return Result<CandidateView<TAttr, TData>>.Failure(decoded.Error!);
@@ -465,6 +382,41 @@ internal sealed unsafe class CandidateSession<TAttr, TData>
             decoded.Value.Data);
         (_cache ??= []).Add(index, value);
         return Result<CandidateView<TAttr, TData>>.Success(value);
+    }
+
+    /// <summary>在原生提交前重新解码完整预测值，返回独立拥有的候选；不得复用可能含应用别名的缓存。</summary>
+    /// <param name="choice">当前事务身份。</param>
+    /// <returns>完整候选或让事务回滚的解码错误。</returns>
+    internal Result<Candidate<TAttr, TData>> Detach(Choice choice)
+    {
+        var valid = Validate(choice);
+        return valid.IsSuccess ? Read(choice.Index) : Result<Candidate<TAttr, TData>>.Failure(valid.Error!);
+    }
+
+    /// <summary>复制当前原生事务的完整字段并调用应用解码器。</summary>
+    /// <param name="index">已验证的候选索引。</param>
+    /// <returns>拥有型候选或稳定错误。</returns>
+    private Result<Candidate<TAttr, TData>> Read(nuint index)
+    {
+        NativeRegistrationMetadata native = default;
+        if (NativeMethods.CandidatesMetadata(_candidates, index, &native) == 0)
+        {
+            return Result<Candidate<TAttr, TData>>.Failure(new VerdandiError("corrupt", "candidate"));
+        }
+
+        var attrFields = Interop.CopyCandidateFields(_candidates, index, true);
+        if (!attrFields.IsSuccess)
+        {
+            return Result<Candidate<TAttr, TData>>.Failure(attrFields.Error!);
+        }
+
+        var dataFields = Interop.CopyCandidateFields(_candidates, index, false);
+        if (!dataFields.IsSuccess)
+        {
+            return Result<Candidate<TAttr, TData>>.Failure(dataFields.Error!);
+        }
+
+        return CandidateDecoder<TAttr, TData>.Decode(native, attrFields.Value, dataFields.Value);
     }
 
     /// <summary>
@@ -594,6 +546,9 @@ internal sealed unsafe class OnePolicyContext<TAttr, TData> : ISelectorPolicyCon
 {
     private readonly OnePolicy<TAttr, TData> _policy;
 
+    /// <summary>在回调内准备好的返回候选；原生事务成功后直接交给调用方。</summary>
+    internal Candidate<TAttr, TData>? Output { get; private set; }
+
     /// <summary>
     /// 保存本次同步调用的应用委托；上下文不会在调用返回后继续使用。
     /// </summary>
@@ -634,6 +589,13 @@ internal sealed unsafe class OnePolicyContext<TAttr, TData> : ISelectorPolicyCon
                 return 0;
             }
 
+            var detached = session.Detach(choice);
+            if (!detached.IsSuccess)
+            {
+                WriteError(error, detached.Error!);
+                return 0;
+            }
+            Output = detached.Value;
             return NativeMethods.SelectionAdd(selection, choice.Index, error);
         }
         catch (OutOfMemoryException exception)
@@ -675,6 +637,9 @@ internal sealed unsafe class AnyPolicyContext<TAttr, TData> : ISelectorPolicyCon
 {
     private readonly AnyPolicy<TAttr, TData> _policy;
 
+    /// <summary>在回调内完整准备的只读结果，失败时不交给调用方。</summary>
+    internal IReadOnlyList<Candidate<TAttr, TData>> Output { get; private set; } = Array.Empty<Candidate<TAttr, TData>>();
+
     /// <summary>
     /// 保存本次同步调用的应用委托。
     /// </summary>
@@ -710,6 +675,8 @@ internal sealed unsafe class AnyPolicyContext<TAttr, TData> : ISelectorPolicyCon
                 return 0;
             }
 
+            var detachedValues = new Candidate<TAttr, TData>[choices.Count];
+            var index = 0;
             HashSet<Choice>? unique = choices.Count > 1 ? [] : null;
             foreach (var choice in choices)
             {
@@ -720,12 +687,20 @@ internal sealed unsafe class AnyPolicyContext<TAttr, TData> : ISelectorPolicyCon
                     return 0;
                 }
 
+                var detached = session.Detach(choice);
+                if (!detached.IsSuccess)
+                {
+                    WriteError(error, detached.Error!);
+                    return 0;
+                }
+                detachedValues[index++] = detached.Value;
                 if (NativeMethods.SelectionAdd(selection, choice.Index, error) == 0)
                 {
                     return 0;
                 }
             }
 
+            Output = Array.AsReadOnly(detachedValues);
             return 1;
         }
         catch (OutOfMemoryException exception)

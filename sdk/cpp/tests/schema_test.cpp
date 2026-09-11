@@ -1,4 +1,5 @@
 #include "verdandi/catalog/path.hpp"
+#include "verdandi/client.hpp"
 #include "verdandi/configuration.hpp"
 #include "verdandi/schema.hpp"
 
@@ -41,6 +42,17 @@ struct throwing_record {
     throwing_scalar value;
 };
 
+struct unicode_record {
+    std::string value;
+};
+
+struct throwing_constructor {
+    std::string value;
+    throwing_constructor() {
+        throw std::runtime_error("constructor failure");
+    }
+};
+
 } // namespace
 
 template <>
@@ -57,10 +69,33 @@ struct verdandi::field_codec<throwing_scalar> {
 VERDANDI_SCHEMA(attr, VERDANDI_FIELD(attr, region), VERDANDI_FIELD(attr, shard));
 VERDANDI_SCHEMA(data, VERDANDI_FIELD(data, power), VERDANDI_NAMED_FIELD(data, ready, "available"));
 VERDANDI_SCHEMA(throwing_record, VERDANDI_FIELD(throwing_record, value));
+VERDANDI_SCHEMA(unicode_record, VERDANDI_NAMED_FIELD(unicode_record, value, "中文"));
+VERDANDI_SCHEMA(throwing_constructor, VERDANDI_FIELD(throwing_constructor, value));
+static_assert(verdandi::valid_schema<unicode_record>());
+static_assert(!verdandi::detail::valid_wire_name("\xc0\x80"));
+static_assert(!verdandi::detail::valid_wire_name("\xed\xa0\x80"));
+static_assert(!verdandi::detail::valid_wire_name("@保留"));
 
 namespace {
 
 int test_schema() {
+    const auto unicode = verdandi::encode_fields(unicode_record{"text"});
+    if (!unicode || unicode->find("中文") == unicode->end() || !verdandi::decode_fields<unicode_record>(*unicode)) {
+        std::cerr << "valid UTF-8 schema failed\n";
+        return 1;
+    }
+    const auto constructor = verdandi::decode_fields<throwing_constructor>({{"value", {}}});
+    if (constructor || constructor.error().category() != verdandi::code::contract) {
+        std::cerr << "application constructor escaped typed decode\n";
+        return 1;
+    }
+    const verdandi::client closed;
+    const auto set = closed.key().set("unused", throwing_scalar{});
+    const auto timed = closed.key().set("unused", throwing_scalar{}, std::chrono::seconds{1});
+    if (set || timed || set.error().category() != verdandi::code::contract || timed.error().category() != verdandi::code::contract) {
+        std::cerr << "application encoder escaped typed Key boundary\n";
+        return 1;
+    }
     const attr input{"east", 7};
     const auto encoded = verdandi::encode_fields(input);
     if (!encoded || encoded->size() != 2 || encoded->find("region") == encoded->end() || encoded->find("shard") == encoded->end()) {

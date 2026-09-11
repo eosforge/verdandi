@@ -1,0 +1,185 @@
+{
+  "status": "pass",
+  "date": "2026-09-10",
+  "scope": "Star/Planet connection foundation, protocol v3",
+  "source_sha256": "bc0220e58bc2cb5be8dd4f154ea1f63906d1ac9b7b8eb0d87f325f029031da26",
+  "source_files": 121,
+  "checks": {
+    "rust_workspace_tests": 37,
+    "protocol_generator_tests": 4,
+    "windows": "format, Clippy, tests, docs, release; final Supervisor checks and targeted Planet tests",
+    "linux": "final full offline check-services --jobs=1, including Go race",
+    "python": "Black and syntax check"
+  },
+  "runs": [
+    {
+      "name": "windows-process",
+      "result": "D:\\projects\\verdandi\\build\\testkit\\results\\services-1789038198548395800.json",
+      "status": "pass",
+      "platform": "win32",
+      "mode": "soak",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_certificate_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "soak": {
+        "requested_seconds": 60,
+        "elapsed_seconds": 61.064,
+        "restart_cycles": 10,
+        "minimum_available_mib": 17022,
+        "peers": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 83.665
+    },
+    {
+      "name": "linux-process",
+      "result": "/home/ubuntu/verdandi/build/testkit/results/services-1789038429513928382.json",
+      "status": "pass",
+      "platform": "linux",
+      "mode": "soak",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_certificate_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "soak": {
+        "requested_seconds": 60,
+        "elapsed_seconds": 60.0,
+        "restart_cycles": 10,
+        "minimum_available_mib": 1146,
+        "peers": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 76.869
+    },
+    {
+      "name": "mixed-process",
+      "result": "D:\\projects\\verdandi\\build\\testkit\\results\\services-1789038435540744800.json",
+      "status": "pass",
+      "platform": "win32",
+      "mode": "soak",
+      "mixed_hosts": true,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_certificate_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "soak": {
+        "requested_seconds": 60,
+        "elapsed_seconds": 63.042,
+        "restart_cycles": 10,
+        "minimum_available_mib": 1146,
+        "peers": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 85.372
+    },
+    {
+      "name": "windows-final-regression",
+      "result": "D:\\projects\\verdandi\\build\\testkit\\results\\services-1789038736079066300.json",
+      "status": "pass",
+      "platform": "win32",
+      "mode": "regression",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_certificate_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 22.748
+    },
+    {
+      "name": "linux-final-regression",
+      "result": "/home/ubuntu/verdandi/build/testkit/results/services-1789038774867162517.json",
+      "status": "pass",
+      "platform": "linux",
+      "mode": "regression",
+      "mixed_hosts": false,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_certificate_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 18.866
+    },
+    {
+      "name": "mixed-final-regression",
+      "result": "D:\\projects\\verdandi\\build\\testkit\\results\\services-1789038829026312900.json",
+      "status": "pass",
+      "platform": "win32",
+      "mode": "regression",
+      "mixed_hosts": true,
+      "cases": [
+        "concurrent_three_peer_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_peer_wait",
+        "persistent_supervisor_restart_and_waiting_peer_join",
+        "graceful_and_forced_peer_restart",
+        "invalid_identities_fail_closed",
+        "star_planet_certificate_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 22.414
+    }
+  ],
+  "limits": [
+    "Each soak requests only 60 seconds, not production endurance qualification.",
+    "Soak runs precede the final strict legacy-row decoder fix; all three final regressions use the final decoder.",
+    "No SDK binding, business replication, persistence or Registry re-registration implementation.",
+    "Windows Go race not executed.",
+    "No new downloads, global environment or firewall changes."
+  ]
+}

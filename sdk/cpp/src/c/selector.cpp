@@ -172,6 +172,10 @@ int VERDANDI_C_CALL verdandi_selector_one(verdandi_selector* value, const verdan
             const auto* field = value == nullptr || !value->value ? "selector" : "output";
             return std::unexpected(verdandi::error(verdandi::code::invalid, field));
         }
+        auto result = std::make_unique<verdandi_candidate_list>();
+        result->values.resize(1);
+        // MSVC 的 map 移动构造可能分配哨兵；提前构造后使用无异常移动赋值。
+        static_assert(std::is_nothrow_move_assignable_v<native_candidate>);
         auto selected = value->value->one([&](native_candidates& native) -> verdandi::result<std::optional<verdandi::registration::choice>> {
             verdandi_candidates candidates{&native};
             verdandi_selection selection{&candidates, true, std::nullopt, {}};
@@ -184,9 +188,8 @@ int VERDANDI_C_CALL verdandi_selector_one(verdandi_selector* value, const verdan
             return std::unexpected(selected.error());
         }
         if (*selected) {
-            std::vector<native_candidate> values;
-            values.push_back(std::move(**selected));
-            *output = new verdandi_candidate_list{std::move(values)};
+            result->values.front() = std::move(**selected);
+            *output = result.release();
         }
         return {};
     });
@@ -202,6 +205,8 @@ int VERDANDI_C_CALL verdandi_selector_any(verdandi_selector* value, const verdan
             const auto* field = value == nullptr || !value->value ? "selector" : "output";
             return std::unexpected(verdandi::error(verdandi::code::invalid, field));
         }
+        auto result = std::make_unique<verdandi_candidate_list>();
+        static_assert(std::is_nothrow_move_assignable_v<decltype(result->values)>);
         auto selected = value->value->any([&](native_candidates& native) -> verdandi::result<std::vector<verdandi::registration::choice>> {
             verdandi_candidates candidates{&native};
             verdandi_selection selection{&candidates, false, std::nullopt, {}};
@@ -214,7 +219,8 @@ int VERDANDI_C_CALL verdandi_selector_any(verdandi_selector* value, const verdan
             return std::unexpected(selected.error());
         }
         if (!selected->empty()) {
-            *output = new verdandi_candidate_list{std::move(*selected)};
+            result->values = std::move(*selected);
+            *output = result.release();
         }
         return {};
     });

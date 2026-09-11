@@ -1,5 +1,6 @@
 #pragma once
 
+#include "internal/catalog_value.hpp"
 #include "internal/driver.hpp"
 #include "internal/protocol.hpp"
 #include "internal/script.hpp"
@@ -24,14 +25,12 @@
 namespace verdandi::catalog::detail {
 
 constexpr std::uint64_t maximum_revision = (std::uint64_t{1} << 53U) - 1U;
-constexpr std::size_t maximum_fields = 65'536;
 
 class subscriber_core;
 class checkpoint_store;
 
-[[nodiscard]] result<std::size_t> validate_catalog_value(kind shape, const fields& value, std::size_t maximum_bytes);
-[[nodiscard]] result<void> validate_catalog_patch(const fields& value, std::size_t maximum_bytes);
 [[nodiscard]] std::optional<kind> parse_catalog_kind(std::string_view value) noexcept;
+[[nodiscard]] result<code> catalog_script_status(std::string_view value);
 [[nodiscard]] std::string catalog_prefix(std::string_view zone);
 [[nodiscard]] std::string catalog_meta_key(std::string_view zone);
 [[nodiscard]] std::string catalog_live_key(std::string_view zone);
@@ -71,6 +70,7 @@ private:
     verdandi::detail::script delete_script_;
     std::shared_ptr<checkpoint_store> store_;
     std::atomic_bool closed_{false};
+    std::mutex close_mutex_;
     std::shared_mutex operations_;
     std::mutex children_mutex_;
     std::vector<std::weak_ptr<subscriber_core>> children_;
