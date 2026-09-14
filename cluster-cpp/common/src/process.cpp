@@ -2,6 +2,7 @@
 #include "process.hpp"
 
 #include <fcntl.h>
+#include <format>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -101,11 +102,10 @@ Logger::~Logger() {
     }
 }
 
-#include <format>
-
 void Logger::write(std::string_view event, std::string_view fields) const {
     const auto now = std::chrono::duration_cast<Milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    const auto line = std::format(R"({{"time_unix_ms":{},"level":"INFO","component":"{}","event":"{}","fields":{}}})""\n",
+    const auto line = std::format(R"({{"time_unix_ms":{},"level":"INFO","component":"{}","event":"{}","fields":{}}})"
+                                  "\n",
                                   now, component_, event, fields);
     // Linux 的 PIPE_BUF 为 4096, 小于等于此值的管道写不会输出半条 JSON.
     if (line.size() <= 4096) {
@@ -115,21 +115,12 @@ void Logger::write(std::string_view event, std::string_view fields) const {
 }
 
 void Logger::status(const NetworkStatus& status, const Id& id) const {
-    const auto upstream = status.active_member 
-        ? std::format(R"({{"id":{},"group":"{}","address":"{}"}})", 
-                      json_string(status.active_member->id), 
-                      status.active_member->group, 
-                      status.active_member->address.text())
-        : "null";
-        
+    const auto upstream = status.active_member ? std::format(R"({{"id":{},"group":"{}","address":"{}"}})", json_string(status.active_member->id),
+                                                             status.active_member->group, status.active_member->address.text())
+                                               : "null";
+
     write("status", std::format(R"({{"id":{},"initialized":{},"members":{},"inbound":{},"outbound":{},"planet_inbound":{},"candidates":{},"upstream":{}}})",
-                                json_string(id),
-                                status.initialized ? "true" : "false",
-                                status.members,
-                                status.inbound,
-                                status.outbound,
-                                status.planet_inbound,
-                                status.candidates,
+                                json_string(id), status.initialized, status.members, status.inbound, status.outbound, status.planet_inbound, status.candidates,
                                 upstream));
 }
 

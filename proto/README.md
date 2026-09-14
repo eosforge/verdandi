@@ -8,6 +8,7 @@
 | `cluster.proto` | Hello、Ping/Pong、成员和单次登记 |
 | `admission.proto` | Supervisor Register 一元 RPC |
 | `star_transport.proto` | StarTransport.OpenSession 双向流 |
+| `sync_transport.proto` | 业务同步草案, 仅生成类型, 当前服务未注册 RPC |
 
 Supervisor 签发不透明 `string id`. 接收方验证签名和绑定, 不解析 UUID 格式.
 仅已提交的 Hello 凭证使用 Ed25519 签名, 启动请求按随机键幂等, 详见[身份与准入契约](../cluster/identity-contract.md).
@@ -39,4 +40,5 @@ Go 输出在 `supervisor/internal/generated`, C++ 输出在 `cluster-cpp/common/
 v6 不兼容旧 v5/v4 的准入流程和签名域, 所有服务需一起升级, 没有旧 Rust 服务回退.
 持久成员库的 `peer_id` 字段已改为 `id`, 旧库不会被静默覆盖, 参见身份契约.
 `message-ids.lock` 保留编号, gRPC 不使用它分派消息. 字段号和历史编号不复用.
-Catalog/Registry 业务流同步与 SDK 接入尚未实现.
+Catalog/Registry 业务流同步与 SDK 接入尚未实现. SyncTransport 中的实例/范围校验和快照衔接仍待实现,
+生成源码不表示该服务已经开放. 见 [本轮整理说明](../cluster-cpp/sync-foundation-review-20260914.md).

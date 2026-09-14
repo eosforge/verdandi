@@ -1,5 +1,19 @@
 # Verdandi Project Memory
 
+## Sync foundation cleanup: validated (2026-09-15)
+
+The maintainer requested fixes after WIP commit `2bf279f`, then explicitly required finishing
+cleanup without compilation or tests and waiting for further notice. The maintainer has now
+explicitly resumed complete validation. Stop any leftover endurance campaign, then run bounded tests only.
+Store cleanup, dedicated fault-injection test sources and real C++/Go protocol generation are prepared.
+SyncTransport remains an unregistered draft; runtime cursor checks and business synchronization are not implemented.
+Fresh validation now passed on the cleanup: Debug/Release/ASan+UBSan/TSan each passed 10 CTests,
+6 real RPC cases and 13 process cases. Both Supervisor platform checks, Linux race and bounded fuzz,
+generator checks, 38 Python harness tests and 6 build-entry tests passed. The allocation sweep triggered
+76 failures. A bounded 4-Star/2-Planet run completed 9 fault cycles and cleaned all owned resources.
+198 selected source hashes match the VM copy. No indefinite test is running. No download, installation,
+commit or push was performed. Review: [sync foundation](cluster-cpp/sync-foundation-review-20260914.md).
+
 ## Current service decision (2026-09-12)
 
 C++ Star/Planet and Go Supervisor are the only active service implementations. The old Rust service is retired; its reports are historical. Shared code uses `cluster`, own identity fields use `id`, and Supervisor issues signed opaque string identities. Current protocol is v6; the [identity contract](cluster/identity-contract.md) supersedes older UUID/client-generation and Rust-comparison descriptions below. Accepted code-review corrections must be implemented, not left as documentation-only proposals. Rust SDKs and the standalone protocol generator remain separate.

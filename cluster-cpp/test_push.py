@@ -52,28 +52,16 @@ def cases(smoke):
         case("fanout1", fanout=1),
         case("fanout16", fanout=16),
         case("burst", burst=True, rate=8000),
-        *[
-            case(f"registry{count}", mode="registry", registries=count, rate=8000)
-            for count in (100, 1000, 10000)
-        ],
-        *[
-            case(f"catalog{size}", mode="catalog", size=size, rate=8000)
-            for size in (64, 256, 1024)
-        ],
-        *[
-            case(f"capacity{rate}", mode="catalog", rate=rate, capacity_probe=True)
-            for rate in (20000, 60000)
-        ],
+        *[case(f"registry{count}", mode="registry", registries=count, rate=8000) for count in (100, 1000, 10000)],
+        *[case(f"catalog{size}", mode="catalog", size=size, rate=8000) for size in (64, 256, 1024)],
+        *[case(f"capacity{rate}", mode="catalog", rate=rate, capacity_probe=True) for rate in (20000, 60000)],
         case("paused-over-budget", pause_ms=1000, rate=20000, capacity_probe=True),
     ]
 
 
 def run_case(cpp, rust, variant, case, seconds, allow_capacity=False):
     """复用客户端、采样和进程拥有者; 不让测量失败绕过清理或被成功记录覆盖."""
-    push = {
-        key: case[key]
-        for key in ("burst", "pause_ms", "mode", "registries", "hot_keys")
-    }
+    push = {key: case[key] for key in ("burst", "pause_ms", "mode", "registries", "hot_keys")}
     load = (case["role"], case["size"], case["fanout"], 64, case["rate"])
     if variant == "rust":
         command = [
@@ -124,23 +112,13 @@ def run_case(cpp, rust, variant, case, seconds, allow_capacity=False):
                     server_process=server,
                 )
                 measured = row["measurement"]
-                accepted = (
-                    measured["publish_replies"] - measured["rejected_publications"]
-                )
-                if (
-                    measured["updates_per_recipient"]
-                    != row["offered_source_updates"] + accepted
-                ):
-                    raise RuntimeError(
-                        "Completed watermark differs from source updates plus accepted publications"
-                    )
+                accepted = measured["publish_replies"] - measured["rejected_publications"]
+                if measured["updates_per_recipient"] != row["offered_source_updates"] + accepted:
+                    raise RuntimeError("Completed watermark differs from source updates plus accepted publications")
                 row["status"] = "pass"
             except (RuntimeError, TimeoutError) as error:
                 detail = str(error) + "\n" + log.read_text(encoding="utf-8")[-4000:]
-                if not (allow_capacity or case["capacity_probe"]) or not any(
-                    marker in detail.lower()
-                    for marker in ("lagged", "resynchronization")
-                ):
+                if not (allow_capacity or case["capacity_probe"]) or not any(marker in detail.lower() for marker in ("lagged", "resynchronization")):
                     raise RuntimeError(f"{variant}/{case['name']}: {detail}") from error
                 row.update(
                     status="capacity_rejected",
@@ -152,10 +130,7 @@ def run_case(cpp, rust, variant, case, seconds, allow_capacity=False):
                 if variant != "rust" and server.poll() is None:
                     server.terminate()
                     if server.wait(timeout=8) != 0:
-                        raise RuntimeError(
-                            "C++ push fixture did not exit gracefully: "
-                            + log.read_text(encoding="utf-8")[-4000:]
-                        )
+                        raise RuntimeError("C++ push fixture did not exit gracefully: " + log.read_text(encoding="utf-8")[-4000:])
             output = log.read_text(encoding="utf-8")
             if any(
                 marker in output
@@ -167,23 +142,15 @@ def run_case(cpp, rust, variant, case, seconds, allow_capacity=False):
                     "runtime error:",
                 )
             ):
-                raise RuntimeError(
-                    "Sanitizer failure in push fixture: " + output[-6000:]
-                )
-            records = [
-                json.loads(line)
-                for line in output.splitlines()
-                if '"event":"allocation_measure"' in line
-            ]
+                raise RuntimeError("Sanitizer failure in push fixture: " + output[-6000:])
+            records = [json.loads(line) for line in output.splitlines() if '"event":"allocation_measure"' in line]
             if records:
                 row["allocation_measure"] = records[-1]
         # 调用者只绑定刚刚持有的监听端口; 这里不删除其它测试或服务资源.
         with socket.socket() as check:
             check.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             check.bind(("127.0.0.1", int(address.rsplit(":", 1)[1])))
-    row["cleanup"] = (
-        "processes joined, listener reusable, owned temporary directory removed"
-    )
+    row["cleanup"] = "processes joined, listener reusable, owned temporary directory removed"
     return row
 
 
@@ -201,15 +168,8 @@ def main():
     parser.add_argument("--rounds", type=int, default=5)
     parser.add_argument("--seconds", type=float, default=2)
     args = parser.parse_args()
-    parser.error(
-        "Retired v4 Rust comparison; this script is historical and cannot validate the current C++ v5 service."
-    )
-    if (
-        sys.platform != "linux"
-        or not 1 <= args.rounds <= 10
-        or not 0.5 <= args.seconds <= 10
-        or not 100 <= args.smoke_rate <= 2000
-    ):
+    parser.error("Retired v4 Rust comparison; this script is historical and cannot validate the current C++ v5 service.")
+    if sys.platform != "linux" or not 1 <= args.rounds <= 10 or not 0.5 <= args.seconds <= 10 or not 100 <= args.smoke_rate <= 2000:
         parser.error("Requires Linux, rounds 1..10 and seconds 0.5..10")
     # 只限制当前测量进程及其子进程的 CPU, 不修改系统或其它工作进程的调度配置.
     affinity = sorted(os.sched_getaffinity(0))[:2]
@@ -236,28 +196,16 @@ def main():
     selected = cases(args.smoke or args.allocations)
     if args.smoke:
         selected = [case | {"rate": args.smoke_rate} for case in selected]
-    variants = (
-        ["cpp-fresh", "cpp-reuse"]
-        if args.allocations
-        else ["rust", "cpp-fresh", "cpp-reuse"]
-    )
+    variants = ["cpp-fresh", "cpp-reuse"] if args.allocations else ["rust", "cpp-fresh", "cpp-reuse"]
     report = {
         "status": "running",
-        "mode": (
-            "allocations"
-            if args.allocations
-            else ("smoke" if args.smoke else "comparison")
-        ),
+        "mode": ("allocations" if args.allocations else ("smoke" if args.smoke else "comparison")),
         "trials": [],
         "cpu_affinity": affinity,
         "platform": platform.platform(),
         "logical_cpus": os.cpu_count(),
         "source_hashes": source_hashes()
-        | {
-            str(path.relative_to(ROOT)).replace("\\", "/"): binary_digest(path)
-            for path in sorted((ROOT / "cluster-cpp/bench").rglob("*"))
-            if path.is_file()
-        }
+        | {str(path.relative_to(ROOT)).replace("\\", "/"): binary_digest(path) for path in sorted((ROOT / "cluster-cpp/bench").rglob("*")) if path.is_file()}
         | {"cluster-cpp/test_push.py": binary_digest(Path(__file__))},
         "binary_sha256": {
             "cpp": binary_digest(args.cpp_binary),
@@ -303,16 +251,11 @@ def main():
                             "status": warmup["status"],
                         }
                     )
-            report["warmup"] = (
-                "Separate 0.5-second runs per case and variant, excluded from measurements"
-            )
+            report["warmup"] = "Separate 0.5-second runs per case and variant, excluded from measurements"
         rounds = 1 if args.smoke else args.rounds
         seconds = 0.65 if args.smoke else args.seconds
         for round_number in range(rounds):
-            order = (
-                variants[round_number % len(variants) :]
-                + variants[: round_number % len(variants)]
-            )
+            order = variants[round_number % len(variants) :] + variants[: round_number % len(variants)]
             for case in selected:
                 for variant in order:
                     row = run_case(

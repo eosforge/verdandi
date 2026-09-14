@@ -164,8 +164,7 @@ Result<Member> Identity::verify(std::span<const std::uint8_t> payload, std::span
     std::string input("verdandi-admission-v6");
     input += '\0';
     input.append(reinterpret_cast<const char*>(payload.data()), payload.size());
-    if (ED25519_verify(reinterpret_cast<const std::uint8_t*>(input.data()), input.size(), signature.data(),
-                       authority_.data()) != 1) {
+    if (ED25519_verify(reinterpret_cast<const std::uint8_t*>(input.data()), input.size(), signature.data(), authority_.data()) != 1) {
         return std::unexpected(Error{ErrorCode::identity, "Invalid admission signature"});
     }
     wire::RegistrationResponse::Member member;

@@ -51,9 +51,7 @@ void signatures(const Identity& identity) {
     member.set_role(wire::ROLE_STAR);
     auto payload = member.SerializeAsString();
     auto signature = test::sign(payload);
-    auto as_bytes = [](std::string_view sv) {
-        return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(sv.data()), sv.size());
-    };
+    auto as_bytes = [](std::string_view sv) { return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(sv.data()), sv.size()); };
     CHECK(identity.verify(as_bytes(payload), as_bytes(signature)));
     CHECK(identity.verify(as_bytes(payload), as_bytes(signature))->id == member.id());
     // 旧启动票据签名不能作为新协议的准入凭证.

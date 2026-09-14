@@ -16,6 +16,7 @@ Supervisor 使用 Go, 旧 Rust Star 已废弃; 当前准入见[身份契约](../
 | `common/src/rpc_status.hpp` | 稳定 gRPC 错误分类 | 只依据状态码, 不把远端 message/details 写入日志 |
 | `common/src/process.*` | 信号、唤醒和 JSON 日志 | 私有进程设施, 有明确所有者和恢复路径 |
 | `common/src/runtime.cpp` | 生命周期协调 | 按会话、准入、拨号、诊断的次序推进, 退出时等待完成 |
+| `common/src/sync_store.*` | 内部状态、批次历史和只读快照 | 先准备分配再提交, 不混入业务鉴权或跨实例游标判断 |
 | `star/src`, `planet/src` | 两个具体角色策略和各自入口 | 只维护内存索引, 不直接联网或在锁中取消 RPC |
 | `common/tests` | 单元与真实 RPC 夹具 | `check.hpp` 的断言在 Release 也生效, `fixture.hpp` 只读取公开测试身份 |
 | `bench` | 隔离的推流对照 | 不链接进服务, 不用实验消息扩充生产协议 |
@@ -73,6 +74,10 @@ flowchart TD
 `cancel` 只提出关闭请求. 控制循环继续推进 Finish / RemoveHold, 收到 OnDone 后才能回收 reactor.
 `completed` 发布 done 之后不能再访问成员, 回调只使用独立持有的 `Wakeup`.
 `Admission` 禁止搬移, 因为 gRPC 借用了它的请求地址. 退出先停止接纳、取消并排空 RPC, 再关闭服务器.
+
+控制流只承载 Hello/Ping/Pong. 保持读取以接收心跳, 四槽发送队列超限时显式关闭;
+不要将尚未实现的业务流背压套用到此控制流. 存储的分配失败测试为独立可执行文件,
+其替换型 new 不得链接到服务或其他测试进程.
 
 `Signals` 和 `Logger` 由入口/Runtime 唯一持有, 禁止复制, 析构恢复处理器或描述符状态.
 日志管道背压丢弃诊断, 不阻塞协议推进. 这些设施保持私有, 不形成公开平台适配框架.

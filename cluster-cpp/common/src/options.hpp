@@ -1,10 +1,10 @@
 // 功能: 声明 CLI 字段及编译期元数据, 作为选项名称, 默认值, 范围和帮助的单一来源.
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include <algorithm>
 
 namespace verdandi::cluster::detail {
 // 注解只描述当前 CLI 使用的字符串和无符号数值, 不构建通用配置框架.

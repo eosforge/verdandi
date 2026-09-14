@@ -21,3 +21,9 @@
 20	verdandi.cluster.v1.RegistrationRequest
 21	verdandi.cluster.v1.RegistrationResponse
 22	verdandi.cluster.v1.SessionPacket
+23	verdandi.cluster.v1.DeltaRecord
+24	verdandi.cluster.v1.SnapshotChunk
+25	verdandi.cluster.v1.SnapshotRequest
+26	verdandi.cluster.v1.SyncPacket
+27	verdandi.cluster.v1.SyncRequest
+28	verdandi.cluster.v1.SyncResponse

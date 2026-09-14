@@ -1,5 +1,25 @@
 # Verdandi Worklog
 
+## Sync foundation cleanup: validation complete (2026-09-15)
+
+Prepared fixes after `2bf279f`: private storage ownership, allocation-safe batches, bounded version
+progress, explicit control-stream overload, real C++/Go generated protocol files, and dedicated
+store/fault-injection test targets. See [review notes](cluster-cpp/sync-foundation-review-20260914.md).
+
+The maintainer explicitly paused compilation and tests until further notice. Only source edits,
+formatting and protocol generation were performed; no test result is claimed for this revision.
+The maintainer subsequently resumed complete validation. No leftover endurance processes were found;
+current validation uses an isolated Ubuntu source copy and bounded runs only. Working changes remain uncommitted.
+
+Validation finished successfully: four C++ profiles each passed 10 CTests, 6 RPC cases and 13 process
+cases; Supervisor checks passed on both platforms, including Linux race and two bounded fuzz runs.
+Core-only tests, Python harness/build tests and protocol generator gates also passed. Store injection
+covered 76 allocation failures. The bounded 4-Star/2-Planet run completed 9 fault cycles in 65.555 seconds,
+then 15 seconds of steady operation, with cleanup verified. 198 source hashes match the VM copy.
+Only two Python harness files required formatting; no implementation fix was needed during testing.
+Final process inspection found no leftover test process. No commit/push or new dependencies.
+Evidence: [validation report](testkit/results/cluster-sync-foundation-20260915.json).
+
 ## Current service decision (2026-09-12)
 
 C++ Star/Planet and Go Supervisor are the only active service implementations. The old Rust service is retired; its reports are historical. Shared code uses `cluster`, own identity fields use `id`, and Supervisor issues signed opaque string identities. Current protocol is v6; the [identity contract](cluster/identity-contract.md) supersedes older UUID/client-generation and Rust-comparison descriptions below. Accepted code-review corrections must be implemented, not left as documentation-only proposals. Rust SDKs and the standalone protocol generator remain separate.

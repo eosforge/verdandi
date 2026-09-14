@@ -3,9 +3,9 @@
 
 #include <algorithm>
 #include <functional>
+#include <map>
 #include <ranges>
 #include <vector>
-#include <map>
 
 namespace verdandi::cluster {
 StarTopology::StarTopology(const Config& config) : config_(config) {}
@@ -36,7 +36,7 @@ Result<void> StarTopology::initialize(const Member& local, std::span<const Membe
         return std::unexpected(Error{ErrorCode::identity, "Complete list omits local identity"});
     }
 
-    // 利用 C++23 Ranges 提取键值并进行内存连续的高效去重，彻底消灭 std::set 带来的红黑树节点分配和内存碎片.
+    // 用临时连续数组排序检查重复项, 避免再为去重索引逐项分配树节点. 性能收益需独立测量.
     auto principals = members | std::views::transform(&Member::principal) | std::ranges::to<std::vector>();
     std::ranges::sort(principals);
     if (std::ranges::adjacent_find(principals) != principals.end()) {

@@ -37,8 +37,10 @@ struct Stream {
         if (!io->Write(message) || !io->Read(&message)) {
             return false;
         }
-        auto admission = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(message.hello().admission().data()), message.hello().admission().size());
-        auto sig = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(message.hello().admission_signature().data()), message.hello().admission_signature().size());
+        auto admission =
+            std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(message.hello().admission().data()), message.hello().admission().size());
+        auto sig = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(message.hello().admission_signature().data()),
+                                                 message.hello().admission_signature().size());
         return message.has_hello() && identity.verify(admission, sig).has_value();
     }
     bool ping(std::uint64_t id) {

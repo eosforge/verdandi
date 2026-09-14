@@ -44,9 +44,7 @@ def supervisor(host):
     wait_for(
         host,
         "supervisor",
-        lambda value: any(
-            "supervisor_registration_started" in line for line in value["tail"]
-        ),
+        lambda value: any("supervisor_registration_started" in line for line in value["tail"]),
     )
     return address
 
@@ -78,10 +76,7 @@ def rpc_boundaries(binaries, report):
         port = int(address.rsplit(":", 1)[1])
         with socket.create_connection(("127.0.0.1", port), timeout=3) as raw:
             with tls.wrap_socket(raw, server_hostname="127.0.0.1") as secured:
-                if (
-                    secured.version() != "TLSv1.3"
-                    or secured.selected_alpn_protocol() != "h2"
-                ):
+                if secured.version() != "TLSv1.3" or secured.selected_alpn_protocol() != "h2":
                     raise AssertionError("TLS version or HTTP/2 ALPN mismatch")
         tls.minimum_version = tls.maximum_version = ssl.TLSVersion.TLSv1_2
         with socket.create_connection(("127.0.0.1", port), timeout=3) as raw:
@@ -96,30 +91,20 @@ def rpc_boundaries(binaries, report):
         idle = []
         # 完成 TLS/h2 协商但不发送 HTTP2 preface, 在运行其余探针期间持续占用这两条测试连接.
         for _ in range(2):
-            raw = stack.enter_context(
-                socket.create_connection(("127.0.0.1", port), timeout=3)
-            )
-            idle.append(
-                stack.enter_context(tls.wrap_socket(raw, server_hostname="127.0.0.1"))
-            )
+            raw = stack.enter_context(socket.create_connection(("127.0.0.1", port), timeout=3))
+            idle.append(stack.enter_context(tls.wrap_socket(raw, server_hostname="127.0.0.1")))
         descriptor_path = Path(f"/proc/{state['pid']}/fd")
         baseline = len(list(descriptor_path.iterdir()))
         # 半个 TLS 记录不进入业务 RPC. 等待公共握手期限后观察 FD 是否回收.
         with ExitStack() as sockets:
             for _ in range(24):
-                connection = sockets.enter_context(
-                    socket.create_connection(
-                        ("127.0.0.1", int(address.rsplit(":", 1)[1])), timeout=2
-                    )
-                )
+                connection = sockets.enter_context(socket.create_connection(("127.0.0.1", int(address.rsplit(":", 1)[1])), timeout=2))
                 connection.sendall(b"\x16")
             peak = len(list(descriptor_path.iterdir()))
             time.sleep(6.5)
             after = len(list(descriptor_path.iterdir()))
             if not host.call("snapshot", name="star")["alive"] or after > baseline + 8:
-                raise AssertionError(
-                    f"TLS handshake descriptors not reclaimed: {baseline}, {peak}, {after}"
-                )
+                raise AssertionError(f"TLS handshake descriptors not reclaimed: {baseline}, {peak}, {after}")
         report["tls_descriptors"] = {
             "baseline": baseline,
             "peak": peak,
@@ -143,9 +128,7 @@ def rpc_boundaries(binaries, report):
             timeout=90,
         )
         if result.returncode:
-            raise AssertionError(
-                f"RPC probe failed: {result.stdout[-4000:]} {result.stderr[-4000:]} {host.call('snapshot', name='star')}"
-            )
+            raise AssertionError(f"RPC probe failed: {result.stdout[-4000:]} {result.stderr[-4000:]} {host.call('snapshot', name='star')}")
         report["rpc_probe"] = result.stdout.strip()
         for line in result.stdout.splitlines():
             if line.startswith("{"):
@@ -163,9 +146,7 @@ def rpc_boundaries(binaries, report):
                 except (ssl.SSLError, ConnectionError):
                     break
             else:
-                raise AssertionError(
-                    "TLS connection without HTTP/2 requests exceeded idle deadline"
-                )
+                raise AssertionError("TLS connection without HTTP/2 requests exceeded idle deadline")
         report["idle_http2_connections"] = {
             "count": len(idle),
             "observed_closed_ms": round((time.monotonic() - idle_started) * 1000),
@@ -173,9 +154,7 @@ def rpc_boundaries(binaries, report):
         report["cases"].append("tls_without_http2_request_idle_cleanup")
         # 停机还要取消此刻刚进入 TLS 的连接, 不能依赖前面已经自然到期的套接字证明清理有效.
         for _ in range(8):
-            connection = stack.enter_context(
-                socket.create_connection(("127.0.0.1", port), timeout=3)
-            )
+            connection = stack.enter_context(socket.create_connection(("127.0.0.1", port), timeout=3))
             connection.sendall(b"\x16")
         host.call("stop", name="star", graceful=True)
         host.call("rebind", address="127.0.0.1", port=int(address.rsplit(":", 1)[1]))
@@ -188,21 +167,15 @@ def planet_before_stars(binaries, report):
         host = Host(binaries)
         stack.callback(host.close)
         super_address = supervisor(host)
-        initial = node(
-            host, "planet", "planet", "planet-a", endpoint(host), super_address
-        )
-        if (
-            initial["status"].get("upstream")
-            or initial["status"].get("candidates") != 0
-        ):
+        initial = node(host, "planet", "planet", "planet-a", endpoint(host), super_address)
+        if initial["status"].get("upstream") or initial["status"].get("candidates") != 0:
             raise AssertionError("Empty Galaxy unexpectedly supplied an upstream")
         # Planet 已获准但暂时没有候选时, 必须主动刷新并发现随后启动的 Star.
         star = node(host, "star", "star", "star-a", endpoint(host), super_address)
         wait_for(
             host,
             "planet",
-            lambda value: (value["status"].get("upstream") or {}).get("id")
-            == star["status"]["id"],
+            lambda value: (value["status"].get("upstream") or {}).get("id") == star["status"]["id"],
         )
         report["cases"].append("empty_candidates_refresh_when_star_joins")
         host.call("stop", name="planet", graceful=True)
@@ -221,13 +194,9 @@ def main():
     }
     destination = ROOT / f"build/testkit/results/cluster-cpp-rpc-{time.time_ns()}.json"
     try:
-        binaries = [
-            options.binaries / name for name in ("star", "planet", "star_rpc_probe")
-        ]
+        binaries = [options.binaries / name for name in ("star", "planet", "star_rpc_probe")]
         binaries.append(ROOT / "build/supervisor/supervisor")
-        report["binary_sha256"] = {
-            str(path.resolve()): binary_digest(path) for path in binaries
-        }
+        report["binary_sha256"] = {str(path.resolve()): binary_digest(path) for path in binaries}
         rpc_boundaries(options.binaries.resolve(), report)
         planet_before_stars(options.binaries.resolve(), report)
         report["passed"] = True

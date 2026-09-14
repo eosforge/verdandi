@@ -14,6 +14,12 @@ const (
 	IDRegistrationRequest        MessageID = 20
 	IDRegistrationResponse       MessageID = 21
 	IDSessionPacket              MessageID = 22
+	IDDeltaRecord                MessageID = 23
+	IDSnapshotChunk              MessageID = 24
+	IDSnapshotRequest            MessageID = 25
+	IDSyncPacket                 MessageID = 26
+	IDSyncRequest                MessageID = 27
+	IDSyncResponse               MessageID = 28
 )
 
 func NewMessage(id MessageID) proto.Message {
@@ -34,6 +40,18 @@ func NewMessage(id MessageID) proto.Message {
 		return &RegistrationResponse{}
 	case IDSessionPacket:
 		return &SessionPacket{}
+	case IDDeltaRecord:
+		return &DeltaRecord{}
+	case IDSnapshotChunk:
+		return &SnapshotChunk{}
+	case IDSnapshotRequest:
+		return &SnapshotRequest{}
+	case IDSyncPacket:
+		return &SyncPacket{}
+	case IDSyncRequest:
+		return &SyncRequest{}
+	case IDSyncResponse:
+		return &SyncResponse{}
 	default:
 		return nil
 	}
@@ -56,6 +74,18 @@ func IDOf(message proto.Message) (MessageID, bool) {
 		return IDRegistrationResponse, true
 	case *SessionPacket:
 		return IDSessionPacket, true
+	case *DeltaRecord:
+		return IDDeltaRecord, true
+	case *SnapshotChunk:
+		return IDSnapshotChunk, true
+	case *SnapshotRequest:
+		return IDSnapshotRequest, true
+	case *SyncPacket:
+		return IDSyncPacket, true
+	case *SyncRequest:
+		return IDSyncRequest, true
+	case *SyncResponse:
+		return IDSyncResponse, true
 	default:
 		return 0, false
 	}

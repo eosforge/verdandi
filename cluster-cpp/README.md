@@ -1,7 +1,9 @@
 # C++26 Star / Planet
 
 Linux x64 / GCC 16.2.0 的 C++26 连接骨架, 与 Go Supervisor 通过 gRPC/TLS 协议 v6 协作.
-当前范围是准入、互联、心跳和有界资源清理, 尚无 Catalog/Registry 业务存储或 SDK 接入.
+当前运行范围是准入、互联、心跳和有界资源清理, 尚无 Catalog/Registry 业务接口或 SDK 接入.
+新增内部 SyncStore 和同步协议草案, 本轮整理后按维护者要求暂停编译与测试.
+审核入口见 [SyncStore 整理说明](sync-foundation-review-20260914.md), 不沿用旧版本的验证结论.
 
 首次阅读从本文的结构和启动方式开始, 然后查看[维护指南](CONTRIBUTING.md)与[身份契约](../cluster/identity-contract.md).
 本轮类型、状态与入口精简见[review 说明](minimal-review-20260914.md).

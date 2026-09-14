@@ -1,21 +1,21 @@
+// 草案: 生成类型用于审阅协议, 当前 Star/Planet 尚未注册此服务或对外提供业务同步.
 syntax = "proto3";
 package verdandi.cluster.v1;
 option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
 
 import "cluster.proto";
 
-// 专用于 Catalog 和 Registry 业务流式同步的传输服务
+// 业务同步候选接口. 每条 RPC 都必须校验准入, 不能因另一条流已经验证就直接放行.
 service SyncTransport {
-    // Session A：信令与极速增量流
-    // 承载日常的心跳、高水位线增量 (DeltaRecord) 和 Commit 屏障
+    // 信令和增量候选通道. 完成整份 SyncResponse 后才可确认其提交位置.
     rpc OpenDeltaStream(stream SyncPacket) returns (stream SyncPacket);
 
-    // Session B：旁路大文件流
-    // 专门应对重连风暴，用于纯粹下发零拷贝的 4KB Chunk 切片快照，即使产生背压也不会阻塞 Session A
+    // 快照候选通道. 独立 RPC 不保证独立资源或端到端零拷贝.
+    // 实例校验, 快照期间的历史保留和切回增量规则尚未实施, 不据此声明可用.
     rpc OpenSnapshotStream(stream SnapshotRequest) returns (stream SnapshotChunk);
 }
 
-// Session A 的核心载体
+// 增量通道的消息载体.
 message SyncPacket {
     oneof body {
         Hello hello = 1;
@@ -26,45 +26,54 @@ message SyncPacket {
     }
 }
 
-// 客户端发起对账
+// 候选恢复请求. 当前版本属于一个服务端实例和一个明确的订阅范围.
 message SyncRequest {
-    // 客户端当前的全局版本号
+    // 客户端已完整应用的本地提交序号, 不是 Catalog 发布者的业务版本.
     uint64 client_global_version = 1;
-    // 上次对账的服务端实例 UUID；若为空或与当前服务端不同，将强制下发全量快照
+    // 上次对账的服务端不透明实例 ID, 复用现有准入身份. 为空或不匹配时必须全量.
     string server_instance_id = 2;
-    // 订阅的范围（例如："Catalog/Routes/" 或 "Registry/"）
-    string subscribe_prefix = 3; 
+    // 本次希望订阅的范围, 例如 "Catalog/Routes/" 或 "Registry/". 空字符串表示全部.
+    string subscribe_prefix = 3;
+    // 游标原来所属的范围. 与本次范围不同必须重新快照, 重连也不能省略此比较.
+    string cursor_prefix = 4;
 }
 
-// 服务端返回对账结果
+// 候选同步响应. requires_full_snapshot 为 true 时不得把此响应当成已同步的提交屏障.
 message SyncResponse {
-    // 服务端当前的最新全局版本（如果下发了增量，这相当于 Commit 屏障）
+    // 全部增量应用成功后才能保存的提交位置.
     uint64 server_global_version = 1;
-    // 当前服务端的实例 UUID，供客户端下次携带
+    // 当前服务端的不透明实例 ID, 供客户端下次携带.
     string server_instance_id = 2;
-    
-    // 如果 client_global_version 太老、server_instance_id 不匹配、或 subscribe_prefix 改变，则返回 true
-    // 客户端收到 true 后，自动挂起 Session A，转去调用 OpenSnapshotStream
-    bool requires_full_snapshot = 3; 
 
-    // O(N) 极速提取出的增量与墓碑列表
+    // 历史不足, 游标超前, 实例不匹配或范围改变时必须全量.
+    // 草案仍需实现快照与增量的衔接, 当前没有对应服务处理器.
+    bool requires_full_snapshot = 3;
+
+    // 按提交顺序排列的完整增量与删除记录, 不在批次中间确认进度.
     repeated DeltaRecord deltas = 4;
 }
 
 message DeltaRecord {
-    string key = 1;                  // 展平后的子 Key
-    bytes payload = 2;               // 业务二进制正文
-    bool deleted = 3;                // 墓碑标记
-    uint64 field_version = 4;        // 局部版本号
+    // 完整业务 Key.
+    string key = 1;
+    // 业务二进制正文.
+    bytes payload = 2;
+    // true 表示删除该 Key.
+    bool deleted = 3;
+    // 当前草案使用所在 Store 的提交号, 不能用于 Catalog 业务版本校验.
+    uint64 field_version = 4;
 }
 
-// Session B：大快照旁路下载
+// 快照请求草案, 其准入与关联规则仍待服务层实现.
 message SnapshotRequest {
     string subscribe_prefix = 1;
 }
 
 message SnapshotChunk {
-    uint64 snapshot_version = 1;     // 锁定快照时的版本号
-    bytes chunk_data = 2;            // 按 4KB 切割的只读数据块
-    bool is_last_chunk = 3;          // EOF 标记
+    // 全部块必须来自同一个不可变快照.
+    uint64 snapshot_version = 1;
+    // 分块大小由后续实现的资源预算决定, 协议不固定为 4 KiB.
+    bytes chunk_data = 2;
+    // 收齐最后一块后才能将完整快照应用到本地视图.
+    bool is_last_chunk = 3;
 }
