@@ -158,7 +158,7 @@ test("model loading errors settle all reads and an already-cancelled scene never
     cancellation.abort();
     await assert.rejects(createGalaxyScene(null, demoGalaxy, {}, cancellation.signal), { name: "AbortError" });
     assert.equal(requests.length, 3);
-    assert.deepEqual(await loadCelestialModels({ ...demoGalaxy, peers: [], links: [] }, scope), {});
+    assert.deepEqual(await loadCelestialModels({ ...demoGalaxy, stars: [], links: [] }, scope), {});
     assert.equal(requests.length, 3);
     globalThis.fetch = (url, { signal }) => {
       requests.push(url.pathname);

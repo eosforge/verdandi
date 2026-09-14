@@ -12,8 +12,8 @@ function positionAt(orbit, seconds) {
 }
 
 test("deterministic tilted ellipses preserve every initial snapshot position", () => {
-  for (const peer of demoGalaxy.peers) {
-    for (const planet of peer.planets) {
+  for (const star of demoGalaxy.stars) {
+    for (const planet of star.planets) {
       const orbit = createPlanetOrbit(planet.id, planet.position);
       assert.deepEqual(orbit, createPlanetOrbit(planet.id, planet.position));
       assert.ok(positionAt(orbit, 0).distanceTo(new Vector3(...planet.position)) < 1e-10);
@@ -23,7 +23,7 @@ test("deterministic tilted ellipses preserve every initial snapshot position", (
 });
 
 test("the star is a focus, motion stays in its plane and period obeys the semi-major axis", () => {
-  for (const planet of demoGalaxy.peers[0].planets) {
+  for (const planet of demoGalaxy.stars[0].planets) {
     const orbit = createPlanetOrbit(planet.id, planet.position);
     const periapsis = new Vector3(...orbit.periapsis);
     const transverse = new Vector3(...orbit.transverse);

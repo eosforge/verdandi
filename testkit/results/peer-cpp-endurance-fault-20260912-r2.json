@@ -1,0 +1,843 @@
+{
+  "status": "running",
+  "phase": "steady",
+  "started_utc": "2026-09-12T04:32:14.998899+00:00",
+  "controller_pid": 314941,
+  "stars": 8,
+  "planets": 16,
+  "fault_seconds_requested": 7200,
+  "steady_seconds_requested": 0,
+  "fault_cycles": 833,
+  "minimum_available_mib": 3175,
+  "binary_sha256": {
+    "peer": "55e139ddb08bf96bf4bfcd5903be2c69edab818c8fdb114a6db658e7921d4d2a",
+    "planet": "56c0ca47a480a058e334c0a5fcae2fb2796ee7f3298aacb77854ee9631493160",
+    "supervisor": "23878d66cf35517376395f5e1500398bb46088461dd442ae4b579d6a8e64d897"
+  },
+  "source_sha256": {
+    "peer-cpp/test_endurance.py": "e63feb2f827fb07d1f8c9e0e3c916dce5846433e914c8b27f24f59547027d535",
+    "testkit/services.py": "00bbf8ad657f11670a30c50ed7e9b184cece4405251c6123e1490b31ba82b8c0",
+    "testkit/support.py": "5d3984eb7ada150d056f99bcd8113aeae7213b20ebb15cea2f39a31863e1e7a7",
+    "peer-cpp/test_scale.py": "72de8c76b992141bcb0e4b352f31c548052f87fb313027167efa7e8cf29cc76f"
+  },
+  "limits": [
+    "Single Ubuntu VM, loopback connections, real C++ Release processes and Go Supervisor",
+    "Connection/heartbeat endurance only; no business Registry/Catalog load",
+    "Heartbeat 200 ms, Pong deadline 1500 ms; topology observations use 1-second service status",
+    "0 steady seconds means run until STOP file or SIGINT/SIGTERM; failure also stops and cleans up",
+    "Samples rotate at 8 x 8 MiB; reports retain aggregate peaks, last sample and recovery counters"
+  ],
+  "resource_peaks": {
+    "supervisor": {
+      "rss_kib": 19504,
+      "threads": 8,
+      "fds": 14
+    },
+    "star-0": {
+      "rss_kib": 20504,
+      "threads": 9,
+      "fds": 29
+    },
+    "star-1": {
+      "rss_kib": 20560,
+      "threads": 9,
+      "fds": 30
+    },
+    "star-2": {
+      "rss_kib": 20560,
+      "threads": 9,
+      "fds": 30
+    },
+    "star-3": {
+      "rss_kib": 20484,
+      "threads": 9,
+      "fds": 30
+    },
+    "star-4": {
+      "rss_kib": 20416,
+      "threads": 9,
+      "fds": 32
+    },
+    "star-5": {
+      "rss_kib": 20424,
+      "threads": 9,
+      "fds": 30
+    },
+    "star-6": {
+      "rss_kib": 20636,
+      "threads": 9,
+      "fds": 30
+    },
+    "star-7": {
+      "rss_kib": 20500,
+      "threads": 9,
+      "fds": 30
+    },
+    "planet-0": {
+      "rss_kib": 17444,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-1": {
+      "rss_kib": 17484,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-2": {
+      "rss_kib": 17472,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-3": {
+      "rss_kib": 17420,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-4": {
+      "rss_kib": 17436,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-5": {
+      "rss_kib": 17436,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-6": {
+      "rss_kib": 17444,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-7": {
+      "rss_kib": 17472,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-8": {
+      "rss_kib": 17424,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-9": {
+      "rss_kib": 17448,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-10": {
+      "rss_kib": 17516,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-11": {
+      "rss_kib": 17476,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-12": {
+      "rss_kib": 17448,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-13": {
+      "rss_kib": 17480,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-14": {
+      "rss_kib": 17492,
+      "threads": 9,
+      "fds": 10
+    },
+    "planet-15": {
+      "rss_kib": 17420,
+      "threads": 9,
+      "fds": 10
+    }
+  },
+  "updated_utc": "2026-09-12T06:36:08.588501+00:00",
+  "elapsed_seconds": 7433.59,
+  "resources": {
+    "planet-1": {
+      "rss_kib": 17232,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.88,
+      "pid": 340700
+    },
+    "planet-2": {
+      "rss_kib": 17328,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.98,
+      "pid": 340812
+    },
+    "planet-3": {
+      "rss_kib": 17232,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.81,
+      "pid": 340841
+    },
+    "planet-4": {
+      "rss_kib": 17208,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.81,
+      "pid": 340871
+    },
+    "planet-5": {
+      "rss_kib": 17276,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.75,
+      "pid": 340901
+    },
+    "planet-6": {
+      "rss_kib": 17128,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.59,
+      "pid": 340931
+    },
+    "planet-7": {
+      "rss_kib": 17248,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.42,
+      "pid": 340960
+    },
+    "star-2": {
+      "rss_kib": 20008,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 16.9,
+      "pid": 340978
+    },
+    "planet-8": {
+      "rss_kib": 17128,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.36,
+      "pid": 340989
+    },
+    "star-3": {
+      "rss_kib": 19872,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 16.33,
+      "pid": 341008
+    },
+    "planet-9": {
+      "rss_kib": 17128,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.11,
+      "pid": 341019
+    },
+    "star-4": {
+      "rss_kib": 19896,
+      "threads": 9,
+      "fds": 24,
+      "cpu_seconds": 14.43,
+      "pid": 341036
+    },
+    "planet-10": {
+      "rss_kib": 17200,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 3.04,
+      "pid": 341047
+    },
+    "planet-11": {
+      "rss_kib": 17152,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 2.83,
+      "pid": 341076
+    },
+    "star-1": {
+      "rss_kib": 19556,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 14.92,
+      "pid": 341094
+    },
+    "planet-12": {
+      "rss_kib": 17088,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 2.88,
+      "pid": 341105
+    },
+    "star-6": {
+      "rss_kib": 19676,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 13.87,
+      "pid": 341122
+    },
+    "planet-13": {
+      "rss_kib": 17064,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 2.69,
+      "pid": 341133
+    },
+    "star-0": {
+      "rss_kib": 19300,
+      "threads": 9,
+      "fds": 23,
+      "cpu_seconds": 11.83,
+      "pid": 341150
+    },
+    "planet-14": {
+      "rss_kib": 16968,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 2.64,
+      "pid": 341162
+    },
+    "star-5": {
+      "rss_kib": 19100,
+      "threads": 9,
+      "fds": 23,
+      "cpu_seconds": 12.46,
+      "pid": 341179
+    },
+    "planet-15": {
+      "rss_kib": 17164,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 2.78,
+      "pid": 341190
+    },
+    "supervisor": {
+      "rss_kib": 16400,
+      "threads": 7,
+      "fds": 9,
+      "cpu_seconds": 1.71,
+      "pid": 341201
+    },
+    "star-7": {
+      "rss_kib": 18988,
+      "threads": 9,
+      "fds": 22,
+      "cpu_seconds": 11.0,
+      "pid": 341208
+    },
+    "planet-0": {
+      "rss_kib": 17080,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 2.39,
+      "pid": 341219
+    }
+  },
+  "tcp_established": 72,
+  "topology": {
+    "planet-1": {
+      "peer_id": "9d30966c79b54e25a84cd0e10d9b358a",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "25240bf41fae44c58c8b2429d5431ef9",
+        "group": "east",
+        "address": "127.0.0.1:60951"
+      }
+    },
+    "planet-2": {
+      "peer_id": "14ff0d9c4a524fe3a649a15ff2e2a5c3",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "e27d151c522045d396a9a9399b3f815c",
+        "group": "east",
+        "address": "127.0.0.1:39593"
+      }
+    },
+    "planet-3": {
+      "peer_id": "1ec4d0f034e341c2b66848429cc251b3",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "dfd8006e284d498d88db806090f634fe",
+        "group": "west",
+        "address": "127.0.0.1:42125"
+      }
+    },
+    "planet-4": {
+      "peer_id": "56601fd59997477db1000c92465334e2",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "25240bf41fae44c58c8b2429d5431ef9",
+        "group": "east",
+        "address": "127.0.0.1:60951"
+      }
+    },
+    "planet-5": {
+      "peer_id": "28b20a1c21974fa1a32691c161c90512",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "b06a0434d1c8474d8939bdcb5060f2b2",
+        "group": "west",
+        "address": "127.0.0.1:45479"
+      }
+    },
+    "planet-6": {
+      "peer_id": "dab554b49d3d43efaced12fa3ac0d998",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "e27d151c522045d396a9a9399b3f815c",
+        "group": "east",
+        "address": "127.0.0.1:39593"
+      }
+    },
+    "planet-7": {
+      "peer_id": "da51350cd9ee4c57a6b753162e9fe1f9",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "dfd8006e284d498d88db806090f634fe",
+        "group": "west",
+        "address": "127.0.0.1:42125"
+      }
+    },
+    "star-2": {
+      "peer_id": "c0cbe346941b4b9ea4d0226268ed33e9",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 3,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-8": {
+      "peer_id": "99b2e4829f334b4e962e3ecd79e95503",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "c0cbe346941b4b9ea4d0226268ed33e9",
+        "group": "east",
+        "address": "127.0.0.1:56179"
+      }
+    },
+    "star-3": {
+      "peer_id": "dfd8006e284d498d88db806090f634fe",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 3,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-9": {
+      "peer_id": "697f9159ea194dcaa62080ac447ed14f",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "dfd8006e284d498d88db806090f634fe",
+        "group": "west",
+        "address": "127.0.0.1:42125"
+      }
+    },
+    "star-4": {
+      "peer_id": "25240bf41fae44c58c8b2429d5431ef9",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 2,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-10": {
+      "peer_id": "851fce70e4644a3c8b621ae16706be8d",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "c0cbe346941b4b9ea4d0226268ed33e9",
+        "group": "east",
+        "address": "127.0.0.1:56179"
+      }
+    },
+    "planet-11": {
+      "peer_id": "cba749e1d2774f389c766735b9d8ab6f",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "2dba481d4fc64f02b60d2a0e3659a909",
+        "group": "west",
+        "address": "127.0.0.1:34099"
+      }
+    },
+    "star-1": {
+      "peer_id": "2dba481d4fc64f02b60d2a0e3659a909",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 3,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-12": {
+      "peer_id": "dd63a5285c704b0e8ab784332f49a25a",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "c0cbe346941b4b9ea4d0226268ed33e9",
+        "group": "east",
+        "address": "127.0.0.1:56179"
+      }
+    },
+    "star-6": {
+      "peer_id": "e27d151c522045d396a9a9399b3f815c",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 3,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-13": {
+      "peer_id": "3ead7b1d600343b9bae96e2ea57679cb",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "2dba481d4fc64f02b60d2a0e3659a909",
+        "group": "west",
+        "address": "127.0.0.1:34099"
+      }
+    },
+    "star-0": {
+      "peer_id": "60c40482404e4c1f892573c5e80a6d00",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 1,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-14": {
+      "peer_id": "cf9193b5452c4632b4e8d47c49f14f64",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "e27d151c522045d396a9a9399b3f815c",
+        "group": "east",
+        "address": "127.0.0.1:39593"
+      }
+    },
+    "star-5": {
+      "peer_id": "b06a0434d1c8474d8939bdcb5060f2b2",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 1,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-15": {
+      "peer_id": "a6c7d65a68614d98a5ec772663bf51cd",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "2dba481d4fc64f02b60d2a0e3659a909",
+        "group": "west",
+        "address": "127.0.0.1:34099"
+      }
+    },
+    "star-7": {
+      "peer_id": "53bc77453a1341aeac543dddd1032a36",
+      "initialized": true,
+      "members": 8,
+      "inbound": 7,
+      "outbound": 7,
+      "planet_inbound": 0,
+      "candidates": 0,
+      "upstream": null
+    },
+    "planet-0": {
+      "peer_id": "cf03232c17e04b699d57e9335fd50642",
+      "initialized": true,
+      "members": 0,
+      "inbound": 0,
+      "outbound": 0,
+      "planet_inbound": 0,
+      "candidates": 8,
+      "upstream": {
+        "peer_id": "60c40482404e4c1f892573c5e80a6d00",
+        "group": "east",
+        "address": "127.0.0.1:42375"
+      }
+    }
+  },
+  "fault_started_utc": "2026-09-12T04:32:45.339750+00:00",
+  "fault_elapsed_seconds": 7205.739,
+  "recovery": {
+    "upstream_failover_supervisor_offline": {
+      "count": 833,
+      "total_seconds": 827.367,
+      "max_seconds": 1.205
+    },
+    "star_restart": {
+      "count": 833,
+      "total_seconds": 2703.41,
+      "max_seconds": 3.636
+    },
+    "planet_restart": {
+      "count": 833,
+      "total_seconds": 1238.455,
+      "max_seconds": 2.227
+    }
+  },
+  "steady_started_utc": "2026-09-12T06:32:51.079136+00:00",
+  "steady_baseline": {
+    "planet-1": {
+      "rss_kib": 17212,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 1.62
+    },
+    "planet-2": {
+      "rss_kib": 17328,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 1.53
+    },
+    "planet-3": {
+      "rss_kib": 17204,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 1.42
+    },
+    "planet-4": {
+      "rss_kib": 17184,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 1.37
+    },
+    "planet-5": {
+      "rss_kib": 17252,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 1.22
+    },
+    "planet-6": {
+      "rss_kib": 17116,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 1.09
+    },
+    "planet-7": {
+      "rss_kib": 17240,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 1.01
+    },
+    "star-2": {
+      "rss_kib": 19856,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 5.28
+    },
+    "planet-8": {
+      "rss_kib": 17096,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.9
+    },
+    "star-3": {
+      "rss_kib": 19792,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 4.56
+    },
+    "planet-9": {
+      "rss_kib": 17104,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.76
+    },
+    "star-4": {
+      "rss_kib": 19792,
+      "threads": 9,
+      "fds": 24,
+      "cpu_seconds": 3.78
+    },
+    "planet-10": {
+      "rss_kib": 17176,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.68
+    },
+    "planet-11": {
+      "rss_kib": 17112,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.6
+    },
+    "star-1": {
+      "rss_kib": 19424,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 2.92
+    },
+    "planet-12": {
+      "rss_kib": 17048,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.46
+    },
+    "star-6": {
+      "rss_kib": 19540,
+      "threads": 9,
+      "fds": 25,
+      "cpu_seconds": 2.46
+    },
+    "planet-13": {
+      "rss_kib": 17012,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.37
+    },
+    "star-0": {
+      "rss_kib": 19148,
+      "threads": 9,
+      "fds": 23,
+      "cpu_seconds": 1.73
+    },
+    "planet-14": {
+      "rss_kib": 16900,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.26
+    },
+    "star-5": {
+      "rss_kib": 18964,
+      "threads": 9,
+      "fds": 23,
+      "cpu_seconds": 1.15
+    },
+    "planet-15": {
+      "rss_kib": 17092,
+      "threads": 9,
+      "fds": 9,
+      "cpu_seconds": 0.16
+    },
+    "supervisor": {
+      "rss_kib": 16400,
+      "threads": 7,
+      "fds": 10,
+      "cpu_seconds": 1.7
+    },
+    "star-7": {
+      "rss_kib": 18704,
+      "threads": 9,
+      "fds": 22,
+      "cpu_seconds": 0.53
+    },
+    "planet-0": {
+      "rss_kib": 16952,
+      "threads": 9,
+      "fds": 10,
+      "cpu_seconds": 0.05
+    }
+  },
+  "steady_pids": {
+    "planet-1": 340700,
+    "planet-2": 340812,
+    "planet-3": 340841,
+    "planet-4": 340871,
+    "planet-5": 340901,
+    "planet-6": 340931,
+    "planet-7": 340960,
+    "star-2": 340978,
+    "planet-8": 340989,
+    "star-3": 341008,
+    "planet-9": 341019,
+    "star-4": 341036,
+    "planet-10": 341047,
+    "planet-11": 341076,
+    "star-1": 341094,
+    "planet-12": 341105,
+    "star-6": 341122,
+    "planet-13": 341133,
+    "star-0": 341150,
+    "planet-14": 341162,
+    "star-5": 341179,
+    "planet-15": 341190,
+    "supervisor": 341201,
+    "star-7": 341208,
+    "planet-0": 341219
+  },
+  "steady_elapsed_seconds": 197.509
+}

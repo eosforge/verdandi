@@ -121,6 +121,7 @@ fn shape(options: &mut BTreeMap<String, String>) -> Result<push_state::Shape, Bo
         registries: take(options, "--registries", "1000").parse()?,
         catalogs: take(options, "--catalogs", "1000").parse()?,
         bytes: take(options, "--catalog-bytes", "256").parse()?,
+        hot_keys: take(options, "--hot-keys", "0").parse()?,
     };
     shape.validate()?;
     Ok(shape)

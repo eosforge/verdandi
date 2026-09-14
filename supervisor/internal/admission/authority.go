@@ -3,8 +3,10 @@ package admission
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"io"
@@ -16,7 +18,17 @@ import (
 )
 
 // SignatureDomain 隔离准入签名和其他 Ed25519 用途, 两种语言必须逐字节一致.
-const SignatureDomain = "verdandi-admission-v4\x00"
+const SignatureDomain = "verdandi-admission-v6\x00"
+
+// newID 仅由 Supervisor 为新的启动尝试分配不透明标识; 使用系统随机源, 错误时停止签发.
+// 此处的前缀和编码是签发实现细节, 接收方不得复制或推断该格式.
+func newID() (string, error) {
+	var random [24]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", err
+	}
+	return "s_" + base64.RawURLEncoding.EncodeToString(random[:]), nil
+}
 
 // Authority 的密钥及 TLS 配置只读共享, 不进入日志或协议应答.
 type Authority struct {
@@ -51,7 +63,7 @@ func Load(directory string) (*Authority, error) {
 	if !roots.AppendCertsFromPEM(ca) {
 		return nil, errors.New("invalid TLS trust roots")
 	}
-	// 与 Rust 节点一样在启动时验证自己的服务端证书, 不让过期或异链身份先占据监听端口.
+	// 与 C++ 节点一样在启动时验证自己的服务端证书, 不让过期或异链身份先占据监听端口.
 	// 公布主机名由连接方核对; Supervisor 可以监听通配地址, 此处不拿 bind 地址替代 SAN.
 	leaf, err := x509.ParseCertificate(pair.Certificate[0])
 	if err != nil {

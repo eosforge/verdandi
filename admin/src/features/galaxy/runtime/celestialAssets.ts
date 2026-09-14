@@ -61,19 +61,19 @@ async function loadModel(url: URL, kind: CelestialModelKind, scope: ResourceScop
 export async function loadCelestialModels(data: GalaxyData, scope: ResourceScope, signal?: AbortSignal): Promise<CelestialModels> {
   const models: CelestialModels = {};
   const requests: Promise<void>[] = [];
-  if (data.peers.some((peer) => peer.status === "unavailable"))
+  if (data.stars.some((star) => star.status === "unavailable"))
     requests.push(
       loadModel(new URL("./assets/black-hole.glb", import.meta.url), "blackHole", scope, signal).then((model) => {
         models.blackHole = model;
       }),
     );
-  if (data.peers.some((peer) => peer.status === "available"))
+  if (data.stars.some((star) => star.status === "available"))
     requests.push(
       loadModel(new URL("./assets/star.glb", import.meta.url), "star", scope, signal).then((model) => {
         models.star = model;
       }),
     );
-  if (data.peers.some((peer) => peer.status === "available" && peer.planets.length))
+  if (data.stars.some((star) => star.status === "available" && star.planets.length))
     requests.push(
       loadModel(new URL("./assets/planet.glb", import.meta.url), "planet", scope, signal).then((model) => {
         models.planet = model;

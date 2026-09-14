@@ -1,0 +1,812 @@
+{
+  "date": "2026-09-12",
+  "status": "maintenance_qualified",
+  "scope": "C++26 connection skeleton maintenance; no business replication or SDK database qualification",
+  "profiles": {
+    "debug": {
+      "status": "pass",
+      "ctest": {
+        "passed": 8,
+        "elapsed_seconds": 32.44
+      },
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions and Rust compatibility",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins",
+          "rust_cpp_star_mesh_and_both_planet_combinations",
+          "mixed_implementation_offline_supervisor_failover"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/peer-cpp/debug/peer": "15142f38939b63930859736b5faf08ca45e8a32ae7aec9d44efdb071d3d21e27",
+          "/home/ubuntu/verdandi/build/peer-cpp/debug/planet": "beee2001d22fa831db6c1f031869779854b32e65bbed57cf13e98b1ca463e253",
+          "/home/ubuntu/verdandi/build/peer-cpp/debug/peer_rpc_probe": "febe1265de04110328c28ba1d6bf557ce2dacf54115eedb44c6199178db705da",
+          "/home/ubuntu/verdandi/build/peer/target/release/peer": "f983f12ce6ffe9f77333d4779cfe8570481720ed8d8a672c07b8ab7158b105c9",
+          "/home/ubuntu/verdandi/build/peer/target/release/planet": "aa5999dbcf11153ae0d0d171d315a1e5907e4cbe60cbe563a8de75963b93fc60",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "23878d66cf35517376395f5e1500398bb46088461dd442ae4b579d6a8e64d897"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 35,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":850.346,\"p95\":1075.86,\"p99\":1175.66,\"max\":1294.57}}\n{\"slow_reader\":{\"attempted_pings\":196,\"close_ms\":37}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 850.346,
+          "p95": 1075.86,
+          "p99": 1175.66,
+          "max": 1294.57
+        },
+        "slow_reader": {
+          "attempted_pings": 196,
+          "close_ms": 37
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16192,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 19368,
+            "threads": 9,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 13400
+        }
+      },
+      "processes": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "peer_binaries": "/home/ubuntu/verdandi/build/peer-cpp/debug",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 23.974
+      },
+      "log": {
+        "path": "build/peer-cpp/cleanup-debug-final-20260912.log",
+        "sha256": "fcfbdb2fcddeee090c115bc627fbd27e429152364a75dee0225f252748000cbf"
+      },
+      "raw_reports": {
+        "peer-cpp-rpc-1789149420411126347.json": "54e218f1fe30e9c8920829584db0e5535e3292e7abbfdfe00ebdc74f16957a20",
+        "services-1789149450309975725.json": "33669ad19962880b64d53e8d60a4d2e0ac87debfc97705049949647378e3353e"
+      }
+    },
+    "asan": {
+      "status": "pass",
+      "ctest": {
+        "passed": 8,
+        "elapsed_seconds": 33.19
+      },
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions and Rust compatibility",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins",
+          "rust_cpp_star_mesh_and_both_planet_combinations",
+          "mixed_implementation_offline_supervisor_failover"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/peer-cpp/asan/peer": "d43ae22b1e4838a0444a15fdaf90d296b5b535637f7e3aad61a496ec8a528d31",
+          "/home/ubuntu/verdandi/build/peer-cpp/asan/planet": "bf95440458ac812024e6f402c60f602080794424703e483552f409105326edc7",
+          "/home/ubuntu/verdandi/build/peer-cpp/asan/peer_rpc_probe": "41364a79836d52395fdfbb5c2e14ec03af6ef43d3fa687fd9a7c42228635afb1",
+          "/home/ubuntu/verdandi/build/peer/target/release/peer": "f983f12ce6ffe9f77333d4779cfe8570481720ed8d8a672c07b8ab7158b105c9",
+          "/home/ubuntu/verdandi/build/peer/target/release/planet": "aa5999dbcf11153ae0d0d171d315a1e5907e4cbe60cbe563a8de75963b93fc60",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "23878d66cf35517376395f5e1500398bb46088461dd442ae4b579d6a8e64d897"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 35,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":1191.76,\"p95\":1473.98,\"p99\":1591.09,\"max\":1717.09}}\n{\"slow_reader\":{\"attempted_pings\":882,\"close_ms\":140}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 1191.76,
+          "p95": 1473.98,
+          "p99": 1591.09,
+          "max": 1717.09
+        },
+        "slow_reader": {
+          "attempted_pings": 882,
+          "close_ms": 140
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16096,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 59816,
+            "threads": 9,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 13794
+        }
+      },
+      "processes": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "peer_binaries": "/home/ubuntu/verdandi/build/peer-cpp/asan",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 24.596
+      },
+      "log": {
+        "path": "build/peer-cpp/cleanup-asan-20260912.log",
+        "sha256": "a6aa2b5c7494e6604e8dbf476781f6211e10c175e0d5c56ebb1d6b3f1faea90d"
+      },
+      "raw_reports": {
+        "peer-cpp-rpc-1789149699520804482.json": "410bd985a56fbf9d74d6e28c73a807847fe99d0580ce503e03bc3bc1d2f47e23",
+        "services-1789149729222593487.json": "db2fbc49db5a60002bcd194783f8214cbcf1e40f5f956b7bc8bbb19ec231575e"
+      }
+    },
+    "tsan": {
+      "status": "pass",
+      "ctest": {
+        "passed": 8,
+        "elapsed_seconds": 38.03
+      },
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions and Rust compatibility",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins",
+          "rust_cpp_star_mesh_and_both_planet_combinations",
+          "mixed_implementation_offline_supervisor_failover"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/peer-cpp/tsan/peer": "20e1d8d593b16a588a6066eaf353a94c9321d12b12758ab8c183dbd07a15303b",
+          "/home/ubuntu/verdandi/build/peer-cpp/tsan/planet": "d7b90a35f85cd4a9713f52b943ec2a43bf5df9e944129c33967d0128281ebec3",
+          "/home/ubuntu/verdandi/build/peer-cpp/tsan/peer_rpc_probe": "97834d1b7c9423766cac9ee2282bc8603ac495128fced42b21b53be92caa42b6",
+          "/home/ubuntu/verdandi/build/peer/target/release/peer": "f983f12ce6ffe9f77333d4779cfe8570481720ed8d8a672c07b8ab7158b105c9",
+          "/home/ubuntu/verdandi/build/peer/target/release/planet": "aa5999dbcf11153ae0d0d171d315a1e5907e4cbe60cbe563a8de75963b93fc60",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "23878d66cf35517376395f5e1500398bb46088461dd442ae4b579d6a8e64d897"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 20,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":2204.72,\"p95\":2916.76,\"p99\":3288.18,\"max\":3587.69}}\n{\"slow_reader\":{\"attempted_pings\":95,\"close_ms\":72}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 2204.72,
+          "p95": 2916.76,
+          "p99": 3288.18,
+          "max": 3587.69
+        },
+        "slow_reader": {
+          "attempted_pings": 95,
+          "close_ms": 72
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16220,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 62320,
+            "threads": 10,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 15402
+        }
+      },
+      "processes": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "peer_binaries": "/home/ubuntu/verdandi/build/peer-cpp/tsan",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 36.782
+      },
+      "log": {
+        "path": "build/peer-cpp/cleanup-tsan-20260912.log",
+        "sha256": "bcff8f04b2b14380da3f0c1a1bda7107bb7bb89f80a9df86c6b347edf74c8258"
+      },
+      "raw_reports": {
+        "peer-cpp-rpc-1789150017313602835.json": "6cd3133cb2d5b847c1ee6b9fc40667c2d1fc897a076f882e1f562557197ff77c",
+        "services-1789150054620474190.json": "5ff622e946024df4d1f9c15cb30145bedd8c0eab0ff7aa1167de07a9aa80112f"
+      }
+    },
+    "release": {
+      "status": "pass",
+      "ctest": {
+        "passed": 8,
+        "elapsed_seconds": 32.23
+      },
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions and Rust compatibility",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins",
+          "rust_cpp_star_mesh_and_both_planet_combinations",
+          "mixed_implementation_offline_supervisor_failover"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/peer-cpp/release/peer": "55e139ddb08bf96bf4bfcd5903be2c69edab818c8fdb114a6db658e7921d4d2a",
+          "/home/ubuntu/verdandi/build/peer-cpp/release/planet": "56c0ca47a480a058e334c0a5fcae2fb2796ee7f3298aacb77854ee9631493160",
+          "/home/ubuntu/verdandi/build/peer-cpp/release/peer_rpc_probe": "d16bc4a087be667319b65445726f13f8899b6fa61f62c73dd731357e392c694d",
+          "/home/ubuntu/verdandi/build/peer/target/release/peer": "f983f12ce6ffe9f77333d4779cfe8570481720ed8d8a672c07b8ab7158b105c9",
+          "/home/ubuntu/verdandi/build/peer/target/release/planet": "aa5999dbcf11153ae0d0d171d315a1e5907e4cbe60cbe563a8de75963b93fc60",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "23878d66cf35517376395f5e1500398bb46088461dd442ae4b579d6a8e64d897"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 35,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":704.038,\"p95\":955.652,\"p99\":1069.56,\"max\":1260.47}}\n{\"slow_reader\":{\"attempted_pings\":101,\"close_ms\":8}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 704.038,
+          "p95": 955.652,
+          "p99": 1069.56,
+          "max": 1260.47
+        },
+        "slow_reader": {
+          "attempted_pings": 101,
+          "close_ms": 8
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16176,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 19080,
+            "threads": 9,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 13342
+        }
+      },
+      "processes": {
+        "status": "pass",
+        "platform": "linux",
+        "mode": "soak",
+        "mixed_hosts": false,
+        "peer_binaries": "/home/ubuntu/verdandi/build/peer-cpp/release",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_peer_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_peer_wait",
+          "persistent_supervisor_restart_and_waiting_peer_join",
+          "graceful_and_forced_peer_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "resources_initial": {
+          "local": {
+            "peer-0": {
+              "rss_kib": 18648,
+              "threads": 9,
+              "fds": 14
+            },
+            "peer-1": {
+              "rss_kib": 18612,
+              "threads": 9,
+              "fds": 14
+            },
+            "peer-3": {
+              "rss_kib": 18560,
+              "threads": 9,
+              "fds": 15
+            },
+            "planet-0": {
+              "rss_kib": 16852,
+              "threads": 9,
+              "fds": 9
+            },
+            "planet-1": {
+              "rss_kib": 16736,
+              "threads": 9,
+              "fds": 10
+            },
+            "supervisor": {
+              "rss_kib": 16124,
+              "threads": 7,
+              "fds": 11
+            },
+            "peer-2": {
+              "rss_kib": 18232,
+              "threads": 9,
+              "fds": 16
+            }
+          }
+        },
+        "resources_final": {
+          "local": {
+            "planet-0": {
+              "rss_kib": 17356,
+              "threads": 9,
+              "fds": 9
+            },
+            "planet-1": {
+              "rss_kib": 17188,
+              "threads": 9,
+              "fds": 9
+            },
+            "peer-0": {
+              "rss_kib": 19064,
+              "threads": 9,
+              "fds": 16
+            },
+            "peer-1": {
+              "rss_kib": 18604,
+              "threads": 9,
+              "fds": 14
+            },
+            "peer-2": {
+              "rss_kib": 18480,
+              "threads": 9,
+              "fds": 14
+            },
+            "peer-3": {
+              "rss_kib": 18200,
+              "threads": 9,
+              "fds": 14
+            },
+            "supervisor": {
+              "rss_kib": 14160,
+              "threads": 6,
+              "fds": 9
+            }
+          }
+        },
+        "resources_peak": {
+          "local/peer-0": {
+            "rss_kib": 19064,
+            "threads": 9,
+            "fds": 16
+          },
+          "local/peer-1": {
+            "rss_kib": 18960,
+            "threads": 9,
+            "fds": 16
+          },
+          "local/peer-3": {
+            "rss_kib": 18900,
+            "threads": 9,
+            "fds": 16
+          },
+          "local/planet-0": {
+            "rss_kib": 17356,
+            "threads": 9,
+            "fds": 9
+          },
+          "local/planet-1": {
+            "rss_kib": 17188,
+            "threads": 9,
+            "fds": 10
+          },
+          "local/supervisor": {
+            "rss_kib": 16124,
+            "threads": 7,
+            "fds": 11
+          },
+          "local/peer-2": {
+            "rss_kib": 19008,
+            "threads": 9,
+            "fds": 16
+          }
+        },
+        "soak": {
+          "requested_seconds": 60,
+          "elapsed_seconds": 61.531,
+          "restart_cycles": 9,
+          "minimum_available_mib": 1437,
+          "peers": 4,
+          "planets": 2
+        },
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 86.343
+      },
+      "log": {
+        "path": "build/peer-cpp/cleanup-release-20260912.log",
+        "sha256": "438e839f033d61b099d4a8266b9f5b1ff335945209fdb0c9a6c69c3d9b2ea2a7"
+      },
+      "raw_reports": {
+        "peer-cpp-rpc-1789150396514834730.json": "e2b6d0e0afa94bb2fed359a547e2b097c7f25c5cbaa0e26bc8a3a1e54763105e",
+        "services-1789150425635414807.json": "0a298df39310addc3d587df1beb367468b4ba3c656ff2ccf176fa353b3e0bee6"
+      }
+    }
+  },
+  "inspection": {
+    "date": "2026-09-12",
+    "status": "pass",
+    "configuration_rejections": [
+      {
+        "flags": [
+          "-DVERDANDI_CORE_ONLY=ON",
+          "-DVERDANDI_BUILD_BENCHMARKS=ON"
+        ],
+        "expected_diagnostic": "Core-only mode has no service allocation or benchmark targets",
+        "exit_code": 1
+      },
+      {
+        "flags": [
+          "-DVERDANDI_MEASURE_ALLOCATIONS=ON"
+        ],
+        "expected_diagnostic": "Allocation measurement requires a separate Release build without sanitizers",
+        "exit_code": 1
+      },
+      {
+        "flags": [
+          "-DVERDANDI_SANITIZER=unsupported"
+        ],
+        "expected_diagnostic": "Sanitizer must be empty, address,undefined or thread",
+        "exit_code": 1
+      },
+      {
+        "flags": [
+          "-DVERDANDI_CONTRACT_SEMANTIC=assume"
+        ],
+        "expected_diagnostic": "Contract semantic must be enforce or ignore",
+        "exit_code": 1
+      }
+    ],
+    "headers": [
+      "config.hpp",
+      "policy.hpp",
+      "runtime.hpp",
+      "types.hpp"
+    ],
+    "binaries": {
+      "debug": {
+        "peer": {
+          "sha256": "15142f38939b63930859736b5faf08ca45e8a32ae7aec9d44efdb071d3d21e27",
+          "bytes": 50185960
+        },
+        "planet": {
+          "sha256": "beee2001d22fa831db6c1f031869779854b32e65bbed57cf13e98b1ca463e253",
+          "bytes": 50046568
+        }
+      },
+      "release": {
+        "peer": {
+          "sha256": "55e139ddb08bf96bf4bfcd5903be2c69edab818c8fdb114a6db658e7921d4d2a",
+          "bytes": 39675296
+        },
+        "planet": {
+          "sha256": "56c0ca47a480a058e334c0a5fcae2fb2796ee7f3298aacb77854ee9631493160",
+          "bytes": 39679032
+        }
+      },
+      "asan": {
+        "peer": {
+          "sha256": "d43ae22b1e4838a0444a15fdaf90d296b5b535637f7e3aad61a496ec8a528d31",
+          "bytes": 56495600
+        },
+        "planet": {
+          "sha256": "bf95440458ac812024e6f402c60f602080794424703e483552f409105326edc7",
+          "bytes": 56335792
+        }
+      },
+      "tsan": {
+        "peer": {
+          "sha256": "20e1d8d593b16a588a6066eaf353a94c9321d12b12758ab8c183dbd07a15303b",
+          "bytes": 164022896
+        },
+        "planet": {
+          "sha256": "d7b90a35f85cd4a9713f52b943ec2a43bf5df9e944129c33967d0128281ebec3",
+          "bytes": 163891120
+        }
+      }
+    },
+    "comment_only_rebuilds": {
+      "debug": {
+        "before": {
+          "peer": "15142f38939b63930859736b5faf08ca45e8a32ae7aec9d44efdb071d3d21e27",
+          "planet": "beee2001d22fa831db6c1f031869779854b32e65bbed57cf13e98b1ca463e253"
+        },
+        "after": {
+          "peer": "15142f38939b63930859736b5faf08ca45e8a32ae7aec9d44efdb071d3d21e27",
+          "planet": "beee2001d22fa831db6c1f031869779854b32e65bbed57cf13e98b1ca463e253"
+        },
+        "identical": true
+      },
+      "release": {
+        "before": {
+          "peer": "55e139ddb08bf96bf4bfcd5903be2c69edab818c8fdb114a6db658e7921d4d2a",
+          "planet": "56c0ca47a480a058e334c0a5fcae2fb2796ee7f3298aacb77854ee9631493160"
+        },
+        "after": {
+          "peer": "55e139ddb08bf96bf4bfcd5903be2c69edab818c8fdb114a6db658e7921d4d2a",
+          "planet": "56c0ca47a480a058e334c0a5fcae2fb2796ee7f3298aacb77854ee9631493160"
+        },
+        "identical": true
+      },
+      "asan": {
+        "before": {
+          "peer": "d43ae22b1e4838a0444a15fdaf90d296b5b535637f7e3aad61a496ec8a528d31",
+          "planet": "bf95440458ac812024e6f402c60f602080794424703e483552f409105326edc7"
+        },
+        "after": {
+          "peer": "d43ae22b1e4838a0444a15fdaf90d296b5b535637f7e3aad61a496ec8a528d31",
+          "planet": "bf95440458ac812024e6f402c60f602080794424703e483552f409105326edc7"
+        },
+        "identical": true
+      },
+      "tsan": {
+        "before": {
+          "peer": "20e1d8d593b16a588a6066eaf353a94c9321d12b12758ab8c183dbd07a15303b",
+          "planet": "d7b90a35f85cd4a9713f52b943ec2a43bf5df9e944129c33967d0128281ebec3"
+        },
+        "after": {
+          "peer": "20e1d8d593b16a588a6066eaf353a94c9321d12b12758ab8c183dbd07a15303b",
+          "planet": "d7b90a35f85cd4a9713f52b943ec2a43bf5df9e944129c33967d0128281ebec3"
+        },
+        "identical": true
+      }
+    },
+    "installation": {
+      "binaries": {
+        "peer": {
+          "version": "peer 0.1.0 (C++26, gRPC v4)",
+          "sha256": "2148f2edac15a59028601c45ce05285b4abb414cd0bbc985af2903e284c79c3f",
+          "dependencies": [
+            "\tlinux-vdso.so.1 (0x00007c40d40aa000)",
+            "\tlibgcc_s.so.1 => /home/ubuntu/verdandi/build/tools/gcc-16.2.0/lib64/libgcc_s.so.1 (0x00007c40d4074000)",
+            "\tlibstdc++.so.6 => /home/ubuntu/verdandi/build/tools/gcc-16.2.0/lib64/libstdc++.so.6 (0x00007c40d3c00000)",
+            "\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x00007c40d3f48000)",
+            "\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x00007c40d3800000)",
+            "\t/lib64/ld-linux-x86-64.so.2 (0x00007c40d40ac000)"
+          ]
+        },
+        "planet": {
+          "version": "planet 0.1.0 (C++26, gRPC v4)",
+          "sha256": "721a8f657ecb42c6cdab7de8c5b3ee6fcaefe232074eb77666c84d6db8daa262",
+          "dependencies": [
+            "\tlinux-vdso.so.1 (0x000076793647f000)",
+            "\tlibgcc_s.so.1 => /home/ubuntu/verdandi/build/tools/gcc-16.2.0/lib64/libgcc_s.so.1 (0x0000767936449000)",
+            "\tlibstdc++.so.6 => /home/ubuntu/verdandi/build/tools/gcc-16.2.0/lib64/libstdc++.so.6 (0x0000767936000000)",
+            "\tlibm.so.6 => /usr/lib/x86_64-linux-gnu/libm.so.6 (0x000076793631d000)",
+            "\tlibc.so.6 => /usr/lib/x86_64-linux-gnu/libc.so.6 (0x0000767935c00000)",
+            "\t/lib64/ld-linux-x86-64.so.2 (0x0000767936481000)"
+          ]
+        }
+      },
+      "licenses": [
+        "share/verdandi/licenses/README.md",
+        "share/verdandi/licenses/abseil/LICENSE",
+        "share/verdandi/licenses/boringssl/LICENSE",
+        "share/verdandi/licenses/cares/LICENSE.md",
+        "share/verdandi/licenses/gcc-runtime/COPYING.RUNTIME",
+        "share/verdandi/licenses/gcc-runtime/COPYING3",
+        "share/verdandi/licenses/grpc-proto/LICENSE",
+        "share/verdandi/licenses/grpc/LICENSE",
+        "share/verdandi/licenses/grpc/NOTICE.txt",
+        "share/verdandi/licenses/protobuf/LICENSE",
+        "share/verdandi/licenses/re2/LICENSE",
+        "share/verdandi/licenses/yyjson/LICENSE",
+        "share/verdandi/licenses/zlib/LICENSE"
+      ],
+      "development_rpath": false,
+      "matching_runtime_supplied_in_child_environment": true
+    },
+    "owned_install_and_configuration_directories_removed": true,
+    "tsan_uses_instrumented_prefix": true,
+    "source_sha256": {
+      "peer-cpp/CMakeLists.txt": "23064f60e63165c4c268256af6001d8b9d5ea3628328510d8ce031ebfffcdd8b",
+      "peer-cpp/bench/generated/probe.grpc.pb.cc": "2375043a70e8bf8c1ef2ab7fae013551e3ff31cfdfacb32717e26a52ceaaabc3",
+      "peer-cpp/bench/generated/probe.grpc.pb.h": "5e17562c2bfb72443ad5c9146b67939fe1c0fe35c6a7a5d1a41f4cad26da5383",
+      "peer-cpp/bench/generated/probe.pb.cc": "d97e8dec5663504482b7b586838dcb56836c5806604c7f28429ab77aea23caa5",
+      "peer-cpp/bench/generated/probe.pb.h": "42106776587fa383829c45f1ffcf0459fefc2b1f0708145a7b325a9996dcb42f",
+      "peer-cpp/bench/push.cpp": "325b6c051b604439bbda32f36ff91dcc76f729ee9fdf51e07e3f042c5a03882a",
+      "peer-cpp/build.ps1": "dc74ab1231af0075edc8959c51c6ea720600944898cbcbb7f530b476e0bb26e2",
+      "peer-cpp/build.py": "cdcd5b3fa5eb3e66585a22eb65586b930d9b56b9c429add248288d02dac5a71e",
+      "peer-cpp/build.sh": "69ebf06c2021ba6fd3579e0a2497f8510b5ce34383b7792bbe5159e01921092b",
+      "peer-cpp/common/include/verdandi/peer/config.hpp": "4b4e82132378363bb8b3b2a321bb91ab0800b71505aa3c86401a108f78c61bd4",
+      "peer-cpp/common/include/verdandi/peer/policy.hpp": "0c1be09033858211fe33ef7e7685977bf6762292101ccc19b152269a500adcde",
+      "peer-cpp/common/include/verdandi/peer/runtime.hpp": "05d6b2548b74f09ae92a916584ebfb87f0560c142afd2cbbcb55884c67ce9219",
+      "peer-cpp/common/include/verdandi/peer/types.hpp": "508d4d706b6884f493d10e42b0ae0a99cd32de32c93e82d51a1a4337bbe12f93",
+      "peer-cpp/common/src/admission.cpp": "ce96bc15edae7172ea461b2eeaf4d59c02d1fef4bb24cb8673186cce61031c04",
+      "peer-cpp/common/src/admission.hpp": "065fa595b85a534d8ca191e522330d6b00665d9a50f3598b1055ce5c1f888dfe",
+      "peer-cpp/common/src/config.cpp": "f5fbe73b2cc804d790cd052e33320466326390d9294645241771df2512de8eeb",
+      "peer-cpp/common/src/generated/admission.grpc.pb.cc": "3e3a8d54862228b92999547b86bde7b9ffaa607b08697f3cef88e7b2532c2ec5",
+      "peer-cpp/common/src/generated/admission.grpc.pb.h": "1d99cc859f1ba79e7595df74f6d42e05890e6dcb12f2e6e8d69c8eeda0b85508",
+      "peer-cpp/common/src/generated/admission.pb.cc": "a60dc81368fdd53a453c3bf1dcb89b72cebfe5c2d15ab395e7b8bf7bcec904da",
+      "peer-cpp/common/src/generated/admission.pb.h": "43052685015dcb02825e4dbd1441d0cea3a38919f140230345a0afae8015f7da",
+      "peer-cpp/common/src/generated/peer.grpc.pb.cc": "dcaa15899cfeab9b15aa38e9413443138b4b6be37d752122e70a9f8e25e22f9d",
+      "peer-cpp/common/src/generated/peer.grpc.pb.h": "8aa925e2b52ed94694e2c68fcd9466c4e27ca93977efa21fa02616902f299d76",
+      "peer-cpp/common/src/generated/peer.pb.cc": "1936ecf95528067b6c7d047992100a19b140bd50624c227ddae80040a0160d36",
+      "peer-cpp/common/src/generated/peer.pb.h": "cf59ca284355eb81e9a94c69e53c6e31f0d5213d4c5ef16d542f19d425b33744",
+      "peer-cpp/common/src/generated/peer_transport.grpc.pb.cc": "f58d15bc9ef42bb0b7cc3b38e9983a3dfe84c680559b07e275eb534f1fb4c92f",
+      "peer-cpp/common/src/generated/peer_transport.grpc.pb.h": "0cde42e105a66a3eb81c27283c7a9f45d55b96d6ca379f84a9a3d1627adba380",
+      "peer-cpp/common/src/generated/peer_transport.pb.cc": "35e6a888c08e5967b192a070161aa01eab71c5cd2756b9378e1ff41c38af69f6",
+      "peer-cpp/common/src/generated/peer_transport.pb.h": "6feb2a10c15ff6a22c36e9295dc93a0af86683b3252e858f4fa1307c0136f190",
+      "peer-cpp/common/src/grpc_session.cpp": "dcfad06b9f31b8b30c238c439833f361199684f43a3156ec06e2482a6c7bb901",
+      "peer-cpp/common/src/grpc_session.hpp": "7d62db34d61f1ba8435bfd1426f2d5d0e203b38b4ff5e7709f7b2fa6374db179",
+      "peer-cpp/common/src/identity.cpp": "4ba197c92b55e1cb528a91e3be2f2bfb449b5d2c9b7ff678ae892d9ea690c622",
+      "peer-cpp/common/src/identity.hpp": "cd54b24fa89d28ee2b68b13c14d43d0b9ed326784e981df246fd895a25e5ef07",
+      "peer-cpp/common/src/options.hpp": "67b1c5f15af70354c56d00344bc13d34a3016d1a2af912b4f1cad8d5b2c7f05b",
+      "peer-cpp/common/src/policy.cpp": "346f225ec8653bca25cdcebe59db1d3a2cfb81998272786aaeb84203fc282734",
+      "peer-cpp/common/src/process.cpp": "ae83c16547cde7fcea908690cdcdb4078e6d576c0e75fb7e6ceda7b369b7ce4e",
+      "peer-cpp/common/src/process.hpp": "c072944653e880fedc05b295d4b12c1d73de2038a82cde8f7e9526073980f8ac",
+      "peer-cpp/common/src/rpc_status.hpp": "8b0456c95f4dae8ab238aaf02d52181f3fcc484a64e51391fcd267603b3ab493",
+      "peer-cpp/common/src/runtime.cpp": "03f139e2ead50a32db73792b4228d3a1dbd7e905e81b6837efdad238cb983c3d",
+      "peer-cpp/common/src/types.cpp": "ae4a7dbfc2ad98cecacf6c08f5056f5661b03b378ad3e8a5df6a3bfecec0021d",
+      "peer-cpp/common/tests/admission_test.cpp": "ca27197437395eda9a9b3a10dc0db25f1d3f2f058d1b1f61ca9d77ba17a18133",
+      "peer-cpp/common/tests/allocation_measure.cpp": "2fbd274eec4ed146bb46bb2930c994327bb2e524bffe47972a083aaa8b5fd793",
+      "peer-cpp/common/tests/check.hpp": "ad6d398fb263b37d77d4f1100d046c9f4fa60d504cae163e701475959aa377dc",
+      "peer-cpp/common/tests/connect_test.cpp": "51cda31d696c84a5c6f919d751f9438c9dce1cb5d2f990d2f74d1af5952f23e8",
+      "peer-cpp/common/tests/contracts_probe.cpp": "1a09705808d3fa5ab84225b0d9841bb531998ff3f8f412447b18458c599709d8",
+      "peer-cpp/common/tests/core_test.cpp": "22ad7c72a9c8e1ab0c45f294d69700b34e287f93a0dc38c65bf7f089a30ab5c5",
+      "peer-cpp/common/tests/fixture.hpp": "2eddb3f228d9796cc917726b007505bc4568691b0b2b07ce048a06df54c9c130",
+      "peer-cpp/common/tests/identity_test.cpp": "0d4d971285aad315b43764de1f19dd1e28dfce76b34ebac7cd87fb82b86985b5",
+      "peer-cpp/common/tests/process_test.cpp": "694c3c9b30f24137efb548800e8b25b19abdbde58f47ebdb213de280f871ece7",
+      "peer-cpp/common/tests/rpc_probe.cpp": "6ddb76fe8f6dcf2d9b257cecfc480670def32af00199f404c4052772347b8c92",
+      "peer-cpp/common/tests/session_test.cpp": "9eacb10b99e7343e633c411e966f0e59d6a01dfff4df4639b8c9bbb966f41b43",
+      "peer-cpp/dependencies.lock.json": "8aecd9e0ba57fae2b0a719e0b5f66447ccb2da84712128219ad3cf26851b7181",
+      "peer-cpp/planet/src/main.cpp": "d9b3fed33a2ce8c24b5db086f40d0f2501b38dad24e4c47e9324bcfe09ff4a4d",
+      "peer-cpp/planet/src/upstream.cpp": "270371099517436bc05f9b71a62d0b1b120afc0e4e9dd53501cecf649f8c0e4a",
+      "peer-cpp/planet/src/upstream.hpp": "6fa41b195e814815b85386bd1c808fc289a46856604599fa2c6b25e2142d2b22",
+      "peer-cpp/prepare_dependencies.py": "507879112aca5e5c878034b5f1f6bbb8177f8fd29b2e96fd00b4e4769f2df6a0",
+      "peer-cpp/star/src/main.cpp": "52e4b96500871c3e05ae6fe1a4e6dbc7f501986d56c80d17c258daec893b1b44",
+      "peer-cpp/star/src/topology.cpp": "779a4ffcf71eb91311e1115bdbeb5f77d1ec8f0ea88b0168d9fb6cfee0037e5f",
+      "peer-cpp/star/src/topology.hpp": "ab31457de0f865cde2ee37e876ad5beae275db93762dd25c936537fa7a68b09e",
+      "peer-cpp/test_build.py": "8e8dbb2b361a2691f8300a5242cdd1b9b3077d90c967acc4e316719a296c469f",
+      "peer-cpp/test_language.py": "f7d3feebfa253028e293e5d207991efe0ae59b213f6908289ee4ed5b37324c16",
+      "peer-cpp/test_processes.py": "be6fd657daebe95e3b23797fa010c1196fddc2d294370fb3aed0c9a329dbe617",
+      "peer-cpp/test_push.py": "671f2114eb875d1989ee69023df7708b72ff991c44f98e516a56259ae9a2fd28",
+      "peer-cpp/test_scale.py": "05d90dee415cd7bdd95dba61cdf91b965c713c96facf9a6636d045d3e0accf75",
+      "scripts/check-services.sh": "0733b468378e932cb15b1ab9e561f200414bc18e462f0fd7beab4a87e595e460",
+      "scripts/test-services.sh": "c0e73d02723dbccc87063cffc080d35a90edde00056913a88f43e33eff820e48",
+      "sdk/cpp/build.py": "36292a678a2fe86f974c61f26693b61fd6f8bc0bcf26d34ec9782e4354a23ff4",
+      "testkit/services.py": "00bbf8ad657f11670a30c50ed7e9b184cece4405251c6123e1490b31ba82b8c0",
+      "testkit/suites.py": "0c94c436b583bc300e407d3e7cb65e2281f46145a51f6006e45844a734836435",
+      "testkit/tests/test_runner.py": "1c9aa80d8ad06dc53e8069ee2015e0050b60c40e45f3bed27e77d69554723f22",
+      "testkit/tests/test_services.py": "c517fb2029cd788bcbc493d3dd6e0577ad1097186a53b3dc1c487e7f7c36b848"
+    },
+    "remaining_owned_services": []
+  },
+  "local_tests": {
+    "cleanup-entry-windows-20260912.log": {
+      "passed": 6,
+      "sha256": "95057e4a06f03cc59730a61a6878cf1d1cbc3aee7db210571b7055995a27c5db"
+    },
+    "cleanup-python-windows-20260912.log": {
+      "passed": 32,
+      "sha256": "d71deb8e394177b5b2d9d18b332a3b1bd3d0b8fed69d3d4568bf74c336fdec26"
+    },
+    "cleanup-sdk-entry-windows-20260912.log": {
+      "passed": 12,
+      "sha256": "f947292bea4a4dea03936794b236d12989ba1e4e5943f9b99d29cb840c91e0e7"
+    }
+  },
+  "shared_linux_python": {
+    "passed": 31,
+    "platform_skipped": 1
+  },
+  "cpp_build_entry_tests": {
+    "windows_passed": 6,
+    "linux_passed_in_each_ctest": 6
+  },
+  "cross_path_fixes": {
+    "empty_ctest": [
+      "peer-cpp/build.py",
+      "sdk/cpp/build.py"
+    ],
+    "empty_runtime_search_path": [
+      "peer-cpp/build.py",
+      "peer-cpp/prepare_dependencies.py",
+      "testkit/suites.py"
+    ],
+    "ignored_diagnostics": [
+      "peer-cpp/build.py",
+      "peer-cpp/CMakeLists.txt"
+    ],
+    "rust_and_go": "Reviewed; no equivalent CMake test switch or LD_LIBRARY_PATH append path"
+  },
+  "limits": [
+    "Linux x64 / GCC 16.2.0 only; Windows checks do not qualify native C++26 services",
+    "ASan/UBSan cover handwritten project targets; TSan also covers generated code and prepared third-party C/C++ libraries",
+    "System runtimes and third-party assembly are not claimed instrumented",
+    "Short fault cycle does not replace the historical hour or repeat the earlier performance matrix",
+    "Existing clang-tidy cannot parse the selected GCC reflection extensions",
+    "Installed binaries require the matching C++ runtime; installation review supplied it in the child environment"
+  ],
+  "prior_evidence_unchanged": [
+    "testkit/results/peer-cpp-foundation-20260911.json",
+    "testkit/results/peer-cpp-foundation-20260912.json"
+  ],
+  "new_downloads": false,
+  "global_configuration_changes": false,
+  "commit_or_push": false
+}

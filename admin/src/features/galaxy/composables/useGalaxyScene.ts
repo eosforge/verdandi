@@ -71,19 +71,19 @@ export function useGalaxyScene(host: Ref<HTMLElement | undefined>, getData: () =
     controller?.overview();
   }
 
-  // 从当前选择解析 Peer, 列表只传递稳定行星标识.
+  // 从当前选择解析 Star, 列表只传递稳定行星标识.
   function selectPlanet(planetId: string): void {
-    if (selection.value) controller?.selectPlanet(selection.value.peer.id, planetId);
+    if (selection.value) controller?.selectPlanet(selection.value.star.id, planetId);
   }
 
   // 聚焦当前行星, 不把 Three.js 对象暴露到组件响应式树.
   function focusPlanet(): void {
     const value = selection.value;
-    if (value?.planet) controller?.focusPlanet(value.peer.id, value.planet.id);
+    if (value?.planet) controller?.focusPlanet(value.star.id, value.planet.id);
   }
 
   return {
-    selectedPeer: computed(() => selection.value?.peer ?? null),
+    selectedStar: computed(() => selection.value?.star ?? null),
     selectedPlanet: computed(() => selection.value?.planet ?? null),
     fps,
     error,

@@ -14,7 +14,7 @@ $verdandiReport = Join-Path $verdandiRoot "build/testkit/firewall-$RunId.json"
 $verdandiStop = Join-Path $verdandiRoot "build/testkit/firewall-$RunId.stop"
 if ((Test-Path -LiteralPath $verdandiReport) -or (Test-Path -LiteralPath $verdandiStop)) { throw 'Run ID already exists.' }
 $verdandiPrograms = @{
-    peer = Join-Path $verdandiRoot 'build/peer/target/release/peer.exe'
+    star = Join-Path $verdandiRoot 'build/cluster/target/release/star.exe'
     supervisor = Join-Path $verdandiRoot 'build/supervisor/supervisor.exe'
 }
 $verdandiCreated = [Collections.Generic.List[string]]::new()

@@ -1,0 +1,1047 @@
+{
+  "status": "pass",
+  "date": "2026-09-14",
+  "scope": "C++ connection skeleton cleanup, protocol v6 unchanged, Planet business paused",
+  "source": {
+    "changes": [
+      {
+        "file": "cluster-cpp/build.py",
+        "before": {
+          "lines": 333,
+          "nonblank_noncomment_lines": 313
+        },
+        "after": {
+          "lines": 261,
+          "nonblank_noncomment_lines": 241
+        }
+      },
+      {
+        "file": "cluster-cpp/common/include/verdandi/cluster/policy.hpp",
+        "before": {
+          "lines": 76,
+          "nonblank_noncomment_lines": 36
+        },
+        "after": {
+          "lines": 69,
+          "nonblank_noncomment_lines": 32
+        }
+      },
+      {
+        "file": "cluster-cpp/common/include/verdandi/cluster/types.hpp",
+        "before": {
+          "lines": 152,
+          "nonblank_noncomment_lines": 98
+        },
+        "after": {
+          "lines": 128,
+          "nonblank_noncomment_lines": 75
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/admission.cpp",
+        "before": {
+          "lines": 131,
+          "nonblank_noncomment_lines": 114
+        },
+        "after": {
+          "lines": 132,
+          "nonblank_noncomment_lines": 114
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/admission.hpp",
+        "before": {
+          "lines": 75,
+          "nonblank_noncomment_lines": 50
+        },
+        "after": {
+          "lines": 75,
+          "nonblank_noncomment_lines": 50
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/grpc_session.cpp",
+        "before": {
+          "lines": 371,
+          "nonblank_noncomment_lines": 327
+        },
+        "after": {
+          "lines": 370,
+          "nonblank_noncomment_lines": 326
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/grpc_session.hpp",
+        "before": {
+          "lines": 149,
+          "nonblank_noncomment_lines": 97
+        },
+        "after": {
+          "lines": 149,
+          "nonblank_noncomment_lines": 96
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/identity.cpp",
+        "before": {
+          "lines": 205,
+          "nonblank_noncomment_lines": 187
+        },
+        "after": {
+          "lines": 205,
+          "nonblank_noncomment_lines": 187
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/identity.hpp",
+        "before": {
+          "lines": 45,
+          "nonblank_noncomment_lines": 25
+        },
+        "after": {
+          "lines": 45,
+          "nonblank_noncomment_lines": 25
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/runtime.cpp",
+        "before": {
+          "lines": 332,
+          "nonblank_noncomment_lines": 291
+        },
+        "after": {
+          "lines": 332,
+          "nonblank_noncomment_lines": 291
+        }
+      },
+      {
+        "file": "cluster-cpp/common/src/types.cpp",
+        "before": {
+          "lines": 132,
+          "nonblank_noncomment_lines": 120
+        },
+        "after": {
+          "lines": 159,
+          "nonblank_noncomment_lines": 144
+        }
+      },
+      {
+        "file": "cluster-cpp/common/tests/core_test.cpp",
+        "before": {
+          "lines": 287,
+          "nonblank_noncomment_lines": 269
+        },
+        "after": {
+          "lines": 331,
+          "nonblank_noncomment_lines": 309
+        }
+      },
+      {
+        "file": "cluster-cpp/common/tests/session_test.cpp",
+        "before": {
+          "lines": 284,
+          "nonblank_noncomment_lines": 264
+        },
+        "after": {
+          "lines": 288,
+          "nonblank_noncomment_lines": 268
+        }
+      },
+      {
+        "file": "cluster-cpp/CONTRIBUTING.md",
+        "before": {
+          "lines": 116,
+          "nonblank_noncomment_lines": 92
+        },
+        "after": {
+          "lines": 121,
+          "nonblank_noncomment_lines": 96
+        }
+      },
+      {
+        "file": "cluster-cpp/planet/src/upstream.cpp",
+        "before": {
+          "lines": 193,
+          "nonblank_noncomment_lines": 172
+        },
+        "after": {
+          "lines": 193,
+          "nonblank_noncomment_lines": 172
+        }
+      },
+      {
+        "file": "cluster-cpp/planet/src/upstream.hpp",
+        "before": {
+          "lines": 55,
+          "nonblank_noncomment_lines": 37
+        },
+        "after": {
+          "lines": 55,
+          "nonblank_noncomment_lines": 37
+        }
+      },
+      {
+        "file": "cluster-cpp/README.md",
+        "before": {
+          "lines": 138,
+          "nonblank_noncomment_lines": 110
+        },
+        "after": {
+          "lines": 138,
+          "nonblank_noncomment_lines": 109
+        }
+      },
+      {
+        "file": "cluster-cpp/star/src/topology.cpp",
+        "before": {
+          "lines": 170,
+          "nonblank_noncomment_lines": 156
+        },
+        "after": {
+          "lines": 167,
+          "nonblank_noncomment_lines": 152
+        }
+      },
+      {
+        "file": "cluster-cpp/star/src/topology.hpp",
+        "before": {
+          "lines": 51,
+          "nonblank_noncomment_lines": 33
+        },
+        "after": {
+          "lines": 51,
+          "nonblank_noncomment_lines": 33
+        }
+      }
+    ],
+    "production_metrics": {
+      "before": {
+        "lines": 2738,
+        "nonblank_noncomment_lines": 2161
+      },
+      "after": {
+        "lines": 2731,
+        "nonblank_noncomment_lines": 2152
+      }
+    },
+    "validation_input_count": 264,
+    "input_sha256": {
+      "cluster-cpp/.clang-format": "a391bdfc0d3e00f613aa6d4c87c4d6f8230809b432cf160e9ca834c18be4f95f",
+      "cluster-cpp/build.ps1": "dc74ab1231af0075edc8959c51c6ea720600944898cbcbb7f530b476e0bb26e2",
+      "cluster-cpp/build.py": "d856624b82576311ede7d3880658fbdc850951e378e924d8663caa4b89f01183",
+      "cluster-cpp/build.sh": "f54d62e107cf3d74360cb67600267d8b98f3f0f18204028cb70c63c154f67dca",
+      "cluster-cpp/CMakeLists.txt": "cd300d0b0c53690669c1642bce5bbf7c76204944b380a7aa6ac53aa54f31fc78",
+      "cluster-cpp/dependencies.lock.json": "8aecd9e0ba57fae2b0a719e0b5f66447ccb2da84712128219ad3cf26851b7181",
+      "cluster-cpp/prepare_dependencies.py": "bc419f9c4c0b5ecec8cea9bda0c83ab200b4b9ecb8c9a5a02f4dcb3f3f6288a6",
+      "cluster-cpp/test_build.py": "11d8708b3289acf2d73611a75cd4a00622ec54449744e0ba802dfd9dfd056549",
+      "cluster-cpp/test_endurance.py": "232a02fa1e4b18f8f01ab6f4de1540fd7e4b556fd181d88fb6ce8646f46edae1",
+      "cluster-cpp/test_language.py": "f7d3feebfa253028e293e5d207991efe0ae59b213f6908289ee4ed5b37324c16",
+      "cluster-cpp/test_processes.py": "135665f16ec8728e7ef521edfe8a0ebc754c5b0c22c1fbfe834f79d8094daf04",
+      "cluster-cpp/test_push.py": "46fd138ddf3cbb247312ae511c46fb0b7a5717ca45500e295f71f8fc63697c88",
+      "cluster-cpp/test_scale.py": "9b15d2e4948b73203e00ef4658b013b1b4f976719d5cf808add8620a88403874",
+      "cluster-cpp/bench/push.cpp": "5ec44d15e23abd2ea946bbbbfdaf56e3150e4e39c09af96054a0743484e9a95d",
+      "cluster-cpp/star/src/main.cpp": "c784f7b64f5d8bc92aac89bc52e9cdd487cef997013d8a89d87c72204077b019",
+      "cluster-cpp/star/src/topology.cpp": "26095a08bd62b32c15c912bc8c8be4f5e5796018b6fb0f8ec3631f58dbaee82d",
+      "cluster-cpp/star/src/topology.hpp": "f9ad1133f5a162f9cc072ba3749591146268d37e9818284396a940e398174767",
+      "cluster-cpp/planet/src/main.cpp": "3f1ffb9041df5b2c0107a0e17b3a299272bbcb9d4f8cbc6792d883c7bb6dd277",
+      "cluster-cpp/planet/src/upstream.cpp": "9ad8c690b0f8ed0f048d89653d79b5a2d7044d5f33796b6414784b978264ac06",
+      "cluster-cpp/planet/src/upstream.hpp": "780f254c4079aa09d46c5c23e5cd917233239709d31dc527668f368560a42773",
+      "cluster-cpp/licenses/abseil/LICENSE": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747",
+      "cluster-cpp/licenses/boringssl/LICENSE": "827c8d8fc207c2392794eef9e00fe246f9f61fdcc132556c275be3dd8c3cd97f",
+      "cluster-cpp/licenses/gcc-runtime/COPYING.RUNTIME": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74",
+      "cluster-cpp/licenses/gcc-runtime/COPYING3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "cluster-cpp/licenses/grpc/LICENSE": "58c86a3f2b5cca0ebdf9ed3e7f4e6dc38e3b38796d8c3dc92064c62a4e39d0dd",
+      "cluster-cpp/licenses/grpc/NOTICE.txt": "693ff28ec216d5112ac1bbfe64ef539005867d1c7bd427b57d579683293b947f",
+      "cluster-cpp/licenses/grpc-proto/LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "cluster-cpp/licenses/protobuf/LICENSE": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d",
+      "cluster-cpp/licenses/re2/LICENSE": "6040cda75d90b1738292a631d89934c411ef7ffd543c4d6a1b7edfc8edf29449",
+      "cluster-cpp/licenses/yyjson/LICENSE": "45e384d3d52c73cba3a64d6e6c25d47cd738cd8a55c30629e3201046eda62947",
+      "cluster-cpp/licenses/zlib/LICENSE": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+      "cluster-cpp/common/src/admission.cpp": "1cf7ea78178475ad8c7c91c0de5688db9f57ee2209f3907570d74dfac64f2441",
+      "cluster-cpp/common/src/admission.hpp": "f07ac6aff6af165d5ef05cfb6b9c3107e2ca17d9e7208001bfab39175f7b9b0b",
+      "cluster-cpp/common/src/config.cpp": "04afe6abc7f8b679e1617520bd9ce0ef57ee608500135f90141d99384d09878b",
+      "cluster-cpp/common/src/grpc_session.cpp": "cfd0fc60f316233967e0b6730b5ca7ecee4ae115fca69a9316c6fd7a10c2aed8",
+      "cluster-cpp/common/src/grpc_session.hpp": "266b65e0c694e49292febb17e8ee43f55955d2e05c1a71ec56fff453fdfc5caf",
+      "cluster-cpp/common/src/identity.cpp": "c552ae9d844de1a1eca631328d05de749275b78e7f7300f089a6145ac7eb4f12",
+      "cluster-cpp/common/src/identity.hpp": "f99cff270373f740db681cfad8b19984b9459960131209c20d9eff0c6e573ea1",
+      "cluster-cpp/common/src/options.hpp": "20aeec0d7c8755371aa368bd3acf466202ac0b44a2df2eb9d7c0ef128f629002",
+      "cluster-cpp/common/src/policy.cpp": "c89ca41ce6691d71283541ab14e5fddb0714215810f584df661a4e07f737366d",
+      "cluster-cpp/common/src/process.cpp": "f46bed1fbdf8d2fd059977b7db56399f1070a5627e3a42843da879711e4ff170",
+      "cluster-cpp/common/src/process.hpp": "c5648ffe757abb526cf879c382e1f5337994e3542c70f31b176b5b05fc4bc1ff",
+      "cluster-cpp/common/src/rpc_status.hpp": "39006ed0fe66a299236096ceeced1bd729eb3da56fa1f189772228ee1b035960",
+      "cluster-cpp/common/src/runtime.cpp": "0b920ef9c0df694a7ab46edef1441bd95f0cb9c2f77e456b9a7bc40b2da48038",
+      "cluster-cpp/common/src/types.cpp": "a03003272d137b6e848641b29cee95e73af4f7c093d662eb7adc2f83492decda",
+      "cluster-cpp/common/tests/admission_test.cpp": "4bfeb76c8717aebd01a2a392f43ff246842f70a352c13588924ba71f13924073",
+      "cluster-cpp/common/tests/allocation_measure.cpp": "8912f1b0a76a5fda81b2182dffeaebb82e025e2747ef8a4beaf8959a9f863d08",
+      "cluster-cpp/common/tests/check.hpp": "a16f43b6ab2d58977f788832c53a165313164608f7d870de93634f475e3a159a",
+      "cluster-cpp/common/tests/connect_test.cpp": "70c8ab0334ceb71fee995faa27abcb0ce56f926e0168d6fbec9a0141f077c44e",
+      "cluster-cpp/common/tests/contracts_probe.cpp": "cd5fc77fb9ac4571750d4cc1e8e026185ffe7dfc574b17dd57cfda811f71925b",
+      "cluster-cpp/common/tests/core_test.cpp": "db05bebbb0662eb5691e0a39b2403d32b629dbc61f25b8d3d861e5fafe7b41c2",
+      "cluster-cpp/common/tests/fixture.hpp": "cdcd10b930145275ab9645844fabe5dc2e9fed6a14e776d41e985e242ae8b516",
+      "cluster-cpp/common/tests/identity_test.cpp": "90a4eb6e21705e05ec041d56b36908fe07cb337b9a84379756771a60511041ba",
+      "cluster-cpp/common/tests/process_test.cpp": "7b1d93f546c1dab474ad65d68eb4f9d19b973649223d5d27b2d53553655382d1",
+      "cluster-cpp/common/tests/rpc_probe.cpp": "f38e678d43ddcdd48c31cdf461d8f9d2d2ea3c451c8bb9fcce08a89e02b4e273",
+      "cluster-cpp/common/tests/session_test.cpp": "f651f68d009bd323bfe2f629b32ab4d3d47892210708666a2e6df06a9a7a16b4",
+      "cluster-cpp/common/src/generated/admission.grpc.pb.cc": "28b4d0dd9cc84d89e894f19e61dd5da97be7a0a874e6d058dad79014f3575c3e",
+      "cluster-cpp/common/src/generated/admission.grpc.pb.h": "3eb075656ed89a4d1bbbb75229b12c734b499227366316bf2f36f425043add58",
+      "cluster-cpp/common/src/generated/admission.pb.cc": "013c00f52e00fafee133b4149e9d72746d95de53f4c6eaaffcd72740a6ed9141",
+      "cluster-cpp/common/src/generated/admission.pb.h": "0f0453c4bb3252a71059edf60aa183e53ef50eb6c678a6a52d5426293349caf1",
+      "cluster-cpp/common/src/generated/cluster.grpc.pb.cc": "65a72d20b685e0f481ebe9eacaddb51cbb803949a17f3d152e0e7cd5a2b8e6fd",
+      "cluster-cpp/common/src/generated/cluster.grpc.pb.h": "7fc4a72926bfb8eed961cb1cb49442056852725d857ad85117face1a9262bdf9",
+      "cluster-cpp/common/src/generated/cluster.pb.cc": "49436c70f55d276746110c8927bc1aedc8a4776d597b5652836d3498fe7b493b",
+      "cluster-cpp/common/src/generated/cluster.pb.h": "f39a2de09bbd5348ea7566a971fb6cca97852c77f3e5f5a1186b488c51964a28",
+      "cluster-cpp/common/src/generated/star_transport.grpc.pb.cc": "37331b936e4264b5c3d8bfb7c01af738fd1e341e13527b516c5d76be6028d8be",
+      "cluster-cpp/common/src/generated/star_transport.grpc.pb.h": "0e7682bfa4b1d931a9d00c707f34bd9d6a0244c5047819c1a63dd013d374c01a",
+      "cluster-cpp/common/src/generated/star_transport.pb.cc": "6195d6607fd9ce5ceb4e5e686272454208f5b00ca409bccbd7ce679e68e5858d",
+      "cluster-cpp/common/src/generated/star_transport.pb.h": "9255125f293bc4a0604bfc264ca0eabbd484e581e8339e98aa293a924e57cde7",
+      "cluster-cpp/common/include/verdandi/cluster/config.hpp": "a52bd3da5bc9effd1ecac61481f7394e856a4949845a33557ec035f8deca903f",
+      "cluster-cpp/common/include/verdandi/cluster/policy.hpp": "5b627314d448f4bac698bdbd815a4aa06baf43e84e3741ffe45438ea3bafecce",
+      "cluster-cpp/common/include/verdandi/cluster/runtime.hpp": "bfad9baea8f21dd982b0213a893b98f9ef72ee6f0028ee7f7c05fcd5559a7c78",
+      "cluster-cpp/common/include/verdandi/cluster/types.hpp": "50044ef29909a799130de6b381b4ef32d8556f223d386bafb2bde0aa2578af78",
+      "cluster-cpp/bench/generated/probe.grpc.pb.cc": "2375043a70e8bf8c1ef2ab7fae013551e3ff31cfdfacb32717e26a52ceaaabc3",
+      "cluster-cpp/bench/generated/probe.grpc.pb.h": "5e17562c2bfb72443ad5c9146b67939fe1c0fe35c6a7a5d1a41f4cad26da5383",
+      "cluster-cpp/bench/generated/probe.pb.cc": "d97e8dec5663504482b7b586838dcb56836c5806604c7f28429ab77aea23caa5",
+      "cluster-cpp/bench/generated/probe.pb.h": "42106776587fa383829c45f1ffcf0459fefc2b1f0708145a7b325a9996dcb42f",
+      "supervisor/go.mod": "7645574994f70d72c63c478186cb19d8d7625df454e29cc7ac3398b4db39abea",
+      "supervisor/go.ps1": "775e59c1646acdb808f42d6bc2dee02390c42648043269ceb550fe12b313e552",
+      "supervisor/go.sh": "a01585b4a910931bca1ff70d53a70344bc70ccee7d97ffd3e2b297e639d7fc69",
+      "supervisor/go.sum": "4c978c0224cfd24976e72acb7dbcac9e14634a49cb8c52d86315a9d84daa4722",
+      "supervisor/internal/admission/accounts.go": "8f692ee769a955592186ac5ed44683267aff1eef9a8dfc84c8d2a0c676c027c3",
+      "supervisor/internal/admission/accounts_test.go": "907371aa8d7e7562fbb524772564d73250769324c84b1ddd4dfad4c57edf48d3",
+      "supervisor/internal/admission/authority.go": "dd649996ad3f21636dd8f21cc3cbd075e74e79c07370d115f6bab324df223ea3",
+      "supervisor/internal/admission/boundaries_test.go": "c3baca713a14edfab47e2c7ac1b822173508861355dfcc9c29ea6433da8ecd77",
+      "supervisor/internal/admission/candidates.go": "e2b4b1eaef5b2557b65eee0f12c4cf7669735c50ad1807352e4ca20f43c6bc7a",
+      "supervisor/internal/admission/candidates_test.go": "c8c02494c2052a9afde20b1d4746230ebf8c6ea263ab8cacde76d39472a25713",
+      "supervisor/internal/admission/contract_test.go": "4052c96677958a0dd1e29f9e78fedf4015b0af8c84f828e4a0ee515ef8535906",
+      "supervisor/internal/admission/issuance_test.go": "80dc1e8a5b5e1e09ff3d00e2130c295d20f4c06f4e313bd8db122b89f884edd9",
+      "supervisor/internal/admission/listener.go": "a84910e12f7df4fb32aa0c57099410387f313df588750acd519680d627c46376",
+      "supervisor/internal/admission/listener_test.go": "9791a2990ffbed491ff75310762d5deff1049aef4f4dfacffb8f8651e0ec6acc",
+      "supervisor/internal/admission/provision.go": "a05f74c28fc85b9e862532623dcaf6d3879be51e48cc738fd9a4613b17f5cb1b",
+      "supervisor/internal/admission/server.go": "02fb9b1d4771b96392f6a68e0c9f5090ea8ef75744b47593c525e2a61b1c620c",
+      "supervisor/internal/admission/server_test.go": "2d3e6f8b8dd35ade2dc694a543ea12ba705023606fe1ab2f0529d54fb19b9b37",
+      "supervisor/internal/app/config.go": "b60f6db98749c75f2e1b53b5534312084884137c98c0dda467c6d261963a121a",
+      "supervisor/internal/app/server.go": "69951b073ac8258d0c832eb822e98bf56ef7f6f9765e4fcfe05ee554b542ce95",
+      "supervisor/internal/app/server_test.go": "89f783a1eda7bb92d7376a4b813f4a135b7d6092470971cc74f248b4bb8fee68",
+      "supervisor/internal/generated/admission.pb.go": "3cc66be69b991919eef552c1a17fd3bcf587b7c24c72812f67f221b73d2a7c9a",
+      "supervisor/internal/generated/admission_grpc.pb.go": "ac5fa44689002eb9fc437209a7e235f607f7b1b20948f1d2bde569d4ae2f0ceb",
+      "supervisor/internal/generated/cluster.pb.go": "29831ca63b00c5408d67c38340991571b923418703e0fd46e8f4f0e6f1fe0714",
+      "supervisor/internal/generated/message_ids.go": "2f0cce2bbe36644505348e076f7a219db2677d180f80fd0ecedfc8092551df4e",
+      "supervisor/internal/generated/star_transport.pb.go": "9e0c0a4226eb1d79d2c5f81938bb4f8427ecc12dd39cf9fcc82dde1fc9f21740",
+      "supervisor/internal/generated/star_transport_grpc.pb.go": "f4f3a652453f5641aa45ac9c67042c59b6ec2b52d4011f1faac3edd5677f113b",
+      "supervisor/internal/management/http.go": "248fd54b101fd205c1ce1e39062559976a9be98b2eee556fc1fe12bc084c4c52",
+      "supervisor/internal/membership/boundaries_test.go": "013d28255cfa2491b9ec1f98ee16d03d5f562c3ca57a61087f9d0ccf2c9361b1",
+      "supervisor/internal/membership/startup_test.go": "f2481ceb8166f9c70ac08c8890aed8e2377cd9ee4dbc069333ad1abce444aabd",
+      "supervisor/internal/membership/store.go": "f0ef2526a7115135dbe446bfcfad678b4f262b777c212ca6a9d9549a7cc3fd67",
+      "supervisor/internal/membership/store_test.go": "204b23d982dd1f150e493d2d85de79df4ef2bbbb76c4c0252dcf712474e085ba",
+      "supervisor/internal/membership/validation.go": "aa58cb96933f35a178c403f74d64eaa1134a78afd965f1ede6b44fccc90adf8b",
+      "supervisor/internal/protocol/frame_test.go": "252d9bd3936d0b99a7ed88ab2ef0e8cdb16cda52d74cdf7faa8f9008d59617e6",
+      "supervisor/internal/protocol/legacy_test.go": "1aa14ebb5969d4f710240b02cf3d2f06d44122964e070906065be85ca888df07",
+      "supervisor/cmd/supervisor/main.go": "315fcb27aca2c0626e7ee28e36028286ad4e7f0b45a6c4bfb2260aeb7dbcda0a",
+      "supervisor/cmd/supervisor/main_test.go": "653bf64abaa3f7bc9bffd272020c1a4b6c93220024989a09877b8b38c737e5c5",
+      "proto/.clang-format": "259c943ee82173311b26247af4ee3f2e809ebd30c95a23288b001c3b8e65febd",
+      "proto/admission.proto": "92f9927fdf541617d72e7558dae50c1a2b8d7c3e2a8b176d71d4bf090a7f1922",
+      "proto/cluster.proto": "3864535a32c24296268a6e8372d6f4767473764d39ffa0232c79f9c74da7dd28",
+      "proto/message-ids.lock": "541cc750e7e425e9cd929fb9f092295460fe2667943152a986e0ca7e54513fa3",
+      "proto/star_transport.proto": "069f07ff00a2f8fc0d54ba85408c05c2b7ab6b31d449da6db854d8f37cc57e8c",
+      "proto/generator/Cargo.lock": "ea8a8d0c3e498058795491ae556d526b2bbb1188c49c82c220b59b1362353744",
+      "proto/generator/Cargo.toml": "ce41bb48bef01b88ba307e723f7d6cd6b7164d5f932cc2b2dd1fca884f110b7c",
+      "proto/generator/rustfmt.toml": "478e818c64a27dc341fffc827ee4b00c5aeef237ab8745efc9690f87ad245de9",
+      "proto/generator/src/ids.rs": "88d52fd29f4bbdf482d002ffadf2c4e68cc06a4236d41753b7f9ff43523cbaa9",
+      "proto/generator/src/main.rs": "bfeb8458d9af31e97f81dde2604d0291e27022f21d03ac460a0f27dbe7c48ffd",
+      "proto/generator/tests/message_ids.rs": "2f3551f76f1ce3649d9c294a330ef930521c301a667656a8649b78c2eba336aa",
+      "cluster/tests/fixtures/admission-v5.json": "c4ae12e156e14c65a1f10f5b800d0f06998509c1b4861b16ac8658a24192e64a",
+      "cluster/tests/fixtures/expired/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/expired/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/expired/cert.pem": "97e007a82a9ea6cb35d37640531449b8ae4363af653a27bcda61756ef88694b2",
+      "cluster/tests/fixtures/expired/key.pem": "19ecf2fb5b40e3e01dbc005305330091207e7198a9e29e8244628a4bc9fe2601",
+      "cluster/tests/fixtures/expired/login.json": "d26c51fde5791bbf24f6ecec4c47dc87dea36cf13c8d2213c22297ee524b8da0",
+      "cluster/tests/fixtures/planet-a/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/planet-a/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/planet-a/cert.pem": "5d48dda1aeb3afe6059001a6237021c687bfd0891b32577366faed3dc6a9f741",
+      "cluster/tests/fixtures/planet-a/key.pem": "777949516b562bde4649de5f0c8aab219bc867490a22d1aeb0916df82e1fd846",
+      "cluster/tests/fixtures/planet-a/login.json": "ca56ae94def107955bdb6528dafbee2a6195b118e310f5e070a15d71b1daeee5",
+      "cluster/tests/fixtures/planet-b/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/planet-b/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/planet-b/cert.pem": "e3a5f2196a77fdd1b2ae16b5d9ea9cbc952acda1a1ea2230a03c0e9f86bb8f83",
+      "cluster/tests/fixtures/planet-b/key.pem": "3cf0ed575c05dbdae49e54185bcacfaca75cc1ce5f9d15c5cabd4dd433be83a1",
+      "cluster/tests/fixtures/planet-b/login.json": "ca56ae94def107955bdb6528dafbee2a6195b118e310f5e070a15d71b1daeee5",
+      "cluster/tests/fixtures/rogue/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/rogue/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/rogue/cert.pem": "6e07ae1011e3e69064bf5f5f95343659c0c12b4a6aec226548bbec04a963aa67",
+      "cluster/tests/fixtures/rogue/key.pem": "350f9e3ca07bcf64b9ab6e4143d442bc8015e49b749bc6e502a300784e0b1c46",
+      "cluster/tests/fixtures/rogue/login.json": "d26c51fde5791bbf24f6ecec4c47dc87dea36cf13c8d2213c22297ee524b8da0",
+      "cluster/tests/fixtures/star-a/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/star-a/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/star-a/cert.pem": "9ec7b20b995ab590e53308a6a856f6d996f47938509574c60b8b404bf4ebd25e",
+      "cluster/tests/fixtures/star-a/key.pem": "d3cc652ad46a79f9569bc8193556678a97e389f349f5161b8bbfc53cea7a7f8e",
+      "cluster/tests/fixtures/star-a/login.json": "d26c51fde5791bbf24f6ecec4c47dc87dea36cf13c8d2213c22297ee524b8da0",
+      "cluster/tests/fixtures/star-b/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/star-b/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/star-b/cert.pem": "0dc790be8a04ee239d530a27d29cc924b0c5fe73424b49846841398226749eca",
+      "cluster/tests/fixtures/star-b/key.pem": "744a41409cd1460765df3e94eee4ffb252f2f36d5ccf882a758023d7adafb002",
+      "cluster/tests/fixtures/star-b/login.json": "d26c51fde5791bbf24f6ecec4c47dc87dea36cf13c8d2213c22297ee524b8da0",
+      "cluster/tests/fixtures/star-c/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/star-c/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/star-c/cert.pem": "f77188eb7063775a1a74ccf906a787eede01fe255058891fdf618d9f3eead182",
+      "cluster/tests/fixtures/star-c/key.pem": "fcaa1629a809cd2cb0acf33d2674dd856c929825b7c17353e8afd641938b8408",
+      "cluster/tests/fixtures/star-c/login.json": "d26c51fde5791bbf24f6ecec4c47dc87dea36cf13c8d2213c22297ee524b8da0",
+      "cluster/tests/fixtures/star-d/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/star-d/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/star-d/cert.pem": "7eb0d46eda6558163e4dda220b5616eb824781d1aa43e7b46e2338e31ee94e88",
+      "cluster/tests/fixtures/star-d/key.pem": "3442de05cb128bf3740afdb793953752845c6396a4db33a0a9b74fa331a8a9d5",
+      "cluster/tests/fixtures/star-d/login.json": "d26c51fde5791bbf24f6ecec4c47dc87dea36cf13c8d2213c22297ee524b8da0",
+      "cluster/tests/fixtures/supervisor/accounts.json": "6c0ac1582201f7affe6ded7e3c17cdb09ee35443cabca1b48f69988cefcf141b",
+      "cluster/tests/fixtures/supervisor/admission.key": "a3bec54ff898d95db885248cdbecd68aab0227eee823e374b47c4e4dcde52379",
+      "cluster/tests/fixtures/supervisor/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/supervisor/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/supervisor/cert.pem": "57f2bd698c62c8faa9c1ec0c22b0afe4ee4913c1ee6af4e067dad088cd9c0080",
+      "cluster/tests/fixtures/supervisor/key.pem": "38904e582402a81a0cab4a6dec62d080eab1d2ad7a74d15a62af5bf5f109f6fc",
+      "cluster/tests/fixtures/supervisor/login.json": "d26c51fde5791bbf24f6ecec4c47dc87dea36cf13c8d2213c22297ee524b8da0",
+      "cluster/tests/fixtures/wrong-cluster/admission.pub": "bb06ecd5754692faf9ea21efdec3ebd59b03cbb2062a85861169ad0786282676",
+      "cluster/tests/fixtures/wrong-cluster/ca.pem": "dc219a452c5f2cd57e5a5cc742e162ecf31a4ecdfbfed74ad88f2fab08034d6c",
+      "cluster/tests/fixtures/wrong-cluster/cert.pem": "409807c6ade4a58fdfb1d9b4b752616e05a2466a3dca4b20b4cc0f8b49ac1d1e",
+      "cluster/tests/fixtures/wrong-cluster/key.pem": "8d1d67379673239467a2f3008deb0468bd9054aa3a540e8825ddc049094e7ac0",
+      "cluster/tests/fixtures/wrong-cluster/login.json": "1d0e4e07d2ce8c040c949dfadedf1be1225ff092b69ac2071f68ea0e291590ad",
+      "testkit/campaign.py": "ad378a691cce60cda51641dbadc5f9487f201b67d3bc7c45f6dfa59b3b66394b",
+      "testkit/config.example.json": "720cd97c3b99296a7dd35d3f57a011c16cfa0591c51395a8b12fd22c54b169cb",
+      "testkit/pyproject.toml": "62ed26242a573cde5d74ad7728448daef2a44a19c95d46db168ea896dfc30e4e",
+      "testkit/requirements.txt": "11883035555e19cbf7efb41419c22db8f635f55137764b8490ca6e97f6577033",
+      "testkit/resources.py": "d957747cadf42329dfc68106fbc06906da344ab70faa2eabf413aee89ad9cdfd",
+      "testkit/run.ps1": "4856507a56d2e1b1dc391fcd0f79a83e6297034b0d67164e443fd12e21ed6ff4",
+      "testkit/run.py": "b4cecf26dae2e2210d63bf31b9d242620bcf799c3c308f66b302cef5bd2d686c",
+      "testkit/run.sh": "3c6cd167ea1aab716db4a7cbf2e8d1c7a5b7d425b4146954d3dec9f9d75c35d4",
+      "testkit/services.py": "5bda47df330f3a2ae518617727b30a03e7b4b07e274f106772e286c641ddf223",
+      "testkit/suites.py": "0c94c436b583bc300e407d3e7cb65e2281f46145a51f6006e45844a734836435",
+      "testkit/support.py": "5d3984eb7ada150d056f99bcd8113aeae7213b20ebb15cea2f39a31863e1e7a7",
+      "testkit/windows_job.py": "f8499c0e0b1b2aa13d6200c4aa565de3974a722fd7618c176ae9f69258b5a0f5",
+      "testkit/catalog/interop_test.py": "52ad8d29fc6d7240217244b29c192421698148f4c613c61dcf1e1a14f0423522",
+      "testkit/catalog/sentinel_test.py": "6790d81a003146115600deb5f0a62d11d1494f40e75216f2e635909c80bae0f8",
+      "testkit/catalog/soak_test.py": "1bca478e2ded1f586a025bcf78987d3df98028fb38822f7375b5dbe9e509f562",
+      "testkit/cpp/sentinel_smoke.py": "85689c9862323551e814a214250cf28d99a9b71aec85e38af2912a46a99fbcff",
+      "testkit/interop/interop_test.py": "c873b130f079927fb0508c098db9557559c399fd138cd27bab06c4ec744c8283",
+      "testkit/lua/catalog_line_benchmark.py": "764fe9921c4e6dee2c9f8c85d9b54a825700ba08d9d8503076d03e47226f0606",
+      "testkit/lua/catalog_test.py": "0f280cd0c73ebf45dbd70900bd75b16060d58e5857bb8f55ac4eb59b781f9998",
+      "testkit/lua/generate_catalog.py": "37244757a33cd85fc4407532ac3758b01bb0c78d607b7431dd8814de2ebe4825",
+      "testkit/lua/generate_registration.py": "661ce1482823c1342b4b9f25a37348a29b461f5ab3c43b52dce4d8b9d103e941",
+      "testkit/lua/registration_benchmark.py": "2884ff9b3a5e8d1615ad0a7462db47d53952c1a671c89515aea45753560355b8",
+      "testkit/lua/registration_line_benchmark.py": "3a1f21b06d89b1b5c85893805901eda272cc2eab20995e7690e2751d2abc0c31",
+      "testkit/lua/registration_test.py": "bfc2d06ca23ca288238e7553119bb3c04cdb4e816375070529ff39afcf03b699",
+      "testkit/lua/requirements.txt": "b0983c8d8a0ab01e9f14c0e4c86c5b60fcdababdfba3d730460710b570452f11",
+      "testkit/sentinel/requirements.txt": "22dfa57b5389f1ba8501676bbb79a157788dc21f6f03c14b82f2e7d159a557d8",
+      "testkit/sentinel/sentinel_test.py": "c8b99034274b676cd38c9c4acd80264998f383f8155e8e74e4826615af72629d",
+      "testkit/soak/soak_test.py": "feb8914e2bc7c0065d1f5deac2a820e9143d7610545215c57d865d0b8dd512d9",
+      "testkit/standalone/standalone_test.py": "2aa3253211abdefc64b5ee1573748cd1a6770da5f1195097a01e52177746944c",
+      "testkit/tests/test_runner.py": "1c9aa80d8ad06dc53e8069ee2015e0050b60c40e45f3bed27e77d69554723f22",
+      "testkit/tests/test_services.py": "8d3ec215a6f3897c26ee46044e732785910f018e2e368f56568b08237ceaf886",
+      "testkit/tests/test_star_endurance.py": "8fc275ae5435bb440939a09eaee621f49cb05b339d05513083e594923fb27da5",
+      "testkit/tls/certificate.pem": "0e4218449b4c0830050ee810a847ade9dc32af73d98299acac001dca2622474d",
+      "testkit/tls/private-key.pem": "f6a5c5a5988dcdac801f70c865195f50b04edcd74d2655bd837d87b51f7a3d64",
+      "testkit/transport/Cargo.lock": "f73f6d2261b114010b094ff4710e0444ae8f84d7fd4eba4f064af01cadf1a96d",
+      "testkit/transport/Cargo.toml": "8f61f7576a8418412dbc6e9de7aaa2c771382bca8cf7c44421f052460177b20c",
+      "testkit/transport/mixed.py": "c82406699a7723e7816194f8463c96e2cc798207f45525b1facf0eba70bcca42",
+      "testkit/transport/remote.py": "1feefea7cbb8a1d3d40f56a38bd264b08d77a094e3dfe0171dda9cde35425baf",
+      "testkit/transport/run.py": "4530951b748bbe0221287c563996bfe16b122c15055f68b8eb024dad8eda4682",
+      "testkit/transport/rustfmt.toml": "5168b47053296e544541fef0076c30e79044604c072ddd0333bf40fba64e7413",
+      "testkit/transport/generator/Cargo.toml": "90bce74c23ece8812d1acb57d0cc3802a8700598c186480844dcc8995f8d0ba8",
+      "testkit/transport/proto/.clang-format": "259c943ee82173311b26247af4ee3f2e809ebd30c95a23288b001c3b8e65febd",
+      "testkit/transport/proto/probe.proto": "ce48565a47fd7c8e8f3d902b42af1be5e4c1211fd7773f6f5a606e1284bff89b",
+      "testkit/transport/src/auth.rs": "9e7ff7062fc93ba7a5bc5e017dfa8aba1786d8bb5d7aaa7de63604548a5d7b9e",
+      "testkit/transport/src/main.rs": "e4282a9c7abbe96321341255c332d0b4b5f3a94182339e82c59116c718af660b",
+      "testkit/transport/src/measure.rs": "38fe5d24ce67946600d9f00b66d51e4ca60a7cc5f92a88534f2764a2ef378832",
+      "testkit/transport/src/push.rs": "f9009e3fd42b42fc4dae6e79e9a3f5901f5f3ca2d74dc9adadc3218333875e84",
+      "testkit/transport/src/push_io.rs": "2d64e4132704a5e78db0b6aa013cb3b0c7f9c9494399628cb28a62f48b277782",
+      "testkit/transport/src/push_measure.rs": "019be6ae420dcc3c502074202bce657cd469090904e4cf167b1264cd2d22fa9f",
+      "testkit/transport/src/push_state.rs": "67bbba0ac5bab9bde3973c2d8c0dfd6ef19bfd01aeb3b71371d472848111fe66",
+      "testkit/transport/src/transport.rs": "9a2e3afcfa17ad16b31cc45feccb103404292ae3d774afc778128890bbea67f2",
+      "testkit/transport/src/wire.rs": "ce0e2cdd9d149da364f9bd11bc5464e0715073711c45ec597ecaf0c06798e515",
+      "testkit/transport/tests/push.rs": "79efea156d1e210e3a23d0fa7de60147236a12f369ec52035d2625170cf4ede3",
+      "testkit/transport/tests/transport.rs": "c7cd3033b9afefe18b917287f25515bd721703f091f5edae88e91148069c3fe6",
+      "testkit/transport/tests/wire.rs": "97c7fd402f1994788d1b69a014334403d0578645f92d0f968593ef81bc0c7794",
+      "testkit/transport/src/generated/verdandi.probe.rs": "577651e48d6ab06f49374050a38f7c516ca693ef13764b080a6101e1bf059817",
+      "testkit/transport/generator/src/main.rs": "49a81076b030e3a800be27e36a789d86f63ba020cf6623d670d6f2a52f2e0899",
+      "testkit/sentinel/go-peer/go.mod": "2c79fe81e49e0406428c57fa1561a8e115ac3819efcf556587d7432ae6b1ca49",
+      "testkit/sentinel/go-peer/go.sum": "40b9c68c8d29c96bb8d96a814a4938d8c9207ef8d8cd1e21c17d943bd3a9bb0e",
+      "testkit/sentinel/go-peer/main.go": "0cf6293d2af046003b217c5291c73c020dd286b2313f9e58a45f894b4560d5e0",
+      "testkit/sentinel/rust-peer/Cargo.lock": "d9f2d4b84bfbb476d9eafcb8a8b876f72f9a0289020a18c97e69e2534cfc37e2",
+      "testkit/sentinel/rust-peer/Cargo.toml": "21b52e039846469799848be79e321b5acf87318bbc3803093378cc533888e864",
+      "testkit/sentinel/rust-peer/rustfmt.toml": "478e818c64a27dc341fffc827ee4b00c5aeef237ab8745efc9690f87ad245de9",
+      "testkit/sentinel/rust-peer/src/main.rs": "6f857837cf70d32119e2e4a150df4ec6e249113fc97a78fc218244e8c07acd39",
+      "testkit/interop/go-peer/go.mod": "0dfc58b5b4cd6ca4fccd12187fef7d60c3726940b5f5b13ff5264a6de4b19d4b",
+      "testkit/interop/go-peer/go.sum": "e7fcac1923e39917a76e97d7e898b317680511679dab64911482621784b7d9f3",
+      "testkit/interop/go-peer/main.go": "fbe5b51a650c98fccfc888d74e33396de599abb61dfde92833a8e5b7fb945987",
+      "testkit/interop/rust-peer/Cargo.lock": "cd270275ded9f40a8320dd9d8a2d37729583519e87551a6d2590c185b6d378a6",
+      "testkit/interop/rust-peer/Cargo.toml": "dd6489b23525d5fdb00aa6d4f6191604c3d62fef62514e18230e653dc995c169",
+      "testkit/interop/rust-peer/rustfmt.toml": "478e818c64a27dc341fffc827ee4b00c5aeef237ab8745efc9690f87ad245de9",
+      "testkit/interop/rust-peer/src/main.rs": "e49bfc00153f604976a6ce47526bf93d929f668aabc76a566879bf711bcb3d5f",
+      "testkit/conformance/v1/catalog_events.json": "ac136e865282dd3e86d62df4597354fc8917accd087b920f10002621cb4e6510",
+      "testkit/conformance/v1/configuration.json": "2476a1f0352949fa4abb47572c88bfc7219bffee93556702f7cf2ceaf834da95",
+      "testkit/catalog/go-peer/go.mod": "7987e8fa2317d72e7646eab08a4bef7ea5243e077c57dcd8569c505ea79cd73b",
+      "testkit/catalog/go-peer/go.sum": "e7fcac1923e39917a76e97d7e898b317680511679dab64911482621784b7d9f3",
+      "testkit/catalog/go-peer/main.go": "9bfa7c3abdf18eb8bd7ea23dfe63b72b0da267157f2f3dc7a7c8510395cf43ad",
+      "testkit/catalog/rust-peer/Cargo.lock": "1347f9b91ee11d5511baadf4fcdf9de791400d6fa6bda5f0de545d365da51698",
+      "testkit/catalog/rust-peer/Cargo.toml": "5c0580ceeda68a45103575eab91fdfcb64cf28114e570f793edde6e7597d0a1f",
+      "testkit/catalog/rust-peer/rustfmt.toml": "478e818c64a27dc341fffc827ee4b00c5aeef237ab8745efc9690f87ad245de9",
+      "testkit/catalog/rust-peer/src/main.rs": "7fbdba139e1f978add09bf9bb50c9c39f7213fd228ab08c3b740a9f0052d78b4",
+      "scripts/check-services.ps1": "af546ef5d5b97d0b38b8a8e2c798071e90215647ef612df71fb5c51b1b06cc11",
+      "scripts/check-services.sh": "f5e732b344978b5c54951d37dc01b5e39bef041bad0475783d3dcf65c7fd4838",
+      "scripts/generate-proto.ps1": "0337f26df1188d1582adb9d6563874572a41cdac48f69aab5b3923441bccb039",
+      "scripts/generate-proto.sh": "9e421936455f4306f1fb5f6dd4b9a97bf55b3a7af6d48f17a5817ff143bc148c",
+      "scripts/test-firewall.ps1": "e465419cfe22f9b397805838f416a479bf080a23c5b1ecfb08220fcd6d3d12e5",
+      "scripts/test-services.ps1": "18971abd4239ebb1f33c45bb9beb737691830ac5d17cf210c8c323ffdb198ced",
+      "scripts/test-services.sh": "58244b16f32a116ddd6bfd542796323f3697a14923ecd7bf6b23bb00020201e8",
+      "LICENSE": "52e33096d2a696ac2884cf69ff0827b190a03cd58e8e36a7fb569c25e8e7a8c5"
+    }
+  },
+  "windows_build_entry_tests": "test_cached_disabled_tests_are_reenabled_and_executed (__main__.BuildEntryTests.test_cached_disabled_tests_are_reenabled_and_executed) ... ok\ntest_empty_suite_fails_the_entry (__main__.BuildEntryTests.test_empty_suite_fails_the_entry) ... ok\ntest_environment_is_child_only_and_avoids_empty_search_paths (__main__.BuildEntryTests.test_environment_is_child_only_and_avoids_empty_search_paths) ... ok\ntest_explicit_parent_runtime_path_is_preserved (__main__.BuildEntryTests.test_explicit_parent_runtime_path_is_preserved) ... ok\ntest_invalid_operation_combinations (__main__.BuildEntryTests.test_invalid_operation_combinations) ... ok\ntest_supported_profiles_and_operations (__main__.BuildEntryTests.test_supported_profiles_and_operations) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 5.176s\n\nOK\n",
+  "linux_profiles": {
+    "debug": {
+      "status": "pass",
+      "ctest_evidence": [
+        "1/8 Test #1: cpp_build ........................   Passed    0.56 sec",
+        "2/8 Test #2: cpp_core .........................   Passed    0.01 sec",
+        "3/8 Test #3: cpp_language .....................   Passed   22.89 sec",
+        "4/8 Test #4: cpp_identity .....................   Passed    0.02 sec",
+        "5/8 Test #5: cpp_session ......................   Passed    0.27 sec",
+        "6/8 Test #6: cpp_admission ....................   Passed    6.00 sec",
+        "7/8 Test #7: cpp_connect ......................   Passed    0.67 sec",
+        "8/8 Test #8: cpp_process ......................   Passed    0.01 sec",
+        "Total Test time (real) =  30.43 sec"
+      ],
+      "generated_sources": "pass",
+      "rpc": {
+        "file": "cluster-cpp-rpc-1789375655819424461.json",
+        "result": {
+          "scope": "C++26 logical gRPC sessions with Go Supervisor",
+          "cases": [
+            "tls13_only_and_h2_negotiation",
+            "partial_tls_handshake_deadline_and_fd_cleanup",
+            "channel_reuse_duplicate_fencing_and_protocol_rejection",
+            "tls_without_http2_request_idle_cleanup",
+            "rpc_fixture_graceful_stop_and_listener_release",
+            "empty_candidates_refresh_when_star_joins"
+          ],
+          "passed": true,
+          "binary_sha256": {
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/debug/star": "33c3ba829a9ccfd799a76ec830aaab52bbd9ae74bc6f79ad3ee29cf6c340c80f",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/debug/planet": "2c74c926b5515d714ad89196c322f89397b61c1716a18b20a6bf9737098c5381",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/debug/star_rpc_probe": "21c3eb5e479f773baff5a0f199c9e3419254b76c3833681f43c5ee9df81aee20",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+          },
+          "tls_descriptors": {
+            "baseline": 11,
+            "peak": 35,
+            "after_deadline": 8,
+            "connections": 24
+          },
+          "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":836.345,\"p95\":1116.66,\"p99\":1289.77,\"max\":1525.48}}\n{\"slow_reader\":{\"attempted_pings\":140,\"close_ms\":23}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+          "control_rtt_us": {
+            "samples": 500,
+            "p50": 836.345,
+            "p95": 1116.66,
+            "p99": 1289.77,
+            "max": 1525.48
+          },
+          "slow_reader": {
+            "attempted_pings": 140,
+            "close_ms": 23
+          },
+          "rpc_server_resources": {
+            "supervisor": {
+              "rss_kib": 16156,
+              "threads": 7,
+              "fds": 9
+            },
+            "star": {
+              "rss_kib": 18564,
+              "threads": 9,
+              "fds": 8
+            }
+          },
+          "idle_http2_connections": {
+            "count": 2,
+            "observed_closed_ms": 13056
+          }
+        }
+      },
+      "processes": {
+        "file": "services-1789375677140485983.json",
+        "result": {
+          "status": "pass",
+          "platform": "linux",
+          "mode": "regression",
+          "mixed_hosts": false,
+          "star_binaries": "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/debug",
+          "cases": [
+            "service_cli_help_version_and_invalid_options",
+            "concurrent_three_star_full_mesh",
+            "supervisor_offline_existing_mesh_and_new_star_wait",
+            "persistent_supervisor_restart_and_waiting_star_join",
+            "graceful_and_forced_star_restart",
+            "invalid_identities_fail_closed",
+            "invalid_login_configuration_and_password_fail_closed",
+            "star_planet_account_roles_fail_closed",
+            "planet_prefers_local_group_without_joining_star_mesh",
+            "planet_cross_group_failover_while_supervisor_offline",
+            "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+            "one_active_upstream_per_planet",
+            "signals_process_exit_and_port_reuse"
+          ],
+          "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+          "elapsed_seconds": 21.203
+        }
+      },
+      "log_sha256": "b1923ba411f7874291c48474423af5122ce642915bd215f94bc04f0b67271d66"
+    },
+    "release": {
+      "status": "pass",
+      "ctest_evidence": [
+        "1/8 Test #1: cpp_build ........................   Passed    0.64 sec",
+        "2/8 Test #2: cpp_core .........................   Passed    0.01 sec",
+        "3/8 Test #3: cpp_language .....................   Passed   21.85 sec",
+        "4/8 Test #4: cpp_identity .....................   Passed    0.02 sec",
+        "5/8 Test #5: cpp_session ......................   Passed    0.12 sec",
+        "6/8 Test #6: cpp_admission ....................   Passed    6.02 sec",
+        "7/8 Test #7: cpp_connect ......................   Passed    0.67 sec",
+        "8/8 Test #8: cpp_process ......................   Passed    0.01 sec",
+        "Total Test time (real) =  29.35 sec"
+      ],
+      "generated_sources": "pass",
+      "rpc": {
+        "file": "cluster-cpp-rpc-1789375959681246781.json",
+        "result": {
+          "scope": "C++26 logical gRPC sessions with Go Supervisor",
+          "cases": [
+            "tls13_only_and_h2_negotiation",
+            "partial_tls_handshake_deadline_and_fd_cleanup",
+            "channel_reuse_duplicate_fencing_and_protocol_rejection",
+            "tls_without_http2_request_idle_cleanup",
+            "rpc_fixture_graceful_stop_and_listener_release",
+            "empty_candidates_refresh_when_star_joins"
+          ],
+          "passed": true,
+          "binary_sha256": {
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/release/star": "c428ef1fb355034f7b9756a6ae6b8fc6a975a2e409c505234d66c903db9cab93",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/release/planet": "7dfdaba505efb67b4ec30ac59d76f7cbb1cc6468d4ea3783514c23c9fe6d2105",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/release/star_rpc_probe": "d38870070925f2a90ef102c73482f2c352373e4569b91cdaec975cd89ff8ef94",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+          },
+          "tls_descriptors": {
+            "baseline": 11,
+            "peak": 17,
+            "after_deadline": 8,
+            "connections": 24
+          },
+          "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":630.234,\"p95\":808.543,\"p99\":916.149,\"max\":1039.56}}\n{\"slow_reader\":{\"attempted_pings\":63,\"close_ms\":7}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+          "control_rtt_us": {
+            "samples": 500,
+            "p50": 630.234,
+            "p95": 808.543,
+            "p99": 916.149,
+            "max": 1039.56
+          },
+          "slow_reader": {
+            "attempted_pings": 63,
+            "close_ms": 7
+          },
+          "rpc_server_resources": {
+            "supervisor": {
+              "rss_kib": 16152,
+              "threads": 7,
+              "fds": 9
+            },
+            "star": {
+              "rss_kib": 18568,
+              "threads": 9,
+              "fds": 8
+            }
+          },
+          "idle_http2_connections": {
+            "count": 2,
+            "observed_closed_ms": 12987
+          }
+        }
+      },
+      "processes": {
+        "file": "services-1789375981813694142.json",
+        "result": {
+          "status": "pass",
+          "platform": "linux",
+          "mode": "regression",
+          "mixed_hosts": false,
+          "star_binaries": "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/release",
+          "cases": [
+            "service_cli_help_version_and_invalid_options",
+            "concurrent_three_star_full_mesh",
+            "supervisor_offline_existing_mesh_and_new_star_wait",
+            "persistent_supervisor_restart_and_waiting_star_join",
+            "graceful_and_forced_star_restart",
+            "invalid_identities_fail_closed",
+            "invalid_login_configuration_and_password_fail_closed",
+            "star_planet_account_roles_fail_closed",
+            "planet_prefers_local_group_without_joining_star_mesh",
+            "planet_cross_group_failover_while_supervisor_offline",
+            "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+            "one_active_upstream_per_planet",
+            "signals_process_exit_and_port_reuse"
+          ],
+          "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+          "elapsed_seconds": 22.24
+        }
+      },
+      "log_sha256": "a041259b6b0ef4ee820575f5ea9b70bbb8d85cbc691249489f8a965dc0e10a13"
+    },
+    "asan": {
+      "status": "pass",
+      "ctest_evidence": [
+        "1/8 Test #1: cpp_build ........................   Passed    0.57 sec",
+        "2/8 Test #2: cpp_core .........................   Passed    0.11 sec",
+        "3/8 Test #3: cpp_language .....................   Passed   21.10 sec",
+        "4/8 Test #4: cpp_identity .....................   Passed    0.06 sec",
+        "5/8 Test #5: cpp_session ......................   Passed    0.82 sec",
+        "6/8 Test #6: cpp_admission ....................   Passed    6.11 sec",
+        "7/8 Test #7: cpp_connect ......................   Passed    0.70 sec",
+        "8/8 Test #8: cpp_process ......................   Passed    0.04 sec",
+        "Total Test time (real) =  29.50 sec"
+      ],
+      "generated_sources": "pass",
+      "rpc": {
+        "file": "cluster-cpp-rpc-1789376282694323012.json",
+        "result": {
+          "scope": "C++26 logical gRPC sessions with Go Supervisor",
+          "cases": [
+            "tls13_only_and_h2_negotiation",
+            "partial_tls_handshake_deadline_and_fd_cleanup",
+            "channel_reuse_duplicate_fencing_and_protocol_rejection",
+            "tls_without_http2_request_idle_cleanup",
+            "rpc_fixture_graceful_stop_and_listener_release",
+            "empty_candidates_refresh_when_star_joins"
+          ],
+          "passed": true,
+          "binary_sha256": {
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/asan/star": "4351800539c890968a9937caebfd037ad2a962c27faa4ee403ed826ce1e5caae",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/asan/planet": "a494b0923da4a06de08cbc36289583acdce269717c35de088196414acf6619c7",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/asan/star_rpc_probe": "372e94d1ea8aa323657e0bf8b2e1d0a25ad0976221ca96059ec9e99975d7ced9",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+          },
+          "tls_descriptors": {
+            "baseline": 11,
+            "peak": 25,
+            "after_deadline": 8,
+            "connections": 24
+          },
+          "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":1235.17,\"p95\":1529.88,\"p99\":1631.99,\"max\":1945}}\n{\"slow_reader\":{\"attempted_pings\":1147,\"close_ms\":163}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+          "control_rtt_us": {
+            "samples": 500,
+            "p50": 1235.17,
+            "p95": 1529.88,
+            "p99": 1631.99,
+            "max": 1945
+          },
+          "slow_reader": {
+            "attempted_pings": 1147,
+            "close_ms": 163
+          },
+          "rpc_server_resources": {
+            "supervisor": {
+              "rss_kib": 16252,
+              "threads": 7,
+              "fds": 9
+            },
+            "star": {
+              "rss_kib": 61804,
+              "threads": 9,
+              "fds": 8
+            }
+          },
+          "idle_http2_connections": {
+            "count": 2,
+            "observed_closed_ms": 13426
+          }
+        }
+      },
+      "processes": {
+        "file": "services-1789376304533746421.json",
+        "result": {
+          "status": "pass",
+          "platform": "linux",
+          "mode": "regression",
+          "mixed_hosts": false,
+          "star_binaries": "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/asan",
+          "cases": [
+            "service_cli_help_version_and_invalid_options",
+            "concurrent_three_star_full_mesh",
+            "supervisor_offline_existing_mesh_and_new_star_wait",
+            "persistent_supervisor_restart_and_waiting_star_join",
+            "graceful_and_forced_star_restart",
+            "invalid_identities_fail_closed",
+            "invalid_login_configuration_and_password_fail_closed",
+            "star_planet_account_roles_fail_closed",
+            "planet_prefers_local_group_without_joining_star_mesh",
+            "planet_cross_group_failover_while_supervisor_offline",
+            "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+            "one_active_upstream_per_planet",
+            "signals_process_exit_and_port_reuse"
+          ],
+          "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+          "elapsed_seconds": 23.787
+        }
+      },
+      "log_sha256": "12e5f38fce43b3a39fc49ff859e0fbea38be9d9385e38a483f9caa0552b8cc44"
+    },
+    "tsan": {
+      "status": "pass",
+      "ctest_evidence": [
+        "1/8 Test #1: cpp_build ........................   Passed    0.70 sec",
+        "2/8 Test #2: cpp_core .........................   Passed    0.10 sec",
+        "3/8 Test #3: cpp_language .....................   Passed   23.12 sec",
+        "4/8 Test #4: cpp_identity .....................   Passed    0.11 sec",
+        "5/8 Test #5: cpp_session ......................   Passed    3.34 sec",
+        "6/8 Test #6: cpp_admission ....................   Passed    7.44 sec",
+        "7/8 Test #7: cpp_connect ......................   Passed    1.75 sec",
+        "8/8 Test #8: cpp_process ......................   Passed    0.10 sec",
+        "Total Test time (real) =  36.66 sec"
+      ],
+      "generated_sources": "pass",
+      "rpc": {
+        "file": "cluster-cpp-rpc-1789376609831171622.json",
+        "result": {
+          "scope": "C++26 logical gRPC sessions with Go Supervisor",
+          "cases": [
+            "tls13_only_and_h2_negotiation",
+            "partial_tls_handshake_deadline_and_fd_cleanup",
+            "channel_reuse_duplicate_fencing_and_protocol_rejection",
+            "tls_without_http2_request_idle_cleanup",
+            "rpc_fixture_graceful_stop_and_listener_release",
+            "empty_candidates_refresh_when_star_joins"
+          ],
+          "passed": true,
+          "binary_sha256": {
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/tsan/star": "d0c84dfc66b5807e05c9cf5429b4a79f2d8fbd23fb9a54818e430e4187fbaac3",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/tsan/planet": "5d1b77fc8696a311c2e1341ba03dd8f85afb34b48fb86b08f3bc06f949ae42d3",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/tsan/star_rpc_probe": "ce778c4abf33e91f58df86d80b7b7ed929ff563cb4b6557f5990ec193095ffa2",
+            "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+          },
+          "tls_descriptors": {
+            "baseline": 11,
+            "peak": 14,
+            "after_deadline": 8,
+            "connections": 24
+          },
+          "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":2250.92,\"p95\":3012.56,\"p99\":3359.68,\"max\":4496.84}}\n{\"slow_reader\":{\"attempted_pings\":37,\"close_ms\":17}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+          "control_rtt_us": {
+            "samples": 500,
+            "p50": 2250.92,
+            "p95": 3012.56,
+            "p99": 3359.68,
+            "max": 4496.84
+          },
+          "slow_reader": {
+            "attempted_pings": 37,
+            "close_ms": 17
+          },
+          "rpc_server_resources": {
+            "supervisor": {
+              "rss_kib": 16124,
+              "threads": 7,
+              "fds": 9
+            },
+            "star": {
+              "rss_kib": 62536,
+              "threads": 10,
+              "fds": 8
+            }
+          },
+          "idle_http2_connections": {
+            "count": 2,
+            "observed_closed_ms": 15088
+          }
+        }
+      },
+      "processes": {
+        "file": "services-1789376637719447396.json",
+        "result": {
+          "status": "pass",
+          "platform": "linux",
+          "mode": "regression",
+          "mixed_hosts": false,
+          "star_binaries": "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/tsan",
+          "cases": [
+            "service_cli_help_version_and_invalid_options",
+            "concurrent_three_star_full_mesh",
+            "supervisor_offline_existing_mesh_and_new_star_wait",
+            "persistent_supervisor_restart_and_waiting_star_join",
+            "graceful_and_forced_star_restart",
+            "invalid_identities_fail_closed",
+            "invalid_login_configuration_and_password_fail_closed",
+            "star_planet_account_roles_fail_closed",
+            "planet_prefers_local_group_without_joining_star_mesh",
+            "planet_cross_group_failover_while_supervisor_offline",
+            "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+            "one_active_upstream_per_planet",
+            "signals_process_exit_and_port_reuse"
+          ],
+          "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+          "elapsed_seconds": 36.051
+        }
+      },
+      "log_sha256": "510e300275ff7d454e97bb36ea51be10a368e92397346385653bd6204552fb43"
+    }
+  },
+  "short_fault_recovery": {
+    "file": "services-1789376703473742913.json",
+    "result": {
+      "status": "pass",
+      "platform": "linux",
+      "mode": "soak",
+      "mixed_hosts": false,
+      "star_binaries": "/home/ubuntu/verdandi/build/cluster-minimal-20260914/source/build/cluster-cpp/release",
+      "cases": [
+        "service_cli_help_version_and_invalid_options",
+        "concurrent_three_star_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_star_wait",
+        "persistent_supervisor_restart_and_waiting_star_join",
+        "graceful_and_forced_star_restart",
+        "invalid_identities_fail_closed",
+        "invalid_login_configuration_and_password_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "resources_initial": {
+        "local": {
+          "star-0": {
+            "rss_kib": 17944,
+            "threads": 9,
+            "fds": 15
+          },
+          "star-1": {
+            "rss_kib": 17896,
+            "threads": 9,
+            "fds": 14
+          },
+          "star-3": {
+            "rss_kib": 18176,
+            "threads": 9,
+            "fds": 14
+          },
+          "planet-0": {
+            "rss_kib": 16952,
+            "threads": 9,
+            "fds": 9
+          },
+          "planet-1": {
+            "rss_kib": 16868,
+            "threads": 9,
+            "fds": 10
+          },
+          "supervisor": {
+            "rss_kib": 16256,
+            "threads": 7,
+            "fds": 11
+          },
+          "star-2": {
+            "rss_kib": 17652,
+            "threads": 9,
+            "fds": 16
+          }
+        }
+      },
+      "resources_final": {
+        "local": {
+          "planet-0": {
+            "rss_kib": 17476,
+            "threads": 9,
+            "fds": 9
+          },
+          "planet-1": {
+            "rss_kib": 17176,
+            "threads": 9,
+            "fds": 9
+          },
+          "star-3": {
+            "rss_kib": 18188,
+            "threads": 9,
+            "fds": 15
+          },
+          "star-1": {
+            "rss_kib": 18004,
+            "threads": 9,
+            "fds": 15
+          },
+          "star-2": {
+            "rss_kib": 17872,
+            "threads": 9,
+            "fds": 14
+          },
+          "star-0": {
+            "rss_kib": 17648,
+            "threads": 9,
+            "fds": 14
+          },
+          "supervisor": {
+            "rss_kib": 14332,
+            "threads": 6,
+            "fds": 9
+          }
+        }
+      },
+      "resources_peak": {
+        "local/star-0": {
+          "rss_kib": 18364,
+          "threads": 9,
+          "fds": 16
+        },
+        "local/star-1": {
+          "rss_kib": 18252,
+          "threads": 9,
+          "fds": 15
+        },
+        "local/star-3": {
+          "rss_kib": 18428,
+          "threads": 9,
+          "fds": 16
+        },
+        "local/planet-0": {
+          "rss_kib": 17476,
+          "threads": 9,
+          "fds": 9
+        },
+        "local/planet-1": {
+          "rss_kib": 17176,
+          "threads": 9,
+          "fds": 10
+        },
+        "local/supervisor": {
+          "rss_kib": 16256,
+          "threads": 7,
+          "fds": 11
+        },
+        "local/star-2": {
+          "rss_kib": 18568,
+          "threads": 9,
+          "fds": 16
+        }
+      },
+      "soak": {
+        "requested_seconds": 60,
+        "elapsed_seconds": 61.507,
+        "restart_cycles": 9,
+        "minimum_available_mib": 1668,
+        "stars": 4,
+        "planets": 2
+      },
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "elapsed_seconds": 82.681
+    }
+  },
+  "cleanup": "All process regressions cleaned owned resources; no isolated validation processes remained",
+  "limits": [
+    "Only a bounded 60-second fault loop, no long endurance or performance qualification",
+    "No new dependencies or global configuration changes",
+    "No business storage, SDK implementation, commit or push"
+  ],
+  "preparation_note": "Initial source archive hit Visual Studio's locked .vs index. Excluded IDE/build caches, then uploaded source successfully; no editor cache modified."
+}

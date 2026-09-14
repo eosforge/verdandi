@@ -36,8 +36,9 @@ use tonic::{
 
 const DEADLINE: Duration = Duration::from_secs(5);
 const QUEUE: usize = 16;
-// 覆盖 64 * 16 KiB 应用飞行窗口. 单个连接只允许一条 RPC, 不使用自动增长窗口.
-const FLOW_WINDOW: u32 = 1048576;
+// C++/Rust 新对照统一使用 HTTP/2 初始 65535 字节窗口, 不使用自适应增长.
+// 2026-09-10 历史实验为 1 MiB; 新数据必须记录配置, 不能与历史值直接合并.
+const FLOW_WINDOW: u32 = 65535;
 
 /// 任务随会话销毁而取消. 队列满时反压, 不在后台无限排队.
 pub struct Session {

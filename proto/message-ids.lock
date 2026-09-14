@@ -1,4 +1,4 @@
-# Automatically assigned MessageIDs. Commit this file with peer.proto. Never reuse an ID.
+# Automatically assigned MessageIDs. Commit this file with cluster.proto. Never reuse an ID.
 1	verdandi.peer.v1.Hello
 2	verdandi.peer.v1.Ping
 3	verdandi.peer.v1.Pong
@@ -11,3 +11,13 @@
 10	verdandi.peer.v1.PlanetRegistrationResponse
 11	verdandi.peer.v1.SessionPacket
 12	verdandi.peer.v1.LoginRequest
+13	verdandi.cluster.v1.Hello
+14	verdandi.cluster.v1.LoginRequest
+15	verdandi.cluster.v1.Ping
+16	verdandi.cluster.v1.PlanetRegistrationResponse
+17	verdandi.cluster.v1.Pong
+18	verdandi.cluster.v1.ProtocolError
+19	verdandi.cluster.v1.RegistrationChallenge
+20	verdandi.cluster.v1.RegistrationRequest
+21	verdandi.cluster.v1.RegistrationResponse
+22	verdandi.cluster.v1.SessionPacket

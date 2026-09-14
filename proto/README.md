@@ -1,35 +1,22 @@
-# Verdandi 服务端协议
+# Verdandi 服务控制协议
 
-v4 使用 TLS 1.3/h2 和 gRPC, 不再使用自定义 MessageID/长度帧头.
-包名保留 `verdandi.peer.v1`, Hello 主版本为 4; 包路径不表示旧协议兼容性.
+当前主版本为 6, 使用 TLS 1.3/h2 和 gRPC, 包名为 `verdandi.cluster.v1`.
+只维护 Go Supervisor 与 C++ Star/Planet. 旧 Rust 服务已废弃.
 
 | Schema | 用途 |
 | --- | --- |
-| `peer.proto` | Hello、Ping/Pong、成员、登记和有限错误类型 |
-| `admission.proto` | Supervisor 的 Challenge / Register 一元 RPC |
-| `peer_transport.proto` | Star/Planet 的 OpenSession 双向流, SessionPacket oneof |
+| `cluster.proto` | Hello、Ping/Pong、成员和单次登记 |
+| `admission.proto` | Supervisor Register 一元 RPC |
+| `star_transport.proto` | StarTransport.OpenSession 双向流 |
 
-账号密码只进入 Supervisor 请求. Member 是独立签名正文, 由 Ed25519 签署
-`verdandi-admission-v4` 加一个 NUL 字节和原始 Protobuf 字节. 验证方验证收到的原始字节,
-不重编码后验签. 凭证为 bearer, 无 exporter 或额外进程签名.
-详细角色和限额见 [gRPC 实现](../peer/grpc-implementation.md).
+Supervisor 签发不透明 `string id`. 接收方验证签名和绑定, 不解析 UUID 格式.
+仅已提交的 Hello 凭证使用 Ed25519 签名, 启动请求按随机键幂等, 详见[身份与准入契约](../cluster/identity-contract.md).
 
 ## 显式生成
 
-生成器使用 protoc 36.1、Prost/Tonic 0.14 系列、protoc-gen-go 1.36.12 和
-protoc-gen-go-grpc 1.6.2. 工具默认路径分别为:
-
-```text
-build/tools/protoc/36.1/bin/protoc[.exe]
-build/tools/protoc-gen-go/1.36.12/protoc-gen-go[.exe]
-build/tools/protoc-gen-go-grpc/1.6.2/protoc-gen-go-grpc[.exe]
-```
-
-生成到 `peer/common/src/generated` 和 `supervisor/internal/generated`, 随 schema 一同提交.
-C++ 生成入口为 `python3 peer-cpp/build.py generate`, 使用额外的 `grpc_cpp_plugin 1.84.0`,
-生成到 `peer-cpp/common/src/generated`. `check-generated` 逐字节比较; C++ 的普通构建同样不运行生成器.
-生成器先在项目内独占临时目录完成全部生成和格式化, 成功后更新源码, 结束后清理临时文件.
-普通服务构建只编译已有源码, 不调用 protoc、不开启下载. 修改 schema 后显式执行:
+Go 生成器自身使用已有 Rust 工具链, 不再生成废弃 Rust 服务代码.
+使用 protoc 36.1、protoc-gen-go 1.36.12、protoc-gen-go-grpc 1.6.2;
+C++ 另使用 grpc_cpp_plugin 1.84.0. 工具来自已准备的 `build/tools/` 或 C++ 依赖前缀.
 
 ```powershell
 ./scripts/generate-proto.ps1
@@ -39,21 +26,17 @@ C++ 生成入口为 `python3 peer-cpp/build.py generate`, 使用额外的 `grpc_
 ```bash
 bash scripts/generate-proto.sh
 bash scripts/generate-proto.sh --check
+python3 cluster-cpp/build.py generate
+python3 cluster-cpp/build.py check-generated
 ```
 
-检查模式不写源码, 任一生成差异均失败. 一键服务检查包含此步骤.
-Rust 生成的 RPC 使用标准 Prost codec 的有界适配, 在反序列化成员列表前扫描对象数量,
-避免空 repeated 条目导致字节预算内的大量对象分配.
+Go 输出在 `supervisor/internal/generated`, C++ 输出在 `cluster-cpp/common/src/generated`.
+生成源码随 schema 维护, 不手工修改. 普通构建不调用 protoc、不下载工具或依赖.
+检查模式只比较, 任何输出或文件集合差异均失败. 删除或重命名 schema 时需显式移除旧生成文件.
 
-## 历史编号与兼容性
+## 兼容性
 
-`message-ids.lock` 继续记录旧自动编号历史, v4 gRPC 调度不使用它.
-已有编号和删除消息占位永不复用. 显式生成新增顶层消息时继续追加编号,
-四项生成器测试检查确定性、重排、删除、冲突及只读行为.
-已删除的 public_key 和 session_proof 字段在 schema 中 reserved, 不复用字段号.
-PlanetRegistrationResponse 仅为 v3 类型历史保留, v4 两个角色统一返回 RegistrationResponse.
-
-新协议需 Supervisor、Star、Planet 同时升级, 不提供旧 TCP 后端回退.
-业务存储、Catalog/Registry 复制和 SDK Bind 消息尚未实现.
-手写注释采用中文和 ASCII 标点, clang-format 按当前配置使用 4 空格.
-bytes 字段生成 Rust Bytes, 不宣称端到端零拷贝.
+v6 不兼容旧 v5/v4 的准入流程和签名域, 所有服务需一起升级, 没有旧 Rust 服务回退.
+持久成员库的 `peer_id` 字段已改为 `id`, 旧库不会被静默覆盖, 参见身份契约.
+`message-ids.lock` 保留编号, gRPC 不使用它分派消息. 字段号和历史编号不复用.
+Catalog/Registry 业务流同步与 SDK 接入尚未实现.

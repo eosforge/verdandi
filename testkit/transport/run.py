@@ -71,7 +71,7 @@ def ready(process, log):
     raise TimeoutError("probe readiness timeout")
 
 
-def trial(binary, transport, case, seconds, directory, address=None, push=None):
+def trial(binary, transport, case, seconds, directory, address=None, push=None, server_process=None):
     role, size, fanout, window, rate = case
     command = [
         binary,
@@ -90,8 +90,9 @@ def trial(binary, transport, case, seconds, directory, address=None, push=None):
     client_log, server_log = directory / "client.log", directory / "server.log"
     from contextlib import ExitStack
 
+    owns_server = address is None
     with ExitStack() as stack:
-        server = None
+        server = server_process
         if address is None:
             server_command = [binary, "serve", f"--transport={transport}", "--address=127.0.0.1:0", "--seconds=60"]
             if push is not None:
@@ -141,7 +142,7 @@ def trial(binary, transport, case, seconds, directory, address=None, push=None):
             report["offered_deliveries_per_second"] = rate * fanout
             report["delivery_rate_ratio"] = report["messages_per_second"] / (rate * fanout)
     # 本地服务器由当前上下文独占. 退出后检查监听释放, 不清理其他进程或端口.
-    if server:
+    if server and owns_server:
         host, port = address.rsplit(":", 1)
         cleanup_deadline = time.monotonic() + 3
         while True:
@@ -157,7 +158,12 @@ def trial(binary, transport, case, seconds, directory, address=None, push=None):
 
 
 def shape_arguments(push, size):
-    return [f"--registries={push.get('registries', 1000)}", f"--catalogs={push.get('catalogs', 1000)}", f"--catalog-bytes={size}"]
+    return [
+        f"--registries={push.get('registries', 1000)}",
+        f"--catalogs={push.get('catalogs', 1000)}",
+        f"--catalog-bytes={size}",
+        f"--hot-keys={push.get('hot_keys', 0)}",
+    ]
 
 
 def source_hashes():
@@ -241,7 +247,8 @@ def main():
             "message_bytes": 32768,
             "payload_bytes": 16384,
             "runtime_workers_per_process": 2,
-            "grpc_stream_and_connection_window_bytes": 1048576,
+            "grpc_stream_and_connection_window_bytes": 65535,
+            "grpc_adaptive_window": False,
             "tcp_flush_policy": "ready_batch_up_to_16" if args.workload == "push" else "each_echo_frame",
         },
         "notes": [

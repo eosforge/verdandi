@@ -6,16 +6,14 @@ import "google.golang.org/protobuf/proto"
 type MessageID uint16
 
 const (
-	IDHello                      MessageID = 1
-	IDPing                       MessageID = 2
-	IDPong                       MessageID = 3
-	IDProtocolError              MessageID = 4
-	IDRegistrationChallenge      MessageID = 7
-	IDRegistrationRequest        MessageID = 8
-	IDRegistrationResponse       MessageID = 9
-	IDPlanetRegistrationResponse MessageID = 10
-	IDSessionPacket              MessageID = 11
-	IDLoginRequest               MessageID = 12
+	IDHello                      MessageID = 13
+	IDPing                       MessageID = 15
+	IDPlanetRegistrationResponse MessageID = 16
+	IDPong                       MessageID = 17
+	IDProtocolError              MessageID = 18
+	IDRegistrationRequest        MessageID = 20
+	IDRegistrationResponse       MessageID = 21
+	IDSessionPacket              MessageID = 22
 )
 
 func NewMessage(id MessageID) proto.Message {
@@ -24,22 +22,18 @@ func NewMessage(id MessageID) proto.Message {
 		return &Hello{}
 	case IDPing:
 		return &Ping{}
+	case IDPlanetRegistrationResponse:
+		return &PlanetRegistrationResponse{}
 	case IDPong:
 		return &Pong{}
 	case IDProtocolError:
 		return &ProtocolError{}
-	case IDRegistrationChallenge:
-		return &RegistrationChallenge{}
 	case IDRegistrationRequest:
 		return &RegistrationRequest{}
 	case IDRegistrationResponse:
 		return &RegistrationResponse{}
-	case IDPlanetRegistrationResponse:
-		return &PlanetRegistrationResponse{}
 	case IDSessionPacket:
 		return &SessionPacket{}
-	case IDLoginRequest:
-		return &LoginRequest{}
 	default:
 		return nil
 	}
@@ -50,22 +44,18 @@ func IDOf(message proto.Message) (MessageID, bool) {
 		return IDHello, true
 	case *Ping:
 		return IDPing, true
+	case *PlanetRegistrationResponse:
+		return IDPlanetRegistrationResponse, true
 	case *Pong:
 		return IDPong, true
 	case *ProtocolError:
 		return IDProtocolError, true
-	case *RegistrationChallenge:
-		return IDRegistrationChallenge, true
 	case *RegistrationRequest:
 		return IDRegistrationRequest, true
 	case *RegistrationResponse:
 		return IDRegistrationResponse, true
-	case *PlanetRegistrationResponse:
-		return IDPlanetRegistrationResponse, true
 	case *SessionPacket:
 		return IDSessionPacket, true
-	case *LoginRequest:
-		return IDLoginRequest, true
 	default:
 		return 0, false
 	}

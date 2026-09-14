@@ -6,15 +6,15 @@ import type { GalaxyData } from "../model/types.ts";
 import PlanetDetails from "./PlanetDetails.vue";
 const props = defineProps<{ data: GalaxyData }>();
 const canvasHost = ref<HTMLElement>();
-const { selectedPeer, selectedPlanet, fps, error, retry, overview, selectPlanet, focusPlanet } = useGalaxyScene(canvasHost, () => props.data);
-const availableIds = computed(() => new Set(props.data.peers.filter((peer) => peer.status === "available").map((peer) => peer.id)));
+const { selectedStar, selectedPlanet, fps, error, retry, overview, selectPlanet, focusPlanet } = useGalaxyScene(canvasHost, () => props.data);
+const availableIds = computed(() => new Set(props.data.stars.filter((star) => star.status === "available").map((star) => star.id)));
 const neighborCount = computed(
   () =>
     props.data.links.filter(
       (link) =>
         availableIds.value.has(link.source) &&
         availableIds.value.has(link.target) &&
-        (link.source === selectedPeer.value?.id || link.target === selectedPeer.value?.id),
+        (link.source === selectedStar.value?.id || link.target === selectedStar.value?.id),
     ).length,
 );
 </script>
@@ -30,8 +30,8 @@ const neighborCount = computed(
     </div>
     <output v-if="!error" class="fps-counter" aria-label="当前 FPS">{{ fps ?? "—" }}</output>
     <PlanetDetails
-      v-if="selectedPeer?.status === 'available' && selectedPlanet"
-      :peer="selectedPeer"
+      v-if="selectedStar?.status === 'available' && selectedPlanet"
+      :star="selectedStar"
       :planet="selectedPlanet"
       :neighbor-count="neighborCount"
       :source-label="data.sourceLabel"

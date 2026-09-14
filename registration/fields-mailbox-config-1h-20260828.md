@@ -38,7 +38,7 @@ pass.
 
 The fingerprint covers the generated and source Lua programs, root Go/Rust
 transport surfaces used by Registration, both Registration/Selector SDK
-implementations and tests, the Sentinel peers and harness, and the soak
+implementations and tests, the Sentinel stars and harness, and the soak
 harness. The exact path list is embedded in the accepted JSON result.
 
 ## Corrections made before the accepted run
@@ -46,11 +46,11 @@ harness. The exact path list is embedded in the accepted JSON result.
 ### Keep the qualification gate aligned with generated configuration
 
 The shared configuration DSL requires
-`selector.clock_refresh_interval_ms >= 1000`. Several old integration and peer
+`selector.clock_refresh_interval_ms >= 1000`. Several old integration and star
 fixtures still requested 100 ms. The first formal workload therefore ran for
 one hour successfully but its Rust post-check rejected the invalid fixture
-configuration. All affected Go/Rust Registration integration, Sentinel peer,
-and interoperability peer fixtures now use one second.
+configuration. All affected Go/Rust Registration integration, Sentinel star,
+and interoperability star fixtures now use one second.
 
 The soak harness now runs the canonical Lua contract, Rust raw convergence,
 and Rust typed Registration/Selector checks both before and after the long
@@ -201,8 +201,8 @@ configuration and Registration-Lua generation checks, all Go packages, and
 Rust all-target/all-feature tests (52 library plus four endpoint-free external
 tests; Redis-dependent cases remained intentionally ignored in this local
 command because the accepted campaign had already exercised their isolated
-endpoints). The modified Go interoperability peer also passed `go test`; the
-Rust interoperability peer passed `cargo check`.
+endpoints). The modified Go interoperability star also passed `go test`; the
+Rust interoperability star passed `cargo check`.
 
 ## Rejected evidence retained for audit
 
@@ -263,9 +263,9 @@ Strengths:
 - Rust follows native Tokio cancellation, task ownership, permit retention,
   and shared immutable payload patterns rather than copying the Go shape;
 - raw and typed Redis convergence passed before and after the hour;
-- the Rust peer passed both Sentinel promotions, total-loss unavailability,
+- the Rust star passed both Sentinel promotions, total-loss unavailability,
   UUID preservation, and cross-language recovery;
-- strict build/test evidence and both updated interoperability peer compile
+- strict build/test evidence and both updated interoperability star compile
   checks pass.
 
 Remaining deductions:

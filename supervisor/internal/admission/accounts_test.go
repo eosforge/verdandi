@@ -26,7 +26,7 @@ func TestProvisionedAccountHasIndependentSaltAndNoPassword(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := accounts.authenticate(context.Background(), "node", "test-secret", wire.NodeRole_NODE_ROLE_PLANET); err != nil {
+		if err := accounts.authenticate(context.Background(), "node", "test-secret", wire.Role_ROLE_PLANET); err != nil {
 			t.Fatal(err)
 		}
 		if accounts.entries["node"].Salt == previous {
@@ -60,7 +60,7 @@ func TestCancelledLoginDoesNotWaitForPasswordCapacity(t *testing.T) {
 	a.work <- struct{}{}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := a.authenticate(ctx, "node", "password", wire.NodeRole_NODE_ROLE_STAR); status.Code(err) != codes.Canceled {
+	if err := a.authenticate(ctx, "node", "password", wire.Role_ROLE_STAR); status.Code(err) != codes.Canceled {
 		t.Fatal(err)
 	}
 }

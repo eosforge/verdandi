@@ -34,7 +34,7 @@
     <div id="scene"></div>
     <nav aria-label="控制器验收">
       <button id="overview">返回总览</button>
-      <button id="peer">进入 Atlas</button>
+      <button id="star">进入 Atlas</button>
       <button id="planet">选择 Atlas 行星</button>
       <button id="foreign">选择 Lyra 行星</button>
       <button id="focus">推进至 Atlas 行星</button>
@@ -48,12 +48,12 @@
       import { demoGalaxy } from "/src/features/galaxy/data/demo.ts";
       const selection = document.getElementById("selection");
       const result = document.getElementById("result");
-      const atlas = demoGalaxy.peers[0];
-      const lyra = demoGalaxy.peers[1];
+      const atlas = demoGalaxy.stars[0];
+      const lyra = demoGalaxy.stars[1];
       // 按钮调用生产控制器, 不读写内部状态, 供验证总览和跨星系的程序化选择限制.
       const controller = await createGalaxyScene(document.getElementById("scene"), demoGalaxy, {
         select(value) {
-          selection.textContent = value ? `${value.peer.name}: ${value.planet?.id ?? "恒星视图"}` : "总览";
+          selection.textContent = value ? `${value.star.name}: ${value.planet?.id ?? "恒星视图"}` : "总览";
         },
         fps() {},
         error(message) {
@@ -64,8 +64,8 @@
         controller.overview();
         result.textContent = "返回总览";
       };
-      document.getElementById("peer").onclick = () => {
-        result.textContent = `进入恒星: ${controller.selectPeer(atlas.id)}`;
+      document.getElementById("star").onclick = () => {
+        result.textContent = `进入恒星: ${controller.selectStar(atlas.id)}`;
       };
       document.getElementById("planet").onclick = () => {
         result.textContent = `选择行星: ${controller.selectPlanet(atlas.id, atlas.planets[0].id)}`;

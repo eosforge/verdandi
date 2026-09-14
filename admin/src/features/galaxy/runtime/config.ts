@@ -10,7 +10,7 @@ export const sceneConfig = {
     far: 1600,
     minDistance: 8,
     maxDistance: 440,
-    peerDistance: 90,
+    starDistance: 90,
     planetDistance: 18,
     transitionSeconds: 1.2,
     zoomResponseSeconds: 0.09,

@@ -6,10 +6,10 @@ import { writeOrbitPosition } from "../src/features/galaxy/model/orbit.ts";
 import { starScaleForPlanetCount } from "../src/features/galaxy/model/presentation.ts";
 
 const radius = 0.82;
-const requests = demoGalaxy.peers.flatMap((peer) => peer.planets.map((planet) => ({ id: planet.id, position: planet.position, center: peer.position })));
-const obstacles = demoGalaxy.peers.map((peer) => ({
-  center: peer.position,
-  radius: peer.status === "available" ? 4.6 * starScaleForPlanetCount(peer.planets.length) : 3.4,
+const requests = demoGalaxy.stars.flatMap((star) => star.planets.map((planet) => ({ id: planet.id, position: planet.position, center: star.position })));
+const obstacles = demoGalaxy.stars.map((star) => ({
+  center: star.position,
+  radius: star.status === "available" ? 4.6 * starScaleForPlanetCount(star.planets.length) : 3.4,
 }));
 const planned = planPlanetOrbits(requests, radius, obstacles);
 

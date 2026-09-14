@@ -43,11 +43,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.StringVar(&cfg.Listen, "listen", cfg.Listen, "management HTTP IP:PORT or [IPv6]:PORT")
 	flags.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout, "graceful shutdown timeout (0, 1m]")
 	flags.IntVar(&cfg.MaxConnections, "max-connections", cfg.MaxConnections, "maximum accepted HTTP connections [1, 65536]")
-	flags.StringVar(&cfg.PeerListen, "peer-listen", "", "registration gRPC/TLS IP:PORT; empty means management only")
+	flags.StringVar(&cfg.StarListen, "star-listen", "", "registration gRPC/TLS IP:PORT; empty means management only")
 	flags.StringVar(&cfg.Cluster, "cluster", "", "authorized registration cluster")
 	flags.StringVar(&cfg.Identity, "identity", "", "directory containing TLS identity, signing key and accounts.json")
 	flags.StringVar(&cfg.Members, "members", "", "persistent member database file")
-	flags.IntVar(&cfg.MaxPeers, "max-peers", cfg.MaxPeers, "maximum registered peers in the cluster [1, 4096]")
+	flags.IntVar(&cfg.MaxMembers, "max-members", cfg.MaxMembers, "maximum registered stars in the cluster [1, 4096]")
+	flags.Uint64Var(&cfg.MaxStartups, "max-startups", cfg.MaxStartups, "maximum retained startup requests per cluster [1, 16777216]; never evicted")
 	flags.TextVar(&level, "log-level", level, "DEBUG, INFO, WARN or ERROR")
 	version := flags.Bool("version", false, "show the service version")
 	// 标准 flag 支持 --name=value; 不自行维护另一套转义或缺值解析器.
@@ -72,7 +73,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// 日志只包含当前管理服务事实, 不把 HTTP 启动标记为 Peer 群组已经 Ready.
+	// 日志只包含当前管理服务事实, 不把 HTTP 启动标记为 Star 群组已经 Ready.
 	logger := slog.New(slog.NewJSONHandler(stdout, &slog.HandlerOptions{Level: level}))
 	if err := app.Run(ctx, cfg, logger); err != nil {
 		logger.Error("supervisor_failed", "error", err)

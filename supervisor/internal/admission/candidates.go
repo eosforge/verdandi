@@ -12,16 +12,16 @@ import (
 
 // encodeMember 统一两种应答及签名正文的字段, 避免名单和凭据的角色或分组不一致.
 func encodeMember(cluster string, member membership.Member) *wire.RegistrationResponse_Member {
-	role := wire.NodeRole_NODE_ROLE_STAR
+	role := wire.Role_ROLE_STAR
 	if member.Role == membership.Planet {
-		role = wire.NodeRole_NODE_ROLE_PLANET
+		role = wire.Role_ROLE_PLANET
 	}
-	return &wire.RegistrationResponse_Member{ClusterId: cluster, PeerId: member.PeerID, Principal: member.Principal,
+	return &wire.RegistrationResponse_Member{ClusterId: cluster, Id: member.ID, Principal: member.Principal,
 		Advertise: member.Address, Epoch: member.Epoch, Role: role, Group: member.Group}
 }
 
 // candidates 最多返回 8 个 Star, 尽量各保留 4 个本组与跨组入口, 数量不足时由另一组补齐.
-// 每个 Planet 用不同的确定性起点分散入口, 应答仍按本组优先和 UUID 排序, 不声称提供实时健康名单.
+// 每个 Planet 用不同的确定性起点分散入口, 应答仍按本组优先和 id 排序, 不声称提供实时健康名单.
 func candidates(stars []*wire.RegistrationResponse_Member, group, process string, round uint32) []*wire.RegistrationResponse_Member {
 	local, remote := make([]*wire.RegistrationResponse_Member, 0), make([]*wire.RegistrationResponse_Member, 0)
 	for _, star := range stars {
@@ -53,7 +53,7 @@ func candidates(stars []*wire.RegistrationResponse_Member, group, process string
 			}
 			return 1
 		}
-		return strings.Compare(a.PeerId, b.PeerId)
+		return strings.Compare(a.Id, b.Id)
 	})
 	return result
 }

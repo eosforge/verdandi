@@ -19,6 +19,28 @@ from testkit.sentinel.sentinel_test import Credentials, Topology
 
 
 class RunnerTests(unittest.TestCase):
+    def test_native_runtime_search_path_does_not_add_the_current_directory(self):
+        from testkit import suites
+
+        key = "PATH" if os.name == "nt" else "LD_LIBRARY_PATH"
+        with support.temporary_directory("native-environment-") as directory:
+            project = Path(directory)
+            library = project / "native/runtime"
+            library.parent.mkdir()
+            library.touch()
+            (project / "build").mkdir()
+            (project / "build/environment.json").write_text(json.dumps({"paths": {"native_runtime": str(library)}}), encoding="utf-8")
+            for inherited in ("", "existing-runtime-path"):
+                with (
+                    self.subTest(inherited=inherited),
+                    patch.object(suites, "ROOT", project),
+                    patch.object(suites, "environment", return_value={key: inherited}),
+                ):
+                    actual, _ = suites.native_environment()
+                expected = [str(library.parent), *([inherited] if inherited else [])]
+                self.assertEqual(actual[key].split(os.pathsep), expected)
+                self.assertEqual(actual["VERDANDI_NATIVE_LIBRARY"], str(library))
+
     @unittest.skipUnless(os.name == "nt", "Windows replacement sharing semantics")
     def test_atomic_report_survives_short_reader_and_preserves_old_on_timeout(self):
         with support.temporary_directory("atomic-report-") as directory:

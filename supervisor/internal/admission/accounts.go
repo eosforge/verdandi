@@ -79,7 +79,7 @@ func validAccount(username string, roles []string) bool {
 
 // authenticate 在有界并发中验证密码, 取消只等待已经开始的一次固定 KDF, 不启动额外 goroutine.
 // 排队前后都观察 ctx, 避免 select 同时就绪时让已取消请求继续消耗密码计算资源.
-func (a *accounts) authenticate(ctx context.Context, username, password string, role wire.NodeRole) error {
+func (a *accounts) authenticate(ctx context.Context, username, password string, role wire.Role) error {
 	if ctx.Err() != nil {
 		return status.FromContextError(ctx.Err()).Err()
 	}
@@ -110,18 +110,18 @@ func (a *accounts) authenticate(ctx context.Context, username, password string, 
 	if err != nil || subtle.ConstantTimeCompare(derived, expected) != 1 || !exists {
 		return denied
 	}
-	if role == wire.NodeRole_NODE_ROLE_UNSPECIFIED {
+	if role == wire.Role_ROLE_UNSPECIFIED {
 		return nil
 	}
 	for _, allowed := range account.Roles {
-		if allowed == membership.Star && role == wire.NodeRole_NODE_ROLE_STAR || allowed == membership.Planet && role == wire.NodeRole_NODE_ROLE_PLANET {
+		if allowed == membership.Star && role == wire.Role_ROLE_STAR || allowed == membership.Planet && role == wire.Role_ROLE_PLANET {
 			return nil
 		}
 	}
 	return status.Error(codes.PermissionDenied, "role not authorized")
 }
 
-// endpointPrincipal 与 Rust 使用相同的零分隔编码, 地址必须已规范化.
+// endpointPrincipal 与 C++ 使用相同的零分隔编码, 地址必须已规范化.
 func endpointPrincipal(username, cluster, address string) string {
 	digest := sha256.Sum256([]byte(username + "\x00" + cluster + "\x00" + address))
 	return hex.EncodeToString(digest[:])

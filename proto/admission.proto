@@ -1,20 +1,11 @@
-// 许可证: MIT, 详见仓库根目录 LICENSE.
-// Supervisor 账号准入. 两个 RPC 均验证密码, 不能把查询到的基线作为授权凭据.
+// Supervisor 单次账号准入. 登录, 幂等登记和成员快照在一个 RPC 中完成.
 syntax = "proto3";
-package verdandi.peer.v1;
+package verdandi.cluster.v1;
 option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
-import "peer.proto";
+import "cluster.proto";
 
 service Admission {
-    // 首次读取账号下该具体端点的重启代次. 重试保留第一次基线, 不抢回较新登记.
-    rpc Challenge(LoginRequest) returns (RegistrationChallenge);
-    // Star 得到完整 Star 名单, Planet 得到至多八个候选. 自身凭证独立签发.
+    // 账号认证后持久提交, Star 得到完整 Star 名单, Planet 保留现有候选行为.
+    // 同启动 request_id 重试不改变身份; 已被替换的请求返回冲突. 不再提供 Challenge.
     rpc Register(RegistrationRequest) returns (RegistrationResponse);
-}
-
-message LoginRequest {
-    string username = 1;
-    string password = 2;
-    string cluster_id = 3;
-    string advertise = 4;
 }

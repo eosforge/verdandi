@@ -1,0 +1,537 @@
+{
+  "status": "pass",
+  "scope": "Protocol v6 single-RPC admission for C++ Star/Planet and Go Supervisor; no business SDK or storage qualification",
+  "recorded_at_utc": "2026-09-12T13:00:02.564646+00:00",
+  "source_verification": {
+    "files_checked": 85,
+    "local_and_vm_match": true,
+    "scope": "Selected active C++/Go/Proto source and generated files, not the entire repository",
+    "sha256": {
+      "cluster-cpp/common/include/verdandi/cluster/config.hpp": "a52bd3da5bc9effd1ecac61481f7394e856a4949845a33557ec035f8deca903f",
+      "cluster-cpp/common/include/verdandi/cluster/policy.hpp": "459c4847af03df6fb38a0a542f2200313448db28e194715975fed1766623a1ce",
+      "cluster-cpp/common/include/verdandi/cluster/runtime.hpp": "bfad9baea8f21dd982b0213a893b98f9ef72ee6f0028ee7f7c05fcd5559a7c78",
+      "cluster-cpp/common/include/verdandi/cluster/types.hpp": "77e5d79b312a687fec50b46d0567adbc5e776145878a86dc2ed9bbfe73183e78",
+      "cluster-cpp/common/src/admission.cpp": "2f7ed4e58a53768f8ba904f30e2861c1dc64c1235820b2e0a30abe8bd2c00005",
+      "cluster-cpp/common/src/admission.hpp": "8fde03352ead516d0b98358dc2d1547098121083b25203948cd78d38ca5b3ffa",
+      "cluster-cpp/common/src/config.cpp": "04afe6abc7f8b679e1617520bd9ce0ef57ee608500135f90141d99384d09878b",
+      "cluster-cpp/common/src/generated/admission.grpc.pb.cc": "28b4d0dd9cc84d89e894f19e61dd5da97be7a0a874e6d058dad79014f3575c3e",
+      "cluster-cpp/common/src/generated/admission.grpc.pb.h": "3eb075656ed89a4d1bbbb75229b12c734b499227366316bf2f36f425043add58",
+      "cluster-cpp/common/src/generated/admission.pb.cc": "013c00f52e00fafee133b4149e9d72746d95de53f4c6eaaffcd72740a6ed9141",
+      "cluster-cpp/common/src/generated/admission.pb.h": "0f0453c4bb3252a71059edf60aa183e53ef50eb6c678a6a52d5426293349caf1",
+      "cluster-cpp/common/src/generated/cluster.grpc.pb.cc": "65a72d20b685e0f481ebe9eacaddb51cbb803949a17f3d152e0e7cd5a2b8e6fd",
+      "cluster-cpp/common/src/generated/cluster.grpc.pb.h": "7fc4a72926bfb8eed961cb1cb49442056852725d857ad85117face1a9262bdf9",
+      "cluster-cpp/common/src/generated/cluster.pb.cc": "49436c70f55d276746110c8927bc1aedc8a4776d597b5652836d3498fe7b493b",
+      "cluster-cpp/common/src/generated/cluster.pb.h": "f39a2de09bbd5348ea7566a971fb6cca97852c77f3e5f5a1186b488c51964a28",
+      "cluster-cpp/common/src/generated/star_transport.grpc.pb.cc": "37331b936e4264b5c3d8bfb7c01af738fd1e341e13527b516c5d76be6028d8be",
+      "cluster-cpp/common/src/generated/star_transport.grpc.pb.h": "0e7682bfa4b1d931a9d00c707f34bd9d6a0244c5047819c1a63dd013d374c01a",
+      "cluster-cpp/common/src/generated/star_transport.pb.cc": "6195d6607fd9ce5ceb4e5e686272454208f5b00ca409bccbd7ce679e68e5858d",
+      "cluster-cpp/common/src/generated/star_transport.pb.h": "9255125f293bc4a0604bfc264ca0eabbd484e581e8339e98aa293a924e57cde7",
+      "cluster-cpp/common/src/grpc_session.cpp": "5df4c488cc69328e47bf698dae168f4cf0dbef811bb15b8013ece3c8f45534b9",
+      "cluster-cpp/common/src/grpc_session.hpp": "81a2a8825fd918515f0de9ad0586a195b65684f5a5049ad262493767dc92050d",
+      "cluster-cpp/common/src/identity.cpp": "81a3c8c448e340dd92bc3256898848378cab28ea86d010e99488144141ec02e3",
+      "cluster-cpp/common/src/identity.hpp": "bf89cf130635eb98ba9ca9baae0d7573eddb0b9c093639317523ee0470e9dce8",
+      "cluster-cpp/common/src/options.hpp": "20aeec0d7c8755371aa368bd3acf466202ac0b44a2df2eb9d7c0ef128f629002",
+      "cluster-cpp/common/src/policy.cpp": "c89ca41ce6691d71283541ab14e5fddb0714215810f584df661a4e07f737366d",
+      "cluster-cpp/common/src/process.cpp": "f46bed1fbdf8d2fd059977b7db56399f1070a5627e3a42843da879711e4ff170",
+      "cluster-cpp/common/src/process.hpp": "c5648ffe757abb526cf879c382e1f5337994e3542c70f31b176b5b05fc4bc1ff",
+      "cluster-cpp/common/src/rpc_status.hpp": "39006ed0fe66a299236096ceeced1bd729eb3da56fa1f189772228ee1b035960",
+      "cluster-cpp/common/src/runtime.cpp": "c2dcdd7c1bbbeca945ca776a9c7b3041015f4dfc633c6759edc5bf766e05c8be",
+      "cluster-cpp/common/src/types.cpp": "1098e1259cc0fd0aaef75b4f936aa76c44d66932f937a45ccccd498efd612125",
+      "cluster-cpp/common/tests/admission_test.cpp": "4bfeb76c8717aebd01a2a392f43ff246842f70a352c13588924ba71f13924073",
+      "cluster-cpp/common/tests/allocation_measure.cpp": "8912f1b0a76a5fda81b2182dffeaebb82e025e2747ef8a4beaf8959a9f863d08",
+      "cluster-cpp/common/tests/check.hpp": "a16f43b6ab2d58977f788832c53a165313164608f7d870de93634f475e3a159a",
+      "cluster-cpp/common/tests/connect_test.cpp": "70c8ab0334ceb71fee995faa27abcb0ce56f926e0168d6fbec9a0141f077c44e",
+      "cluster-cpp/common/tests/contracts_probe.cpp": "cd5fc77fb9ac4571750d4cc1e8e026185ffe7dfc574b17dd57cfda811f71925b",
+      "cluster-cpp/common/tests/core_test.cpp": "426390aff1c2c16edb2e45d8e085c9051c1a51f2b3d2f8eacb116e18708282d1",
+      "cluster-cpp/common/tests/fixture.hpp": "cdcd10b930145275ab9645844fabe5dc2e9fed6a14e776d41e985e242ae8b516",
+      "cluster-cpp/common/tests/identity_test.cpp": "90a4eb6e21705e05ec041d56b36908fe07cb337b9a84379756771a60511041ba",
+      "cluster-cpp/common/tests/process_test.cpp": "7b1d93f546c1dab474ad65d68eb4f9d19b973649223d5d27b2d53553655382d1",
+      "cluster-cpp/common/tests/rpc_probe.cpp": "f38e678d43ddcdd48c31cdf461d8f9d2d2ea3c451c8bb9fcce08a89e02b4e273",
+      "cluster-cpp/common/tests/session_test.cpp": "8aec14d0b354bbc9e36da63778ae087789b813f4bff0c6d1add3a8944151c3eb",
+      "cluster-cpp/planet/src/main.cpp": "3f1ffb9041df5b2c0107a0e17b3a299272bbcb9d4f8cbc6792d883c7bb6dd277",
+      "cluster-cpp/planet/src/upstream.cpp": "042e95fce8a3786fd3edb306bb928524975cbb609e6e79220e41d05b74d7d2bc",
+      "cluster-cpp/planet/src/upstream.hpp": "b6942f7028f65e01f4e68a049b12b5aed6a8c18a34aae305f1f83b8762e3deb7",
+      "cluster-cpp/star/src/main.cpp": "c784f7b64f5d8bc92aac89bc52e9cdd487cef997013d8a89d87c72204077b019",
+      "cluster-cpp/star/src/topology.cpp": "00f62bdfc9a5a69c17869beb7a3dc82ea2e0f4fdabb6d109d2c5fe60b73531a1",
+      "cluster-cpp/star/src/topology.hpp": "0b3e4a9b314488b882181f525b39c00c7f2d2ef92b020e494e3ff68b80c9b94f",
+      "proto/admission.proto": "92f9927fdf541617d72e7558dae50c1a2b8d7c3e2a8b176d71d4bf090a7f1922",
+      "proto/cluster.proto": "3864535a32c24296268a6e8372d6f4767473764d39ffa0232c79f9c74da7dd28",
+      "proto/generator/src/ids.rs": "88d52fd29f4bbdf482d002ffadf2c4e68cc06a4236d41753b7f9ff43523cbaa9",
+      "proto/generator/src/main.rs": "bfeb8458d9af31e97f81dde2604d0291e27022f21d03ac460a0f27dbe7c48ffd",
+      "proto/generator/tests/message_ids.rs": "2f3551f76f1ce3649d9c294a330ef930521c301a667656a8649b78c2eba336aa",
+      "proto/star_transport.proto": "069f07ff00a2f8fc0d54ba85408c05c2b7ab6b31d449da6db854d8f37cc57e8c",
+      "supervisor/cmd/supervisor/main.go": "315fcb27aca2c0626e7ee28e36028286ad4e7f0b45a6c4bfb2260aeb7dbcda0a",
+      "supervisor/cmd/supervisor/main_test.go": "653bf64abaa3f7bc9bffd272020c1a4b6c93220024989a09877b8b38c737e5c5",
+      "supervisor/internal/admission/accounts.go": "8f692ee769a955592186ac5ed44683267aff1eef9a8dfc84c8d2a0c676c027c3",
+      "supervisor/internal/admission/accounts_test.go": "907371aa8d7e7562fbb524772564d73250769324c84b1ddd4dfad4c57edf48d3",
+      "supervisor/internal/admission/authority.go": "dd649996ad3f21636dd8f21cc3cbd075e74e79c07370d115f6bab324df223ea3",
+      "supervisor/internal/admission/boundaries_test.go": "c3baca713a14edfab47e2c7ac1b822173508861355dfcc9c29ea6433da8ecd77",
+      "supervisor/internal/admission/candidates.go": "e2b4b1eaef5b2557b65eee0f12c4cf7669735c50ad1807352e4ca20f43c6bc7a",
+      "supervisor/internal/admission/candidates_test.go": "c8c02494c2052a9afde20b1d4746230ebf8c6ea263ab8cacde76d39472a25713",
+      "supervisor/internal/admission/contract_test.go": "4052c96677958a0dd1e29f9e78fedf4015b0af8c84f828e4a0ee515ef8535906",
+      "supervisor/internal/admission/issuance_test.go": "80dc1e8a5b5e1e09ff3d00e2130c295d20f4c06f4e313bd8db122b89f884edd9",
+      "supervisor/internal/admission/listener.go": "a84910e12f7df4fb32aa0c57099410387f313df588750acd519680d627c46376",
+      "supervisor/internal/admission/listener_test.go": "9791a2990ffbed491ff75310762d5deff1049aef4f4dfacffb8f8651e0ec6acc",
+      "supervisor/internal/admission/provision.go": "a05f74c28fc85b9e862532623dcaf6d3879be51e48cc738fd9a4613b17f5cb1b",
+      "supervisor/internal/admission/server.go": "02fb9b1d4771b96392f6a68e0c9f5090ea8ef75744b47593c525e2a61b1c620c",
+      "supervisor/internal/admission/server_test.go": "2d3e6f8b8dd35ade2dc694a543ea12ba705023606fe1ab2f0529d54fb19b9b37",
+      "supervisor/internal/app/config.go": "b60f6db98749c75f2e1b53b5534312084884137c98c0dda467c6d261963a121a",
+      "supervisor/internal/app/server.go": "69951b073ac8258d0c832eb822e98bf56ef7f6f9765e4fcfe05ee554b542ce95",
+      "supervisor/internal/app/server_test.go": "89f783a1eda7bb92d7376a4b813f4a135b7d6092470971cc74f248b4bb8fee68",
+      "supervisor/internal/generated/admission.pb.go": "3cc66be69b991919eef552c1a17fd3bcf587b7c24c72812f67f221b73d2a7c9a",
+      "supervisor/internal/generated/admission_grpc.pb.go": "ac5fa44689002eb9fc437209a7e235f607f7b1b20948f1d2bde569d4ae2f0ceb",
+      "supervisor/internal/generated/cluster.pb.go": "29831ca63b00c5408d67c38340991571b923418703e0fd46e8f4f0e6f1fe0714",
+      "supervisor/internal/generated/message_ids.go": "2f0cce2bbe36644505348e076f7a219db2677d180f80fd0ecedfc8092551df4e",
+      "supervisor/internal/generated/star_transport.pb.go": "9e0c0a4226eb1d79d2c5f81938bb4f8427ecc12dd39cf9fcc82dde1fc9f21740",
+      "supervisor/internal/generated/star_transport_grpc.pb.go": "f4f3a652453f5641aa45ac9c67042c59b6ec2b52d4011f1faac3edd5677f113b",
+      "supervisor/internal/management/http.go": "248fd54b101fd205c1ce1e39062559976a9be98b2eee556fc1fe12bc084c4c52",
+      "supervisor/internal/membership/boundaries_test.go": "013d28255cfa2491b9ec1f98ee16d03d5f562c3ca57a61087f9d0ccf2c9361b1",
+      "supervisor/internal/membership/startup_test.go": "f2481ceb8166f9c70ac08c8890aed8e2377cd9ee4dbc069333ad1abce444aabd",
+      "supervisor/internal/membership/store.go": "f0ef2526a7115135dbe446bfcfad678b4f262b777c212ca6a9d9549a7cc3fd67",
+      "supervisor/internal/membership/store_test.go": "204b23d982dd1f150e493d2d85de79df4ef2bbbb76c4c0252dcf712474e085ba",
+      "supervisor/internal/membership/validation.go": "aa58cb96933f35a178c403f74d64eaa1134a78afd965f1ede6b44fccc90adf8b",
+      "supervisor/internal/protocol/frame_test.go": "252d9bd3936d0b99a7ed88ab2ef0e8cdb16cda52d74cdf7faa8f9008d59617e6",
+      "supervisor/internal/protocol/legacy_test.go": "1aa14ebb5969d4f710240b02cf3d2f06d44122964e070906065be85ca888df07"
+    }
+  },
+  "windows": {
+    "command": "scripts/check-services.ps1 -Service supervisor",
+    "status": "pass",
+    "log_sha256": "bd5e5b09d7f7428a77d65e49b1a9b83320a9b9ee977d9641d1777b80c575d672",
+    "output": "protocol is current\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 4 tests\ntest append_only_ids_survive_reordering_and_removal ... ok\ntest conflicting_or_exhausted_ids_fail ... ok\ntest initial_assignment_is_deterministic ... ok\ntest ordinary_build_never_changes_stale_registry ... ok\n\ntest result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\nall modules verified\nok  \tgithub.com/eosforge/verdandi/supervisor/cmd/supervisor\t0.215s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/admission\t24.675s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/app\t0.447s\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/generated\t[no test files]\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/management\t[no test files]\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/membership\t2.263s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/protocol\t0.388s\nsupervisor 0.1.0\nService checks passed.\n",
+    "python_harness": {
+      "command": "python -B -m unittest testkit.tests.test_services",
+      "passed_tests": 7
+    }
+  },
+  "linux": {
+    "workspace": "/home/ubuntu/verdandi/build/admission-review/source",
+    "toolchains": {
+      "cpp": "GCC 16.2.0",
+      "go": "Go 1.27.1"
+    },
+    "go_race": {
+      "status": "pass",
+      "command": "CGO_ENABLED=1 bash supervisor/go.sh test -race -p 1 -count=1 -shuffle=on -timeout=240s ./...",
+      "attempt": 3,
+      "output": "ok  \tgithub.com/eosforge/verdandi/supervisor/cmd/supervisor\t1.027s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/admission\t114.078s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/app\t1.203s\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/generated\t[no test files]\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/management\t[no test files]\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/membership\t2.607s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/protocol\t1.032s\n"
+    },
+    "profiles": {
+      "debug": {
+        "status": "pass",
+        "ctest_suites": 8,
+        "ctest_evidence": [
+          "1/8 Test #1: cpp_build ........................   Passed    0.54 sec",
+          "2/8 Test #2: cpp_core .........................   Passed    0.01 sec",
+          "3/8 Test #3: cpp_language .....................   Passed   30.33 sec",
+          "4/8 Test #4: cpp_identity .....................   Passed    0.03 sec",
+          "5/8 Test #5: cpp_session ......................   Passed    0.32 sec",
+          "6/8 Test #6: cpp_admission ....................   Passed    6.01 sec",
+          "7/8 Test #7: cpp_connect ......................   Passed    0.68 sec",
+          "8/8 Test #8: cpp_process ......................   Passed    0.01 sec",
+          "Total Test time (real) =  37.95 sec"
+        ],
+        "protocol_generation": "pass",
+        "rpc_report": {
+          "file": "cluster-cpp-rpc-1789217837900288907.json",
+          "result": {
+            "scope": "C++26 logical gRPC sessions with Go Supervisor",
+            "cases": [
+              "tls13_only_and_h2_negotiation",
+              "partial_tls_handshake_deadline_and_fd_cleanup",
+              "channel_reuse_duplicate_fencing_and_protocol_rejection",
+              "tls_without_http2_request_idle_cleanup",
+              "rpc_fixture_graceful_stop_and_listener_release",
+              "empty_candidates_refresh_when_star_joins"
+            ],
+            "passed": true,
+            "binary_sha256": {
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/debug/star": "e13a9968eff389d9087181938bdc2317085c82b72988b3e42000e04be6a35566",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/debug/planet": "f2a73b41f6b0e5b86ecdd23c30f7b9f3807c96b8b98b8b16bbd015c407309b2b",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/debug/star_rpc_probe": "c62b6043bbaa86bc862b40c88350ea127aed6a4587391dfdeee29bcb331f300d",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+            },
+            "tls_descriptors": {
+              "baseline": 11,
+              "peak": 15,
+              "after_deadline": 8,
+              "connections": 24
+            },
+            "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":666.436,\"p95\":772.842,\"p99\":817.144,\"max\":3879.11}}\n{\"slow_reader\":{\"attempted_pings\":74,\"close_ms\":6}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+            "control_rtt_us": {
+              "samples": 500,
+              "p50": 666.436,
+              "p95": 772.842,
+              "p99": 817.144,
+              "max": 3879.11
+            },
+            "slow_reader": {
+              "attempted_pings": 74,
+              "close_ms": 6
+            },
+            "rpc_server_resources": {
+              "supervisor": {
+                "rss_kib": 16136,
+                "threads": 7,
+                "fds": 9
+              },
+              "star": {
+                "rss_kib": 18480,
+                "threads": 9,
+                "fds": 8
+              }
+            },
+            "idle_http2_connections": {
+              "count": 2,
+              "observed_closed_ms": 12927
+            }
+          }
+        },
+        "process_report": {
+          "file": "services-1789217859108953259.json",
+          "result": {
+            "status": "pass",
+            "platform": "linux",
+            "mode": "regression",
+            "mixed_hosts": false,
+            "star_binaries": "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/debug",
+            "cases": [
+              "service_cli_help_version_and_invalid_options",
+              "concurrent_three_star_full_mesh",
+              "supervisor_offline_existing_mesh_and_new_star_wait",
+              "persistent_supervisor_restart_and_waiting_star_join",
+              "graceful_and_forced_star_restart",
+              "invalid_identities_fail_closed",
+              "invalid_login_configuration_and_password_fail_closed",
+              "star_planet_account_roles_fail_closed",
+              "planet_prefers_local_group_without_joining_star_mesh",
+              "planet_cross_group_failover_while_supervisor_offline",
+              "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+              "one_active_upstream_per_planet",
+              "signals_process_exit_and_port_reuse"
+            ],
+            "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+            "elapsed_seconds": 23.232
+          }
+        },
+        "log_sha256": "605da04c1b6b0f06f407d2d4b1a2a00ce4a40f6d771527575e7ce1432f2c0532"
+      },
+      "release": {
+        "status": "pass",
+        "ctest_suites": 8,
+        "ctest_evidence": [
+          "1/8 Test #1: cpp_build ........................   Passed    0.57 sec",
+          "2/8 Test #2: cpp_core .........................   Passed    0.01 sec",
+          "3/8 Test #3: cpp_language .....................   Passed   29.78 sec",
+          "4/8 Test #4: cpp_identity .....................   Passed    0.02 sec",
+          "5/8 Test #5: cpp_session ......................   Passed    0.12 sec",
+          "6/8 Test #6: cpp_admission ....................   Passed    5.99 sec",
+          "7/8 Test #7: cpp_connect ......................   Passed    0.66 sec",
+          "8/8 Test #8: cpp_process ......................   Passed    0.01 sec",
+          "Total Test time (real) =  37.17 sec"
+        ],
+        "protocol_generation": "pass",
+        "rpc_report": {
+          "file": "cluster-cpp-rpc-1789216932319949691.json",
+          "result": {
+            "scope": "C++26 logical gRPC sessions with Go Supervisor",
+            "cases": [
+              "tls13_only_and_h2_negotiation",
+              "partial_tls_handshake_deadline_and_fd_cleanup",
+              "channel_reuse_duplicate_fencing_and_protocol_rejection",
+              "tls_without_http2_request_idle_cleanup",
+              "rpc_fixture_graceful_stop_and_listener_release",
+              "empty_candidates_refresh_when_star_joins"
+            ],
+            "passed": true,
+            "binary_sha256": {
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/release/star": "a528284c24afb75eb5ae6bf3474a4ee7fce3552de12ee8fa0aba98cf8f53be09",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/release/planet": "925dd13f9702b3cfe0d64638eafdec6d6c7dc031d589101aac3f700e79b44ae2",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/release/star_rpc_probe": "0f9fc0c8b697d7e163d25afc0bdd7f2cc211c2cf4ff18ec1dc0991f468d6589e",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+            },
+            "tls_descriptors": {
+              "baseline": 11,
+              "peak": 35,
+              "after_deadline": 8,
+              "connections": 24
+            },
+            "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":655.635,\"p95\":786.943,\"p99\":897.449,\"max\":993.754}}\n{\"slow_reader\":{\"attempted_pings\":212,\"close_ms\":14}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+            "control_rtt_us": {
+              "samples": 500,
+              "p50": 655.635,
+              "p95": 786.943,
+              "p99": 897.449,
+              "max": 993.754
+            },
+            "slow_reader": {
+              "attempted_pings": 212,
+              "close_ms": 14
+            },
+            "rpc_server_resources": {
+              "supervisor": {
+                "rss_kib": 16192,
+                "threads": 7,
+                "fds": 9
+              },
+              "star": {
+                "rss_kib": 18324,
+                "threads": 9,
+                "fds": 8
+              }
+            },
+            "idle_http2_connections": {
+              "count": 2,
+              "observed_closed_ms": 12908
+            }
+          }
+        },
+        "process_report": {
+          "file": "services-1789216953371521563.json",
+          "result": {
+            "status": "pass",
+            "platform": "linux",
+            "mode": "regression",
+            "mixed_hosts": false,
+            "star_binaries": "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/release",
+            "cases": [
+              "service_cli_help_version_and_invalid_options",
+              "concurrent_three_star_full_mesh",
+              "supervisor_offline_existing_mesh_and_new_star_wait",
+              "persistent_supervisor_restart_and_waiting_star_join",
+              "graceful_and_forced_star_restart",
+              "invalid_identities_fail_closed",
+              "invalid_login_configuration_and_password_fail_closed",
+              "star_planet_account_roles_fail_closed",
+              "planet_prefers_local_group_without_joining_star_mesh",
+              "planet_cross_group_failover_while_supervisor_offline",
+              "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+              "one_active_upstream_per_planet",
+              "signals_process_exit_and_port_reuse"
+            ],
+            "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+            "elapsed_seconds": 23.291
+          }
+        },
+        "log_sha256": "e785bc8700f4557ad3409da820f961ca58e5ccafbf817b5c83daf639270f9765"
+      },
+      "asan": {
+        "status": "pass",
+        "ctest_suites": 8,
+        "ctest_evidence": [
+          "1/8 Test #1: cpp_build ........................   Passed    0.59 sec",
+          "2/8 Test #2: cpp_core .........................   Passed    0.08 sec",
+          "3/8 Test #3: cpp_language .....................   Passed   29.85 sec",
+          "4/8 Test #4: cpp_identity .....................   Passed    0.13 sec",
+          "5/8 Test #5: cpp_session ......................   Passed    1.10 sec",
+          "6/8 Test #6: cpp_admission ....................   Passed    6.14 sec",
+          "7/8 Test #7: cpp_connect ......................   Passed    0.71 sec",
+          "8/8 Test #8: cpp_process ......................   Passed    0.04 sec",
+          "Total Test time (real) =  38.64 sec"
+        ],
+        "protocol_generation": "pass",
+        "rpc_report": {
+          "file": "cluster-cpp-rpc-1789217311643343584.json",
+          "result": {
+            "scope": "C++26 logical gRPC sessions with Go Supervisor",
+            "cases": [
+              "tls13_only_and_h2_negotiation",
+              "partial_tls_handshake_deadline_and_fd_cleanup",
+              "channel_reuse_duplicate_fencing_and_protocol_rejection",
+              "tls_without_http2_request_idle_cleanup",
+              "rpc_fixture_graceful_stop_and_listener_release",
+              "empty_candidates_refresh_when_star_joins"
+            ],
+            "passed": true,
+            "binary_sha256": {
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/asan/star": "593817c31ec9ea6b0ac04c6f7c5c2929076d85193e7f0852f2187644e93c1f89",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/asan/planet": "d493b53c2483a0968972ec576a05b02188c7203e8a65e829e73c4aded212d55a",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/asan/star_rpc_probe": "371b088c86ea44e7b1483db9f9bcec51b64e6aab5d4a6f22d61dad7be92208e3",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+            },
+            "tls_descriptors": {
+              "baseline": 11,
+              "peak": 30,
+              "after_deadline": 8,
+              "connections": 24
+            },
+            "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":926.751,\"p95\":1133.16,\"p99\":1231.17,\"max\":1352.17}}\n{\"slow_reader\":{\"attempted_pings\":1305,\"close_ms\":207}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+            "control_rtt_us": {
+              "samples": 500,
+              "p50": 926.751,
+              "p95": 1133.16,
+              "p99": 1231.17,
+              "max": 1352.17
+            },
+            "slow_reader": {
+              "attempted_pings": 1305,
+              "close_ms": 207
+            },
+            "rpc_server_resources": {
+              "supervisor": {
+                "rss_kib": 16148,
+                "threads": 7,
+                "fds": 9
+              },
+              "star": {
+                "rss_kib": 61820,
+                "threads": 9,
+                "fds": 8
+              }
+            },
+            "idle_http2_connections": {
+              "count": 2,
+              "observed_closed_ms": 13304
+            }
+          }
+        },
+        "process_report": {
+          "file": "services-1789217333432643944.json",
+          "result": {
+            "status": "pass",
+            "platform": "linux",
+            "mode": "regression",
+            "mixed_hosts": false,
+            "star_binaries": "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/asan",
+            "cases": [
+              "service_cli_help_version_and_invalid_options",
+              "concurrent_three_star_full_mesh",
+              "supervisor_offline_existing_mesh_and_new_star_wait",
+              "persistent_supervisor_restart_and_waiting_star_join",
+              "graceful_and_forced_star_restart",
+              "invalid_identities_fail_closed",
+              "invalid_login_configuration_and_password_fail_closed",
+              "star_planet_account_roles_fail_closed",
+              "planet_prefers_local_group_without_joining_star_mesh",
+              "planet_cross_group_failover_while_supervisor_offline",
+              "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+              "one_active_upstream_per_planet",
+              "signals_process_exit_and_port_reuse"
+            ],
+            "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+            "elapsed_seconds": 24.234
+          }
+        },
+        "log_sha256": "3cc646bcf2d895245b71ed6e047a48a7fac90cb465a8aedd3278964a6e7b5435"
+      },
+      "tsan": {
+        "status": "pass",
+        "ctest_suites": 8,
+        "ctest_evidence": [
+          "1/8 Test #1: cpp_build ........................   Passed    0.63 sec",
+          "2/8 Test #2: cpp_core .........................   Passed    0.09 sec",
+          "3/8 Test #3: cpp_language .....................   Passed   30.84 sec",
+          "4/8 Test #4: cpp_identity .....................   Passed    0.10 sec",
+          "5/8 Test #5: cpp_session ......................   Passed    3.99 sec",
+          "6/8 Test #6: cpp_admission ....................   Passed    7.82 sec",
+          "7/8 Test #7: cpp_connect ......................   Passed    1.84 sec",
+          "8/8 Test #8: cpp_process ......................   Passed    0.23 sec",
+          "Total Test time (real) =  45.55 sec"
+        ],
+        "protocol_generation": "pass",
+        "rpc_report": {
+          "file": "cluster-cpp-rpc-1789217701647707829.json",
+          "result": {
+            "scope": "C++26 logical gRPC sessions with Go Supervisor",
+            "cases": [
+              "tls13_only_and_h2_negotiation",
+              "partial_tls_handshake_deadline_and_fd_cleanup",
+              "channel_reuse_duplicate_fencing_and_protocol_rejection",
+              "tls_without_http2_request_idle_cleanup",
+              "rpc_fixture_graceful_stop_and_listener_release",
+              "empty_candidates_refresh_when_star_joins"
+            ],
+            "passed": true,
+            "binary_sha256": {
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/tsan/star": "bf3ebd0d6c682a0b07a48a576b6631e83c7ca2d2ca9265fadd8e263e78eb31bd",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/tsan/planet": "46be0d96d851bc1d4a45544f75032e78a7e246ac628da9f244e52dbb31e203be",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/tsan/star_rpc_probe": "8215c18192e676999720563e1cdc1f0b719142da53b92e27b42af234b5cbce8e",
+              "/home/ubuntu/verdandi/build/admission-review/source/build/supervisor/supervisor": "cb41b3013807fde1edee82bf9a9afa6a07b6774a8c330d4a9c2c7050b0f8ef7c"
+            },
+            "tls_descriptors": {
+              "baseline": 11,
+              "peak": 20,
+              "after_deadline": 8,
+              "connections": 24
+            },
+            "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":2250.32,\"p95\":2824.45,\"p99\":3190.37,\"max\":3466.49}}\n{\"slow_reader\":{\"attempted_pings\":16,\"close_ms\":7}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+            "control_rtt_us": {
+              "samples": 500,
+              "p50": 2250.32,
+              "p95": 2824.45,
+              "p99": 3190.37,
+              "max": 3466.49
+            },
+            "slow_reader": {
+              "attempted_pings": 16,
+              "close_ms": 7
+            },
+            "rpc_server_resources": {
+              "supervisor": {
+                "rss_kib": 16108,
+                "threads": 7,
+                "fds": 9
+              },
+              "star": {
+                "rss_kib": 62472,
+                "threads": 10,
+                "fds": 8
+              }
+            },
+            "idle_http2_connections": {
+              "count": 2,
+              "observed_closed_ms": 15364
+            }
+          }
+        },
+        "process_report": {
+          "file": "services-1789217731138204024.json",
+          "result": {
+            "status": "pass",
+            "platform": "linux",
+            "mode": "regression",
+            "mixed_hosts": false,
+            "star_binaries": "/home/ubuntu/verdandi/build/admission-review/source/build/cluster-cpp/tsan",
+            "cases": [
+              "service_cli_help_version_and_invalid_options",
+              "concurrent_three_star_full_mesh",
+              "supervisor_offline_existing_mesh_and_new_star_wait",
+              "persistent_supervisor_restart_and_waiting_star_join",
+              "graceful_and_forced_star_restart",
+              "invalid_identities_fail_closed",
+              "invalid_login_configuration_and_password_fail_closed",
+              "star_planet_account_roles_fail_closed",
+              "planet_prefers_local_group_without_joining_star_mesh",
+              "planet_cross_group_failover_while_supervisor_offline",
+              "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+              "one_active_upstream_per_planet",
+              "signals_process_exit_and_port_reuse"
+            ],
+            "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+            "elapsed_seconds": 38.3
+          }
+        },
+        "log_sha256": "ff1f0834eb24ae658218c7ff8af0f20c707bf02b44f2dd5ae6f5edd5c2e31085"
+      }
+    },
+    "post_test_process_scan": "No remaining process referenced the isolated validation binary directory"
+  },
+  "earlier_attempts": {
+    "missing_supervisor_preparation": {
+      "scope": "C++26 logical gRPC sessions with Go Supervisor",
+      "cases": [],
+      "passed": false,
+      "error": "[Errno 2] No such file or directory: '/home/ubuntu/verdandi/build/admission-review/source/build/supervisor/supervisor'"
+    },
+    "go_race_attempt_1": "ok  \tgithub.com/eosforge/verdandi/supervisor/cmd/supervisor\t1.027s\n-test.shuffle 1789215887253794370\n--- FAIL: TestLoginAndRoleFailClosed (20.02s)\n    --- FAIL: TestLoginAndRoleFailClosed/password (5.49s)\n        server_test.go:171: got rpc error: code = DeadlineExceeded desc = context deadline exceeded\nFAIL\nFAIL\tgithub.com/eosforge/verdandi/supervisor/internal/admission\t110.283s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/app\t1.143s\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/generated\t[no test files]\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/management\t[no test files]\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/membership\t2.443s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/protocol\t1.025s\nFAIL\n",
+    "go_race_attempt_2": "ok  \tgithub.com/eosforge/verdandi/supervisor/cmd/supervisor\t1.031s\n-test.shuffle 1789216177091990218\n--- FAIL: TestPlanetResponseIsSeparateSignedAndDoesNotJoinStarList (10.51s)\n    candidates_test.go:30: invalid Planet response: <nil> rpc error: code = DeadlineExceeded desc = context deadline exceeded\nFAIL\nFAIL\tgithub.com/eosforge/verdandi/supervisor/internal/admission\t114.677s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/app\t1.146s\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/generated\t[no test files]\n?   \tgithub.com/eosforge/verdandi/supervisor/internal/management\t[no test files]\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/membership\t2.231s\nok  \tgithub.com/eosforge/verdandi/supervisor/internal/protocol\t1.031s\nFAIL\n",
+    "resolution": "Built the isolated Supervisor binary. Race-instrumented PBKDF2 exceeded the production RPC budget; the private test entry now uses 15 seconds while production Serve remains 5 seconds and password derivation remains 600000 iterations. Final real process checks use production Serve."
+  },
+  "limits": [
+    "Protocol v6 requires coordinated Supervisor/Star/Planet upgrade; historical v4/v5 results are not reused as v6 evidence",
+    "New startup requests replace deployments in transaction commit order, not physical process-start order",
+    "Committed startup request history is durable and bounded by --max-startups; entries are not evicted",
+    "No new endurance or comparative performance qualification; the earlier stopped endurance campaign remains stopped",
+    "No new dependency downloads or global configuration changes"
+  ]
+}

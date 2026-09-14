@@ -173,7 +173,7 @@ and the unchanged gate requires two. The gate was not relaxed; the replacement
 | Rust all-target tests | PASS, 37 library tests plus non-Registration targets |
 | Rust Clippy, all targets/features, warnings denied | PASS |
 | Rust rustdoc | PASS |
-| Go and Rust Sentinel peers as external consumers | PASS |
+| Go and Rust Sentinel stars as external consumers | PASS |
 | Root public namespaces contain no Registration/Selector re-export | PASS |
 
 ### 6.2 Current-source fault gate
@@ -322,9 +322,9 @@ evidence assessment, not a release or production certification.
   two-hour evidence covers the same production state machines before the
   source-package relocation; a new two-hour run would raise relocation-specific
   endurance confidence but is not needed to prove a path-only module move.
-- The combined Registration/Catalog interoperability peers are temporarily
+- The combined Registration/Catalog interoperability stars are temporarily
   waiting for the parallel Catalog child-API migration. Registration's
-  bidirectional cross-language path passed through the Sentinel peers.
+  bidirectional cross-language path passed through the Sentinel stars.
 
 ## 11. Evidence files
 

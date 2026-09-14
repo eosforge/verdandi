@@ -9,7 +9,7 @@ import (
 	"github.com/eosforge/verdandi/supervisor/internal/membership"
 )
 
-func TestSharedRustGoAdmissionVectors(t *testing.T) {
+func TestSharedCppGoAdmissionVectors(t *testing.T) {
 	type validation struct {
 		Value string `json:"value"`
 		Valid bool   `json:"valid"`
@@ -17,7 +17,7 @@ func TestSharedRustGoAdmissionVectors(t *testing.T) {
 	var vectors struct {
 		Names      []validation `json:"names"`
 		Addresses  []validation `json:"addresses"`
-		UUIDs      []validation `json:"uuids"`
+		IDs        []validation `json:"ids"`
 		Principals []struct {
 			Username string `json:"username"`
 			Cluster  string `json:"cluster"`
@@ -25,7 +25,7 @@ func TestSharedRustGoAdmissionVectors(t *testing.T) {
 			SHA256   string `json:"sha256"`
 		} `json:"principals"`
 	}
-	data, err := os.ReadFile(filepath.Join(fixture(""), "admission-v4.json"))
+	data, err := os.ReadFile(filepath.Join(fixture(""), "admission-v5.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestSharedRustGoAdmissionVectors(t *testing.T) {
 	for _, group := range []struct {
 		cases []validation
 		check func(string) bool
-	}{{vectors.Names, membership.Name}, {vectors.Addresses, membership.Address}, {vectors.UUIDs, membership.UUID}} {
+	}{{vectors.Names, membership.Name}, {vectors.Addresses, membership.Address}, {vectors.IDs, membership.ID}} {
 		if len(group.cases) == 0 {
 			t.Fatal("missing shared vectors")
 		}

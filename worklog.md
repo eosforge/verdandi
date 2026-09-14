@@ -1,5 +1,22 @@
 # Verdandi Worklog
 
+## Current service decision (2026-09-12)
+
+C++ Star/Planet and Go Supervisor are the only active service implementations. The old Rust service is retired; its reports are historical. Shared code uses `cluster`, own identity fields use `id`, and Supervisor issues signed opaque string identities. Current protocol is v6; the [identity contract](cluster/identity-contract.md) supersedes older UUID/client-generation and Rust-comparison descriptions below. Accepted code-review corrections must be implemented, not left as documentation-only proposals. Rust SDKs and the standalone protocol generator remain separate.
+
+## Admission simplification (2026-09-12)
+
+The maintainer authorized single-RPC admission simplification. Protocol v6 removes Challenge,
+startup Ticket and client CAS baselines. Supervisor owns durable request deduplication and member
+epoch assignment; Star retains local signed-Hello validation and local session lifetime fencing.
+Committed superseded requests stay rejected across Supervisor restarts. Fresh requests replace in
+transaction commit order, not physical process-start order. Bounded durable request history is
+controlled by --max-startups; no eviction or silent reset. See [current identity contract](cluster/identity-contract.md).
+Planet business development is paused; preserve and regress its existing shared connection path.
+Next business work targets direct Star/first SDK, but this turn only implements admission.
+This supersedes the v5 ticket/CAS descriptions below; previous test results retain their own scope.
+Implementation and bounded regression are complete. See [admission verification](cluster-cpp/admission-simplification-20260912.md).
+
 ## 1. Purpose and Update Rules
 
 This is the authoritative record of changing repository state and engineering
@@ -19,26 +36,24 @@ Maintain this file with the work it describes:
 
 ## 2. Current Snapshot
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 - Star/Planet target: C++26 / GCC 16.2.0 on Linux first, Supervisor remains Go.
-  The maintainer authorized implementation in the separate `peer-cpp/` directory.
-  The [skeleton plan](peer/cpp26-skeleton-design.md) now describes its actual layout;
-  full dependency linking is complete and final process qualification is in progress. Rust remains
-  the executable comparison, with the shared bearer handshake ordering fix tested
-  in 54 cases on both Windows and Linux. See [C++ evidence](peer-cpp/validation.md).
+  The maintainer authorized implementation in the separate `cluster-cpp/` directory.
+  The [skeleton plan](cluster/cpp26-skeleton-design.md) now describes its actual layout;
+  the default Linux entry selects C++. The Rust service is retired. Earlier comparison results are historical;
+  protocol v6 uses a single Register RPC, Supervisor-issued opaque id and one signed admission credential.
+  See [current admission evidence](cluster-cpp/admission-simplification-20260912.md).
 
 - Project: Verdandi, a language-neutral distributed coordination protocol and
   SDK ecosystem.
 - Repository: public `git@github.com:eosforge/verdandi.git`.
 - Local path: `D:\projects\verdandi`.
-- Git state: the current `alpha` baseline is `81cb8b9`
-  (`perf: harden alpha parser and build checks`). The 2026-09-05 offline
-  Catalog correctness/optimization changes, the 2026-09-06 external OpenSSL
-  preparation policy, and the 2026-09-07 audit fixes and project-local cache
-  entry points described below are uncommitted and unpushed. The maintainer
-  has now authorized project Go/Rust/C++ dependency downloads locally and on
-  the Ubuntu VM, with a fresh static review required before runtime tests.
+- Git state: backup commit `3e074fa` on `alpha` was pushed with the maintainer's
+  explicit authorization. The 2026-09-12 C++ qualification and maintenance changes are working
+  tree changes, not a new commit or push. Dependency permissions remain specific
+  to the approved packages and project-local locations; no new download occurred
+  in this resumed qualification.
 - Release state: the maintainer selected `0.1.0` as the current
   non-production Alpha version for distributed development and controlled
   service integration. Its source and documentation are published only on the
@@ -198,52 +213,6 @@ Last updated: 2026-09-11
   public on `alpha`.
 
 ## 3. Active Work
-
-### P1 (paused by maintainer): Qualify and implement the C++26 Star/Planet skeleton after design review
-
-- Current maintainer instruction: finish this TSan regression, save its result,
-  then stop execution and pause all remaining implementation/qualification until
-  the maintainer explicitly resumes it. Do not launch additional soak or
-  performance work after TSan passes.
-- Follow M0-M4 in [the design](peer/cpp26-skeleton-design.md); implementation is
-  now authorized and underway in `peer-cpp/`. Preserve v4 behavior and Rust comparison binaries until
-  C++ passes its own gates. No SDK migration or business storage in stage one.
-- Qualify callback lifetime, slow TLS resource cleanup, logical session/epoch
-  fencing, framework flow control and typed-RPC byte/postdecode limits before
-  switching the service entry points. The maintainer superseded the physical
-  session lifetime, fixed 64 KiB and predecode scan requirements. Validate
-  [locked source versions](peer/cpp26-dependencies.md); obtain specific approval
-  before missing dependency acquisition. Reuse project-local GCC and caches.
-- Deliver native/mixed-language regression, sanitizer, bounded soak and
-  allocation/latency evidence, plus the actual reduction in duplicated logic.
-- The maintainer separately approved the named gRPC C++ dependency set in Ubuntu
-  project-local directories. Sources were fetched with recorded archive SHA-256;
-  ordinary dependency builds run one compiler job at a time with a 2 GiB virtual
-  address limit. A separate full TSan dependency prefix retains one compiler job
-  but needs unrestricted shadow address mapping. No global configuration changes.
-- Strengthened the shared service harness to reject sanitizer diagnostics and
-  unexpected rejection exit codes, and to clean owned directories even after a
-  stop check fails. Windows Python 30 cases and the Rust/Go 13-case Linux process
-  regression pass. A subsequent ASan SEGV prompted a receive-buffer ownership audit.
-- Added a concurrent receive handoff test: the old C++ code resubmitted a nonempty
-  buffer; 50,000 deliveries pass after the fix. Recheck pending data and late
-  transport failures before submitting another operation. The old 2,808.645-second,
-  396-cycle soak was explicitly interrupted; it is not a completed one-hour result.
-  The final changed binary passes Debug CTest and the full ASan/UBSan regression.
-  Its Release soak passes 3,603.207 seconds and 510 fault cycles with owned process,
-  port and directory cleanup. Full TSan dependencies then completed. Final TSan
-  passed all 5 CTest groups, 8 RPC/mixed groups and 13 process groups with owned
-  resource cleanup. The CMake prefix switch now also clears utf8_range_DIR, whose
-  cached value initially referenced the ordinary dependency prefix; final links
-  use the instrumented prefix. No additional soak was started. Results are saved
-  in `testkit/results/peer-cpp-foundation-20260911.json`; execution stops here at
-  the maintainer's request.
-- Acceptance review clarified that TSan is not the last gate in all of M0-M4.
-  Independent metadata compile-failure tests, a contracts-disabled behavior
-  comparison, and the remaining control-plane scale/allocation and isolated
-  push-comparison evidence are still outstanding. Keep those gaps explicit in
-  `peer-cpp/validation.md`; do not declare the complete design qualified or switch
-  default entry points merely because the sanitizer regression passes.
 
 ### P1: Re-audit current source before approved dependency-backed qualification
 
@@ -671,6 +640,213 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 
 ## 6. Completed Work
 
+### 2026-09-14: Minimize the C++ connection skeleton for review
+
+- Replaced HexId with concrete Principal and removed DialTarget. Policy::due now returns one
+  optional Member, preserving Runtime dial pacing and pending ownership. Removed the generic
+  admission Call, consumed completed calls on both outcomes, and consolidated redundant closing/upstream flags.
+- Removed the already unusable benchmark command and dispatch. Preserved Chinese ownership comments,
+  protocol v6, Supervisor behavior, existing role semantics and all prior tests. Planet business remains paused.
+- Added checks for single-target retry ownership, stale failure after replacement, digest encoding and
+  first cancellation reason. Windows formatting and six build-entry tests passed.
+- Linux Debug, Release, ASan/UBSan and TSan each passed eight CTest suites, six RPC scenarios,
+  thirteen process scenarios and generation checks. Release also completed 61.507 seconds and nine
+  fault/recovery cycles with four Stars and two Planets. All owned resources were cleaned.
+- Verified 264 validation input hashes against the VM. Review patch and the original working-file snapshot
+  remain in build/cluster-minimal-20260914; existing migration/Admin changes are not counted as this cleanup.
+- No new dependencies, global changes, business implementation, commit/push or long endurance restart.
+  See [review guide](cluster-cpp/minimal-review-20260914.md) and [results](testkit/results/cluster-minimal-20260914.json).
+
+### 2026-09-12: Simplify Supervisor admission and Star login
+
+- Protocol v6 replaces Challenge/Register with one Register. Removed startup tickets, the second
+  signature domain and client expected_epoch CAS; Star validates one signed admission locally.
+- Supervisor owns atomic request deduplication and member epoch assignment. Committed old requests
+  remain rejected after replacement and reopen; fresh starts use transaction commit order.
+  The bounded --max-startups index is not evicted, and current retries work at capacity.
+- Windows Go/Proto checks and 7 Python harness tests passed. Linux Go race passed after separating
+  instrumentation timeout from credential semantics; production timeout and KDF cost are unchanged.
+- C++ Debug, Release, ASan/UBSan and TSan each passed 8 CTest suites, 6 real RPC scenarios and
+  13 process scenarios. Final Debug reused the final Go binary. 85 selected source hashes match
+  between local and isolated VM validation; owned resources were cleaned and no test service remained.
+- No new dependencies, business implementation, commit/push or endurance restart. Planet business
+  work remains paused; its shared admission and connection behavior remain covered.
+- Evidence: [review and limits](cluster-cpp/admission-simplification-20260912.md) and
+  [machine-readable results](testkit/results/cluster-admission-20260912.json), including earlier failures.
+
+### 2026-09-12: Implement Supervisor-issued ids and retire Rust service checks
+
+- Active service roles and APIs use Star/Planet and `id`; shared C++ code is `cluster-cpp/` and `verdandi::cluster`. Admin uses Star/Planet and `stars`, retaining `starId` only for a planet's owner reference.
+- Supervisor issues signed startup tickets. Retries retain the issued opaque string id and first CAS baseline; committed Hello credentials have a separate v5 signature domain. Client UUID generation and format validation are removed.
+- Removed Rust service selection and mixed service regression. Deprecated Rust sources and historical reports are retained. The old v4 benchmark is rejected explicitly because its Rust receiver cannot qualify v5.
+- Verified Windows Go quality checks and protocol generation, Linux Go race, eight C++ CTest suites, six TLS/RPC scenarios, thirteen real process scenarios, thirteen Python harness tests, and 53 Admin tests with type check, boundaries and production build. See [migration verification](cluster-cpp/identity-migration-20260912.md).
+- No new dependencies were installed. Validation used an isolated VM source/build directory and new databases; the existing endurance run and its binaries were not replaced.
+
+### 2026-09-12: Complete expanded connection endurance and manual cleanup
+
+- User authorized 8 Star / 16 Planet plus Go Supervisor on Ubuntu, two hours
+  of repeated failures and recovery followed by uninterrupted steady operation
+  until manual stop. No upper-layer implementation is part of this run.
+- Reuse qualified Release binaries and project-local tools, without downloads.
+  `cluster-cpp/test_endurance.py` reuses Host ownership, adds phase transitions,
+  fresh-status checks, per-Star Planet ownership checks and rotating samples.
+- Windows 37 shared harness checks passed; Linux 36 passed with one Windows
+  platform skip. Expanded-topology short preview and actual STOP/SIGTERM/
+  unexpected-child-exit controls passed. Binary hashes match maintenance evidence.
+- Fault qualification completed and the later steady run was manually stopped
+  with cleanup verified. Details: [endurance](cluster-cpp/endurance-20260912.md).
+- First attempt PID 310386 failed after 357.517 seconds / 41 cycles because the
+  Python checker dereferenced a legitimate null Planet upstream. Cleanup passed;
+  `build/peer-cpp/endurance-20260912/status.json` remains immutable failure evidence.
+- The new regression fails on the original null case and passes after normalizing
+  an absent/null upstream to a pending topology. Scale uses the same expression,
+  with an existing mesh short-circuit guard; it was normalized consistently.
+  C++ and Rust emit null by contract; Go and SDK paths do not consume this field.
+  Shared Python suites pass 38 Windows / 37 Linux plus one platform skip.
+- User clarified that failures require investigation and repair within existing
+  authorization, then continued testing, not stopping work to wait for permission.
+  Preserve each failed attempt, use a new output directory and restart the full
+  two-hour clock after a fix. Current retry output is `endurance-20260912-r2`.
+  Second attempt PID 314941 started at 2026-09-12 12:32:15 Asia/Shanghai.
+  Expanded preview passed 43.200 fault seconds / 5 cycles and 12.655 steady
+  seconds including cleanup. All four scale cases through 16 Stars / 32 Planets
+  passed, as did STOP/SIGTERM and traceback-preserving abnormal-child cleanup.
+  Heartbeat `star-planet` resumed every five minutes; stop and
+  pause it only after a user stop or a concrete unresolved external blocker.
+- Second attempt completed 7205.739 seconds / 833 fault cycles and entered steady
+  operation at 2026-09-12 14:32:51.079 Asia/Shanghai. All three recovery checks
+  counted 833 completions. Snapshot evidence is
+  `testkit/results/peer-cpp-endurance-fault-20260912-r2.json`; binary hashes match
+  maintenance qualification. All 25 steady process PIDs match their baseline.
+  The final user stop completed at 2026-09-12 16:30:17.775 Asia/Shanghai.
+  Steady observation lasted 7046.696 seconds including exit cleanup; total
+  controller runtime was 14282.776 seconds. All 25 service PIDs and the controller
+  are absent, ports are reusable, and the actual owned directory was removed.
+  Heartbeat star-planet is PAUSED. Final evidence is
+  `testkit/results/peer-cpp-endurance-final-20260912-r2.json`.
+  This evidence refers to pre-rename peer-cpp binaries and original runtime paths.
+  Last sampled RSS was 438.5 MiB, 3.297 MiB above the steady baseline, with
+  unchanged PIDs/threads and two fewer FDs. No further test is running.
+
+### 2026-09-12: Record Supervisor ownership of opaque PeerId generation
+
+- Recorded the maintainer's accepted identity direction in the C++ skeleton design:
+  Supervisor issues process IDs and owns their format; Star/Planet authenticate the
+  signed admission envelope and do not depend on UUIDv4, hexadecimal or 16-byte IDs.
+- Confirmed the maintainer's choice of Protobuf `string peer_id` and owned C++
+  `std::string`; retained generic UTF-8/length bounds and exact comparison without
+  case folding, trimming or normalization. Replaced the earlier bytes recommendation.
+- Kept format evolution distinct from changing an already issued process identity,
+  message-size limits, member binding/epoch checks and registration retry correlation.
+- Linked the direction from current connection rules, the C++ README and project memory.
+  Current client UUID generation remains explicitly documented as implementation history;
+  Schema, generated source, runtime behavior and test results were not changed.
+
+### 2026-09-12: Document C++ responsibilities, configuration and enum contracts
+
+- Recorded functional source headers, per-field configuration explanations, individual enum
+  comments, declaration contracts and implementation-block reasoning in `coding.md` and
+  `cluster-cpp/CONTRIBUTING.md`, with links from the C++ entry and project memory.
+- Applied functional headers to the 36 handwritten C++ source/header files; documented all
+  28 enum elements, production configuration/CLI fields, function ownership and important
+  validation, callback, replacement, retry and shutdown boundaries. Root licenses, required
+  third-party notices and generated sources were not modified.
+- Used the existing clang-format 22.1.3 after source writes. Compared all 36 files against a
+  saved pre-edit working-copy baseline: non-comment token sequences and enum order are unchanged;
+  clang-format dry-run, targeted configuration/enum coverage and diff whitespace checks passed.
+  These are source-level checks, not a new Linux C++ build or runtime qualification run.
+- The subsequent proposal to let Supervisor issue signed opaque process IDs remains a design
+  discussion; this comment pass retains the current client-generated UUID and admission behavior.
+
+### 2026-09-12: Record per-Key reconciliation and streaming direction
+
+- Added [the synchronization design](cluster/key-stream-sync-design.md) covering publisher-owned
+  versions across Star redirection, per-Key bounded history, complete-value fallback,
+  authenticated reconciliation, live handoff, deletion evidence and stale-replica handling.
+- Distinguished accepted direction from unresolved writer recovery, history coverage,
+  lease/binding metadata, tombstone reclamation and storage confirmation rules.
+- Linked the design from Peer/Core, Galaxy, the C++ entry and project memory, while retaining
+  the existing Redis SDK contracts and connection-only implementation boundary.
+- Documentation-only change; no runtime code, dependencies, service processes, commits or
+  publication changed. Verification is limited to Markdown structure, local links and diff checks;
+  the listed behavioral scenarios are future acceptance work, not tests executed this turn.
+
+### 2026-09-12: Organize and qualify C++ skeleton maintenance boundaries
+
+- Retained common/star/planet. Extracted private Signals/Wakeup/Logger from
+  Runtime, separated admission and dial advancement, and documented ownership.
+  Admission cannot move while gRPC borrows its request fields; process guards
+  cannot be copied. Session error classification no longer imports the
+  Supervisor adapter or constructs temporary Error strings just to read a code.
+- Removed the unused dial flag and three temporary Planet duplicate sets;
+  bounded candidate comparisons reuse inplace_vector. Consolidated six test
+  assertions with source_location and preserved Release checking.
+- Fixed empty-CTest success in Peer and the C++ SDK test entry, rejected ignored
+  diagnostic combinations, and removed empty runtime search-path entries in
+  both C++ preparation/build and the shared C#/Python native harness.
+  Reviewed matching Rust/Go paths; no corresponding CMake cache or path append.
+- Final Debug, Release, ASan/UBSan and full TSan each pass eight CTests, eight
+  real RPC/interoperability cases and thirteen process cases. Default Release
+  entry also passes Go vet/unit/race and protocol checks. Four Stars/two Planets
+  complete 61.531 seconds and nine fault cycles with owned resource cleanup.
+- Build-entry tests pass six cases on both hosts; shared Python tests pass 32
+  on Windows and 31 plus one platform skip on Linux; Windows SDK build-policy
+  tests pass 12. Four public headers compile independently; four invalid native
+  configurations fail with intended diagnostics. Both installed executables
+  and license files pass review without a development RPATH.
+- Three comment punctuation lines were normalized after behavior testing;
+  all four profiles were rebuilt and both executable hashes remain identical
+  to their respective qualified outputs. No new download, global configuration,
+  database test, commit or push. Earlier hour/performance reports are preserved.
+- Evidence: [maintenance report](cluster-cpp/maintenance-20260912.md),
+  [machine result](testkit/results/peer-cpp-maintenance-20260912.json), and
+  [maintainer guide](cluster-cpp/CONTRIBUTING.md).
+
+### 2026-09-12: Complete C++26 connection-skeleton qualification and default entry
+
+- Resumed after the authorized backup commit 3e074fa. Added seven compiler
+  negative cases, a positive metadata baseline and isolated contract/STL probes.
+  The contracts-disabled Release passes six CTest groups, eight RPC/mixed groups
+  and thirteen process groups. Default contracts remain enforce.
+- Qualified 2/4/8/16 Stars with 0/1/8/32 Planets, including real Supervisor
+  admission, mesh convergence, forced upstream failure, restart and cleanup.
+  Separate allocation builds count successful C++ new requests only. The largest
+  ordinary topology uses about 875 MiB aggregate sampled idle RSS.
+- Added an isolated C++ callback push fixture and shared Rust state validation,
+  without changing production messages. The final five-round matrix completed
+  225 trials: 194 full passes and 31 explicit capacity rejections, all confined
+  to pressure scenarios. All ordinary cases passed. The separate allocation
+  comparison passed 40/40; Event-shell reuse saves about 5% of counted new calls
+  but does not justify Arena or a new pool. C++ CPU/RSS and tail latency exceed
+  this Rust implementation; no language-intrinsic performance advantage is claimed.
+- Audited cross-language propagation: protect the benchmark receive object during
+  reentrant dispatch; handle late-publication rejection in the shared Rust
+  receiver; correct benchmark window metadata; stop injecting the instrumented
+  dependency lib directory into unrelated tools. The latter had loaded TSan
+  zlib into rustc/LLVM. Services retain static instrumented dependencies.
+- Final ASan/UBSan and full TSan each pass six CTest groups and twelve push cases;
+  TSan smoke explicitly uses 200 source updates/s, not performance measurement.
+  Full TSan additionally passes eight RPC/mixed and thirteen process groups.
+  No broad suppressions were added. Current clang-tidy cannot parse reflection,
+  and the report retains that analyzer limitation and historical failed trials.
+- The normal Release Star/Planet hashes remain identical to the earlier
+  3,603.207-second / 510-cycle accepted fault soak. Production source did not
+  change this turn; the one-hour run was not repeated or relabeled.
+- Default Linux service checks and regression now select C++; Rust is explicit
+  through --implementation=rust or -Implementation rust. Windows C++ selection
+  fails early instead of silently falling back. The default Linux entry passes
+  generated-source checks, six CTest groups, Go vet/tests/race, eight RPC/mixed
+  groups, thirteen process groups and owned cleanup. Python passes 31 on Windows
+  and 30 with one platform skip on Linux; changed Rust probe passes 16 tests and
+  Clippy on both platforms. No SDK/database regression was triggered.
+- M0-M4 connection scope is qualified with documented limits. Business data
+  replication, persistence, SDK binding, Admin integration and production
+  capacity/deployment qualification remain later work. No new dependency was
+  downloaded, no global setting changed, and no new commit/push was made.
+- Evidence: [detailed report](cluster-cpp/qualification-20260912.md) and
+  [machine-readable results](testkit/results/peer-cpp-foundation-20260912.json).
+  The immutable 2026-09-11 results preserve the earlier pause and sanitizer history.
+
 ### 2026-09-11: Document the C++26 Star/Planet skeleton target
 
 - Incorporated all seven follow-up decisions: logical session identity and
@@ -679,7 +855,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   service, framework I/O workers with a fixed application loop, and measured
   optimization after bounded reuse. Updated qualification and regression rules
   together; ordinary authentication and correctness checks remain required.
-- Added [the source-version lock](peer/cpp26-dependencies.md) using official
+- Added [the source-version lock](cluster/cpp26-dependencies.md) using official
   stable release/tag metadata: gRPC 1.84.0, Protobuf 36.1 and supporting releases,
   plus gRPC's exact BoringSSL gitlink. Recorded differences from upstream bundled
   revisions; selected versions are not a claim of verified build compatibility.
@@ -687,7 +863,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   transport and private identity crypto, replacing the initial OpenSSL reuse
   recommendation. No download/build occurred; existing Redis SDK policy is
   unchanged. BoringSSL API/ABI changes require a coordinated rebuild and tests.
-- Added [the detailed plan](peer/cpp26-skeleton-design.md): current-vs-target
+- Added [the detailed plan](cluster/cpp26-skeleton-design.md): current-vs-target
   scope, C++26 feature applications, common/star/planet structure, callback and
   lock ownership, v4 parity, gRPC capability gates, dependency/generation policy,
   staged acceptance, tests and performance/complexity measurements.
@@ -733,7 +909,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 - Supplemental Linux Black invocation could not run because that module is
   absent. Existing Windows Black checked the identical Python source; Linux
   Python unit tests then ran independently. No tool was installed.
-- Evidence: [detailed hardening report](peer/service-hardening-20260911.md)
+- Evidence: [detailed hardening report](cluster/service-hardening-20260911.md)
   and [machine-readable results](testkit/results/service-hardening-20260911.json).
   Existing gRPC migration and historical performance reports are preserved.
   Business replication/persistence, SDK Bind, bearer lifecycle and production
@@ -763,7 +939,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 - Protocol v4 requires coordinated upgrade and a new member database path;
   old data is preserved. Bearer expiry/revocation, business replication, SDK
   migration and endurance/capacity qualification remain outside this result.
-- Evidence: [detailed report](peer/grpc-validation-20260911.md) and
+- Evidence: [detailed report](cluster/grpc-validation-20260911.md) and
   [machine-readable results](testkit/results/service-grpc-20260911.json).
 
 ### 2026-09-10: Complete the conditional gRPC push evaluation and detailed report
@@ -799,14 +975,14 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 - Final process/temporary-directory checks are clean on both hosts. Removed
   one ownership-verified stale Windows pre-experiment directory. Ubuntu's OOM
   kill count did not increase; minor system swap activity is documented.
-- Evidence: [detailed report](peer/grpc-benchmark-results.md),
-  [TLS flush audit](peer/tls-flush-audit.md), the three
+- Evidence: [detailed report](cluster/grpc-benchmark-results.md),
+  [TLS flush audit](cluster/tls-flush-audit.md), the three
   `testkit/results/transport-push-*-20260910-v3.json` matrices and
   `testkit/results/transport-cleanup-20260910-v3.json`.
 
 ### 2026-09-10: Star / Planet connection foundation and cross-platform validation
 
-- Organized Rust into `peer/common`, `peer/star`, `peer/planet`, preserving
+- Organized Rust into `cluster/common`, `cluster/star`, `cluster/planet`, preserving
   `peer` for Star and adding `planet`. Shared protocol and session code is not
   duplicated between roles; no new dependency downloads were needed.
 - Protocol v3 binds role/group into admission, preserves Star full-list
@@ -822,9 +998,9 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   processes each passed regression and a 60-second, ten-cycle fault loop;
   final decoder changes were followed by all three regressions again.
   Owned processes, ports and temporary resources were cleaned up.
-- Updated [connection rules](peer/connection-rules.md), project memory and
+- Updated [connection rules](cluster/connection-rules.md), project memory and
   service documentation. Evidence and limitations:
-  [validation](peer/star-planet-validation-20260910.md),
+  [validation](cluster/star-planet-validation-20260910.md),
   [JSON](testkit/results/star-planet-foundation-20260910.json).
 - Business cache/replication, persistence, SDK binding and Registry re-registration
   remain unimplemented and are not claimed by this connection foundation.
@@ -1294,7 +1470,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 - Replaced Orion's dim rock and red cross with an opaque black core, a
   camera-facing event-horizon rim and a tilted, slowly flowing accretion disc.
   Retained the three available stars, dim static entities, dashed incident
-  links and existing peer/planet selection contracts. Removed the X marker.
+  links and existing cluster/planet selection contracts. Removed the X marker.
 - Kept the effect in the Three.js runtime with owned ring geometries and
   materials, shared core geometry and the existing frame loop. The stylized
   shaders add no dependency, texture, full-screen postprocessing or ray tracing.
@@ -1648,7 +1824,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 
 ### 2026-09-09: Compare one full-duplex Peer connection with two mirrored connections
 
-- Added `peer/connection-model-review-20260909.md` and linked it from the Core
+- Added `cluster/connection-model-review-20260909.md` and linked it from the Core
   and Supervisor designs. Compared exact socket counts, join/reconnect behavior,
   directional ownership, control/data queueing, duplicate arbitration and failure
   scope against TCP, Tokio and Erlang primary documentation and local code.
@@ -1689,7 +1865,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 - Recorded pairwise join/reconnect discovery, sequential normal joins, and an
   independent observer for alerts and bounded exceptional connection repair.
   Kept current periodic Discover explicitly labeled as existing implementation.
-- Added `peer/supervisor-design.md` covering expected-node coverage, stale and
+- Added `cluster/supervisor-design.md` covering expected-node coverage, stale and
   incomplete observations, two directed TCP connections per pair, shared graph
   data, repair limits, and a proposed browser 3D/2D/table interface.
 - Distinguished connection health from future data convergence, and documented
@@ -1706,7 +1882,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
 - Added bounded DiscoverRequest/DiscoverResponse pagination, direct verification of learned IDs, reverse connections, short-lock topology ownership, duplicate-address/ID suppression and generation protection. Periodic jittered queries supplement stale lists without deleting live members; candidate caps, request budgets and a shared dial cadence bound discovery amplification.
 - Passed all 31 tests on both Windows and the native Ubuntu VM, including three-node full mesh, late-node discovery, stale and duplicate lists, paging, flood limits, old sessions, shutdown cancellation and port release. Windows rustfmt/strict Clippy and both Release builds/help paths passed. No long-duration or 64-node capacity claim is made.
 - Rechecked the analogous Go/Rust Selector retry and PONG paths, C++ shared retry, and C# native delegation. The Peer framing has no other-language implementation to patch, and no existing Redis SDK contract changed. Database SDK regressions were not rerun for this Rust Peer-only change.
-- Updated Peer/protocol design documents and recorded exact scope in `peer/protobuf-network-validation-20260909.md`. State replication, SDK Bind, production authentication and daemon process lifecycle remain future work. No commit or push was created.
+- Updated Peer/protocol design documents and recorded exact scope in `cluster/protobuf-network-validation-20260909.md`. State replication, SDK Bind, production authentication and daemon process lifecycle remain future work. No commit or push was created.
 
 ### 2026-09-08: Complete unified regression/soak entries and owned-resource recovery
 

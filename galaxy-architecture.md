@@ -1,28 +1,38 @@
 # Verdandi 星图结构修订
 
+> 2026-09-12: Planet 业务推进暂停. 下一阶段先完成 Star 与第一版 SDK 的直接接入闭环;
+> 现有 Planet 连接骨架保留并验证共享改动. 本文 Planet 缓存和换绑业务规则暂不进入实现.
+
+
+2026-09-12 命名更新: 两种运行角色统一为 Star、Planet, 自身字段为 `id`. Supervisor 签发规则见[身份契约](cluster/identity-contract.md).
+
+2026-09-12 业务同步设计更新：见[按 Key 对账与流式同步](cluster/key-stream-sync-design.md)。
+Subscriber / Selector 先鉴权、按 Key 对账，再持续推送；发布者负责跨入口的版本连续性。
+这只记录未来业务同步方向，不改变下文角色映射或现有连接实现。
+
 日期: 2026-09-10. 状态: 角色映射、Planet 全量授权缓存、离线换绑及可选存储模式已由维护者确认;
-Star/Planet 基础连接和协议 v3 已实现, 当前契约见 [连接规则](peer/connection-rules.md).
+Star/Planet 基础连接和协议 v5 已实现, 当前契约见 [连接规则](cluster/connection-rules.md).
 业务缓存、复制、持久化、重新登记和 Admin 新展示模型仍未实现.
 
-本文是 Peer 后端与 Admin 的共同结构入口. 它替代旧设计中 SDK 只能直连 Peer、Admin 将业务实体称为行星的目标结构.
+本文是 Star 后端与 Admin 的共同结构入口. 它替代旧设计中 SDK 只能直连 Star、Admin 将业务实体称为行星的目标结构.
 现有 Redis SDK 契约保持有效; 现有服务认证网络的验证记录见 [服务验证](service-admission-validation-20260910.md).
 
 ## 1. 已确认的角色
 
 | 星图对象 | 系统角色 | 归属与职责 |
 | --- | --- | --- |
-| Galaxy | 一组对等 Peer | 同一群组的成员、复制与访问范围 |
-| 恒星 | Peer | 接纳 Publisher/Registry 请求, 将合法状态同步给其他 Star 和所属 Planet, 承担核心业务负载 |
-| 行星 | Relay 中继器 | 共用存储/同步规则, 缓存 Galaxy 全部授权状态并向下游分发; Publisher/Registry 请求只转发给所绑定 Star |
-| 卫星 | Catalog / Subscriber / Registry 等接入实体 | 可以直接绑定 Peer, 也可以绑定 Relay |
-| 黑洞 | 不可用 Peer 的展示状态 | 保留该恒星身份, 不表示新的服务类型或数据删除 |
+| Galaxy | 一组对等 Star | 同一群组的成员、复制与访问范围 |
+| 恒星 | Star | 接纳 Publisher/Registry 请求, 将合法状态同步给其他 Star 和所属 Planet, 承担核心业务负载 |
+| 行星 | Planet 中继器 | 共用存储/同步规则, 缓存 Galaxy 全部授权状态并向下游分发; Publisher/Registry 请求只转发给所绑定 Star |
+| 卫星 | Catalog / Subscriber / Registry 等接入实体 | 可以直接绑定 Star, 也可以绑定 Planet |
+| 黑洞 | 不可用 Star 的展示状态 | 保留该恒星身份, 不表示新的服务类型或数据删除 |
 | 虫洞 | 后续跨 Galaxy 中继器 | 未来用于 Catalog 同步; 当前不实现 |
 
-Supervisor 保持 Go. Star/Planet 的新目标为 C++26, 当前 Rust 实现保留, 尚未执行迁移;
-第一阶段仅规划连接骨架, 见 [C++26 详细设计](peer/cpp26-skeleton-design.md).
+Supervisor 保持 Go. Star/Planet 当前实现为 C++26, 旧 Rust 服务已废弃;
+连接骨架已实现, 见 [C++26 详细设计](cluster/cpp26-skeleton-design.md).
 Supervisor 负责成员登记和管理观测, Admin 负责星图展示.
 Supervisor 不自动成为恒星、行星或业务流量的中转站; 它兼任 Catalog Publisher 时使用普通业务接入能力.
-Planet 也向 Supervisor 鉴权, 但取得局部候选 Star, 不取得用于加入 Peer full mesh 的完整成员资格.
+Planet 也向 Supervisor 鉴权, 但取得局部候选 Star, 不取得用于加入 Star full mesh 的完整成员资格.
 已确认 Planet 换绑时向新 Star 重新登记所管理的数据, 新 Star 负责扩散并使旧归属失效.
 Supervisor 暂时不可用时, 已运行 Planet 可以使用仍有效的已有授权切换至候选 Star 并重新登记.
 Star 和 Planet 均可选择内存或落盘模式, 同一 Galaxy 的 Star 允许混用; 存储模式不改变角色权限.
@@ -33,19 +43,19 @@ Star 按实际地域等属性划分逻辑组, Planet 优先本组, 故障时允�
 flowchart TB
     S[Supervisor] -. 成员登记与管理观测 .-> A
     subgraph G[Galaxy]
-        A[恒星 A / Peer] <--> B[恒星 B / Peer]
-        B <--> C[恒星 C / Peer]
+        A[恒星 A / Star] <--> B[恒星 B / Star]
+        B <--> C[恒星 C / Star]
         C <--> A
-        R[行星 / 聚合缓存 Relay] <--> A
-        X[卫星 / 直属 Peer] <--> A
-        Y[卫星 / 经 Relay 接入] <--> R
-        Z[卫星 / 经 Relay 接入] <--> R
-        D[黑洞 / 不可用 Peer]
+        R[行星 / 聚合缓存 Planet] <--> A
+        X[卫星 / 直属 Star] <--> A
+        Y[卫星 / 经 Planet 接入] <--> R
+        Z[卫星 / 经 Planet 接入] <--> R
+        D[黑洞 / 不可用 Star]
     end
 ```
 
-双箭头表示逻辑通信, 不统一规定物理连接数量. 当前 Peer 两两双连接仍成立;
-Relay 和卫星接入的连接、多路复用及认证协议尚未实现, 不能直接沿用 Peer 成员握手获得成员权限.
+双箭头表示逻辑通信, 不统一规定物理连接数量. 当前 Star 两两双连接仍成立;
+Planet 和卫星接入的连接、多路复用及认证协议尚未实现, 不能直接沿用 Star 成员握手获得成员权限.
 
 ## 2. 四种关系分别表达
 
@@ -53,15 +63,15 @@ Relay 和卫星接入的连接、多路复用及认证协议尚未实现, 不能
 
 | 关系 | 含义 | 不应推导出的行为 |
 | --- | --- | --- |
-| Peer 属于 Galaxy | Peer 参加本群组的成员网络 | Relay 和卫星也必须进入 Peer full mesh |
-| Relay 嫁接 Peer | Relay 当前从该入口同步 Galaxy 全部授权状态 | Relay 获得写者权威或权威持久确认资格 |
-| 卫星绑定 Peer / Relay | 当前业务同步与推送的接入路径 | 所访问的数据只能属于该入口 Peer |
+| Star 属于 Galaxy | Star 参加本群组的成员网络 | Planet 和卫星也必须进入 Star full mesh |
+| Planet 嫁接 Star | Planet 当前从该入口同步 Galaxy 全部授权状态 | Planet 获得写者权威或权威持久确认资格 |
+| 卫星绑定 Star / Planet | 当前业务同步与推送的接入路径 | 所访问的数据只能属于该入口 Star |
 | 数据重新登记到新 Star | 新 Star 接替接纳与同步职责, 扩散后使旧 Star 归属失效 | 新增一份不同身份的数据或无条件删除业务 Key |
 | 业务 Key 的写者权威与内容版本 | 由业务协议独立规定 | 切换父节点自动更换 Publisher、重置版本或抹掉已确认内容 |
 
 维护者已明确 Planet 将请求转发给当前绑定的一个 Star; 候选 Star 用于切换, 不同时分担写入.
 一个卫星绑定只有一个活动接入点仍是首版建议. 物理连接和逻辑绑定数量另行定义.
-Relay 不参加 Peer full mesh, 不承担多数持久确认. 不因增加 Relay 而改变既有 Peer 之间的连接拓扑.
+Planet 不参加 Star full mesh, 不承担多数持久确认. 不因增加 Planet 而改变既有 Star 之间的连接拓扑.
 
 Galaxy 暂映射现有 `cluster_id` / `--cluster`, 不新增一套重复群组标识, 也不立即改名线上字段和命令行参数.
 业务 Zone、Catalog 路径与群组继续区分. 跨 Galaxy 通信当前没有通路.
@@ -81,7 +91,7 @@ Planet 共用状态存储 -> 按各卫星权限和绑定条件筛选 -> 下游�
 
 “全部授权状态”包括正文、业务版本、删除标记及同步所需的租约/归属元数据, 不表示绕过权限复制整个 Galaxy.
 卫星增加或解绑不改变 Planet 的上游复制范围; 授权范围改变时必须重新校验缓存和下游可见范围.
-下游过滤、投影及权限仍各自校验, 不因共用存储就允许跨权限读取. 不引入过滤器包含推导或任意 Relay 级联.
+下游过滤、投影及权限仍各自校验, 不因共用存储就允许跨权限读取. 不引入过滤器包含推导或任意 Planet 级联.
 
 建议流程:
 
@@ -116,44 +126,44 @@ Planet 落盘仍是非权威副本, 不自动计入 Star 的多数持久确认, 
 全量缓存减少订阅范围维护, 同时增加每颗 Planet 的初次同步、容量和持续复制成本.
 容量不足时必须显式报告并限制资源, 不能静默丢弃未订阅数据后仍宣称全量同步完成.
 
-Relay 的确认必须区分“Relay 收到”和“业务写入已按 Peer 协议确认”. Publisher/Registry 请求只转发给当前 Star,
+Planet 的确认必须区分“Planet 收到”和“业务写入已按 Star 协议确认”. Publisher/Registry 请求只转发给当前 Star,
 业务成功由 Star 按所属协议判定. 转发请求不能先作为已确认更新安装到 Planet 的共享缓存;
 不能借订阅聚合吞并、重排或合并未经协议允许的写入, 也不能用缓存接收成功冒充持久确认.
 
 ## 4. 故障与缓存有效性
 
-Relay 至少需要表达“正在同步”“上游有效”“缓存已过期/上游失联”这几种可观察状态;
+Planet 至少需要表达“正在同步”“上游有效”“缓存已过期/上游失联”这几种可观察状态;
 具体字段和状态机待协议设计时收敛, 不先创建多套持久状态.
 
 | 事件 | 必须保留的语义 |
 | --- | --- |
-| Relay 上游中断 | 已有缓存可以保留, 必须标明过期; 不假装收到新的续租、写入确认或最新状态 |
-| Relay 切换 Peer | 重新校验 Galaxy、授权和业务基线, 完成恢复后才能恢复有效推送 |
-| Relay 自身重启 | 内存模式重建, 落盘模式加载校验后补齐; 卫星重新绑定, 不能凭同一地址或磁盘缓存沿用旧会话资格 |
+| Planet 上游中断 | 已有缓存可以保留, 必须标明过期; 不假装收到新的续租、写入确认或最新状态 |
+| Planet 切换 Star | 重新校验 Galaxy、授权和业务基线, 完成恢复后才能恢复有效推送 |
+| Planet 自身重启 | 内存模式重建, 落盘模式加载校验后补齐; 卫星重新绑定, 不能凭同一地址或磁盘缓存沿用旧会话资格 |
 | 卫星消费过慢 | 发送内存有上限, 按业务语义合并或要求重同步, 不能拖住所有下游 |
 | Registry 租约到期 | 缓存不能因重复展示或下游连接仍在线而替已失效 Registration 续租 |
-| Supervisor 失联 | 已运行 Peer 按已有拓扑通信; Planet 可凭仍有效授权切换候选并重新登记; 观测变旧不等于节点不可用 |
+| Supervisor 失联 | 已运行 Star 按已有拓扑通信; Planet 可凭仍有效授权切换候选并重新登记; 观测变旧不等于节点不可用 |
 | Supervisor 失联期间启动新进程 | Star/Planet 均等待 Supervisor 鉴权, 即使部署曾加入且磁盘仍在; 不自动恢复旧进程准入 |
 
 Catalog 的旧值是否允许读取由既有业务降级契约决定; Registry 的可选服务集合仍需遵守租约与时间有效性.
 缓存相同版本不代表它的租约、权限和上游可用性永远有效.
 
-当前业务复制与 SDK Binding 还未实现. 上述是后续协议必须满足的约束, 不能将已经通过的网络层测试当作 Relay 测试证据.
+当前业务复制与 SDK Binding 还未实现. 上述是后续协议必须满足的约束, 不能将已经通过的网络层测试当作 Planet 测试证据.
 
 ## 5. Admin 当前结构与迁移方向
 
 已核对当前源码:
 
-- `model/types.ts` 的 `PlanetKind` 是 Registry / Subscriber / Publisher, `PeerStar.planets` 直接包含这些业务实体.
-- `Planet.peerId` 只允许直属 Peer, 没有 Relay、卫星或可选择的父节点类型.
-- `PeerStatus` 只有 available / unavailable. 渲染器收到 unavailable 就创建黑洞, 隐藏其业务实体和连线.
+- `model/types.ts` 的 `PlanetKind` 是 Registry / Subscriber / Publisher, `StarStar.planets` 直接包含这些业务实体.
+- `Planet.peerId` 只允许直属 Star, 没有 Planet、卫星或可选择的父节点类型.
+- `StarStatus` 只有 available / unavailable. 渲染器收到 unavailable 就创建黑洞, 隐藏其业务实体和连线.
 - 当前数据来自 `data/demo.ts`; 尚未连接 Supervisor, 并不能判定真实服务是否不可用.
 
 修订后的展示模型建议分别保存 `peers`, `relays`, `satellites`, `links`;
-卫星父节点使用带类型的引用 `Peer(id) | Relay(id)`, 不靠字符串前缀猜测, 不通过任意递归嵌套构造拓扑.
+卫星父节点使用带类型的引用 `Star(id) | Planet(id)`, 不靠字符串前缀猜测, 不通过任意递归嵌套构造拓扑.
 所有父引用必须同属 Galaxy, 存在且类型合法. 当前活动父引用改变只表示接入切换.
 
-Relay 是节点角色, Catalog / Registry 是业务领域, Subscriber / Publisher 是访问角色.
+Planet 是节点角色, Catalog / Registry 是业务领域, Subscriber / Publisher 是访问角色.
 推荐在模型中分开描述“实体角色”和“业务领域”, 展示标签保留用户熟悉的名称;
 不继续把这些不同维度固定成一个互斥的行星类型枚举. 卫星对应一个 SDK 进程还是一个逻辑绑定仍需决定,
 推荐按逻辑绑定显示, 多个绑定可以归属于同一 SDK 进程, 不把一个图元误当作一条物理 TCP.
@@ -161,13 +171,13 @@ Relay 是节点角色, Catalog / Registry 是业务领域, Subscriber / Publishe
 恒星的画面位置建议关联部署记录, 当前进程 UUID 单独记录, 保留重启后新 UUID 的已确认要求.
 现有部署凭据指纹可以在凭据未变化时关联记录; 证书轮换后的稳定展示身份仍须显式设计, 不能假定指纹永久稳定.
 
-黑洞应是同一 Peer 的状态表现, 恢复时回到恒星. 保留最后已知的关联信息供诊断,
+黑洞应是同一 Star 的状态表现, 恢复时回到恒星. 保留最后已知的关联信息供诊断,
 但不把失效连线画成可用连接. UI 可以折叠不可达的下游, 不能据此删除后台关系或业务数据.
 某一观察者无法连接、监控源离线和明确判定不可用应区分; 建议增加 unknown/stale 展示状态及观测时间,
 由数据适配层提供状态依据, 渲染器不以丢一条边推断整个节点已死亡.
 
 轨道与视觉大小只用于展示. 现有“按行星数量缩放恒星”规则需重新选择指标,
-不能把旧 SDK 数量自动替换成 Relay 数量而改变含义; 直属卫星与 Relay 下卫星也不能重复计数.
+不能把旧 SDK 数量自动替换成 Planet 数量而改变含义; 直属卫星与 Planet 下卫星也不能重复计数.
 
 ## 6. 实施顺序与未决项
 
@@ -176,7 +186,7 @@ Relay 是节点角色, Catalog / Registry 是业务领域, Subscriber / Publishe
 
 1. 明确卫星粒度与单活动上游建议, 修订 Admin 快照、演示数据、类型校验与选择接口.
 2. 接入同一份拓扑数据模型的观测来源, 再展示真实绑定、未知状态及黑洞恢复.
-3. 在 Peer 业务同步/SDK Binding 语义明确后实现 Relay 全量授权缓存, 共用存储与恢复规则.
+3. 在 Star 业务同步/SDK Binding 语义明确后实现 Planet 全量授权缓存, 共用存储与恢复规则.
 4. 验证下游数量不改变上游同步范围, 无订阅数据仍同步, 权限不串用, 换绑只恢复自身有效登记,
    断线切换不回退版本, 半份快照不泄漏, 租约不被缓存延长, 慢消费者隔离和资源清理.
 5. 分别覆盖内存/落盘恢复、磁盘旧状态校验、容量不足和 Supervisor 离线下的授权候选切换;
@@ -184,11 +194,11 @@ Relay 是节点角色, Catalog / Registry 是业务领域, Subscriber / Publishe
 
 Star 混合存储、新进程在线鉴权及组内优先/跨组故障切换已确认, 见第 9 节.
 后续优先审核持久确认集合与混合模式写入流程, 再细化候选响应及重新登记协议.
-卫星按进程还是逻辑绑定显示仍待决定. Relay 的实现语言、独立程序或现有程序运行模式随后再定;
+卫星按进程还是逻辑绑定显示仍待决定. Planet 的实现语言、独立程序或现有程序运行模式随后再定;
 不在未决定前增加包、可执行入口或通用路由框架.
 
 虫洞只记录未来跨 Galaxy 的 Catalog 同步目标. 当前不实现协议、路径搜索、转发链、冲突解决或后台任务,
-不允许普通 Relay 借该预留跨群组转发. 将来需先决定方向、授权和循环抑制, 再定义实现.
+不允许普通 Planet 借该预留跨群组转发. 将来需先决定方向、授权和循环抑制, 再定义实现.
 
 ## 7. Star/Planet 请求方向与重新绑定审核
 
@@ -235,7 +245,7 @@ Supervisor 离线时只能使用仍有效的已有信息; 跨组允许并不意�
 不需要把 Star 完整成员表交给 Planet. 当前独立 `PlanetRegistrationResponse` 最多返回 8 个候选.
 
 复用现有 mTLS、签名和进程证明实现, 但 Planet 必须有独立角色和有界响应契约.
-当前 Peer RegistrationResponse 的完整成员表门槛属于 Star 组网, 不应给它加入“有时只是局部”这一隐式例外.
+当前 Star RegistrationResponse 的完整成员表门槛属于 Star 组网, 不应给它加入“有时只是局部”这一隐式例外.
 Planet 数量也不应计入 Star full mesh 或权威持久确认集合.
 
 ### 7.3 新 Star 重新登记并扩散旧归属失效
@@ -323,7 +333,7 @@ Publisher 的接纳/同步 Star 可以随本轮规则切换; 这不等于转移�
 
 本批不重复确认 Star/Planet 职责、单活动上游、重新登记后使旧归属失效和最终一致方向.
 也不要求维护者选择代次字段、数据结构或并发实现; 先明确产品行为, 再设计并审核这些技术细节.
-旧 Peer 草案的固定 owner 入口与 `owner == sender` 限制已有修订入口声明, 正文仍待统一;
+旧 Star 草案的固定 owner 入口与 `owner == sender` 限制已有修订入口声明, 正文仍待统一;
 它们不能覆盖本文后续已确认的角色和重新登记方向.
 
 ## 9. 第二批及分组决定

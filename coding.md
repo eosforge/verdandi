@@ -3,23 +3,24 @@
 ## 1. Scope and Source of Truth
 
 The C++26 Star/Planet replacement is specified in
-[the skeleton design](peer/cpp26-skeleton-design.md) and implemented under
-`peer-cpp/`: Rust service checks below remain active, and the C++23
+[the skeleton design](cluster/cpp26-skeleton-design.md) and implemented under
+`cluster-cpp/`: C++ is the default Linux service entry, Rust checks below apply to
+the explicitly selected comparison, and the C++23
 SDK baseline is unchanged. The plan defines service-local reflection,
 callback ownership, formatting and verification rules without applying them
 to existing SDKs. Actual C++ build, test results and remaining qualification
-gates are recorded in [its validation report](peer-cpp/validation.md).
+limits are recorded in [its supplementary report](cluster-cpp/qualification-20260912.md).
 
 Verdandi follows the standard idioms and official formatters of each
 implementation language. This document defines cross-language quality,
 resource, API, testing, documentation, and comment expectations. It does not
 invent a common syntax or formatting dialect.
 
-These rules also apply to `peer/` and `supervisor/`. Their configuration and
+These rules also apply to `cluster/` and `supervisor/`. Their configuration and
 tests stay under the owning service root; the Rust white-box test placement
-rule means `peer/common/tests`, `peer/star/tests`, and `peer/planet/tests` for
+rule means `cluster/common/tests`, `cluster/star/tests`, and `cluster/planet/tests` for
 the corresponding workspace crates; cross-language public fixtures remain in
-`peer/tests/fixtures`. Use `scripts/check-services.ps1`
+`cluster/tests/fixtures`. Use `scripts/check-services.ps1`
 or `scripts/check-services.sh` for offline gates. See
 [service-foundation.md](service-foundation.md) for ownership and process rules.
 
@@ -190,6 +191,25 @@ Comments go immediately above the declaration or logical block they explain.
 Avoid long trailing end-of-line comments. Struct/record field comments are
 placed immediately above their field.
 
+Handwritten project files begin with a short explanation of their current
+purpose, responsibilities, and relevant boundaries. Do not repeat the repository
+license notice in every owned source header. Keep the root license, distribution
+notices, and required third-party copyright/license text intact; do not edit
+generated headers by hand.
+
+Every configuration field has its own explanation of meaning, unit, default,
+valid range, zero/empty behavior, and interactions where applicable. Distinguish
+CLI-validated constraints from internal settings and caller preconditions;
+comments must not imply validation that the implementation does not perform.
+
+Every handwritten enum element has a comment directly above it, including
+internal states and test scenarios. Explain its meaning and applicable behavior;
+document reserved/unknown values, flag combinations, ordering or numeric
+dependencies when present. Do not change enum values or order to organize
+comments. This targeted requirement also applies to tests without requiring a
+general rewrite of test comments. Schema enums are documented in their source,
+and generated copies are updated only through the existing generation workflow.
+
 Use the language's standard forms:
 
 - Go: declaration comments for exported API, `//` block comments, and standard
@@ -199,6 +219,10 @@ Use the language's standard forms:
   before every `unsafe` block.
 - Schema languages: comments describe wire meaning, units, validity, security,
   and compatibility; generated-language wording is not edited downstream.
+- C++: place `//` contract comments immediately above declarations, fields, enum
+  elements and implementation blocks, following the existing handwritten style.
+  Document a header-declared function's caller contract in the header and its
+  implementation reasoning at the relevant block, without duplicating both.
 - Future languages: record the official documentation syntax in this file or a
   linked SDK standard before implementation.
 

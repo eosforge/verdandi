@@ -8,17 +8,23 @@ pub struct Shape {
     pub registries: usize,
     pub catalogs: usize,
     pub bytes: usize,
+    // 零为均匀分布, 非零仅更新前若干键, 预置状态仍保留完整基数.
+    pub hot_keys: usize,
 }
 
 impl Default for Shape {
     fn default() -> Self {
-        Self { registries: 1000, catalogs: 1000, bytes: 256 }
+        Self { registries: 1000, catalogs: 1000, bytes: 256, hot_keys: 0 }
     }
 }
 
 impl Shape {
     pub fn validate(self) -> io::Result<()> {
-        if !(1..=100000).contains(&self.registries) || !(1..=10000).contains(&self.catalogs) || !(64..=1024).contains(&self.bytes) {
+        if !(1..=100000).contains(&self.registries)
+            || !(1..=10000).contains(&self.catalogs)
+            || !(64..=1024).contains(&self.bytes)
+            || self.hot_keys > self.registries.min(self.catalogs)
+        {
             return Err(io::Error::other("invalid registry/catalog shape"));
         }
         Ok(())
@@ -26,6 +32,7 @@ impl Shape {
 
     pub fn key(self, domain: Domain, revision: u64) -> String {
         let (prefix, count) = if domain == Domain::Registry { ("registry/service/instance", self.registries) } else { ("catalog/config", self.catalogs) };
+        let count = if self.hot_keys == 0 { count } else { self.hot_keys };
         format!("{prefix}/{:06}", revision % count as u64)
     }
 
@@ -36,7 +43,7 @@ impl Shape {
             for index in 0..count {
                 let mut data = vec![0x31; size];
                 data[..8].copy_from_slice(&(index as u64).to_le_bytes());
-                state.insert(self.key(domain, index as u64), (0, Bytes::from(data)));
+                state.insert(Self { hot_keys: 0, ..self }.key(domain, index as u64), (0, Bytes::from(data)));
             }
         }
         state

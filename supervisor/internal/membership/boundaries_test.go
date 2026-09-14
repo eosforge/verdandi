@@ -13,27 +13,27 @@ import (
 )
 
 func TestHigherEpochKeepsDeploymentRoleAndEndpoint(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "members.db"), 2)
+	store, err := Open(filepath.Join(t.TempDir(), "members.db"), 2, DefaultMaximumStarts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	first, err := store.Register("alpha", candidate(1), 0)
+	first, err := store.Register("alpha", candidate(1), startup(candidate(1)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, field := range []string{"role", "address"} {
 		changed := candidate(1)
-		changed.PeerID = candidate(2).PeerID
+		changed.ID = candidate(2).ID
 		if field == "role" {
 			changed.Role = Planet
 		} else {
 			changed.Address = candidate(2).Address
 		}
-		if _, err := store.Register("alpha", changed, 1); !errors.Is(err, ErrConflict) {
+		if _, err := store.Register("alpha", changed, startup(changed)); !errors.Is(err, ErrConflict) {
 			t.Fatal("deployment identity changed", field, err)
 		}
-		again, err := store.Register("alpha", candidate(1), 0)
+		again, err := store.Register("alpha", candidate(1), startup(candidate(1)))
 		if err != nil || !reflect.DeepEqual(first, again) {
 			t.Fatal("rejected registration changed snapshot")
 		}
@@ -42,30 +42,30 @@ func TestHigherEpochKeepsDeploymentRoleAndEndpoint(t *testing.T) {
 
 func TestSnapshotReplacementRemainsOrderedAndOwnedAfterReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "members.db")
-	store, err := Open(path, 3)
+	store, err := Open(path, 3, DefaultMaximumStarts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	for _, index := range []int{3, 1, 2} {
-		if _, err := store.Register("alpha", candidate(index), 0); err != nil {
+		if _, err := store.Register("alpha", candidate(index), startup(candidate(index))); err != nil {
 			t.Fatal(err)
 		}
 	}
 	next := candidate(1)
-	next.PeerID, next.Group = candidate(4).PeerID, "new-group"
-	snapshot, err := store.Register("alpha", next, 1)
-	if err != nil || len(snapshot) != 3 || snapshot[2].PeerID != next.PeerID || snapshot[2].Epoch != 2 {
+	next.ID, next.Group = candidate(4).ID, "new-group"
+	snapshot, err := store.Register("alpha", next, startup(next))
+	if err != nil || len(snapshot) != 3 || snapshot[2].ID != next.ID || snapshot[2].Epoch != 2 {
 		t.Fatal("replacement was not sorted", snapshot, err)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	store, err = Open(path, 3)
+	store, err = Open(path, 3, DefaultMaximumStarts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	again, err := store.Register("alpha", next, 1)
+	again, err := store.Register("alpha", next, startup(next))
 	if err != nil || !reflect.DeepEqual(snapshot, again) {
 		t.Fatal("snapshot differs from persisted transaction", err)
 	}
@@ -77,7 +77,7 @@ func TestSnapshotReplacementRemainsOrderedAndOwnedAfterReopen(t *testing.T) {
 
 func TestEpochExhaustionAndFailedOpenReleaseFileLock(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "members.db")
-	store, err := Open(path, 1)
+	store, err := Open(path, 1, DefaultMaximumStarts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,11 +98,11 @@ func TestEpochExhaustionAndFailedOpenReleaseFileLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	next := candidate(1)
-	next.PeerID = candidate(2).PeerID
-	if _, err := store.Register("alpha", next, math.MaxUint64); !errors.Is(err, ErrConflict) {
+	next.ID = candidate(2).ID
+	if _, err := store.Register("alpha", next, startup(next)); !errors.Is(err, ErrConflict) {
 		t.Fatal("epoch wrapped", err)
 	}
-	if epoch, err := store.Epoch("alpha", member.Principal); err != nil || epoch != math.MaxUint64 {
+	if epoch, err := storedEpoch(store, "alpha", member.Principal); err != nil || epoch != math.MaxUint64 {
 		t.Fatal("exhausted epoch changed", err)
 	}
 	if second, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 30 * time.Millisecond}); err == nil {
@@ -112,7 +112,7 @@ func TestEpochExhaustionAndFailedOpenReleaseFileLock(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	store, err = Open(path, 1)
+	store, err = Open(path, 1, DefaultMaximumStarts)
 	if err != nil {
 		t.Fatal("closed store retained lock", err)
 	}

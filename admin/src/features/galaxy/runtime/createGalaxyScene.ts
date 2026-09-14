@@ -43,9 +43,9 @@ function initializeScene(host: HTMLElement, data: GalaxyData, callbacks: GalaxyC
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   canvas.setAttribute("aria-label", "集群拓扑, 左键旋转, 中键平移, 滚轮缩放, 先点击恒星进入星系, 再点击所属行星查看详情, 双击或 Escape 返回全景");
   canvas.setAttribute("role", "img");
-  const unavailablePeers = data.peers.filter((peer) => peer.status === "unavailable");
-  if (unavailablePeers.length)
-    canvas.setAttribute("aria-description", `不可用节点: ${unavailablePeers.map((peer) => peer.name).join(", ")}. 以独立黑洞模型表示, 不显示行星或连线.`);
+  const unavailableStars = data.stars.filter((star) => star.status === "unavailable");
+  if (unavailableStars.length)
+    canvas.setAttribute("aria-description", `不可用节点: ${unavailableStars.map((star) => star.name).join(", ")}. 以独立黑洞模型表示, 不显示行星或连线.`);
   canvas.tabIndex = 0;
   host.append(canvas);
   const controls = scope.own(new FrameOrbitControls(camera, canvas));
@@ -78,31 +78,31 @@ function initializeScene(host: HTMLElement, data: GalaxyData, callbacks: GalaxyC
     callbacks.select(value);
   }
 
-  // 验证 Peer 标识后平滑接近, 仅选恒星时不产生行星详情.
-  function selectPeer(peerId: string): boolean {
+  // 验证 Star 标识后平滑接近, 仅选恒星时不产生行星详情.
+  function selectStar(starId: string): boolean {
     if (disposed || failed) return false;
-    const system = objects.systemsById.get(peerId);
+    const system = objects.systemsById.get(starId);
     if (!system) return false;
-    const center = new THREE.Vector3(...system.peer.position);
+    const center = new THREE.Vector3(...system.star.position);
     const halfFov = Math.atan(Math.tan(THREE.MathUtils.degToRad(config.fieldOfView) * 0.5) * Math.min(1, camera.aspect));
-    const distance = Math.max(config.peerDistance, (system.orbitExtent / Math.sin(halfFov)) * 1.05);
+    const distance = Math.max(config.starDistance, (system.orbitExtent / Math.sin(halfFov)) * 1.05);
     const approach = camera.position.clone().sub(controls.target).normalize().multiplyScalar(Math.min(config.maxDistance, distance));
     moveCamera(center.clone().add(approach), center);
-    publishSelection({ peer: system.peer, planet: null });
+    publishSelection({ star: system.star, planet: null });
     return true;
   }
 
   // 仅为存活场景中的可用恒星设置自转速度, 不改变选择、相机或其它节点的速度.
-  function setStarRotationSpeed(peerId: string, radiansPerSecond: number): boolean {
-    return !disposed && !failed && objects.setStarRotationSpeed(peerId, radiansPerSecond);
+  function setStarRotationSpeed(starId: string, radiansPerSecond: number): boolean {
+    return !disposed && !failed && objects.setStarRotationSpeed(starId, radiansPerSecond);
   }
 
   // 仅当前星系允许选择行星, 所有入口共用检查; 总览、跨星系或错误标识不改变状态.
-  function selectPlanet(peerId: string, planetId: string): boolean {
-    if (disposed || failed || selection?.peer.id !== peerId) return false;
-    const location = objects.findPlanet(peerId, planetId);
+  function selectPlanet(starId: string, planetId: string): boolean {
+    if (disposed || failed || selection?.star.id !== starId) return false;
+    const location = objects.findPlanet(starId, planetId);
     if (!location) return false;
-    publishSelection({ peer: location.peer, planet: location.planet });
+    publishSelection({ star: location.star, planet: location.planet });
     return true;
   }
 
@@ -114,14 +114,14 @@ function initializeScene(host: HTMLElement, data: GalaxyData, callbacks: GalaxyC
   }
 
   // 从当前公转位置的球壳外侧接近, 避免目标被恒星遮挡.
-  function focusPlanet(peerId: string, planetId: string): boolean {
-    if (!selectPlanet(peerId, planetId)) return false;
-    const location = objects.findPlanet(peerId, planetId);
+  function focusPlanet(starId: string, planetId: string): boolean {
+    if (!selectPlanet(starId, planetId)) return false;
+    const location = objects.findPlanet(starId, planetId);
     if (!location) return false;
     const target = objects.worldPosition(location);
     const approach = target
       .clone()
-      .sub(new THREE.Vector3(...location.peer.position))
+      .sub(new THREE.Vector3(...location.star.position))
       .normalize()
       .multiplyScalar(config.planetDistance)
       .add(new THREE.Vector3(0, 5, 0));
@@ -168,8 +168,8 @@ function initializeScene(host: HTMLElement, data: GalaxyData, callbacks: GalaxyC
       motion,
       pick(raycaster) {
         const hit = objects.pick(raycaster, selection);
-        if (hit?.planet) selectPlanet(hit.peer.id, hit.planet.id);
-        else if (hit) selectPeer(hit.peer.id);
+        if (hit?.planet) selectPlanet(hit.star.id, hit.planet.id);
+        else if (hit) selectStar(hit.star.id);
       },
       overview,
     },
@@ -220,7 +220,7 @@ function initializeScene(host: HTMLElement, data: GalaxyData, callbacks: GalaxyC
     reportCleanup(scope.dispose());
   }
 
-  return { selectPeer, setStarRotationSpeed, selectPlanet, focusPlanet, overview, dispose };
+  return { selectStar, setStarRotationSpeed, selectPlanet, focusPlanet, overview, dispose };
 }
 
 // 清理异常仅报告给开发者, 不遮盖原始初始化失败或阻断其它资源释放.

@@ -1,6 +1,6 @@
 # 管理端架构
 
-> 目标角色已按 [星图结构修订](../../galaxy-architecture.md) 更新: Peer 为恒星, Relay 为全量授权缓存行星,
+> 目标角色已按 [星图结构修订](../../galaxy-architecture.md) 更新: Star 为恒星, Relay 为全量授权缓存行星,
 > 业务实体为可直属恒星或绑定行星的卫星. 下文记录当前已实现的旧展示模型, 不是新模型已完成的声明.
 
 ## 依赖方向
@@ -24,9 +24,9 @@ main → app/App + AppShell + styles
 model/types + presentation + layout + orbit + orbitPlanner + validate ← data/demo, ui, composables, runtime
 ```
 
-`GalaxyData` 是展示快照, 不是 Supervisor 的网络协议. Peer、行星和连线使用稳定 ID;
-行星坐标是相对于 Peer 的初始布局参考, 防碰撞规划可调整实际起点与轨道, 不改写输入数据.
-连线显式提供, 渲染器不会把所有 Peer 自动连成完全图. 初始化前检查唯一性、所属关系、有限坐标和边端点.
+`GalaxyData` 是展示快照, 不是 Supervisor 的网络协议. Star、行星和连线使用稳定 ID;
+行星坐标是相对于 Star 的初始布局参考, 防碰撞规划可调整实际起点与轨道, 不改写输入数据.
+连线显式提供, 渲染器不会把所有 Star 自动连成完全图. 初始化前检查唯一性、所属关系、有限坐标和边端点.
 此检查面向已类型化的内部快照; 未来网络响应仍需独立的结构、大小和权限校验.
 
 ## 责任与所有权
@@ -45,7 +45,7 @@ model/types + presentation + layout + orbit + orbitPlanner + validate ← data/d
 | ResourceScope              | 逆序、幂等、尽力完成全部清理                     | 业务状态恢复           |
 
 场景控制器的选择命令接受 ID, 错误 ID 和已释放实例返回 `false`, 不改变当前选择.
-`setStarRotationSpeed(peerId, radiansPerSecond)` 设置可用恒星的本地 Y 轴自转速度, 单位为弧度/秒.
+`setStarRotationSpeed(starId, radiansPerSecond)` 设置可用恒星的本地 Y 轴自转速度, 单位为弧度/秒.
 默认使用 `sceneConfig.starRotationRadiansPerSecond` 的 `2π/60`, 即一分钟一圈; 负数反转, 0 原地停止.
 拒绝非有限值、缺失或不可用节点以及已失败/释放的场景, 不改变原速度.
 该接口独立于行星数量和选择状态, 暂不推导业务速度规则; 重建快照时调用方需重新设置速度.
@@ -86,15 +86,15 @@ model/types + presentation + layout + orbit + orbitPlanner + validate ← data/d
 静态包围球覆盖远日点与模型半径, 公转后仍支持剔除和拾取. 选中环和推进读取当前实例矩阵, 不使用初始坐标.
 总览拾取目标只有恒星, 进入星系后才加入所属行星; 其它星系的行星不会挡住恒星点击.
 控制器的 `selectPlanet` 和 `focusPlanet` 同样要求已经进入对应星系, 不再隐式跨视图选择. ID 查找不依赖对象引用.
-恒星使用 GLB 中的起伏球面和球形日冕壳, 按 Peer 着色; 行星使用 GLB 岩质网格并按实体类型着色.
+恒星使用 GLB 中的起伏球面和球形日冕壳, 按 Star 着色; 行星使用 GLB 岩质网格并按实体类型着色.
 `model/presentation.ts` 以全部所属行星数计算恒星线性缩放: 10→0.5、30→1、60→1.5、120→2、180→3,
-区间内线性插值, 两端钳制. 只缩放恒星 GLB 根节点, 表面、日冕和拾取同步; Peer 坐标、行星轨道与连线不随之缩放.
+区间内线性插值, 两端钳制. 只缩放恒星 GLB 根节点, 表面、日冕和拾取同步; Star 坐标、行星轨道与连线不随之缩放.
 恒星聚焦距离至少为 90, 按规划后的轨道范围和画布较窄方向的视角适当后退, 上限仍遵循相机配置.
 每个可用恒星保存独立自转速度, 使用原有帧循环更新模型根节点姿态, 不增加材质、纹理或行星矩阵上传.
 无效时间增量被忽略, 零速不更新姿态; 先按旋转周期折叠增量再乘速度, 避免极大有限输入溢出.
 星体与日冕均为实体网格, 不使用 Sprite 或随相机转向的贴片; 行星选中环仍是独立的 UI 装饰.
 
-`PeerStar.status` 显式声明展示快照中的可用性. Orion 是新增的不可用示例, 原有三个 Peer 的状态和实体保持不变.
+`Star.status` 显式声明展示快照中的可用性. Orion 是新增的不可用示例, 原有三个 Star 的状态和实体保持不变.
 不可用节点只创建黑洞模型, 即使快照保留旧实体和边, 也不创建其行星、拾取入口或连线.
 星图装配时将黑洞模型整体缩放到 0.75, 盘面、阴影和拾取代理保持一致比例; 以下光学参数均为未缩放的模型局部单位.
 黑洞 GLB 包含 Core、Horizon 和 Accretion 下的 Disc、Glow. 运行时只绘制封闭的 Horizon 光学体积;

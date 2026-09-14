@@ -338,7 +338,7 @@ class Build:
     def test(self) -> None:
         section("Test C++23, C ABI, and Legacy consumers")
         ctest = executable(Path(self.native.cmake).with_name("ctest.exe" if self.native.platform == "windows" else "ctest"), "ctest", required=True)
-        arguments = [ctest, "--test-dir", str(self.directory), "--output-on-failure", "--parallel", str(self.jobs)]
+        arguments = [ctest, "--test-dir", str(self.directory), "--output-on-failure", "--no-tests=error", "--parallel", str(self.jobs)]
         if self.native.multi_config:
             arguments += ["-C", self.configuration]
         self.run("CTest", arguments)

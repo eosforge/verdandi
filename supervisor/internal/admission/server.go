@@ -38,8 +38,14 @@ type Server struct {
 
 // Serve 拥有监听器和 gRPC 后台连接. 停机等待 handler 返回后, app 才能关闭数据库.
 func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
+	return s.serve(ctx, listener, 5*time.Second)
+}
+
+// serve 共用生产处理链; 白盒 race 夹具只放宽 RPC 预算, 不替换密码验证或复制 gRPC 服务设置.
+// requestTimeout 必须为正; 生产入口固定五秒, 不暴露 CLI 或每节点可变的认证计时状态.
+func (s *Server) serve(ctx context.Context, listener net.Listener, requestTimeout time.Duration) error {
 	if ctx == nil || listener == nil || !membership.Name(s.Cluster) || s.Authority == nil || s.Authority.TLS == nil ||
-		s.Authority.accounts == nil || s.Store == nil || s.Logger == nil || s.MaximumConnections < 1 || s.MaximumConnections > 65536 {
+		s.Authority.accounts == nil || s.Store == nil || s.Logger == nil || s.MaximumConnections < 1 || s.MaximumConnections > 65536 || requestTimeout <= 0 {
 		if listener != nil {
 			_ = listener.Close()
 		}
@@ -51,7 +57,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		grpc.MaxHeaderListSize(4096), grpc.WaitForHandlers(true),
 		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionIdle: 5 * time.Second, MaxConnectionAge: 15 * time.Second, MaxConnectionAgeGrace: time.Second}),
 		grpc.UnaryInterceptor(func(ctx context.Context, request any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-			limited, cancel := context.WithTimeout(ctx, 5*time.Second)
+			limited, cancel := context.WithTimeout(ctx, requestTimeout)
 			defer cancel()
 			return handler(limited, request)
 		}),
@@ -76,24 +82,9 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 	return err
 }
 
-// Challenge 只读取端点的首次 CAS 基线, 不签发凭证, 同样要求账号登录.
-func (s *Server) Challenge(ctx context.Context, request *wire.LoginRequest) (*wire.RegistrationChallenge, error) {
-	if err := s.Authority.accounts.authenticate(ctx, request.Username, request.Password, wire.NodeRole_NODE_ROLE_UNSPECIFIED); err != nil {
-		return nil, err
-	}
-	if request.ClusterId != s.Cluster || !membership.Address(request.Advertise) {
-		return nil, status.Error(codes.InvalidArgument, "invalid registration target")
-	}
-	epoch, err := s.Store.Epoch(s.Cluster, endpointPrincipal(request.Username, s.Cluster, request.Advertise))
-	if err != nil {
-		return nil, storeError(err)
-	}
-	return &wire.RegistrationChallenge{ClusterId: s.Cluster, ExpectedEpoch: epoch}, nil
-}
-
-// Register 再次认证账号, 然后在一次持久事务内完成 CAS 和快照. 密码不进入成员表和签名正文.
+// Register 一次认证后原子登记, 返回已提交身份和完整快照. 幂等键不进入凭证或日志.
 func (s *Server) Register(ctx context.Context, request *wire.RegistrationRequest) (*wire.RegistrationResponse, error) {
-	if request.Role != wire.NodeRole_NODE_ROLE_STAR && request.Role != wire.NodeRole_NODE_ROLE_PLANET {
+	if request.Role != wire.Role_ROLE_STAR && request.Role != wire.Role_ROLE_PLANET {
 		return nil, status.Error(codes.InvalidArgument, "explicit role required")
 	}
 	if err := s.Authority.accounts.authenticate(ctx, request.Username, request.Password, request.Role); err != nil {
@@ -103,12 +94,19 @@ func (s *Server) Register(ctx context.Context, request *wire.RegistrationRequest
 		return nil, status.Error(codes.InvalidArgument, "invalid registration target")
 	}
 	role := membership.Star
-	if request.Role == wire.NodeRole_NODE_ROLE_PLANET {
+	if request.Role == wire.Role_ROLE_PLANET {
 		role = membership.Planet
 	}
 	principal := endpointPrincipal(request.Username, s.Cluster, request.Advertise)
+	if len(request.RequestId) != 32 {
+		return nil, status.Error(codes.InvalidArgument, "invalid startup request")
+	}
+	id, err := newID()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "identity issuance failed")
+	}
 	members, err := s.Store.Register(s.Cluster,
-		membership.Member{PeerID: request.PeerId, Principal: principal, Address: request.Advertise, Role: role, Group: request.Group}, request.ExpectedEpoch)
+		membership.Member{ID: id, Principal: principal, Address: request.Advertise, Role: role, Group: request.Group}, request.RequestId)
 	if err != nil {
 		return nil, storeError(err)
 	}
@@ -126,7 +124,7 @@ func (s *Server) Register(ctx context.Context, request *wire.RegistrationRequest
 		}
 	}
 	if role == membership.Planet {
-		result.Members = candidates(result.Members, request.Group, request.PeerId, request.CandidateRound)
+		result.Members = candidates(result.Members, request.Group, principal, request.CandidateRound)
 	}
 	return result, nil
 }

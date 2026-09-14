@@ -22,7 +22,7 @@ func TestCanceledLoginWithFreeCapacityDoesNotComputePassword(t *testing.T) {
 	cancel()
 	// 空闲名额与取消同时就绪, 不应随机选择 KDF 分支并返回认证失败.
 	for range 32 {
-		if err := a.authenticate(ctx, "unknown", "wrong", wire.NodeRole_NODE_ROLE_STAR); status.Code(err) != codes.Canceled {
+		if err := a.authenticate(ctx, "unknown", "wrong", wire.Role_ROLE_STAR); status.Code(err) != codes.Canceled {
 			t.Fatal(err)
 		}
 		if len(a.work) != 0 {

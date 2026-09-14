@@ -25,7 +25,7 @@ def native_environment():
     env = environment()
     env["VERDANDI_NATIVE_LIBRARY"] = str(library)
     key = "PATH" if os.name == "nt" else "LD_LIBRARY_PATH"
-    env[key] = str(library.parent) + os.pathsep + env.get(key, "")
+    env[key] = os.pathsep.join(path for path in (str(library.parent), env.get(key, "")) if path)
     return env, report
 
 

@@ -79,7 +79,7 @@ func TestManagementHTTPAndPortCleanup(t *testing.T) {
 		{"GET", "/healthz", "", 200},
 		{"HEAD", "/healthz", "", 200},
 		{"POST", "/healthz", "", 405},
-		{"GET", "/peers", "", 404},
+		{"GET", "/stars", "", 404},
 		{"GET", "/healthz", "unexpected", 400},
 	} {
 		t.Run(tc.method+tc.path+tc.body, func(t *testing.T) {

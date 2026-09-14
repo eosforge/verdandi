@@ -30,23 +30,23 @@ test("star scale follows the requested piecewise count landmarks and clamps both
   }
 });
 
-test("demo retains the three available systems and an isolated unavailable peer", () => {
+test("demo retains the three available systems and an isolated unavailable star", () => {
   validateGalaxyData(demoGalaxy);
   assert.deepEqual(
-    demoGalaxy.peers.map((peer) => peer.planets.length),
+    demoGalaxy.stars.map((star) => star.planets.length),
     [36, 48, 60, 0],
   );
   assert.equal(demoGalaxy.links.length, 3);
-  assert.ok(demoGalaxy.links.every((link) => link.source !== "peer-orion" && link.target !== "peer-orion"));
+  assert.ok(demoGalaxy.links.every((link) => link.source !== "star-orion" && link.target !== "star-orion"));
   assert.deepEqual(
-    demoGalaxy.peers.filter((peer) => peer.status === "available").map((peer) => peer.id),
-    ["peer-atlas", "peer-lyra", "peer-vega"],
+    demoGalaxy.stars.filter((star) => star.status === "available").map((star) => star.id),
+    ["star-atlas", "star-lyra", "star-vega"],
   );
   assert.deepEqual(
-    demoGalaxy.peers.filter((peer) => peer.status === "unavailable").map((peer) => peer.id),
-    ["peer-orion"],
+    demoGalaxy.stars.filter((star) => star.status === "unavailable").map((star) => star.id),
+    ["star-orion"],
   );
-  validateGalaxyData({ ...demoGalaxy, peers: [], links: [] });
+  validateGalaxyData({ ...demoGalaxy, stars: [], links: [] });
 });
 
 test("spherical layout is deterministic, finite, and stays on its requested radius", () => {
@@ -74,33 +74,33 @@ for (const [name, mutate] of [
   [
     "invalid availability",
     (data) => {
-      data.peers[0].status = "unknown";
+      data.stars[0].status = "unknown";
     },
   ],
-  ["duplicate peer", (data) => data.peers.push(data.peers[0])],
-  ["duplicate planet", (data) => data.peers[0].planets.push(data.peers[0].planets[0])],
+  ["duplicate star", (data) => data.stars.push(data.stars[0])],
+  ["duplicate planet", (data) => data.stars[0].planets.push(data.stars[0].planets[0])],
   [
     "wrong owner",
     (data) => {
-      data.peers[0].planets[0].peerId = "missing";
+      data.stars[0].planets[0].starId = "missing";
     },
   ],
   [
     "unknown kind",
     (data) => {
-      data.peers[0].planets[0].kind = "Other";
+      data.stars[0].planets[0].kind = "Other";
     },
   ],
   [
     "nonfinite position",
     (data) => {
-      data.peers[0].position[0] = NaN;
+      data.stars[0].position[0] = NaN;
     },
   ],
   [
     "invalid color",
     (data) => {
-      data.peers[0].color = "broken";
+      data.stars[0].color = "broken";
     },
   ],
   [

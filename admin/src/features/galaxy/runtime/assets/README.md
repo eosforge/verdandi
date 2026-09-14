@@ -5,9 +5,9 @@
 
 | 文件           | 内容                                                                      | 运行时用途                       |
 | -------------- | ------------------------------------------------------------------------- | -------------------------------- |
-| star.glb       | Surface 起伏球面、Corona 球形日冕壳                                       | 所有可用 Peer 共享几何, 单独着色 |
+| star.glb       | Surface 起伏球面、Corona 球形日冕壳                                       | 所有可用 Star 共享几何, 单独着色 |
 | planet.glb     | Surface 简化岩质球面                                                      | 九批实例共享几何与材质           |
-| black-hole.glb | Core 阴影代理、Horizon 光学球壳、Accretion 下的 Disc 连续盘体与 Glow 椭球 | 不可用 Peer 的独立模型           |
+| black-hole.glb | Core 阴影代理、Horizon 光学球壳、Accretion 下的 Disc 连续盘体与 Glow 椭球 | 不可用 Star 的独立模型           |
 
 在 `admin/` 使用已有 Node.js 和 Three.js 复现:
 

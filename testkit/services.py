@@ -1,4 +1,4 @@
-"""Peer/Supervisor 真实进程回归与长时测试, 只使用已经构建的二进制和公开测试凭据."""
+"""Star/Supervisor 真实进程回归与长时测试, 只使用已经构建的二进制和公开测试凭据."""
 
 from __future__ import annotations
 
@@ -17,7 +17,14 @@ import sys
 import threading
 import time
 
-from testkit.support import ROOT, atomic_json, available_memory, environment, stop_process, temporary_directory
+from testkit.support import (
+    ROOT,
+    atomic_json,
+    available_memory,
+    environment,
+    stop_process,
+    temporary_directory,
+)
 
 
 class ServiceProcess:
@@ -39,7 +46,10 @@ class ServiceProcess:
             startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startup.wShowWindow = 0
             # 独占且隐藏的控制台允许向本进程发送 Ctrl+Break, 不触碰用户终端.
-            kwargs = {"creationflags": subprocess.CREATE_NEW_CONSOLE | 4, "startupinfo": startup}
+            kwargs = {
+                "creationflags": subprocess.CREATE_NEW_CONSOLE | 4,
+                "startupinfo": startup,
+            }
         else:
             kwargs = {"start_new_session": True}
         self.process = None
@@ -124,7 +134,14 @@ class ServiceProcess:
                 if os.name == "nt":
                     # 临时助手仅附着这个自有子进程的独占控制台, 不在测试主进程切换控制台.
                     subprocess.run(
-                        [getattr(sys, "_base_executable", sys.executable), "-B", "-m", "testkit.services", "--signal-pid", str(self.process.pid)],
+                        [
+                            getattr(sys, "_base_executable", sys.executable),
+                            "-B",
+                            "-m",
+                            "testkit.services",
+                            "--signal-pid",
+                            str(self.process.pid),
+                        ],
                         cwd=ROOT,
                         env=environment(),
                         creationflags=subprocess.CREATE_NO_WINDOW,
@@ -138,7 +155,9 @@ class ServiceProcess:
                 # 在发送信号前已经异常退出也必须失败, 不能因 poll() 非空而漏过退出码校验.
                 code = self.process.wait(timeout=8)
                 if code != 0:
-                    raise RuntimeError(f"Graceful service stop returned {code}: {self.snapshot()['tail']}")
+                    raise RuntimeError(
+                        f"Graceful service stop returned {code}: {self.snapshot()['tail']}"
+                    )
         finally:
             stop_process(self.process)
             self.reader.join(timeout=5)
@@ -150,23 +169,42 @@ class ServiceProcess:
                     raise RuntimeError(self.error + "\n" + "\n".join(self.tail))
 
 
+def star_binary_directory(implementation):
+    """显式选择独立产物目录, 不因某个程序缺失而静默切换实现."""
+    if implementation != "cpp":
+        raise ValueError("Unknown Star implementation: " + str(implementation))
+    return ROOT / "build/cluster-cpp/release"
+
+
 class Host:
     """本机进程集合; SSH 模式复用同一实现, 断开控制连接后自动清理全部子进程."""
 
-    def __init__(self, peer_binaries=None):
+    def __init__(self, star_binaries=None):
         self.stack = ExitStack()
-        self.directory = Path(self.stack.enter_context(temporary_directory("services-")))
+        self.directory = Path(
+            self.stack.enter_context(temporary_directory("services-"))
+        )
         self.processes = {}
         self.counter = 0
-        # C++ 迁移显式选择独立产物目录, 默认 Rust 入口保持原样, 不覆盖或伪装旧二进制.
-        self.peer_binaries = Path(peer_binaries) if peer_binaries else ROOT / "build/peer/target/release"
+        # 默认采用已验收的 C++ 入口. Rust 比较必须显式选择, 不覆盖或伪装旧二进制.
+        self.star_binaries = (
+            Path(star_binaries) if star_binaries else star_binary_directory("cpp")
+        )
 
     def call(self, action, **args):
         if action == "verify_cli":
             suffix = ".exe" if os.name == "nt" else ""
-            for kind in ("peer", "planet", "supervisor"):
-                binary = ROOT / f"build/supervisor/{kind}{suffix}" if kind == "supervisor" else self.peer_binaries / f"{kind}{suffix}"
-                for option, expected in [("--version", 0), ("--help", 0), ("--unknown-test-option", 2)]:
+            for kind in ("star", "planet", "supervisor"):
+                binary = (
+                    ROOT / f"build/supervisor/{kind}{suffix}"
+                    if kind == "supervisor"
+                    else self.star_binaries / f"{kind}{suffix}"
+                )
+                for option, expected in [
+                    ("--version", 0),
+                    ("--help", 0),
+                    ("--unknown-test-option", 2),
+                ]:
                     result = subprocess.run(
                         [str(binary), option],
                         cwd=ROOT,
@@ -176,11 +214,25 @@ class Host:
                         text=True,
                         encoding="utf-8",
                         timeout=10,
-                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                        creationflags=(
+                            subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                        ),
                     )
-                    if result.returncode != expected or not result.stdout + result.stderr:
-                        raise AssertionError(f"{kind} {option}: unexpected CLI result {result.returncode}")
-                    if option == "--help" and kind != "supervisor" and ("login.json" not in result.stdout or "process key" in result.stdout):
+                    if (
+                        result.returncode != expected
+                        or not result.stdout + result.stderr
+                    ):
+                        raise AssertionError(
+                            f"{kind} {option}: unexpected CLI result {result.returncode}"
+                        )
+                    if (
+                        option == "--help"
+                        and kind != "supervisor"
+                        and (
+                            "login.json" not in result.stdout
+                            or "process key" in result.stdout
+                        )
+                    ):
                         raise AssertionError(f"{kind}: stale identity instructions")
             return True
         if action == "reserve":
@@ -196,38 +248,59 @@ class Host:
                 command = [
                     ROOT / f"build/supervisor/supervisor{suffix}",
                     f"--listen={args['management']}",
-                    f"--peer-listen={args['address']}",
+                    f"--star-listen={args['address']}",
                     "--cluster=alpha",
-                    "--max-peers=4",
-                    "--max-connections=32",
-                    f"--identity={ROOT / 'peer/tests/fixtures/supervisor'}",
+                    f"--max-members={args.get('max_members', 4)}",
+                    f"--max-connections={args.get('max_connections', 32)}",
+                    f"--identity={ROOT / 'cluster/tests/fixtures/supervisor'}",
                     f"--members={self.directory / 'members.db'}",
                 ]
-            elif kind in {"peer", "planet"}:
+            elif kind in {"star", "planet"}:
                 role = args["role"]
-                if role not in {"peer-a", "peer-b", "peer-c", "peer-d", "planet-a", "planet-b", "wrong-cluster", "expired", "rogue"}:
+                if role not in {
+                    "star-a",
+                    "star-b",
+                    "star-c",
+                    "star-d",
+                    "planet-a",
+                    "planet-b",
+                    "wrong-cluster",
+                    "expired",
+                    "rogue",
+                }:
                     raise ValueError("Unknown test identity")
-                identity = ROOT / "peer/tests/fixtures" / role
+                identity = ROOT / "cluster/tests/fixtures" / role
                 if login_case := args.get("login_case"):
                     if login_case not in {"wrong-password", "malformed"}:
                         raise ValueError("Unknown login test case")
                     # 只改本次测试拥有的副本, 公开夹具与用户部署材料保持独立.
                     copied = self.directory / f"identity-{self.counter + 1}"
                     copied.mkdir()
-                    for filename in ("ca.pem", "cert.pem", "key.pem", "admission.pub", "login.json"):
+                    for filename in (
+                        "ca.pem",
+                        "cert.pem",
+                        "key.pem",
+                        "admission.pub",
+                        "login.json",
+                    ):
                         shutil.copyfile(identity / filename, copied / filename)
-                    login = {"username": "stars", "password": "wrong-public-test-password"}
+                    login = {
+                        "username": "stars",
+                        "password": "wrong-public-test-password",
+                    }
                     if login_case == "malformed":
                         login["unexpected"] = True
-                    (copied / "login.json").write_text(json.dumps(login), encoding="utf-8")
+                    (copied / "login.json").write_text(
+                        json.dumps(login), encoding="utf-8"
+                    )
                     identity = copied
                 command = [
-                    self.peer_binaries / f"{kind}{suffix}",
+                    self.star_binaries / f"{kind}{suffix}",
                     f"--listen={args['address']}",
                     f"--super={args['supervisor']}",
                     "--cluster=alpha",
                     f"--group={args.get('group', 'default')}",
-                    "--max-peers=4",
+                    f"--max-members={args.get('max_members', 4)}",
                     f"--identity={identity}",
                     "--status-interval-seconds=1",
                     "--heartbeat-interval-ms=200",
@@ -236,7 +309,9 @@ class Host:
             else:
                 raise ValueError("Unknown service")
             self.counter += 1
-            self.processes[name] = ServiceProcess(command, self.directory / f"{self.counter}.log")
+            self.processes[name] = ServiceProcess(
+                command, self.directory / f"{self.counter}.log"
+            )
             return self.processes[name].process.pid
         if action == "snapshot":
             return self.processes[args["name"]].snapshot()
@@ -260,7 +335,10 @@ class Host:
                 if owned.process.poll() is None:
                     directory = Path(f"/proc/{owned.process.pid}")
                     try:
-                        fields = dict(line.split(":", 1) for line in (directory / "status").read_text().splitlines())
+                        fields = dict(
+                            line.split(":", 1)
+                            for line in (directory / "status").read_text().splitlines()
+                        )
                         samples[name] = {
                             "rss_kib": int(fields["VmRSS"].split()[0]),
                             "threads": int(fields["Threads"]),
@@ -296,6 +374,8 @@ class RemoteHost:
         import paramiko
         import shlex
 
+        implementation = config.get("star_implementation", "cpp")
+        star_binary_directory(implementation)
         self.client = paramiko.SSHClient()
         self.client.load_system_host_keys()
         known = ROOT / "build/testkit/known_hosts"
@@ -312,8 +392,10 @@ class RemoteHost:
             allow_agent=False,
         )
         project = config.get("project", "/home/ubuntu/verdandi")
-        command = f"cd {shlex.quote(project)} && exec {shlex.quote(project + '/build/tools/python-build/bin/python')} -B -m testkit.services --agent"
-        self.stdin, self.stdout, self.stderr = self.client.exec_command(command, timeout=30)
+        command = f"cd {shlex.quote(project)} && exec {shlex.quote(project + '/build/tools/python-build/bin/python')} -B -m testkit.services --agent --implementation={implementation}"
+        self.stdin, self.stdout, self.stderr = self.client.exec_command(
+            command, timeout=30
+        )
 
     def call(self, action, **args):
         self.stdin.write(json.dumps({"action": action, **args}) + "\n")
@@ -356,21 +438,37 @@ def converge(nodes, members, active=None):
         complete = True
         for baseline, value in zip(baselines, latest):
             state = value["status"]
-            complete &= value["alive"] and value["sequence"] > baseline and state.get("initialized") and state.get("members") == members
-            complete &= state.get("inbound") == active - 1 and state.get("outbound") == active - 1
+            complete &= (
+                value["alive"]
+                and value["sequence"] > baseline
+                and state.get("initialized")
+                and state.get("members") == members
+            )
+            complete &= (
+                state.get("inbound") == active - 1
+                and state.get("outbound") == active - 1
+            )
         if complete:
             return
         if not all(value["alive"] for value in latest):
             break
         time.sleep(0.1)
     # 保留每个节点的有限诊断, 避免只报告最先等待者而遗漏实际失败的另一端.
-    evidence = [{"name": name, "alive": value["alive"], "status": value["status"], "tail": value["tail"][-6:]} for (_, name), value in zip(nodes, latest)]
+    evidence = [
+        {
+            "name": name,
+            "alive": value["alive"],
+            "status": value["status"],
+            "tail": value["tail"][-6:],
+        }
+        for (_, name), value in zip(nodes, latest)
+    ]
     raise TimeoutError(f"Mesh did not converge: {evidence}")
 
 
 def campaign(options, report):
     with ExitStack() as stack:
-        local = Host(getattr(options, "peer_binaries", None))
+        local = Host(getattr(options, "star_binaries", None))
         stack.callback(local.close)
         other = local
         remote_address = options.address
@@ -379,7 +477,12 @@ def campaign(options, report):
             other = RemoteHost(config)
             stack.callback(other.close)
             remote_address = config["host"]
-        endpoints = [(local, options.address), (other, remote_address), (other, remote_address), (local, options.address)]
+        endpoints = [
+            (local, options.address),
+            (other, remote_address),
+            (other, remote_address),
+            (local, options.address),
+        ]
         ports = [host.call("reserve", address=address) for host, address in endpoints]
         super_port = local.call("reserve", address=options.address)
         management = local.call("reserve", address=options.address)
@@ -391,51 +494,76 @@ def campaign(options, report):
         report["cases"].append("service_cli_help_version_and_invalid_options")
 
         def start_super():
-            local.call("start", name="supervisor", kind="supervisor", address=supervisor, management=f"{options.address}:{management}")
-            wait_for(local, "supervisor", lambda value: any("supervisor_registration_started" in line for line in value["tail"]))
+            local.call(
+                "start",
+                name="supervisor",
+                kind="supervisor",
+                address=supervisor,
+                management=f"{options.address}:{management}",
+            )
+            wait_for(
+                local,
+                "supervisor",
+                lambda value: any(
+                    "supervisor_registration_started" in line for line in value["tail"]
+                ),
+            )
 
-        def start_peer(index):
+        def start_star(index):
             host, address = endpoints[index]
             host.call(
                 "start",
-                name=f"peer-{index}",
-                kind="peer",
-                role=f"peer-{chr(97 + index)}",
+                name=f"star-{index}",
+                kind="star",
+                role=f"star-{chr(97 + index)}",
                 address=f"{address}:{ports[index]}",
                 supervisor=supervisor,
                 group="west" if index == 2 else "east",
             )
-            return host, f"peer-{index}"
+            return host, f"star-{index}"
 
         start_super()
-        nodes = [start_peer(index) for index in range(3)]
+        nodes = [start_star(index) for index in range(3)]
         converge(nodes, 3)
-        report["cases"].append("concurrent_three_peer_full_mesh")
+        report["cases"].append("concurrent_three_star_full_mesh")
         local.call("stop", name="supervisor", graceful=True)
-        fourth = start_peer(3)
-        wait_for(*fourth, lambda value: value["sequence"] >= 2 and not value["status"].get("initialized"))
+        fourth = start_star(3)
+        wait_for(
+            *fourth,
+            lambda value: value["sequence"] >= 2
+            and not value["status"].get("initialized"),
+        )
         converge(nodes, 3)
-        report["cases"].append("supervisor_offline_existing_mesh_and_new_peer_wait")
+        report["cases"].append("supervisor_offline_existing_mesh_and_new_star_wait")
         start_super()
         nodes.append(fourth)
         converge(nodes, 4)
-        report["cases"].append("persistent_supervisor_restart_and_waiting_peer_join")
-        # 每次重启必须换 UUID, 其他节点随后只保留当前实例的两条连接.
+        report["cases"].append("persistent_supervisor_restart_and_waiting_star_join")
+        # 每次重启必须获取新 id, 其他节点随后只保留当前实例的两条连接.
         for graceful in [True, False]:
             host, name = nodes[2]
-            old_id = host.call("snapshot", name=name)["status"]["peer_id"]
+            old_id = host.call("snapshot", name=name)["status"]["id"]
             host.call("stop", name=name, graceful=graceful)
             converge([node for index, node in enumerate(nodes) if index != 2], 4, 3)
-            start_peer(2)
-            value = wait_for(host, name, lambda value: value["status"].get("initialized"))
-            if value["status"]["peer_id"] == old_id:
-                raise AssertionError("Peer restart reused process UUID")
+            start_star(2)
+            value = wait_for(
+                host, name, lambda value: value["status"].get("initialized")
+            )
+            if value["status"]["id"] == old_id:
+                raise AssertionError("Star restart reused issued process id")
             converge(nodes, 4)
-        report["cases"].append("graceful_and_forced_peer_restart")
+        report["cases"].append("graceful_and_forced_star_restart")
         # 未知账号和无效本地 TLS 证书均不能进入 initialized 状态.
         for role in ["wrong-cluster", "expired", "rogue"]:
             port = local.call("reserve", address=options.address)
-            local.call("start", name=role, kind="peer", role=role, address=f"{options.address}:{port}", supervisor=supervisor)
+            local.call(
+                "start",
+                name=role,
+                kind="star",
+                role=role,
+                address=f"{options.address}:{port}",
+                supervisor=supervisor,
+            )
             value = wait_for(local, role, lambda value: not value["alive"])
             if value["exit"] != 1 or value["status"].get("initialized"):
                 raise AssertionError(f"Invalid identity accepted: {role}")
@@ -445,7 +573,15 @@ def campaign(options, report):
 
         for login_case in ("wrong-password", "malformed"):
             port = local.call("reserve", address=options.address)
-            local.call("start", name="bad-login", kind="peer", role="peer-a", login_case=login_case, address=f"{options.address}:{port}", supervisor=supervisor)
+            local.call(
+                "start",
+                name="bad-login",
+                kind="star",
+                role="star-a",
+                login_case=login_case,
+                address=f"{options.address}:{port}",
+                supervisor=supervisor,
+            )
             value = wait_for(local, "bad-login", lambda value: not value["alive"])
             if value["exit"] != 1 or value["status"].get("initialized"):
                 raise AssertionError("Invalid account login entered initialized state")
@@ -456,9 +592,16 @@ def campaign(options, report):
         report["cases"].append("invalid_login_configuration_and_password_fail_closed")
 
         # 使用真实 Go 准入服务检查账号角色, 不能通过请求字段冒充另一种部署.
-        for kind, role in [("planet", "peer-a"), ("peer", "planet-a")]:
+        for kind, role in [("planet", "star-a"), ("star", "planet-a")]:
             port = local.call("reserve", address=options.address)
-            local.call("start", name="wrong-role", kind=kind, role=role, address=f"{options.address}:{port}", supervisor=supervisor)
+            local.call(
+                "start",
+                name="wrong-role",
+                kind=kind,
+                role=role,
+                address=f"{options.address}:{port}",
+                supervisor=supervisor,
+            )
             value = wait_for(local, "wrong-role", lambda value: not value["alive"])
             if value["exit"] != 1 or value["status"].get("initialized"):
                 raise AssertionError("Account role escalation accepted")
@@ -467,7 +610,9 @@ def campaign(options, report):
         report["cases"].append("star_planet_account_roles_fail_closed")
 
         planet_endpoints = [(local, options.address), (other, remote_address)]
-        planet_ports = [host.call("reserve", address=address) for host, address in planet_endpoints]
+        planet_ports = [
+            host.call("reserve", address=address) for host, address in planet_endpoints
+        ]
 
         def start_planet(index):
             host, address = planet_endpoints[index]
@@ -492,17 +637,17 @@ def campaign(options, report):
                 return (
                     value["sequence"] > baseline
                     and state.get("initialized")
-                    and upstream.get("peer_id")
+                    and upstream.get("id")
                     and (group is None or upstream.get("group") == group)
-                    and upstream.get("peer_id") != excluded
+                    and upstream.get("id") != excluded
                 )
 
             return wait_for(*node, ready)
 
         planets = [start_planet(0)]
         initial = planet_connected(planets[0], group="west")
-        planet_id = initial["status"]["peer_id"]
-        old_upstream = initial["status"]["upstream"]["peer_id"]
+        planet_id = initial["status"]["id"]
+        old_upstream = initial["status"]["upstream"]["id"]
         converge(nodes, 4)
         report["cases"].append("planet_prefers_local_group_without_joining_star_mesh")
 
@@ -510,21 +655,33 @@ def campaign(options, report):
         local.call("stop", name="supervisor", graceful=True)
         nodes[2][0].call("stop", name=nodes[2][1], graceful=False)
         switched = planet_connected(planets[0], group="east", excluded=old_upstream)
-        if switched["status"]["peer_id"] != planet_id:
+        if switched["status"]["id"] != planet_id:
             raise AssertionError("Planet failover changed its process identity")
         report["cases"].append("planet_cross_group_failover_while_supervisor_offline")
         planets.append(start_planet(1))
-        wait_for(*planets[1], lambda value: value["sequence"] >= 2 and not value["status"].get("initialized"))
+        wait_for(
+            *planets[1],
+            lambda value: value["sequence"] >= 2
+            and not value["status"].get("initialized"),
+        )
         start_super()
-        start_peer(2)
+        start_star(2)
         converge(nodes, 4)
         planet_connected(planets[1])
         planet_connected(planets[0], group="east")
-        report["cases"].append("new_planet_waits_for_supervisor_and_healthy_upstream_stays")
+        report["cases"].append(
+            "new_planet_waits_for_supervisor_and_healthy_upstream_stays"
+        )
 
         # 单上游不是仅检查 Planet 的一个字段, 还从所有 Star 的实际入站索引交叉验证.
         deadline = time.monotonic() + 20
-        while sum(host.call("snapshot", name=name)["status"].get("planet_inbound", 0) for host, name in nodes) != 2:
+        while (
+            sum(
+                host.call("snapshot", name=name)["status"].get("planet_inbound", 0)
+                for host, name in nodes
+            )
+            != 2
+        ):
             if time.monotonic() >= deadline:
                 raise AssertionError("Stars do not own exactly two Planet sessions")
             time.sleep(0.1)
@@ -534,10 +691,14 @@ def campaign(options, report):
             restarts = 0
             minimum_available = available_memory()
             next_progress = started + 60
-            resource_hosts = [("local", local)] + ([("remote", other)] if other is not local else [])
+            resource_hosts = [("local", local)] + (
+                [("remote", other)] if other is not local else []
+            )
 
             def sample_resources():
-                samples = {label: host.call("resources") for label, host in resource_hosts}
+                samples = {
+                    label: host.call("resources") for label, host in resource_hosts
+                }
                 report.setdefault("resources_initial", samples)
                 report["resources_final"] = samples
                 peaks = report.setdefault("resources_peak", {})
@@ -554,22 +715,28 @@ def campaign(options, report):
                     "elapsed_seconds": round(time.monotonic() - started, 3),
                     "restart_cycles": restarts,
                     "minimum_available_mib": minimum_available // 1024**2,
-                    "peers": 4,
+                    "stars": 4,
                     "planets": 2,
                 }
 
             while time.monotonic() - started < options.duration:
                 sample_resources()
-                minimum_available = min(minimum_available, local.call("memory"), other.call("memory"))
+                minimum_available = min(
+                    minimum_available, local.call("memory"), other.call("memory")
+                )
                 record_soak()
                 if minimum_available < 384 * 1024**2:
                     raise RuntimeError("Available memory fell below 384 MiB")
-                upstream_id = planet_connected(planets[0])["status"]["upstream"]["peer_id"]
-                index = next(index for index, (host, name) in enumerate(nodes) if host.call("snapshot", name=name)["status"]["peer_id"] == upstream_id)
+                upstream_id = planet_connected(planets[0])["status"]["upstream"]["id"]
+                index = next(
+                    index
+                    for index, (host, name) in enumerate(nodes)
+                    if host.call("snapshot", name=name)["status"]["id"] == upstream_id
+                )
                 host, name = nodes[index]
                 host.call("stop", name=name, graceful=False)
                 planet_connected(planets[0], excluded=upstream_id)
-                start_peer(index)
+                start_star(index)
                 converge(nodes, 4)
                 local.call("stop", name="supervisor", graceful=False)
                 converge(nodes, 4)
@@ -577,9 +744,14 @@ def campaign(options, report):
                 restarts += 1
                 record_soak()
                 if time.monotonic() >= next_progress:
-                    print(json.dumps({"event": "soak_progress", **report["soak"]}), flush=True)
+                    print(
+                        json.dumps({"event": "soak_progress", **report["soak"]}),
+                        flush=True,
+                    )
                     next_progress = time.monotonic() + 60
-                time.sleep(min(2, max(0, options.duration - (time.monotonic() - started))))
+                time.sleep(
+                    min(2, max(0, options.duration - (time.monotonic() - started)))
+                )
             sample_resources()
             record_soak()
         for host, name in reversed(planets):
@@ -603,16 +775,26 @@ def signal_windows_child(pid):
     from ctypes import wintypes
 
     handler_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
-    api.AttachConsole.argtypes, api.AttachConsole.restype = [wintypes.DWORD], wintypes.BOOL
-    api.SetConsoleCtrlHandler.argtypes, api.SetConsoleCtrlHandler.restype = [handler_type, wintypes.BOOL], wintypes.BOOL
-    api.GenerateConsoleCtrlEvent.argtypes, api.GenerateConsoleCtrlEvent.restype = [wintypes.DWORD, wintypes.DWORD], wintypes.BOOL
+    api.AttachConsole.argtypes, api.AttachConsole.restype = [
+        wintypes.DWORD
+    ], wintypes.BOOL
+    api.SetConsoleCtrlHandler.argtypes, api.SetConsoleCtrlHandler.restype = [
+        handler_type,
+        wintypes.BOOL,
+    ], wintypes.BOOL
+    api.GenerateConsoleCtrlEvent.argtypes, api.GenerateConsoleCtrlEvent.restype = [
+        wintypes.DWORD,
+        wintypes.DWORD,
+    ], wintypes.BOOL
     handler = handler_type(lambda event: True)
     # 只从专用助手的控制台脱离, 不能在调用者或用户终端中执行此步骤.
     api.FreeConsole()
     if not api.AttachConsole(pid):
         raise ctypes.WinError(ctypes.get_last_error())
     try:
-        if not api.SetConsoleCtrlHandler(handler, True) or not api.GenerateConsoleCtrlEvent(1, 0):
+        if not api.SetConsoleCtrlHandler(
+            handler, True
+        ) or not api.GenerateConsoleCtrlEvent(1, 0):
             raise ctypes.WinError(ctypes.get_last_error())
         time.sleep(0.1)
     finally:
@@ -647,15 +829,34 @@ def main():
     parser.add_argument("--duration", type=int, default=60)
     parser.add_argument("--address", default="127.0.0.1")
     parser.add_argument("--remote-config")
-    parser.add_argument("--peer-binaries", type=Path, help="Explicit local Star/Planet binary directory; defaults to Rust artifacts")
+    parser.add_argument(
+        "--implementation",
+        choices=("cpp",),
+        default="cpp",
+        help="Service implementation; never falls back to another binary",
+    )
+    parser.add_argument(
+        "--star-binaries",
+        type=Path,
+        help="Explicit local Star/Planet binary directory, overriding implementation output path",
+    )
     parser.add_argument("--agent", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--signal-pid", type=int, help=argparse.SUPPRESS)
     options = parser.parse_args()
     if options.signal_pid:
         signal_windows_child(options.signal_pid)
         return
+    if (
+        options.implementation == "cpp"
+        and sys.platform != "linux"
+        and not options.star_binaries
+    ):
+        parser.error("C++26 services require Linux; the Rust service is retired")
+    options.star_binaries = options.star_binaries or star_binary_directory(
+        options.implementation
+    )
     if options.agent:
-        host = Host()
+        host = Host(options.star_binaries)
         try:
             # SSH 断网未及时产生 EOF 时也清理. 控制协议必须在 60 秒内完成一条命令.
             for line in agent_lines():
@@ -680,7 +881,7 @@ def main():
         "platform": sys.platform,
         "mode": options.mode,
         "mixed_hosts": bool(options.remote_config),
-        "peer_binaries": str((options.peer_binaries or ROOT / "build/peer/target/release").resolve()),
+        "star_binaries": str(options.star_binaries.resolve()),
         "cases": [],
     }
     result = ROOT / "build/testkit/results" / f"services-{time.time_ns()}.json"
@@ -688,7 +889,9 @@ def main():
     try:
         campaign(options, report)
         report["status"] = "pass"
-        report["cleanup"] = "processes joined, ports reusable, owned temporary directories removed"
+        report["cleanup"] = (
+            "processes joined, ports reusable, owned temporary directories removed"
+        )
     except BaseException as error:
         report["status"] = "fail"
         report["error"] = str(error)
@@ -696,7 +899,10 @@ def main():
     finally:
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
         atomic_json(result, report)
-        print(json.dumps({"result": str(result), **report}, ensure_ascii=False), flush=True)
+        print(
+            json.dumps({"result": str(result), **report}, ensure_ascii=False),
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

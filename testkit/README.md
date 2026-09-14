@@ -1,22 +1,28 @@
 # Verdandi Testkit
 
-The independent Star/Planet/Supervisor backend uses `scripts/test-services.ps1`
-or `bash scripts/test-services.sh`. Both run offline service gates followed by
+The independent Star/Planet/Supervisor backend defaults to C++26 on Linux:
+`bash scripts/test-services.sh`. Windows can explicitly run the retained Rust
+comparison using `scripts/test-services.ps1 -Implementation rust`; the C++
+selection reports that Linux is required. Both run offline gates followed by
 real-process regression; `-Mode soak -Duration 3600` / `--mode soak --duration 3600`
 adds timed restart/failover loops with the same owned-resource cleanup.
 The matrix includes four Stars, two Planets, role rejection, group preference,
 Supervisor-offline switching and restart admission. It does not test business
 data replication, which is not implemented. See the
-[current connection rules](../peer/connection-rules.md) and
-[validation record](../peer/star-planet-validation-20260910.md).
+[current connection rules](../cluster/connection-rules.md) and
+[validation record](../cluster/star-planet-validation-20260910.md).
 
 The C++26 replacement has an independent Linux entry:
-`bash peer-cpp/build.sh regression` and
-`bash peer-cpp/build.sh soak --profile release --duration=3600`.
+`bash cluster-cpp/build.sh regression` and
+`bash cluster-cpp/build.sh soak --profile release --duration=3600`.
 It selects its own binaries, runs C++/Rust interoperability, then reuses the
 same process scenarios and cleanup ownership. Direct harness use can pass
-`--peer-binaries build/peer-cpp/release`; omitting it keeps the Rust default.
-See the [C++ instructions and qualification limits](../peer-cpp/README.md).
+`--star-binaries build/cluster-cpp/release`; omitting it selects C++ Release.
+Use `--implementation=rust` for the old Linux comparison. The shared default
+entry also checks generated C++ sources and runs C++/Rust interoperability.
+For mixed-host tests, remote JSON can explicitly set `star_implementation` to
+`cpp` or `rust`; its default is `cpp`. A missing binary never triggers a fallback.
+See the [C++ instructions and qualification limits](../cluster-cpp/README.md).
 
 The current testkit covers the Registration and Catalog Lua contracts,
 independently executable Go, Rust, C++, and C# regressions, live Go/Rust
@@ -112,7 +118,7 @@ and tool versions; it is reported explicitly as preflight, not a regression pass
 | Two-promotion Catalog Sentinel | Go/Rust, plain | Separate regression |
 | C++ Sentinel domain smoke, plain/TLS | Yes | Separate regression |
 | Continuous Registration and Catalog fault workloads | Separate soak | Go; duration per domain |
-| Continuous Rust/C++/C# endurance, live mutual TLS, direct native C++ two-promotion peer | Coverage gaps | Coverage gaps |
+| Continuous Rust/C++/C# endurance, live mutual TLS, direct native C++ two-promotion star | Coverage gaps | Coverage gaps |
 
 Each campaign saves `build/testkit/runs/<run-id>/report.json` and `report.md`,
 stage logs, source hashes, tool versions, elapsed time and cleanup status. The
@@ -490,7 +496,7 @@ python -B tests/sentinel_test.py --host 192.168.0.90 --ssh-user ubuntu --result-
 Standalone builds the C++ shared Release runtime, applies the managed
 formatter/analyzer gate, builds and runs .NET 8 and .NET 10 offline, publishes
 both as self-contained Linux x64 applications, then runs each against its own
-ACL-protected Redis 8.8 fixture. Sentinel keeps both managed peers alive across
+ACL-protected Redis 8.8 fixture. Sentinel keeps both managed stars alive across
 acknowledged-write loss, two promotions, `SCRIPT FLUSH`, complete Sentinel
 loss, unavailable views, and recovery. Both harnesses remove only their exact
 owned resources and write a result only after final empty-database cleanup.
@@ -506,7 +512,7 @@ python testkit/interop/interop_test.py --redis-url redis://127.0.0.1:6379/0
 python testkit/catalog/interop_test.py --redis-url redis://127.0.0.1:6379/0
 ```
 
-The harness starts one Go peer and one Rust peer with synchronized empty
+The harness starts one Go star and one Rust star with synchronized empty
 Selectors and Catalog Subscribers. Go registers and updates a binary-valued
 record that Rust observes through live Pub/Sub; Rust performs the reverse
 direction. Go then Replaces a binary Map at Catalog revision 1, Rust observes
@@ -536,7 +542,7 @@ python -B sdk/csharp/tests/sentinel_test.py --tls --runtime linux-x64 --host 192
 ```
 
 The harness first runs the SDK-specific Sentinel integration tests. It then
-keeps one Go peer and one Rust peer alive across a minority stale Sentinel,
+keeps one Go star and one Rust star alive across a minority stale Sentinel,
 forced acknowledged-write loss, primary promotion, same-UUID full-state
 republish, `SCRIPT FLUSH`, all-Sentinel loss, primary loss while resolution is
 unavailable, Sentinel restart, a second promotion, and cross-language Selector

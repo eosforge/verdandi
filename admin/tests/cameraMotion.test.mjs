@@ -3,7 +3,7 @@ import test from "node:test";
 import { Vector3 } from "three";
 import { CameraMotion } from "../src/features/galaxy/runtime/cameraMotion.ts";
 
-test("peer focus starts at the current pose, eases, and ends at a copied destination", () => {
+test("star focus starts at the current pose, eases, and ends at a copied destination", () => {
   const position = new Vector3(0, 0, 100);
   const target = new Vector3();
   const motion = new CameraMotion(position, target);

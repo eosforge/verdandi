@@ -12,9 +12,7 @@ authoritative Redis state after an acknowledged subscribe/read/PING alignment.
 
 ## Project Status
 
-The [C++26 Star/Planet skeleton](peer-cpp/README.md) is being implemented and
-qualified on Linux / GCC 16.2, with the [Rust Peer](peer/README.md) retained as a
-comparison and [Go Supervisor](supervisor/README.md) providing admission.
+The [C++26 Star/Planet connection skeleton](cluster-cpp/README.md) is the Linux / GCC 16.2 service implementation, with [Go Supervisor](supervisor/README.md) providing admission. The old Rust service is retired. Current naming and protocol v5 are described in the [identity contract](cluster/identity-contract.md).
 These backend foundations are under development. Their structure, lifecycle guarantees,
 offline checks and remaining production gates are documented in
 [Service Foundation](service-foundation.md). See [Contributing](CONTRIBUTING.md).
@@ -156,9 +154,10 @@ Redis Sentinel -> resolves and monitors the current Redis primary
 ```text
 lua/                  shared Lua sources and generated Redis atomic operations
 sdk/<language>/       independently versioned language SDKs
-peer/common/          shared Rust service protocol, admission and sessions
-peer/star/            Rust Star mesh and peer executable
-peer/planet/          Rust single-upstream Planet executable
+cluster/common/          shared Rust service protocol, admission and sessions
+cluster/star/            Rust Star mesh and peer executable
+cluster/planet/          Rust single-upstream Planet executable
+cluster-cpp/             C++26 Star/Planet connection skeleton and qualification
 supervisor/           Go member admission and management skeleton
 proto/                service schema, stable message IDs and source generator
 testkit/              shared vectors and cross-language conformance tests
@@ -167,8 +166,8 @@ testkit/              shared vectors and cross-language conformance tests
 
 Language manifests and toolchain configuration belong under the corresponding
 `sdk/<language>` directory. The repository root remains language-neutral.
-The independent service backend uses the `peer/` Rust workspace and
-`supervisor/` Go module. Its current [Star/Planet connection contract](peer/connection-rules.md)
+The independent service backend uses `cluster-cpp/` and the `supervisor/` Go module;
+`cluster/` remains an explicit interoperability comparison. Its [connection contract](cluster/connection-rules.md)
 does not yet implement business replication, SDK bindings or persistent data.
 
 Use the project entry points for Go/Rust dependency and build caches. Pass the

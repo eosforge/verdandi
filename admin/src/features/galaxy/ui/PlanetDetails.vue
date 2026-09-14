@@ -2,11 +2,11 @@
 import { computed, ref, watch } from "vue";
 import { NButton } from "naive-ui";
 import { planetColors, planetKinds } from "../model/presentation.ts";
-import type { PeerStar, Planet, PlanetKind } from "../model/types.ts";
-const props = defineProps<{ peer: PeerStar; planet: Planet; neighborCount: number; sourceLabel: string; description: string }>();
+import type { Star, Planet, PlanetKind } from "../model/types.ts";
+const props = defineProps<{ star: Star; planet: Planet; neighborCount: number; sourceLabel: string; description: string }>();
 const emit = defineEmits<{ close: []; focus: []; select: [planetId: string] }>();
 const activeKind = ref<PlanetKind>(props.planet.kind);
-const visiblePlanets = computed(() => props.peer.planets.filter((planet) => planet.kind === activeKind.value));
+const visiblePlanets = computed(() => props.star.planets.filter((planet) => planet.kind === activeKind.value));
 watch(
   () => props.planet,
   (planet) => {
@@ -19,17 +19,17 @@ watch(
     <div class="panel-heading">
       <span class="eyebrow">SYSTEM DETAILS</span><NButton quaternary size="small" aria-label="关闭详情并返回全景" @click="emit('close')">✕</NButton>
     </div>
-    <div class="peer-identity">
-      <span class="identity-orb" :style="{ '--star-color': peer.color }"></span>
+    <div class="star-identity">
+      <span class="identity-orb" :style="{ '--star-color': star.color }"></span>
       <div>
-        <h2>{{ peer.name }}</h2>
-        <span>{{ peer.id }}</span>
+        <h2>{{ star.name }}</h2>
+        <span>{{ star.id }}</span>
       </div>
     </div>
-    <p class="panel-description">恒星代表 Peer, 各类实体沿不同倾角的椭圆轨道公转。查看行星详情时暂停公转。</p>
-    <div class="peer-facts">
+    <p class="panel-description">恒星代表 Star, 各类实体沿不同倾角的椭圆轨道公转。查看行星详情时暂停公转。</p>
+    <div class="star-facts">
       <div>
-        <span>关联行星</span><strong>{{ peer.planets.length }}</strong>
+        <span>关联行星</span><strong>{{ star.planets.length }}</strong>
       </div>
       <div>
         <span>邻接恒星</span><strong>{{ neighborCount }}</strong>
@@ -45,8 +45,8 @@ watch(
       <dl>
         <dt>实体标识</dt>
         <dd>{{ planet.id }}</dd>
-        <dt>关联 Peer</dt>
-        <dd>{{ peer.id }}</dd>
+        <dt>关联 Star</dt>
+        <dd>{{ star.id }}</dd>
         <dt>实时状态</dt>
         <dd>未接入 · 演示实体</dd>
       </dl>
@@ -55,7 +55,7 @@ watch(
 
     <div class="entity-heading">
       <h3>星系实体</h3>
-      <span>{{ peer.planets.length }} TOTAL</span>
+      <span>{{ star.planets.length }} TOTAL</span>
     </div>
     <div class="kind-tabs" role="group" aria-label="实体类型">
       <button v-for="kind in planetKinds" :key="kind" :class="{ active: activeKind === kind }" :aria-pressed="activeKind === kind" @click="activeKind = kind">
@@ -115,7 +115,7 @@ watch(
 .panel-heading .eyebrow {
   font-size: 9px;
 }
-.peer-identity {
+.star-identity {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -126,13 +126,13 @@ watch(
   height: 32px;
   background: radial-gradient(circle at 35% 30%, #fff4, transparent 65%), var(--star-color);
 }
-.peer-identity h2 {
+.star-identity h2 {
   margin: 0;
   font-weight: 500;
   font-size: 24px;
   line-height: 1.2;
 }
-.peer-identity div > span {
+.star-identity div > span {
   color: #708099;
   font-size: 11px;
 }
@@ -142,27 +142,27 @@ watch(
   font-size: 11px;
   line-height: 1.9;
 }
-.peer-facts {
+.star-facts {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   padding: 16px 0;
   border-top: 1px solid #ffffff0a;
   border-bottom: 1px solid #ffffff0a;
 }
-.peer-facts > div {
+.star-facts > div {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.peer-facts span {
+.star-facts span {
   font-size: 10px;
   color: #71829b;
 }
-.peer-facts strong {
+.star-facts strong {
   font-size: 20px;
   font-weight: 400;
 }
-.peer-facts .demo-value {
+.star-facts .demo-value {
   font-size: 13px;
   color: #cbb994;
   margin-top: 4px;

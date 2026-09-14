@@ -1,0 +1,52 @@
+{
+  "scope": "C++26 logical gRPC sessions with Go Supervisor",
+  "cases": [
+    "tls13_only_and_h2_negotiation",
+    "partial_tls_handshake_deadline_and_fd_cleanup",
+    "channel_reuse_duplicate_fencing_and_protocol_rejection",
+    "tls_without_http2_request_idle_cleanup",
+    "rpc_fixture_graceful_stop_and_listener_release",
+    "empty_candidates_refresh_when_star_joins"
+  ],
+  "passed": true,
+  "binary_sha256": {
+    "/home/ubuntu/verdandi/build/identity-review/source/build/cluster-cpp/debug/star": "79a373401dfc48a251da7d29fd63941f99c974b72c6f706b880f53f68a0e8f1f",
+    "/home/ubuntu/verdandi/build/identity-review/source/build/cluster-cpp/debug/planet": "df51815cd52dfa4b6aaf03d6779f42b69688ace25d37595b4e110f1d269ee0d1",
+    "/home/ubuntu/verdandi/build/identity-review/source/build/cluster-cpp/debug/star_rpc_probe": "01c5955a325614aaf689ef1b030328539a48bc06e77bdd1574f0611f08a1b8a1",
+    "/home/ubuntu/verdandi/build/identity-review/source/build/supervisor/supervisor": "af2ee1b2bc366e54db9820b6726bf3b9e131dca1ba716e89b68812007fc899fd"
+  },
+  "tls_descriptors": {
+    "baseline": 11,
+    "peak": 33,
+    "after_deadline": 8,
+    "connections": 24
+  },
+  "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":641.535,\"p95\":866.046,\"p99\":964.852,\"max\":1393.97}}\n{\"slow_reader\":{\"attempted_pings\":361,\"close_ms\":31}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+  "control_rtt_us": {
+    "samples": 500,
+    "p50": 641.535,
+    "p95": 866.046,
+    "p99": 964.852,
+    "max": 1393.97
+  },
+  "slow_reader": {
+    "attempted_pings": 361,
+    "close_ms": 31
+  },
+  "rpc_server_resources": {
+    "supervisor": {
+      "rss_kib": 16368,
+      "threads": 7,
+      "fds": 9
+    },
+    "star": {
+      "rss_kib": 18716,
+      "threads": 9,
+      "fds": 8
+    }
+  },
+  "idle_http2_connections": {
+    "count": 2,
+    "observed_closed_ms": 13421
+  }
+}

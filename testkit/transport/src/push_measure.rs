@@ -5,7 +5,7 @@ use crate::{
     push_io,
     push_state::Shape,
 };
-use prost::bytes::Bytes;
+use prost::{Message, bytes::Bytes};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -39,11 +39,13 @@ struct Pending {
 struct Samples {
     updates: u64,
     bytes: u64,
+    encoded_bytes: u64,
     snapshots: u64,
     elapsed: f64,
     control: Vec<u64>,
     scheduled: Vec<u64>,
     publish: Vec<u64>,
+    rejected_publications: u64,
     queue: Vec<u64>,
     state_hash: String,
     cancelled_pings: usize,
@@ -82,15 +84,18 @@ pub async fn run(auth: Arc<Auth>, load: Load) -> io::Result<Value> {
         "updates_per_recipient": first.updates, "completed": updates, "failed": 0,
         "messages_per_second": updates as f64 / elapsed, "effective_mib_per_second": bytes as f64 / elapsed / 1048576.0,
         "received_data_bytes": bytes, "snapshot_fragments": samples.iter().map(|s| s.snapshots).sum::<u64>(),
+        "received_protobuf_event_bytes": samples.iter().map(|s| s.encoded_bytes).sum::<u64>(),
         "p50_ms": percentile(&control, 0.50), "p95_ms": percentile(&control, 0.95), "p99_ms": percentile(&control, 0.99),
         "scheduled_control_p99_ms": percentile(&scheduled, 0.99),
         "control_replies": control.iter().sum::<u64>(), "cancelled_pings_at_completion": samples.iter().map(|s| s.cancelled_pings).sum::<usize>(),
         "publish_replies": publish.iter().sum::<u64>(), "publish_p99_ms": percentile(&publish, 0.99),
+        "rejected_publications": samples.iter().map(|s| s.rejected_publications).sum::<u64>(),
         "dispatch_queue_p99_ms": percentile(&queue, 0.99), "state_sha256": first.state_hash,
         "per_update_ack": false, "latency_bucket_ms": 0.1,
     });
     let details = json!({
         "registry_entries": load.shape.registries, "catalog_entries": load.shape.catalogs, "catalog_bytes": load.shape.bytes,
+        "hot_keys": load.shape.hot_keys,
         "registry_deliveries": samples.iter().map(|s| s.registries).sum::<u64>(),
         "catalog_deliveries": samples.iter().map(|s| s.catalogs).sum::<u64>(),
         "progress_sent": samples.iter().map(|s| s.progress_sent).sum::<u64>(),
@@ -126,11 +131,13 @@ async fn receiver(auth: Arc<Auth>, load: Load, slow: bool) -> io::Result<Samples
     let mut samples = Samples {
         updates: 0,
         bytes: 0,
+        encoded_bytes: 0,
         snapshots: 0,
         elapsed: 0.0,
         control: vec![0; 100001],
         scheduled: vec![0; 100001],
         publish: vec![0; 100001],
+        rejected_publications: 0,
         queue: vec![0; 100001],
         state_hash: String::new(),
         cancelled_pings: 0,
@@ -149,6 +156,9 @@ async fn receiver(auth: Arc<Auth>, load: Load, slow: bool) -> io::Result<Samples
             sleep(Duration::from_millis(load.pause_ms)).await;
         }
         let message = timeout(Duration::from_secs(10), connection.receive.recv()).await?.ok_or_else(closed)??;
+        // 两端生成器都使用规范 Protobuf 编码. 记录消息编码长度, 与业务正文及 TLS/HTTP2 字节分别计量.
+        samples.encoded_bytes += message.encoded_len() as u64;
+        let rejected = matches!(&message.event, Some(Kind::Rejected(_)));
         match message.event {
             Some(Kind::Update(update)) => {
                 let domain = Domain::try_from(update.domain).map_err(io::Error::other)?;
@@ -191,9 +201,11 @@ async fn receiver(auth: Arc<Auth>, load: Load, slow: bool) -> io::Result<Samples
                 record(&mut samples.control, queued.elapsed().as_micros() as u64);
                 record(&mut samples.scheduled, due.elapsed().as_micros() as u64);
             }
-            Some(Kind::Accepted(id)) => {
+            Some(Kind::Accepted(id) | Kind::Rejected(id)) => {
+                // 源结束前排队的请求可能在结束后才被处理. 拒绝也是终态应答, 必须按请求关联并单独计数.
                 let due = pending.lock().map_err(|_| closed())?.publishes.remove(&id).ok_or_else(closed)?;
                 record(&mut samples.publish, due.elapsed().as_micros() as u64);
+                samples.rejected_publications += u64::from(rejected);
             }
             Some(Kind::Drained(revision)) if !drained && revision == samples.updates => {
                 drained = true;
@@ -212,7 +224,13 @@ async fn receiver(auth: Arc<Auth>, load: Load, slow: bool) -> io::Result<Samples
                 samples.completion = completion;
                 break;
             }
-            _ => return Err(io::Error::other("invalid push event or completion watermark")),
+            other => {
+                return Err(io::Error::other(format!(
+                    // 保留异常消息种类和本地水位, 区分关闭后的拒绝与实际丢版本.
+                    "invalid push event or completion watermark: {other:?}; received={}, drained={drained}",
+                    samples.updates
+                )));
+            }
         }
     }
     stop.cancel();

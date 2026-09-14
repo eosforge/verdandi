@@ -1,15 +1,17 @@
 # Verdandi Supervisor
 
+当前准入为协议 v6, 单次 Register 完成账号认证和持久幂等登记, Supervisor 签发不透明 `id` 与 Hello 准入凭证. 不再使用启动票据, 详见[身份与准入契约](../cluster/identity-contract.md).
+
 Go Supervisor 提供管理 HTTP 和独立 gRPC/TLS 准入入口, 通过账号密码授权节点,
 用 bbolt 持久保存成员, 签发每进程独立的 Ed25519 bearer 凭证. Star 获得完整 Star 名单,
 Planet 获得最多 8 个候选. 同账号可运行多节点, 不承担节点间数据转发.
-完整规则见 [gRPC 契约](../peer/grpc-implementation.md) 和 [连接规则](../peer/connection-rules.md).
+完整规则见 [gRPC 契约](../cluster/grpc-implementation.md) 和 [连接规则](../cluster/connection-rules.md).
 
 ## 构建与启动
 
 ```powershell
 ./supervisor/go.ps1 build -trimpath -p 2 -o ../build/supervisor/supervisor.exe ./cmd/supervisor
-./build/supervisor/supervisor.exe --listen=127.0.0.1:8080 --peer-listen=192.168.0.25:7442 --cluster=alpha --identity=identity --members=build/supervisor/members-v4.db
+./build/supervisor/supervisor.exe --listen=127.0.0.1:8080 --star-listen=192.168.0.25:7442 --cluster=alpha --identity=identity --members=build/supervisor/members-v6.db
 ```
 
 Linux 使用 `bash supervisor/go.sh ...` 和无 `.exe` 的二进制. 数据库父目录需预先存在.
@@ -42,9 +44,10 @@ group 仅是入口偏好, 不授予业务权限. 不使用证书 URI 绑定账�
 | 参数 | 默认值 | 作用 |
 | --- | --- | --- |
 | `--listen` | `127.0.0.1:8080` | 管理 HTTP |
-| `--peer-listen` | 空 | gRPC/TLS 登记地址, 空为仅管理模式 |
+| `--star-listen` | 空 | gRPC/TLS 登记地址, 空为仅管理模式 |
 | `--cluster`, `--identity`, `--members` | 空 | 登记启用时全部必填 |
-| `--max-peers` | 64 | 每种角色各自的持久成员上限, 1..4096 |
+| `--max-members` | 64 | 每种角色各自的持久成员上限, 1..4096 |
+| `--max-startups` | 1,048,576 | 每 Galaxy 累计启动记录预算, 1..16,777,216; 满时拒绝新启动, 不驱逐旧记录 |
 | `--max-connections` | 128 | HTTP 与登记端口各自的连接上限 |
 | `--shutdown-timeout` | 5s | 管理 HTTP 排空期限 |
 | `--log-level` | INFO | slog 等级 |
@@ -57,11 +60,13 @@ group 仅是入口偏好, 不授予业务权限. 不使用证书 URI 绑定账�
 ## 身份、恢复与兼容性
 
 成员 principal 由已认证账号、Galaxy 和规范端点构造, 同账号不同端点独立.
-同端点新 UUID 通过 CAS 替换并递增 epoch; 同请求重试幂等, 原进程始终保留首次基线.
+同端点的全新启动按事务顺序替换并递增 epoch; 原请求被替换后永久拒绝.
+客户端不提交 CAS 基线, 幂等记录由 Supervisor 持久维护, 重启后仍有效.
 断线不删除成员. 用户名/地址改变会创建新槽位, 当前没有在线退役和删除接口.
 
-v4 不兼容旧 TCP/mTLS v3. 新版严格拒绝含旧 public_key 字段的成员库,
-部署时使用新库文件并重新登记, 不自动删除旧库. 一个库由文件锁限制为一个 Supervisor 写入.
+v6 不兼容 v5 两阶段准入及更早协议. 现有 v5 的 id 成员记录可保留, 新登记创建私有启动索引;
+索引创建后不能降级给旧 Supervisor. 含旧 peer_id/public_key 的数据库仍拒绝, 不自动删除旧库.
+一个库由文件锁限制为一个 Supervisor 写入. 启动索引满后可提高 --max-startups, 不自动回收历史请求.
 账号删除或密码变更只影响后续登录, 不会即时撤销已签名 bearer 凭证.
 凭证无独立 TTL, 不提供在线吊销、轮换或 Supervisor HA; 业务数据恢复尚未实现.
 
@@ -76,8 +81,8 @@ Admin 拓扑接口、Catalog Publisher 和业务持久化仍待实现.
 旧 `internal/protocol` 全部为 `_test.go`, 仅保留历史帧向量测试.
 依赖锁在 go.mod/go.sum, 包括 grpc、protobuf、bbolt 和 x/net. 新下载仍需具体授权.
 
-Windows: `scripts/test-services.ps1`; Linux: `bash scripts/test-services.sh`.
+Windows 检查 Go: `scripts/check-services.ps1 -Service supervisor`; Linux Go/C++ 回归: `bash scripts/test-services.sh`. 旧 Rust 服务已废弃.
 可选长时模式 `-Mode soak -Duration 3600` / `--mode soak --duration 3600`, 自动清理资源.
 Linux 检查默认包含 Go race, Windows race 需要已有 cgo 编译器和显式开关.
-有限 fuzz: `scripts/check-services.ps1 -FuzzSeconds 10` 或 `bash scripts/check-services.sh --fuzz-seconds=10`.
-当前整理和完整测试范围见 [骨架补强报告](../peer/service-hardening-20260911.md).
+有限 fuzz: `scripts/check-services.ps1 -Service supervisor -FuzzSeconds 10` 或 `bash scripts/check-services.sh --fuzz-seconds=10`.
+当前整理和完整测试范围见 [骨架补强报告](../cluster/service-hardening-20260911.md).

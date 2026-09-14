@@ -7,16 +7,22 @@ fi
 set -euo pipefail
 verdandi_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 skip_checks=false
+implementation=cpp
 arguments=()
 for argument in "$@"; do
     case "$argument" in
         --skip-checks) skip_checks=true ;;
+        --implementation=cpp) implementation="${argument#*=}" ;;
+        --implementation|--implementation=*) printf '%s\n' 'Use --implementation=cpp; the Rust service is retired.' >&2; exit 2 ;;
         *) arguments+=("$argument") ;;
     esac
 done
-if [[ "$skip_checks" == false ]]; then bash "$verdandi_root/scripts/check-services.sh"; fi
+if [[ "$skip_checks" == false ]]; then bash "$verdandi_root/scripts/check-services.sh" --implementation="$implementation"; fi
 verdandi_python="$verdandi_root/build/tools/python-build/bin/python"
 if [[ ! -x "$verdandi_python" ]]; then printf '%s\n' 'Prepare the approved project-local Python environment first.' >&2; exit 1; fi
 cd -- "$verdandi_root"
 if [[ "$skip_checks" == false ]]; then "$verdandi_python" -B -m unittest discover -s testkit/tests -p 'test_*.py'; fi
-exec "$verdandi_python" -B -m testkit.services "${arguments[@]}"
+if [[ "$skip_checks" == false && "$implementation" == cpp ]]; then
+    "$verdandi_python" -B cluster-cpp/test_processes.py --binaries "$verdandi_root/build/cluster-cpp/release"
+fi
+exec "$verdandi_python" -B -m testkit.services --implementation="$implementation" "${arguments[@]}"

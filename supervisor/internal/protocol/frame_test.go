@@ -13,8 +13,8 @@ import (
 )
 
 func TestWireVectorsAndFragmentation(t *testing.T) {
-	// Fixed independent wire vector: Ping ID=2, length=2, request_id=1.
-	want, _ := hex.DecodeString("0002000000020801")
+	// Fixed independent wire vector: current Ping ID=15, length=2, request_id=1.
+	want, _ := hex.DecodeString("000f000000020801")
 	var buffer bytes.Buffer
 	if err := Write(&buffer, &wire.Ping{RequestId: 1}, 32); err != nil {
 		t.Fatal(err)
@@ -29,7 +29,7 @@ func TestWireVectorsAndFragmentation(t *testing.T) {
 }
 
 func TestReadRejectsTruncationUnknownAndOversize(t *testing.T) {
-	valid, _ := hex.DecodeString("0002000000020801")
+	valid, _ := hex.DecodeString("000f000000020801")
 	for length := range len(valid) {
 		_, err := Read(bytes.NewReader(valid[:length]), 32)
 		want := io.ErrUnexpectedEOF
@@ -40,7 +40,7 @@ func TestReadRejectsTruncationUnknownAndOversize(t *testing.T) {
 			t.Fatalf("prefix %d: got %v, want %v", length, err, want)
 		}
 	}
-	for _, raw := range []string{"ffff00000000", "000200000021", "000200000001ff"} {
+	for _, raw := range []string{"ffff00000000", "000f00000021", "000f00000001ff"} {
 		data, _ := hex.DecodeString(raw)
 		if _, err := Read(bytes.NewReader(data), 32); !errors.Is(err, ErrFrame) {
 			t.Fatalf("accepted invalid frame %s: %v", raw, err)
@@ -78,7 +78,7 @@ func (zeroWriter) Write([]byte) (int, error) { return 0, nil }
 
 func TestPhaseMismatchIsRejectedBeforeReadingOrDecodingPayload(t *testing.T) {
 	// 完整头声明一份名单, 但不提供任何正文. 当前阶段必须直接拒绝, 不能读到 EOF 后才拒绝类型.
-	header := []byte{0, 9, 0, 0, 4, 0}
+	header := []byte{0, 21, 0, 0, 4, 0}
 	if _, err := Read(bytes.NewReader(header), 4096, wire.IDRegistrationRequest, wire.IDProtocolError); !errors.Is(err, ErrFrame) {
 		t.Fatalf("phase guard read or decoded unexpected body: %v", err)
 	}

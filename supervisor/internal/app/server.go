@@ -34,7 +34,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) (result error) {
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	if cfg.PeerListen == "" {
+	if cfg.StarListen == "" {
 		return serve(ctx, cfg, logger, listener, management.Handler())
 	}
 	// 登记相关资源按所有权反序释放. 任一步失败都关闭已绑定管理端口.
@@ -43,21 +43,21 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) (result error) {
 	if err != nil {
 		return err
 	}
-	store, err := membership.Open(cfg.Members, cfg.MaxPeers)
+	store, err := membership.Open(cfg.Members, cfg.MaxMembers, cfg.MaxStartups)
 	if err != nil {
 		return err
 	}
 	defer func() { result = errors.Join(result, store.Close()) }()
-	peerListener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.PeerListen)
+	starListener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.StarListen)
 	if err != nil {
 		return err
 	}
-	defer peerListener.Close()
+	defer starListener.Close()
 	lifetime, cancel := context.WithCancel(ctx)
 	defer cancel()
 	registration := &admission.Server{Cluster: cfg.Cluster, Authority: authority, Store: store, MaximumConnections: cfg.MaxConnections, Logger: logger}
 	results := make(chan error, 2)
-	go func() { results <- registration.Serve(lifetime, peerListener) }()
+	go func() { results <- registration.Serve(lifetime, starListener) }()
 	go func() { results <- serve(lifetime, cfg, logger, listener, management.Handler()) }()
 	// 任一服务退出均停止另一个, 并等待两者归还所有任务, 然后才关闭成员数据库.
 	first := <-results
