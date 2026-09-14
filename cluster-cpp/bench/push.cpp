@@ -414,8 +414,10 @@ public:
         const auto entry = context->client_metadata().find("hello-bin");
         wire::Hello hello;
         if (entry == context->client_metadata().end() || entry->second.size() > 2048 ||
-            !hello.ParseFromArray(entry->second.data(), static_cast<int>(entry->second.size())) || hello.protocol_major() != 5 ||
-            hello.max_frame_bytes() != 32768 || !identity_->verify(hello.admission(), hello.admission_signature())) {
+            !hello.ParseFromArray(entry->second.data(), static_cast<int>(entry->second.size())) || hello.protocol_major() != 6 ||
+            hello.max_frame_bytes() != 32768 || !identity_->verify(
+                std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(hello.admission().data()), hello.admission().size()),
+                std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(hello.admission_signature().data()), hello.admission_signature().size())).has_value()) {
             auto* rejected = new Rejected;
             rejected->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "invalid test bearer"));
             return rejected;

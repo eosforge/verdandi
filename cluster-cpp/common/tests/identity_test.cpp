@@ -51,19 +51,22 @@ void signatures(const Identity& identity) {
     member.set_role(wire::ROLE_STAR);
     auto payload = member.SerializeAsString();
     auto signature = test::sign(payload);
-    CHECK(identity.verify(payload, signature));
-    CHECK(identity.verify(payload, signature)->id == member.id());
+    auto as_bytes = [](std::string_view sv) {
+        return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(sv.data()), sv.size());
+    };
+    CHECK(identity.verify(as_bytes(payload), as_bytes(signature)));
+    CHECK(identity.verify(as_bytes(payload), as_bytes(signature))->id == member.id());
     // 旧启动票据签名不能作为新协议的准入凭证.
     const auto ticket_signature = test::sign(payload, "verdandi-registration-ticket-v1");
-    CHECK(!identity.verify(payload, ticket_signature));
-    CHECK(!identity.verify(payload, test::sign(payload, "wrong-domain")));
-    CHECK(!identity.verify(payload + "\x78\x01", signature));
+    CHECK(!identity.verify(as_bytes(payload), as_bytes(ticket_signature)));
+    CHECK(!identity.verify(as_bytes(payload), as_bytes(test::sign(payload, "wrong-domain"))));
+    CHECK(!identity.verify(as_bytes(payload + "\x78\x01"), as_bytes(signature)));
     const auto extended = payload + "\x78\x01";
-    CHECK(identity.verify(extended, test::sign(extended)));
-    CHECK(!identity.verify(payload, signature.substr(1)));
+    CHECK(identity.verify(as_bytes(extended), as_bytes(test::sign(extended))));
+    CHECK(!identity.verify(as_bytes(payload), as_bytes(signature.substr(1))));
     signature[0] ^= 1;
-    CHECK(!identity.verify(payload, signature));
-    CHECK(!identity.verify(std::string(1025, 'x'), std::string(64, 'x')));
+    CHECK(!identity.verify(as_bytes(payload), as_bytes(signature)));
+    CHECK(!identity.verify(as_bytes(std::string(1025, 'x')), as_bytes(std::string(64, 'x'))));
     member.set_epoch(0);
     CHECK(!decode_member(member));
     member.set_epoch(1);

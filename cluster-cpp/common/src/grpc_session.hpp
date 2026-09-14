@@ -107,7 +107,7 @@ private:
         wire::SessionPacket packet;
         Clock::time_point deadline;
     };
-    std::array<std::optional<PendingPacket>, 4> queue_;
+    std::array<std::optional<PendingPacket>, 32> queue_;
     std::size_t head_{};
     std::size_t queued_{};
 };

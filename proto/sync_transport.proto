@@ -1,0 +1,70 @@
+syntax = "proto3";
+package verdandi.cluster.v1;
+option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
+
+import "cluster.proto";
+
+// 专用于 Catalog 和 Registry 业务流式同步的传输服务
+service SyncTransport {
+    // Session A：信令与极速增量流
+    // 承载日常的心跳、高水位线增量 (DeltaRecord) 和 Commit 屏障
+    rpc OpenDeltaStream(stream SyncPacket) returns (stream SyncPacket);
+
+    // Session B：旁路大文件流
+    // 专门应对重连风暴，用于纯粹下发零拷贝的 4KB Chunk 切片快照，即使产生背压也不会阻塞 Session A
+    rpc OpenSnapshotStream(stream SnapshotRequest) returns (stream SnapshotChunk);
+}
+
+// Session A 的核心载体
+message SyncPacket {
+    oneof body {
+        Hello hello = 1;
+        Ping ping = 2;
+        Pong pong = 3;
+        SyncRequest request = 4;
+        SyncResponse response = 5;
+    }
+}
+
+// 客户端发起对账
+message SyncRequest {
+    // 客户端当前的全局版本号
+    uint64 client_global_version = 1;
+    // 上次对账的服务端实例 UUID；若为空或与当前服务端不同，将强制下发全量快照
+    string server_instance_id = 2;
+    // 订阅的范围（例如："Catalog/Routes/" 或 "Registry/"）
+    string subscribe_prefix = 3; 
+}
+
+// 服务端返回对账结果
+message SyncResponse {
+    // 服务端当前的最新全局版本（如果下发了增量，这相当于 Commit 屏障）
+    uint64 server_global_version = 1;
+    // 当前服务端的实例 UUID，供客户端下次携带
+    string server_instance_id = 2;
+    
+    // 如果 client_global_version 太老、server_instance_id 不匹配、或 subscribe_prefix 改变，则返回 true
+    // 客户端收到 true 后，自动挂起 Session A，转去调用 OpenSnapshotStream
+    bool requires_full_snapshot = 3; 
+
+    // O(N) 极速提取出的增量与墓碑列表
+    repeated DeltaRecord deltas = 4;
+}
+
+message DeltaRecord {
+    string key = 1;                  // 展平后的子 Key
+    bytes payload = 2;               // 业务二进制正文
+    bool deleted = 3;                // 墓碑标记
+    uint64 field_version = 4;        // 局部版本号
+}
+
+// Session B：大快照旁路下载
+message SnapshotRequest {
+    string subscribe_prefix = 1;
+}
+
+message SnapshotChunk {
+    uint64 snapshot_version = 1;     // 锁定快照时的版本号
+    bytes chunk_data = 2;            // 按 4KB 切割的只读数据块
+    bool is_last_chunk = 3;          // EOF 标记
+}

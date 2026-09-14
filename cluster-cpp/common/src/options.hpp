@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <algorithm>
 
 namespace verdandi::cluster::detail {
 // 注解只描述当前 CLI 使用的字符串和无符号数值, 不构建通用配置框架.
@@ -27,12 +28,8 @@ struct Option {
             throw "CLI annotation text exceeds its compile-time capacity";
         }
         // 长度检查后复制文本, 未覆盖的零初始化尾部作为 NUL, 避免反射元数据借用临时缓冲.
-        for (std::size_t i = 0; i < option_name.size(); ++i) {
-            name[i] = option_name[i];
-        }
-        for (std::size_t i = 0; i < help.size(); ++i) {
-            description[i] = help[i];
-        }
+        std::ranges::copy(option_name, name);
+        std::ranges::copy(help, description);
     }
 };
 

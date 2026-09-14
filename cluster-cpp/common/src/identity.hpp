@@ -25,7 +25,7 @@ public:
     Principal principal(std::string_view cluster, std::string_view endpoint) const;
     // 对原始 admission 字节验签后解析, 不重新序列化构造验签输入.
     // payload 最多 1024 字节, signature 必须为 64 字节 Ed25519 签名; 失败返回 identity, 成功成员不借用凭证缓冲.
-    Result<Member> verify(std::string_view payload, std::string_view signature) const;
+    Result<Member> verify(std::span<const std::uint8_t> payload, std::span<const std::uint8_t> signature) const;
     // 构造共享 TLS 1.3 客户端凭证, 校验服务端证书及目标主机, 不向对端提供客户端证书.
     std::shared_ptr<grpc::ChannelCredentials> channel_credentials() const;
     // 构造共享 TLS 1.3 服务端凭证, 创建选项失败返回 nullptr; 客户端身份由后续准入协议验证.

@@ -156,15 +156,15 @@ Principal Identity::principal(std::string_view cluster, std::string_view endpoin
     return result;
 }
 
-Result<Member> Identity::verify(std::string_view payload, std::string_view signature) const {
+Result<Member> Identity::verify(std::span<const std::uint8_t> payload, std::span<const std::uint8_t> signature) const {
     if (payload.size() > 1024 || signature.size() != 64) {
         return std::unexpected(Error{ErrorCode::identity, "Invalid admission credential bounds"});
     }
     // 签名输入包含协议域及末尾 NUL 再拼接原始 payload, 与签发方保持字节级一致.
     std::string input("verdandi-admission-v6");
     input += '\0';
-    input += payload;
-    if (ED25519_verify(reinterpret_cast<const std::uint8_t*>(input.data()), input.size(), reinterpret_cast<const std::uint8_t*>(signature.data()),
+    input.append(reinterpret_cast<const char*>(payload.data()), payload.size());
+    if (ED25519_verify(reinterpret_cast<const std::uint8_t*>(input.data()), input.size(), signature.data(),
                        authority_.data()) != 1) {
         return std::unexpected(Error{ErrorCode::identity, "Invalid admission signature"});
     }

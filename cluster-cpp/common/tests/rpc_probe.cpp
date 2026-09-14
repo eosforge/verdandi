@@ -37,7 +37,9 @@ struct Stream {
         if (!io->Write(message) || !io->Read(&message)) {
             return false;
         }
-        return message.has_hello() && identity.verify(message.hello().admission(), message.hello().admission_signature()).has_value();
+        auto admission = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(message.hello().admission().data()), message.hello().admission().size());
+        auto sig = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(message.hello().admission_signature().data()), message.hello().admission_signature().size());
+        return message.has_hello() && identity.verify(admission, sig).has_value();
     }
     bool ping(std::uint64_t id) {
         wire::SessionPacket message;
@@ -78,7 +80,9 @@ wire::Hello admit(const Identity& identity, const std::string& supervisor, const
     context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
     wire::RegistrationResponse response;
     CHECK(stub->Register(&context, request, &response).ok());
-    CHECK(identity.verify(response.admission(), response.signature()));
+    auto admission = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(response.admission().data()), response.admission().size());
+    auto sig = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(response.signature().data()), response.signature().size());
+    CHECK(identity.verify(admission, sig).has_value());
     wire::Hello hello;
     hello.set_protocol_major(6);
     hello.set_max_frame_bytes(4096);

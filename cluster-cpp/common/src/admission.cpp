@@ -94,7 +94,9 @@ Result<Joined> Admission::validate(wire::RegistrationResponse& response) {
         return std::unexpected(Error{ErrorCode::capacity, "Admission list exceeds role capacity"});
     }
     // 对原始准入字节验签并核对部署. 首次接受 Supervisor 签发的身份, 后续刷新不得更换它.
-    auto local = identity_->verify(response.admission(), response.signature());
+    auto local = identity_->verify(
+        std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(response.admission().data()), response.admission().size()),
+        std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(response.signature().data()), response.signature().size()));
     if (!local || local->cluster != config_.cluster || local->group != config_.group || local->role != config_.role || local->address != config_.advertise ||
         local->principal != identity_->principal(config_.cluster, config_.advertise.text()) || (local_ && *local != *local_)) {
         return std::unexpected(Error{ErrorCode::identity, "Admission credential does not match this process"});

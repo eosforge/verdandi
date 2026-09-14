@@ -206,15 +206,21 @@ int main() {
         {
             ControlledSession session(config, Direction::inbound, {3}, greeting, std::nullopt, [] {});
             start(session);
-            for (std::uint64_t id = 1; id <= 6; ++id) {
-                session.deliver(ping(id));
+            for (std::uint64_t id = 1; id <= 40; ++id) {
+                if (session.receiving) {
+                    session.deliver(ping(id));
+                }
                 session.pump(policy, **identity, now + Milliseconds(1));
             }
-            CHECK(session.error() == ErrorCode::capacity && !session.done());
-            const auto writes = session.writes;
+            // 背压机制生效，停止调用 begin_read，队列不会溢出，因此不会触发 capacity error.
+            CHECK(!session.receiving && !session.error());
+            static_cast<void>(session.writes);
             session.acknowledge();
             session.pump(policy, **identity, now + Milliseconds(2));
-            CHECK(session.done() && session.writes == writes && session.finishes == 1);
+            // 写入队列腾出空间后，自动恢复接收.
+            CHECK(session.receiving);
+            session.cancel();
+            session.pump(policy, **identity, now + Milliseconds(3));
         }
         {
             ControlledSession session(config, Direction::inbound, {4}, greeting, std::nullopt, [] {});

@@ -23,7 +23,7 @@ public:
         channel_->GetState(true);
         stub_ = wire::StarTransport::NewStub(channel_);
         stub_->async()->OpenSession(&context_, this);
-        AddHold();
+        hold_guard_.emplace(this);
     }
     // gRPC 读取回调只发布 ok, 接收缓冲由后续 pump 消费后才能再次使用.
     void OnReadDone(bool ok) override {
@@ -62,13 +62,32 @@ private:
             context_.TryCancel();
         }
     }
-    // 外部操作停止后归还唯一 hold, 允许最终 OnDone 发生; 客户端不将 ErrorCode 写成服务端状态.
+    // 外部操作停止后销毁 RAII HoldGuard 归还唯一 hold, 允许最终 OnDone 发生.
     void finish_call(ErrorCode) override {
-        RemoveHold();
+        hold_guard_.reset();
     }
+    
+    struct HoldGuard {
+        ClientSession* session;
+        explicit HoldGuard(ClientSession* s) : session(s) { session->AddHold(); }
+        ~HoldGuard() { if (session) session->RemoveHold(); }
+        HoldGuard(const HoldGuard&) = delete;
+        HoldGuard& operator=(const HoldGuard&) = delete;
+        HoldGuard(HoldGuard&& other) noexcept : session(other.session) { other.session = nullptr; }
+        HoldGuard& operator=(HoldGuard&& other) noexcept {
+            if (this != &other) {
+                if (session) session->RemoveHold();
+                session = other.session;
+                other.session = nullptr;
+            }
+            return *this;
+        }
+    };
+
     grpc::ClientContext context_;
     std::shared_ptr<grpc::Channel> channel_;
     std::unique_ptr<wire::StarTransport::Stub> stub_;
+    std::optional<HoldGuard> hold_guard_;
 };
 } // namespace
 
@@ -101,7 +120,9 @@ Result<std::vector<SessionGeneration>> RpcSession::receive(const wire::SessionPa
         if (!packet.has_hello() || packet.hello().protocol_major() != 6 || packet.hello().max_frame_bytes() < 1024) {
             return std::unexpected(Error{ErrorCode::protocol, "Expected compatible Hello"});
         }
-        auto member = identity.verify(packet.hello().admission(), packet.hello().admission_signature());
+        auto member = identity.verify(
+            std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(packet.hello().admission().data()), packet.hello().admission().size()),
+            std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(packet.hello().admission_signature().data()), packet.hello().admission_signature().size()));
         if (!member) {
             return std::unexpected(member.error());
         }
@@ -238,8 +259,10 @@ std::vector<SessionGeneration> RpcSession::pump(Policy& policy, const Identity& 
                 write_inflight_ = true;
                 begin_write(&write_);
             }
-            // 完成回调可能在本轮取消息之后到达. 尚未消费的 read_ 仍归控制循环, 不能再次交给 gRPC 写入.
-            if (!read_inflight_ && !read_ready_) {
+            // 实现网络背压 (Backpressure): 当发送队列接近满载（只保留少量槽位给关键控制帧）时，
+            // 暂停向 gRPC 提交读请求。底层流控会自动反压对端，避免粗暴掐断连接。
+            // 尚未消费的 read_ 仍归控制循环, 不能再次交给 gRPC 写入.
+            if (!read_inflight_ && !read_ready_ && queued_ <= queue_.size() - 4) {
                 read_inflight_ = true;
                 begin_read(&read_);
             }

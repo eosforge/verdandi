@@ -52,7 +52,7 @@ def generated(check, env):
     for schemas, names, destination in (
         (
             ROOT / "proto",
-            ["cluster.proto", "admission.proto", "star_transport.proto"],
+            ["cluster.proto", "admission.proto", "star_transport.proto", "sync_transport.proto"],
             SOURCE / "common/src/generated",
         ),
         (ROOT / "testkit/transport/proto", ["probe.proto"], SOURCE / "bench/generated"),

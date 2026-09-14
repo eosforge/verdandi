@@ -101,10 +101,12 @@ Logger::~Logger() {
     }
 }
 
+#include <format>
+
 void Logger::write(std::string_view event, std::string_view fields) const {
     const auto now = std::chrono::duration_cast<Milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    const auto line = "{\"time_unix_ms\":" + std::to_string(now) + ",\"level\":\"INFO\",\"component\":\"" + component_ + "\",\"event\":\"" +
-                      std::string(event) + "\",\"fields\":" + std::string(fields) + "}\n";
+    const auto line = std::format(R"({{"time_unix_ms":{},"level":"INFO","component":"{}","event":"{}","fields":{}}})""\n",
+                                  now, component_, event, fields);
     // Linux 的 PIPE_BUF 为 4096, 小于等于此值的管道写不会输出半条 JSON.
     if (line.size() <= 4096) {
         const auto written = ::write(STDOUT_FILENO, line.data(), line.size());
@@ -113,17 +115,25 @@ void Logger::write(std::string_view event, std::string_view fields) const {
 }
 
 void Logger::status(const NetworkStatus& status, const Id& id) const {
-    const auto boolean = [](bool value) { return value ? "true" : "false"; };
-    const auto upstream = status.active_member ? "{\"id\":" + json_string(status.active_member->id) + ",\"group\":\"" + status.active_member->group +
-                                                     "\",\"address\":\"" + status.active_member->address.text() + "\"}"
-                                               : "null";
-    write("status", "{\"id\":" + json_string(id) + ",\"initialized\":" + std::string(boolean(status.initialized)) +
-                        ",\"members\":" + std::to_string(status.members) + ",\"inbound\":" + std::to_string(status.inbound) +
-                        ",\"outbound\":" + std::to_string(status.outbound) + ",\"planet_inbound\":" + std::to_string(status.planet_inbound) +
-                        ",\"candidates\":" + std::to_string(status.candidates) + ",\"upstream\":" + upstream + "}");
+    const auto upstream = status.active_member 
+        ? std::format(R"({{"id":{},"group":"{}","address":"{}"}})", 
+                      json_string(status.active_member->id), 
+                      status.active_member->group, 
+                      status.active_member->address.text())
+        : "null";
+        
+    write("status", std::format(R"({{"id":{},"initialized":{},"members":{},"inbound":{},"outbound":{},"planet_inbound":{},"candidates":{},"upstream":{}}})",
+                                json_string(id),
+                                status.initialized ? "true" : "false",
+                                status.members,
+                                status.inbound,
+                                status.outbound,
+                                status.planet_inbound,
+                                status.candidates,
+                                upstream));
 }
 
 void Logger::failure(std::string_view event, ErrorCode error) const {
-    write(event, "{\"reason\":\"" + std::string(error_name(error)) + "\"}");
+    write(event, std::format(R"({{"reason":"{}"}})", error_name(error)));
 }
 } // namespace verdandi::cluster

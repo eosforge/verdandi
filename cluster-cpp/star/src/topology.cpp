@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <functional>
-#include <set>
+#include <ranges>
+#include <vector>
+#include <map>
 
 namespace verdandi::cluster {
 StarTopology::StarTopology(const Config& config) : config_(config) {}
@@ -14,13 +16,10 @@ Result<void> StarTopology::initialize(const Member& local, std::span<const Membe
     }
     // 在临时容器完成整份名单校验, 任何失败都不会留下部分成员索引, 验证成功后再加锁安装.
     std::map<Principal, Entry> prepared;
-    std::set<std::string> addresses;
-    std::set<Principal> principals;
     std::optional<Id> previous;
     bool found = false;
     for (const auto& member : members) {
-        if (!validate_member(member) || member.cluster != config_.cluster || member.role != Role::star || (previous && *previous >= member.id) ||
-            !principals.insert(member.principal).second || !addresses.insert(member.address.text()).second) {
+        if (!validate_member(member) || member.cluster != config_.cluster || member.role != Role::star || (previous && *previous >= member.id)) {
             return std::unexpected(Error{ErrorCode::identity, "Invalid complete Star list"});
         }
         previous = member.id;
@@ -35,6 +34,19 @@ Result<void> StarTopology::initialize(const Member& local, std::span<const Membe
     }
     if (!found) {
         return std::unexpected(Error{ErrorCode::identity, "Complete list omits local identity"});
+    }
+
+    // 利用 C++23 Ranges 提取键值并进行内存连续的高效去重，彻底消灭 std::set 带来的红黑树节点分配和内存碎片.
+    auto principals = members | std::views::transform(&Member::principal) | std::ranges::to<std::vector>();
+    std::ranges::sort(principals);
+    if (std::ranges::adjacent_find(principals) != principals.end()) {
+        return std::unexpected(Error{ErrorCode::identity, "Duplicate principal in complete Star list"});
+    }
+
+    auto addresses = members | std::views::transform([](const Member& m) { return m.address.text(); }) | std::ranges::to<std::vector>();
+    std::ranges::sort(addresses);
+    if (std::ranges::adjacent_find(addresses) != addresses.end()) {
+        return std::unexpected(Error{ErrorCode::identity, "Duplicate address in complete Star list"});
     }
     std::lock_guard lock(mutex_);
     if (local_) {
