@@ -29,7 +29,7 @@ func TestPlanetResponseIsSeparateSignedAndDoesNotJoinStarList(t *testing.T) {
 	if err != nil || !ok || len(response.Members) != 2 || response.Members[0].Group != "local" {
 		t.Fatalf("invalid Planet response: %v %v", reply, err)
 	}
-	var local wire.RegistrationResponse_Member
+	var local wire.Member
 	if err := proto.Unmarshal(response.Admission, &local); err != nil || local.Role != r.Role || local.Group != r.Group || !membership.ID(local.Id) {
 		t.Fatal("Planet credential lost role, group or process binding")
 	}
@@ -75,13 +75,13 @@ func TestAccountsCannotClaimTheOtherRole(t *testing.T) {
 }
 
 func TestCandidateRoundsAreBoundedPrioritizedAndEventuallyCoverEveryStar(t *testing.T) {
-	stars := make([]*wire.RegistrationResponse_Member, 0, 31)
+	stars := make([]*wire.Member, 0, 31)
 	for index := range 31 {
 		group := "local"
 		if index >= 19 {
 			group = "remote"
 		}
-		stars = append(stars, &wire.RegistrationResponse_Member{Id: fmt.Sprintf("%032x", index), Group: group, Role: wire.Role_ROLE_STAR})
+		stars = append(stars, &wire.Member{Id: fmt.Sprintf("%032x", index), Group: group, Role: wire.Role_ROLE_STAR})
 	}
 	seen := make(map[string]bool)
 	for round := range uint32(31) {

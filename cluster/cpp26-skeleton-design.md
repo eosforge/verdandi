@@ -1,8 +1,10 @@
 # Star / Planet C++26 骨架设计与迁移计划
 
+> 当前实现以 [Orbit/Astra/Comet v1](../protocol-v1.md) 和 [身份契约](identity-contract.md) 为准. 下文保留设计演进记录, 不作为旧协议兼容要求.
+
 > 2026-09-12: 旧 Rust 服务已废弃, 当前仅维护 C++ Star/Planet + Go Supervisor. 协议 v6、单次 Register、Supervisor 签发不透明 id 和持久幂等规则以[身份与准入契约](identity-contract.md)为准. 下文旧 UUID/v4/Rust 对照和 Challenge/expected_epoch 描述保留为设计演进记录, 不再是当前实现要求.
 
-日期: 2026-09-11. 状态: 独立 cluster-cpp/ 连接回归及 TSan 已通过; 其余设计验收按维护者要求暂停.
+日期: 2026-09-11. 状态: 独立 astra/ 连接回归及 TSan 已通过; 其余设计验收按维护者要求暂停.
 
 维护者选择将 Star/Planet 从 Rust 迁移到 C++26, Supervisor 保持 Go, 暂不要求 MSVC 支持.
 文档完成后维护者已明确要求开始实现. Rust/Tonic 保留为对照, 其测试成绩不能转记为 C++ 成绩.
@@ -22,7 +24,7 @@
 | Star / Planet | C++26, 首个构建与运行验证平台为 Linux x64 / GCC 16.2.0 |
 | Supervisor | 保持现有 Go gRPC 服务、账号配置与 bbolt 成员表 |
 | 网络协议 | 保持 v4, `Admission.Challenge/Register` 与 `StarTransport.OpenSession` |
-| 目录职责 | 在 `cluster-cpp/common`, `cluster-cpp/star`, `cluster-cpp/planet` 保持责任划分 |
+| 目录职责 | 在 `astra/common`, `astra/star`, `astra/planet` 保持责任划分 |
 | 产物 | Star 为 `star`, Planet 为 `planet`, 第一阶段不产出 Windows 二进制 |
 | 设计目标 | 减少重复声明、包装层、分配与拷贝, 同时保持明确的资源和并发所有权 |
 | 实施授权 | 已允许新建目录实施; 所列 C++ 依赖另已明确获准在 Ubuntu 项目内获取和构建 |
@@ -149,10 +151,10 @@ C++ modules / `import std` 不进入首阶段, 避免同时增加生成头、依
 
 ## 3. 目标目录与依赖方向
 
-以下为首版实际源码布局. 验证是否完成以 `cluster-cpp/validation.md` 的证据为准.
+以下为首版实际源码布局. 验证是否完成以 `astra/validation.md` 的证据为准.
 
 ```text
-cluster-cpp/
+astra/
     CMakeLists.txt                 # 服务构建根, 不移到仓库根
     .clang-format
     build.py / build.sh / build.ps1
@@ -160,7 +162,7 @@ cluster-cpp/
     dependencies.lock.json / licenses/
     test_processes.py             # 真实 RPC 与 Rust/C++ 混合进程测试
     common/
-        include/verdandi/cluster/     # 两个角色实际共用的少量声明
+        include/astra/cluster/     # 两个角色实际共用的少量声明
         src/
             config.cpp / options.hpp
             identity.cpp / admission.cpp
@@ -182,7 +184,7 @@ Common 不包含 Star mesh 策略或 Planet 选址策略; 两个 main 只组合�
 协议生成目标与手写目标分别设置警告选项. 生成类型只穿过协议适配边界, 不遍布配置与拓扑算法.
 两个程序各自编译一套普通角色实现, 不把 entire runtime 模板化为 `Node<Role, Transport, Store, ...>`.
 
-维护者随后允许新建目录, 实施采用独立 `cluster-cpp/`, 当前 Rust 仍位于 `cluster/`, 两者使用独立构建输出.
+维护者随后允许新建目录, 实施采用独立 `astra/`, 当前 Rust 仍位于 `cluster/`, 两者使用独立构建输出.
 第一阶段验收前保留 Rust 作为行为对照; C++ 验收通过后再整理 Rust 运行入口与服务专用依赖.
 SDK Rust 和 `proto/generator` 的后续去留独立处理, 不能误删它们仍使用的 Cargo 工作流.
 不长期维护两个生产 transport 后端, 也不提前移动/删除现有实现来制造不可回退状态.
@@ -320,7 +322,7 @@ Supervisor 离线时已获准进程可验证已有凭证并重连, 新进程仍�
 
 ### 5.2 字节签名和分层输入限制
 
-Ed25519 验证输入必须是 `verdandi-admission-v4\0` 加 admission 原始字节, 正文最多 1024 字节,
+Ed25519 验证输入必须是 `astra-admission-v4\0` 加 admission 原始字节, 正文最多 1024 字节,
 签名必须 64 字节. 不能 decode 再 serialize 后验签, 不能把“确定性 Protobuf”误认为跨语言规范编码.
 未知/保留字段与重复字段按现有协议和回归处理, 不使用 C++ 结构体内存布局作为协议格式.
 
@@ -448,7 +450,7 @@ gRPC C++ 当日发布了 v1.84.0, 替代初稿的 v1.83.1 候选. Go gRPC 属于
 | 组件 | 选择原则 | 本地位置 / 待完成事项 |
 | --- | --- | --- |
 | GCC / libstdc++ | 使用已验证的 16.2.0 组合 | `build/tools/gcc-16.2.0`, 不修改系统工具链 |
-| gRPC C++ / grpc_cpp_plugin | 1.84.0, 插件使用同一份源码 | `build/deps/cluster-cpp`, 生成工具放 `build/tools` |
+| gRPC C++ / grpc_cpp_plugin | 1.84.0, 插件使用同一份源码 | `build/deps/astra`, 生成工具放 `build/tools` |
 | Protobuf / protoc | 36.1, C++ 生成代码与 runtime 精确匹配 | 生成器放 `build/tools`, 运行库放依赖前缀 |
 | Abseil、c-ares、RE2、zlib | 20260817.0 / 1.34.8 / 2025-11-05 / 1.3.2 | commit 见版本锁; 与 gRPC 上游子模块不同, M0 验证组合 |
 | TLS 与 Ed25519/SHA256/RNG | 使用所选 gRPC 配套的 BoringSSL, TLS 与本地凭证验签共用同一份构建 | 锁定 gRPC 所引用的 BoringSSL commit, 放项目依赖前缀 |
@@ -479,8 +481,8 @@ C++ Protobuf 要求生成代码与 runtime 精确匹配, 不承诺跨版本 ABI.
 
 ### 8.2 构建隔离与离线规则
 
-首版依赖产物放 `build/deps/cluster-cpp/linux-gcc16/install`, 版本由来源锁固定,
-对象与二进制放 `build/cluster-cpp/<profile>`, core-only 使用独立的 `core-<profile>`.
+首版依赖产物放 `build/deps/astra/linux-gcc16/install`, 版本由来源锁固定,
+对象与二进制放 `build/astra/<profile>`, core-only 使用独立的 `core-<profile>`.
 依赖锁记录 archive/commit 摘要、provider、C++ ABI、编译器、链接方式与许可证; 不只记录“系统中找到”.
 现有系统 C++ 二进制依赖要通过 ABI/编译链接探测, 失败则复用源码在项目内另建, 不强行混合 GCC 15/16 的运行库.
 
@@ -495,7 +497,7 @@ Linux 发布产物最终需要声明 libstdc++/libgcc/glibc 与实际链接的 g
 ### 8.3 协议生成
 
 `.proto` 是唯一线上契约. C++ `.pb.h/.pb.cc/.grpc.pb.h/.grpc.pb.cc` 显式生成并作为源码放在
-`cluster-cpp/common/src/generated`; 普通编译不运行 protoc. 保留字段编号和 reserved 项, 不复活 MessageID 分派.
+`astra/common/src/generated`; 普通编译不运行 protoc. 保留字段编号和 reserved 项, 不复活 MessageID 分派.
 校验命令在项目临时目录重新生成后逐字节比较, 不在检查阶段修改源码.
 锁定 protoc、插件及参数, 去掉时间/机器路径等不稳定生成输入.
 
@@ -669,9 +671,9 @@ SDK 仅在对应路径适用时进入审查, 记录“不适用”的依据, 不
 先在获准的实施阶段验证锁定依赖与 G1..G8, 再完成连接骨架, 整理所有权与重复逻辑后进行功能和长时测试.
 优化实验独立于正确性验收; 后续业务复制与存储仍按 Galaxy 设计另行推进.
 
-独立 `cluster-cpp/` 已实现连接骨架, 获准的依赖已在 Ubuntu 项目内构建, Debug/Release、ASan/UBSan、
+独立 `astra/` 已实现连接骨架, 获准的依赖已在 Ubuntu 项目内构建, Debug/Release、ASan/UBSan、
 跨语言互通和修复后一小时故障循环已有实测证据. 完整 TSan 已通过, 2026-09-12 按维护者指示恢复剩余验收.
 编译期负例、契约关闭对照、16 Star / 32 Planet 规模与分配测试已通过; 推流完成五轮 225 组对照,
 40 组独立分配对照及新增 sanitizer 检查. 默认 Linux C++ 入口完整回归通过, M0..M4 连接范围验收完成.
-本轮细项及容量拒绝、分析器和性能限制见 [补充报告](../cluster-cpp/qualification-20260912.md), 不扩大为业务或生产容量认证.
-实际证据和缺口以 [C++ 验证记录](../cluster-cpp/validation.md) 为准, 不把设计文本当作已实现或已通过的证明.
+本轮细项及容量拒绝、分析器和性能限制见 [补充报告](../astra/qualification-20260912.md), 不扩大为业务或生产容量认证.
+实际证据和缺口以 [C++ 验证记录](../astra/validation.md) 为准, 不把设计文本当作已实现或已通过的证明.

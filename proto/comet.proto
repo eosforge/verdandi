@@ -1,0 +1,4 @@
+// Comet v1 是未来 SDK 接入协议的命名边界. 当前未定义消息或开放 RPC.
+syntax = "proto3";
+package proto.comet.v1;
+option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";

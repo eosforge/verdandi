@@ -1,0 +1,155 @@
+// Astra v1 节点间控制消息. Orbit 凭证作为原始字节传输, 类型由 Orbit 唯一定义.
+syntax = "proto3";
+package proto.astra.v1;
+option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
+
+// TLS 1.3 建链后交换签名 bearer 凭证. 不携带第三方名单或业务数据.
+message Hello {
+    // 主版本为 1, 角色与逻辑组绑定到准入签名, 旧协议不能连接新服务.
+    uint32 protocol_major = 1;
+    uint32 protocol_minor = 2;
+    // 身份只在 Orbit 签名的 Member 正文中定义, 不在 Hello 重复.
+    reserved 3, 4, 5, 6;
+    reserved "cluster_id", "id", "boot_id", "advertise";
+    // 本端 payload 容量, 至少 1024 字节. 不改变当前阶段的硬上限.
+    uint32 max_frame_bytes = 7;
+    // 原样转发 Supervisor 返回的 Member 编码, 校验前不信任其中任何字段.
+    bytes admission = 8;
+    // Ed25519 签名, 覆盖域分隔前缀和 admission 原始字节.
+    bytes admission_signature = 9;
+    // 准入凭证通过签名验证, 不使用连接级证明字段.
+    reserved 10;
+    reserved "session_proof";
+}
+
+// 每方向最多一个等待响应的心跳, 超时包括写入等待, 普通输入不延长期限.
+message Ping {
+    uint64 request_id = 1;
+}
+message Pong {
+    uint64 request_id = 1;
+}
+
+// 只传有限拒绝码, 不回显远端输入或内部错误. 收到后关闭连接, 不回复另一个错误.
+message ProtocolError {
+    ProtocolErrorCode code = 1;
+}
+enum ProtocolErrorCode {
+    // 未指定错误, 不作为有效拒绝原因.
+    PROTOCOL_ERROR_CODE_UNSPECIFIED = 0;
+    // 控制协议主版本不兼容.
+    PROTOCOL_ERROR_CODE_PROTOCOL_MISMATCH = 1;
+    // 签名成员不属于当前 Galaxy.
+    PROTOCOL_ERROR_CODE_CLUSTER_MISMATCH = 2;
+    // Hello 缺少字段或身份绑定无效.
+    PROTOCOL_ERROR_CODE_INVALID_HELLO = 3;
+    // 拒绝连接当前运行实例自身.
+    PROTOCOL_ERROR_CODE_SELF_CONNECTION = 4;
+    // 连接或消息超过本端容量.
+    PROTOCOL_ERROR_CODE_RESOURCE_LIMIT = 5;
+    // 当前阶段不能接收此消息类型.
+    PROTOCOL_ERROR_CODE_UNEXPECTED_MESSAGE = 6;
+    // 认证握手未在期限内完成.
+    PROTOCOL_ERROR_CODE_HANDSHAKE_TIMEOUT = 7;
+    // 账号权限或准入凭证校验失败.
+    PROTOCOL_ERROR_CODE_UNAUTHORIZED = 8;
+    // 成员代次或会话所有权冲突.
+    PROTOCOL_ERROR_CODE_CONFLICT = 9;
+    // 登记持久存储暂时不可用.
+    PROTOCOL_ERROR_CODE_STORAGE_UNAVAILABLE = 10;
+}
+
+// Star/Planet 的互联传输. Supervisor 准入使用 orbit.proto 中的 gRPC 接口.
+
+// 每次 RPC 建立一条逻辑会话. 双方第一条均为 Hello, 后续消息由当前阶段验证.
+// 角色索引按成员身份、代次和方向隔离重复会话, 不依赖底层连接是否复用.
+// 拨号方先发送 Hello, 接收方验证准入后再返回自己的 bearer 凭证.
+service StarTransport {
+    rpc OpenSession(stream SessionPacket) returns (stream SessionPacket);
+}
+
+// 显式类型分派, 不把旧 MessageID 或六字节帧重新装进 bytes 隧道.
+// 当前仅实现控制会话, Catalog/Registry 业务同步另行定义有界消息.
+message SessionPacket {
+    oneof body {
+        Hello hello = 1;
+        Ping ping = 2;
+        Pong pong = 3;
+        ProtocolError rejection = 4;
+    }
+}
+
+// 草案: 生成类型用于审阅协议, 当前 Star/Planet 尚未注册此服务或对外提供业务同步.
+
+// 业务同步候选接口. 每条 RPC 都必须校验准入, 不能因另一条流已经验证就直接放行.
+service SyncTransport {
+    // 信令和增量候选通道. 完成整份 SyncResponse 后才可确认其提交位置.
+    rpc OpenDeltaStream(stream SyncPacket) returns (stream SyncPacket);
+
+    // 快照候选通道. 独立 RPC 不保证独立资源或端到端零拷贝.
+    // 实例校验, 快照期间的历史保留和切回增量规则尚未实施, 不据此声明可用.
+    rpc OpenSnapshotStream(stream SnapshotRequest) returns (stream SnapshotChunk);
+}
+
+// 增量通道的消息载体.
+message SyncPacket {
+    oneof body {
+        Hello hello = 1;
+        Ping ping = 2;
+        Pong pong = 3;
+        SyncRequest request = 4;
+        SyncResponse response = 5;
+    }
+}
+
+// 候选恢复请求. 当前版本属于一个服务端实例和一个明确的订阅范围.
+message SyncRequest {
+    // 客户端已完整应用的本地提交序号, 不是 Catalog 发布者的业务版本.
+    uint64 client_global_version = 1;
+    // 上次对账的服务端不透明实例 ID, 复用现有准入身份. 为空或不匹配时必须全量.
+    string server_instance_id = 2;
+    // 本次希望订阅的范围, 例如 "Catalog/Routes/" 或 "Registry/". 空字符串表示全部.
+    string subscribe_prefix = 3;
+    // 游标原来所属的范围. 与本次范围不同必须重新快照, 重连也不能省略此比较.
+    string cursor_prefix = 4;
+}
+
+// 候选同步响应. requires_full_snapshot 为 true 时不得把此响应当成已同步的提交屏障.
+message SyncResponse {
+    // 全部增量应用成功后才能保存的提交位置.
+    uint64 server_global_version = 1;
+    // 当前服务端的不透明实例 ID, 供客户端下次携带.
+    string server_instance_id = 2;
+
+    // 历史不足, 游标超前, 实例不匹配或范围改变时必须全量.
+    // 草案仍需实现快照与增量的衔接, 当前没有对应服务处理器.
+    bool requires_full_snapshot = 3;
+
+    // 按提交顺序排列的完整增量与删除记录, 不在批次中间确认进度.
+    repeated DeltaRecord deltas = 4;
+}
+
+message DeltaRecord {
+    // 完整业务 Key.
+    string key = 1;
+    // 业务二进制正文.
+    bytes payload = 2;
+    // true 表示删除该 Key.
+    bool deleted = 3;
+    // 当前草案使用所在 Store 的提交号, 不能用于 Catalog 业务版本校验.
+    uint64 field_version = 4;
+}
+
+// 快照请求草案, 其准入与关联规则仍待服务层实现.
+message SnapshotRequest {
+    string subscribe_prefix = 1;
+}
+
+message SnapshotChunk {
+    // 全部块必须来自同一个不可变快照.
+    uint64 snapshot_version = 1;
+    // 分块大小由后续实现的资源预算决定, 协议不固定为 4 KiB.
+    bytes chunk_data = 2;
+    // 收齐最后一块后才能将完整快照应用到本地视图.
+    bool is_last_chunk = 3;
+}

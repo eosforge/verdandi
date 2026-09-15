@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package proto.astra.bench.v1;
+
+// 合成数据只用于传输对照, 不属于 Star/Planet 的正式业务协议.
+message Transfer {
+    uint64 sequence = 1;
+    bytes body = 2;
+}
+
+// 一条长期双向流复用一条认证连接, 不为每条消息重新建立 RPC.
+service TransportProbe {
+    rpc Exchange(stream Transfer) returns (stream Transfer);
+    // 主负载为 Star 主动推流, 上行只承载少量控制与发布请求.
+    rpc Synchronize(stream Control) returns (stream Event);
+}
+
+message Forward {
+    uint64 request = 1;
+    bytes data = 2;
+}
+
+message Update {
+    uint64 revision = 1;
+    string key = 2;
+    bytes data = 3;
+    Domain domain = 4;
+}
+
+enum Domain {
+    DOMAIN_UNSPECIFIED = 0;
+    DOMAIN_REGISTRY = 1;
+    DOMAIN_CATALOG = 2;
+}
+
+// 每 128 条更新回报一次应用水位. final 表示已应用全部更新, 不要求逐条 ACK.
+message Progress {
+    uint64 revision = 1;
+    bool final = 2;
+}
+
+message Completed {
+    uint64 revision = 1;
+    uint64 sampled_updates = 2;
+    uint64 update_p50_micros = 3;
+    uint64 update_p95_micros = 4;
+    uint64 update_p99_micros = 5;
+    uint64 expired_samples = 6;
+}
+
+// 正常同步不逐条 ACK 更新. join 只在会话开始时发送一次.
+message Control {
+    oneof command {
+        bool join = 1;
+        uint64 ping = 2;
+        Forward publish = 3;
+        Progress progress = 4;
+    }
+}
+
+// queue_micros 只测发布入队到传输队列交接, 不伪装为跨机单向时延.
+message Event {
+    uint64 queue_micros = 1;
+    oneof event {
+        bool ready = 2;
+        Update update = 3;
+        uint64 pong = 4;
+        uint64 accepted = 5;
+        bytes snapshot = 6;
+        Completed completed = 7;
+        uint64 rejected = 8;
+        uint64 drained = 9;
+    }
+}

@@ -22,7 +22,7 @@ Supervisor 沿用当前准入服务作为配套. 通过验证后再决定服务�
 Rust 仍负责 Star/Planet, Go 仍负责 Supervisor, `cluster/common`, `cluster/star`, `cluster/planet` 所有权划分保留.
 
 gRPC 能从 schema 生成 RPC 客户端/服务端接口, 支持双向流及 deadline/cancellation.
-它不会生成 Verdandi 的完整业务 SDK, 也不会代替版本合并、Selector、缓存、持久确认和换绑恢复.
+它不会生成 Astra 的完整业务 SDK, 也不会代替版本合并、Selector、缓存、持久确认和换绑恢复.
 [官方概念](https://grpc.io/docs/what-is-grpc/core-concepts/) 支持上述传输能力;
 是否能减少本项目维护成本属于需要通过原型验证的工程判断.
 
@@ -60,7 +60,7 @@ gRPC 的 HTTP/2 帧与消息前缀不同于当前六字节前缀, 属于线协�
 
 流中两端读写需要独立推进, 正常关闭须回收自己的 stream、task 和 channel.
 不要在应用自己的候选退避外再叠加不可观察的无限 RPC 重试.
-已建立的流断开后由 Verdandi 重新建立会话并携带恢复信息; 框架重连不代表同步已恢复.
+已建立的流断开后由 Astra 重新建立会话并携带恢复信息; 框架重连不代表同步已恢复.
 [官方流控](https://grpc.io/docs/guides/flow-control/), [重试](https://grpc.io/docs/guides/retry/).
 
 当前 TLS exporter 在 `common/src/identity.rs` 直接从 rustls 连接取得.

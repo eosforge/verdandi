@@ -1,0 +1,102 @@
+{
+  "source_files_match": 154,
+  "source_manifest_sha256": "f408599d7a90fd8d6246d23b7892ba0c92d9fe4520c24dd483605f7e4bcf868e",
+  "dependency_files_size_mtime_unchanged": 3420,
+  "cpp_profile": "debug",
+  "ctest_passed": 10,
+  "rpc": {
+    "scope": "C++26 logical gRPC sessions with Go Supervisor",
+    "cases": [
+      "tls13_only_and_h2_negotiation",
+      "partial_tls_handshake_deadline_and_fd_cleanup",
+      "channel_reuse_duplicate_fencing_and_protocol_rejection",
+      "tls_without_http2_request_idle_cleanup",
+      "rpc_fixture_graceful_stop_and_listener_release",
+      "empty_candidates_refresh_when_star_joins"
+    ],
+    "passed": true,
+    "binary_sha256": {
+      "/home/ubuntu/verdandi/build/astra/debug/star": "2f26dd52254eead280315d70da8182a59cea091e4ffa6a246a3185513b742b4c",
+      "/home/ubuntu/verdandi/build/astra/debug/planet": "5e4d8507f82bd8efe1a556731de4bac77d9598cbd80717e015fbb10ce11b348a",
+      "/home/ubuntu/verdandi/build/astra/debug/star_rpc_probe": "5da1dffbc8f97e54b74e32414446d030a3edc8927599ad1817ab308209445f30",
+      "/home/ubuntu/verdandi/build/supervisor/supervisor": "21fa4df882a986fcc48deb28a1cc5bd2ef77748d96eab77d8db47570ecca4c75"
+    },
+    "tls_descriptors": {
+      "baseline": 11,
+      "peak": 35,
+      "after_deadline": 8,
+      "connections": 24
+    },
+    "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":1054.16,\"p95\":1588.29,\"p99\":1842.6,\"max\":2191.52}}\n{\"slow_reader\":{\"attempted_pings\":313,\"close_ms\":21}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+    "control_rtt_us": {
+      "samples": 500,
+      "p50": 1054.16,
+      "p95": 1588.29,
+      "p99": 1842.6,
+      "max": 2191.52
+    },
+    "slow_reader": {
+      "attempted_pings": 313,
+      "close_ms": 21
+    },
+    "rpc_server_resources": {
+      "supervisor": {
+        "rss_kib": 16108,
+        "threads": 7,
+        "fds": 9
+      },
+      "star": {
+        "rss_kib": 18944,
+        "threads": 9,
+        "fds": 8
+      }
+    },
+    "idle_http2_connections": {
+      "count": 2,
+      "observed_closed_ms": 13144
+    }
+  },
+  "service_regression": {
+    "result": "/home/ubuntu/verdandi/build/testkit/results/services-1789449342989842320.json",
+    "status": "pass",
+    "platform": "linux",
+    "mode": "regression",
+    "mixed_hosts": false,
+    "star_binaries": "/home/ubuntu/verdandi/build/astra/debug",
+    "cases": [
+      "service_cli_help_version_and_invalid_options",
+      "concurrent_three_star_full_mesh",
+      "supervisor_offline_existing_mesh_and_new_star_wait",
+      "persistent_supervisor_restart_and_waiting_star_join",
+      "graceful_and_forced_star_restart",
+      "invalid_identities_fail_closed",
+      "invalid_login_configuration_and_password_fail_closed",
+      "star_planet_account_roles_fail_closed",
+      "planet_prefers_local_group_without_joining_star_mesh",
+      "planet_cross_group_failover_while_supervisor_offline",
+      "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+      "one_active_upstream_per_planet",
+      "signals_process_exit_and_port_reuse"
+    ],
+    "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+    "elapsed_seconds": 21.123
+  },
+  "remaining_service_processes": [],
+  "date": "2026-09-15",
+  "protocol_major": 1,
+  "packages": [
+    "proto.orbit.v1",
+    "proto.astra.v1",
+    "proto.comet.v1"
+  ],
+  "signature_domain": "proto.orbit.v1.admission\u0000",
+  "frozen_files_unchanged": 704,
+  "windows_supervisor_checks": "pass",
+  "linux_supervisor_checks_and_race": "pass",
+  "generator_tests": 4,
+  "windows_build_entry_tests": 6,
+  "benchmark_targets": "compiled only",
+  "release_asan_tsan_rerun": false,
+  "third_party_download_or_rebuild": false,
+  "unbounded_tests": false
+}

@@ -1,9 +1,9 @@
-# Supervisor 与 Star/Planet v6 验证计划
+# Supervisor 与 Star/Planet v1 验证计划
 
 日期: 2026-09-12. 当前实现为 C++ Star/Planet + Go Supervisor, gRPC/TLS,
 单次 Register 和一个签名 bearer 凭证. 以[身份契约](cluster/identity-contract.md)为准.
-本轮执行证据见[准入精简报告](cluster-cpp/admission-simplification-20260912.md).
-旧 Rust 服务及 v3/v4/v5 结果保留为历史, 不能计入 v6 验收.
+本轮执行证据见[准入精简报告](astra/admission-simplification-20260912.md).
+旧 Rust 服务及 v3/v4/v5 结果保留为历史, 不能计入 v1 验收.
 Planet 业务推进暂停, 此处只保留已有连接骨架的回归要求.
 
 ## 测试矩阵
@@ -16,17 +16,17 @@ Planet 业务推进暂停, 此处只保留已有连接骨架的回归要求.
 | 登记重试 | admission/issuance_test.go, membership/startup_test.go | 响应丢失与并发相同请求幂等, 新请求按提交顺序替换, 已提交旧请求重开库后仍拒绝 |
 | 成员表 | membership/store_test.go, startup_test.go | 地址/id/槽位冲突, 持久恢复, 完整快照, 请求索引损坏, 满额不驱逐且当前重试仍可完成 |
 | 候选 | admission/candidates_test.go | Planet 不进入 Star 名单, 最多 8 个候选, 本组优先, 轮换覆盖 |
-| 身份与解码 | cluster-cpp/common/tests/identity_test.cpp | 不透明 id, bearer 可复用, 凭证篡改及旧签名域拒绝, 成员字段校验 |
-| C++ 准入 | cluster-cpp/common/tests/admission_test.cpp | 连接/登记总期限, 取消, 相同请求键, 候选刷新不能改变已安装实例身份 |
-| 会话 | cluster-cpp/common/tests/session_test.cpp | 有界队列、绝对期限、旧 Pong 不延时、旧关闭不删除新会话 |
-| gRPC 流 | cluster-cpp/common/tests/rpc_probe.cpp | 同一通道多个逻辑会话, 双向 Ping/Pong, 错误不回声, 重复会话拒绝 |
+| 身份与解码 | astra/common/tests/identity_test.cpp | 不透明 id, bearer 可复用, 凭证篡改及旧签名域拒绝, 成员字段校验 |
+| C++ 准入 | astra/common/tests/admission_test.cpp | 连接/登记总期限, 取消, 相同请求键, 候选刷新不能改变已安装实例身份 |
+| 会话 | astra/common/tests/session_test.cpp | 有界队列、绝对期限、旧 Pong 不延时、旧关闭不删除新会话 |
+| gRPC 流 | astra/common/tests/rpc_probe.cpp | 同一通道多个逻辑会话, 双向 Ping/Pong, 错误不回声, 重复会话拒绝 |
 | 资源 | 同上及 Go admission 测试 | 消息/连接限制, 慢 TLS 和缺失 Hello 不能拖住关闭, 端口可复用 |
-| Star 网络 | cluster-cpp/common/tests/core_test.cpp, testkit/services.py | 并发加入收敛, 完整名单原子安装, Supervisor 离线重连 |
-| Planet 网络 | 同上及 cluster-cpp/test_processes.py | 一个上游, 本组优先、跨组切换, 旧候选接受合法较高 epoch, 空候选后发现新 Star |
+| Star 网络 | astra/common/tests/core_test.cpp, testkit/services.py | 并发加入收敛, 完整名单原子安装, Supervisor 离线重连 |
+| Planet 网络 | 同上及 astra/test_processes.py | 一个上游, 本组优先、跨组切换, 旧候选接受合法较高 epoch, 空候选后发现新 Star |
 | 实际进程 | testkit/services.py | 真实 Go Supervisor 与 C++ 二进制, 信号与清理; 当前 C++ 验收平台为 Linux |
-| 配置与错误 | cluster-cpp/common/tests/core_test.cpp, process_test.cpp | 极端时间/容量在运行前拒绝, RPC 错误分类不误隔离候选, 退避饱和不溢出 |
-| I/O 所有权 | cluster-cpp/common/tests/connect_test.cpp, session_test.cpp | 取消并排空真实 I/O, 回调不借用已销毁 Runtime, 逻辑会话与底层连接分离 |
-| 公共身份向量 | cluster/tests/fixtures/admission-v5.json | Go/C++ 的名称、规范地址、不透明 id 和 principal 摘要一致; v6 沿用这些字段规则 |
+| 配置与错误 | astra/common/tests/core_test.cpp, process_test.cpp | 极端时间/容量在运行前拒绝, RPC 错误分类不误隔离候选, 退避饱和不溢出 |
+| I/O 所有权 | astra/common/tests/connect_test.cpp, session_test.cpp | 取消并排空真实 I/O, 回调不借用已销毁 Runtime, 逻辑会话与底层连接分离 |
+| 公共身份向量 | cluster/tests/fixtures/admission-v1.json | Go/C++ 的名称、规范地址、不透明 id 和 principal 摘要一致; v1 使用这些字段规则 |
 | 输入与持久边界 | admission/boundaries_test.go, membership/boundaries_test.go | 无效 UTF-8, KDF 前后取消, 角色/地址不可变, epoch 耗尽, 快照无别名 |
 | 编排器 | testkit/tests/test_services.py | 临时身份副本隔离, 进程命名不被覆盖, CLI 退出码与帮助契约, 无效场景不创建进程 |
 | 覆盖引导 fuzz | 两个 Go boundaries_test.go 中的 Fuzz 入口 | 账号配置不会接受无效角色, 持久 Member 成功解码后必须满足不变量并可 round trip |

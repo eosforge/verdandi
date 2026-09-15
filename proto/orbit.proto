@@ -1,0 +1,67 @@
+// Orbit v1 控制面. Member 和 Role 是准入凭证及成员名单的唯一协议定义.
+syntax = "proto3";
+package proto.orbit.v1;
+option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
+
+// Supervisor 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
+service Admission {
+    rpc Register(RegistrationRequest) returns (RegistrationResponse);
+}
+
+// 账号通过 TLS 提交, Supervisor 从已验证账号和规范端点构建指纹.
+message RegistrationRequest {
+    string cluster_id = 1;
+    // 身份与代次由服务端分配, 以下编号不用于当前请求字段.
+    reserved 2, 5, 11, 12;
+    reserved "id", "expected_epoch", "ticket", "ticket_signature";
+    // 规范的具体 IP:PORT. 节点启动和其他节点拨号均验证服务端 IP SAN.
+    string advertise = 3;
+    reserved 4;
+    reserved "public_key";
+    // 必须属于账号允许的角色, UNSPECIFIED 非法.
+    Role role = 6;
+    // 连接偏好组, 如实际地域. 不改变 Galaxy 的数据或权限范围.
+    string group = 7;
+    // 仅 Planet 使用, 候选耗尽后递增以轮换小名单. 不影响进程准入代次或写入版本.
+    uint32 candidate_round = 8;
+    // 仅向 Supervisor 发送, 不复制到成员名单, 日志或节点间 Hello.
+    string username = 9;
+    string password = 10;
+    // 本次启动生成一次的 32 字节随机幂等键, 所有重试和候选刷新复用, 不作为实例身份或授权凭据.
+    // Supervisor 持久记住已提交请求; 被替换的旧请求不能再次登记.
+    bytes request_id = 13;
+}
+
+// 登记持久提交后返回有界名单: Star 得到完整 Star 列表, Planet 得到最多 8 个候选.
+message RegistrationResponse {
+    // Star 按 id 严格排序并包含自身. Planet 本组优先, 每组内按 id 排序, 不含自身.
+    repeated Member members = 1;
+    // 本次登记的 Member 原始编码及其签名, 与完整名单放在同一个应答中.
+    bytes admission = 2;
+    bytes signature = 3;
+}
+
+message Member {
+    string cluster_id = 1;
+    // Supervisor 签发的不透明 UTF-8 字符串, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
+    string id = 2;
+    // SHA-256(username + NUL + cluster_id + NUL + advertise), 小写十六进制, 不替代本次启动的 id.
+    string principal = 3;
+    string advertise = 4;
+    // 每部署身份的重启代次, 不用于 Catalog/Registry 的业务版本排序.
+    uint64 epoch = 5;
+    reserved 6;
+    reserved "public_key";
+    Role role = 7;
+    string group = 8;
+}
+
+// 角色是准入权限的一部分, 不从端口、地址或存储模式推断.
+enum Role {
+    // 未指定角色, 准入请求拒绝此值.
+    ROLE_UNSPECIFIED = 0;
+    // 维护互联拓扑并接纳 Planet 上游连接的 Star.
+    ROLE_STAR = 1;
+    // 从授权候选中维持单个 Star 上游的 Planet.
+    ROLE_PLANET = 2;
+}

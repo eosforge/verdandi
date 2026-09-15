@@ -1,5 +1,45 @@
-# Verdandi Worklog
+# Astra Worklog
 
+## Explicit C++ protocol names (2026-09-15)
+
+Removed wire, orbit and probe namespace aliases from 12 handwritten C++ service, test and probe files.
+All protocol references use full proto::astra::v1, proto::orbit::v1 or proto::astra::bench::v1 names.
+Verified changes are only alias expansion plus clang-format output; schemas, generated code and other previously tested sources remain unchanged.
+Synced Linux and passed Debug regression with benchmark targets built: 10 CTests, 6 RPC cases and 13 process cases.
+Generation comparison and formatting passed; test services exited and owned resources were cleaned.
+This source-only edit did not rerun Release or sanitizers. No downloads, commit or push.
+Linux log: build/protocol-names/debug.log. Naming rule is recorded in astra/CONTRIBUTING.md.
+
+## Full v1 regression recheck (2026-09-15)
+
+Rebuilt current Linux Debug, Release, ASan/UBSan and TSan project targets using existing dependencies.
+Each profile passed 10 CTests, 6 TLS/RPC cases and 13 process cases; no sanitizer diagnostics.
+Windows/Linux Supervisor and generator gates, Linux Go race, Python 44 tests and Admin 53 tests/typecheck/build passed.
+Verified 338 cross-host source files, unchanged frozen sources/dependencies, binary hashes and final service cleanup.
+No production code changes or new downloads. No long-running campaign, commit or push.
+See [recheck report](testkit/results/protocol-v1-recheck-20260915.md); prior evidence below remains historical.
+
+## Orbit / Astra / Comet v1 boundary
+
+Consolidated the active schemas as orbit.proto, astra.proto and comet.proto. C++ handwritten types use astra;
+Member/Role belong only to proto.orbit.v1. All node senders, receivers and benchmark probes use major 1,
+with the single signing domain proto.orbit.v1.admission + NUL. Comet remains an empty SDK boundary.
+Windows Go checks, Linux Go race, generator checks, Debug CTest/RPC/process regression and v1 reply validation passed.
+154 service/tool files match both hosts; 704 frozen files and 3420 installed dependency files remain unchanged.
+No Release/sanitizer rerun, new download, third-party rebuild, indefinite test, commit or push.
+See [v1 contract and evidence](protocol-v1.md). Earlier entries retain their historical names and versions.
+
+## Astra naming and source-directory migration (2026-09-15)
+
+Moved the active C++ service from cluster-cpp to astra, with matching C++ namespace, CMake options,
+protobuf packages, admission domain, Admin identity, documentation and service test paths.
+Outer checkout directories, Git remote and repository-derived Go imports remain unchanged.
+Legacy Verdandi SDKs and 704 frozen files remain unchanged; all 28 MessageIDs retain their numbers.
+Linux now tests from the project root using migrated build/astra trees and existing dependency prefixes.
+Debug and Release each passed 10 CTests, 6 RPC cases and 13 process cases. Both Go checks and Linux race,
+protocol checks, Python harnesses and 53 Admin tests passed. Sanitizer caches were reconfigured, not rerun.
+No downloads, third-party rebuild, indefinite test, commit or push. Details: [Astra migration](astra-migration.md).
+Historical paths in entries below refer to the source directory before this move.
 ## SyncStore line review and bounded performance comparison (2026-09-15)
 
 Applied the maintainer's binary-search/reserve idea, Ranges member projection, lock-external record preparation,

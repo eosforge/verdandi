@@ -1,10 +1,10 @@
-# Verdandi Admin
+# Astra Admin
 
 > 2026-09-10 结构修订: 目标改为 Galaxy 包含 Star 恒星, Relay 行星全量缓存 Galaxy 授权状态,
 > 业务卫星可绑定恒星或行星. 详见 [共同星图架构](../galaxy-architecture.md).
 > 下文和当前演示源码仍使用旧的业务行星模型, 本轮未实施展示迁移.
 
-Verdandi Supervisor 的管理端基础工程, 使用 Vue 3、TypeScript、Vite、Naive UI 和 Three.js.
+Astra Supervisor 的管理端基础工程, 使用 Vue 3、TypeScript、Vite、Naive UI 和 Three.js.
 当前包含可折叠侧边栏与四恒星拓扑演示: Atlas、Lyra、Vega 保持可用, Orion 演示不可用状态,
 三个可用节点共 144 个 Registry、Subscriber、Publisher 实体, 不可用 Orion 为独立黑洞.
 所有连接和实体均为本地示例, 尚未接入 Supervisor API, 不代表真实集群状态.

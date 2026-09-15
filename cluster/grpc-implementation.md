@@ -1,12 +1,14 @@
 # gRPC 服务骨架与账号准入
 
+> 当前实现以 [Orbit/Astra/Comet v1](../protocol-v1.md) 和 [身份契约](identity-contract.md) 为准. 下文保留设计演进记录, 不作为旧协议兼容要求.
+
 > 2026-09-12: 旧 Rust 服务已废弃, 当前仅维护 C++ Star/Planet + Go Supervisor. 协议 v5、Supervisor 签发不透明 id 和重试规则以[身份与准入契约](identity-contract.md)为准. 下文旧 UUID/v4/Rust 对照描述保留为设计演进记录, 不再是当前实现要求.
 
 日期: 2026-09-11. 功能已接入; 初次迁移通过两端与混合组网回归及 60 秒故障循环.
 后续整理与测试补强单独记录在 [服务骨架报告](service-hardening-20260911.md), 不覆盖初次迁移证据.
 本文件替代旧 v3 文档中的自定义 TCP 帧、mTLS 账号身份和 TLS exporter 规则.
 
-后续 C++26 迁移已按 [设计稿](cpp26-skeleton-design.md) 在独立 [cluster-cpp/](../cluster-cpp/README.md) 实施和验证, 保留本文的 Rust 实现作对照.
+后续 C++26 迁移已按 [设计稿](cpp26-skeleton-design.md) 在独立 [astra/](../astra/README.md) 实施和验证, 保留本文的 Rust 实现作对照.
 新骨架以本文 v4 为兼容基准; C++ 的生命周期与资源约束需重新验证, 不沿用 Rust 测试成绩.
 C++ 已确认调整物理连接映射、固定 64 KiB 窗口和名单解码前扫描要求, 详见设计稿第 13.1 节;
 v4 字段与认证规则保持兼容, 本文的 Rust 实现及历史测试结论不因目标设计变更而改写.

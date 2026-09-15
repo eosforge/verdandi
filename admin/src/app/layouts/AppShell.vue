@@ -37,14 +37,14 @@ const menuOptions: MenuOption[] = [
       :collapsed-width="64"
       content-style="display: flex; flex-direction: column; height: 100%"
     >
-      <div class="brand" :class="{ 'brand--collapsed': collapsed }" aria-label="Verdandi Supervisor">
+      <div class="brand" :class="{ 'brand--collapsed': collapsed }" aria-label="Astra Supervisor">
         <span class="brand-mark" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
             <path d="m5 5 7 14 7-14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </span>
         <div v-if="!collapsed" class="brand-copy">
-          <strong>Verdandi</strong>
+          <strong>Astra</strong>
           <span>Supervisor</span>
         </div>
       </div>

@@ -6,7 +6,7 @@
 SDK 在连接或切换入口时按订阅范围对账，随后通过同一条 gRPC 流持续接收更新。
 
 适用角色与转发方向沿用[星图架构](../galaxy-architecture.md)。当前 C++26 服务仍是
-[连接骨架](../cluster-cpp/README.md)，本文不修改现有 Redis SDK、C ABI、Protobuf 或持久化格式。
+[连接骨架](../astra/README.md)，本文不修改现有 Redis SDK、C ABI、Protobuf 或持久化格式。
 
 ## 1. 本轮确认的方向
 

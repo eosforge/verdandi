@@ -1,8 +1,7 @@
-# Star / Planet 身份与准入
+# Orbit v1 身份与准入
 
-2026-09-12: C++26 Star + Go Supervisor 使用控制协议 v6. Planet 的业务推进暂停;
-已有连接骨架共享此次准入修改并继续接受回归. 旧 Rust 服务不参与当前实现或验收.
-本契约取代 v5 的 Challenge、启动票据及客户端首次 CAS 基线.
+当前仅实现 v1. Supervisor 使用 Orbit, 节点通信使用 Astra, SDK 接入预留 Comet.
+不存在旧协议兼容、版本协商回退或别名 RPC. 详见 [v1 协议边界](../protocol-v1.md).
 
 ## 一次启动
 
@@ -25,7 +24,7 @@
 - request_id 只发给 Supervisor, 不复制到成员名单、Hello、日志或业务版本中.
 
 两个全新启动请求按 Supervisor 的提交顺序登记. 后提交者替换前者, 不比较物理启动时间;
-这取代 v5 的同 CAS 基线只能成功一个的语义. 从未提交的迟到请求无法被识别为较早进程,
+从未提交的迟到请求无法被识别为较早进程,
 不得将这一规则描述为墙钟最新进程保证. 正常客户端同一进程永远不更换 request_id.
 
 ## 幂等与持久记录
@@ -56,7 +55,7 @@
 2. Galaxy、角色、端点及已知部署替换关系.
 3. 当前逻辑会话的重复或冲突.
 
-只有一个签名域: `verdandi-admission-v6` + NUL + 原始 Member 字节.
+只有一个签名域: `proto.orbit.v1.admission` + NUL + 原始 Member 字节.
 后续消息沿用会话身份, 不逐条重新验签; Star 不处理其他节点的密码、登记请求键或持久幂等索引.
 认证通过不代表业务写入已经授权或数据同步完成; 业务协议仍待实现.
 
@@ -65,13 +64,10 @@ TLS 1.3 继续负责加密与服务端证书验证, bearer 凭证继续承担客
 本轮未增加凭证 TTL、在线吊销、共享密码直连或 mTLS 证书签发机制.
 成员替换只在收到较新凭证后被本地观察, 不承诺所有隔离副本即时撤销旧实例.
 
-## 升级和范围
+## 当前范围
 
-- v6 与 v5 不互通, Supervisor、Star 和保留的 Planet 应一起升级. 旧字段号保留, 不复用.
-- v5 的当前 `id` 成员记录可以保留; 首次 v6 登记创建私有启动索引并递增已有部署 epoch.
-- 更早的 `peer_id` / public_key 成员格式仍拒绝, 不自动删除或清空数据库.
-- 添加启动索引后的数据库不能交给旧版 Supervisor, 无自动降级.
-- Planet 的业务缓存、换绑再登记、Star 业务复制和 SDK 仍未实现.
-- 历史 v4/v5 性能与长测报告不自动成为 v6 验收结果.
-
-验证结果见 [准入精简记录](../cluster-cpp/admission-simplification-20260912.md).
+- 完整 RPC 路径为 `/proto.orbit.v1.Admission/Register` 和 `/proto.astra.v1.StarTransport/OpenSession`.
+- 签名 Member 与 Role 仅定义于 `orbit.proto`; Star 验签后转换为内部成员值.
+- 只接受当前格式, 不自动转换或清空不支持的成员库, 不承诺旧版本迁移兼容.
+- Planet 业务推进暂停, 业务复制、SDK、在线吊销和凭证轮换尚未实现.
+- 历史测试报告保持原始版本描述, 当前结果见 [v1 修正记录](../protocol-v1.md).

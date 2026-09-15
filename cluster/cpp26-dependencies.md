@@ -2,13 +2,13 @@
 
 状态: 普通依赖与 TSan 独立插桩依赖均已在 Ubuntu 项目内构建并完成服务回归. 核对日期 2026-09-11. 适用范围仅为 C++26 Star/Planet,
 不升级现有 Rust、Go Supervisor 或 Redis SDK 依赖. 机器可读的来源和归档 SHA-256 固定在
-[dependencies.lock.json](../cluster-cpp/dependencies.lock.json). 主设计见 [C++26 骨架设计](cpp26-skeleton-design.md).
+[dependencies.lock.json](../astra/dependencies.lock.json). 主设计见 [C++26 骨架设计](cpp26-skeleton-design.md).
 
 维护者已要求锁定当前最新稳定版. 下表采用核对时官方 latest release 中非预发布、非草稿的版本,
 同时解析 tag 对应的完整源码 commit. 今后的构建不得重新查询 latest 自动改变此表.
-固定来源已完成普通构建及 Debug/Release/ASan 服务验证; 完整并发和长时结果见独立 [C++ 测试记录](../cluster-cpp/validation.md).
-构建选项见 [prepare_dependencies.py](../cluster-cpp/prepare_dependencies.py), 上游许可证原文保存在
-[licenses](../cluster-cpp/licenses/README.md). 产物摘要由显式准备入口写入忽略的 `build/deps/cluster-cpp/artifacts.json`.
+固定来源已完成普通构建及 Debug/Release/ASan 服务验证; 完整并发和长时结果见独立 [C++ 测试记录](../astra/validation.md).
+构建选项见 [prepare_dependencies.py](../astra/prepare_dependencies.py), 上游许可证原文保存在
+[licenses](../astra/licenses/README.md). 产物摘要由显式准备入口写入忽略的 `build/deps/astra/artifacts.json`.
 
 ## 1. 稳定发布版本
 
@@ -78,17 +78,17 @@ gRPC 源树自带或固定引用的其他内部生成数据随 gRPC commit 固�
 
 已有缓存必须匹配上述来源版本及工具链, 不因“本机能找到”就混用其他 ABI. 实际位置:
 
-- 源码与下载缓存: `build/deps/cluster-cpp`.
-- 依赖安装前缀: `build/deps/cluster-cpp/linux-gcc16/install`.
-- TSan 独立安装前缀: `build/deps/cluster-cpp/linux-gcc16-tsan/install`, 复用相同来源缓存.
+- 源码与下载缓存: `build/deps/astra`.
+- 依赖安装前缀: `build/deps/astra/linux-gcc16/install`.
+- TSan 独立安装前缀: `build/deps/astra/linux-gcc16-tsan/install`, 复用相同来源缓存.
 - 生成工具: `build/tools/protoc` 与 `build/tools/grpc-cpp-plugin`, 子目录包含固定版本.
-- C++ 服务产物: `build/cluster-cpp/<profile>`, core-only 为 `core-<profile>`.
+- C++ 服务产物: `build/astra/<profile>`, core-only 为 `core-<profile>`.
 
 准备入口记录实际归档 SHA-256、递归来源、编译器/标准库 ABI、构建选项、链接方式、许可证与产物摘要;
 源码 commit 不能冒充尚未下载归档的 SHA-256. 正常配置、生成检查、构建和测试保持离线.
 本表批准的是版本选择, 获取缺失的软件或依赖仍遵循用户对具体项目的下载授权约定.
 
-普通静态库和生成器的摘要在 `build/deps/cluster-cpp/artifacts.json`; 完整 TSan 准备成功后另写 `artifacts-tsan.json`.
+普通静态库和生成器的摘要在 `build/deps/astra/artifacts.json`; 完整 TSan 准备成功后另写 `artifacts-tsan.json`.
 两者单任务编译, 普通配置限制 2 GiB 虚拟地址空间; TSan 生成工具需要 shadow 映射, 因此不套用该虚拟地址限制.
 不改变系统配置或普通生成工具. 安装显式指定项目前缀, gRPC 构建所需完整安装目标, 不构建其上游测试目标.
 BoringSSL 上游测试的 GCC 编译诊断及本轮覆盖边界见验证记录, 不将本项目测试当成整个上游测试集通过.

@@ -13,9 +13,7 @@ from testkit.support import ROOT
 
 class ServiceHarnessTests(unittest.TestCase):
     def test_implementation_selection_rejects_unknown_paths(self):
-        self.assertEqual(
-            star_binary_directory("cpp"), ROOT / "build/cluster-cpp/release"
-        )
+        self.assertEqual(star_binary_directory("cpp"), ROOT / "build/astra/release")
         with self.assertRaises(ValueError):
             star_binary_directory("rust")
         with self.assertRaises(ValueError):
@@ -75,13 +73,7 @@ class ServiceHarnessTests(unittest.TestCase):
                 )
                 self.assertEqual(set(host.processes), {"bad-login"})
                 command = process.call_args.args[0]
-                copied = Path(
-                    next(
-                        value.split("=", 1)[1]
-                        for value in command
-                        if isinstance(value, str) and value.startswith("--identity=")
-                    )
-                )
+                copied = Path(next(value.split("=", 1)[1] for value in command if isinstance(value, str) and value.startswith("--identity=")))
                 self.assertTrue(copied.is_relative_to(directory))
                 self.assertEqual(
                     json.loads((copied / "login.json").read_text())["password"],
@@ -129,9 +121,7 @@ class ServiceHarnessTests(unittest.TestCase):
         try:
             outputs = [
                 SimpleNamespace(returncode=0, stdout="star 0.1.0", stderr=""),
-                SimpleNamespace(
-                    returncode=0, stdout="Process id is issued by Supervisor", stderr=""
-                ),
+                SimpleNamespace(returncode=0, stdout="Process id is issued by Supervisor", stderr=""),
             ]
             with patch("testkit.services.subprocess.run", side_effect=outputs):
                 with self.assertRaises(AssertionError):

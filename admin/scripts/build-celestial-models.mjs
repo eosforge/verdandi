@@ -131,7 +131,7 @@ function createPlanetModel() {
 
 // 将自有网格导出到功能目录, 不引用纹理或远程资产; 返回后释放导出专用资源.
 async function exportModel(root, name) {
-  root.userData = { author: "Verdandi", source: "admin/scripts/build-celestial-models.mjs" };
+  root.userData = { author: "Astra", source: "admin/scripts/build-celestial-models.mjs" };
   const originalFileReader = globalThis.FileReader;
   globalThis.FileReader = ExportFileReader;
   try {

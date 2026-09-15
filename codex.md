@@ -1,4 +1,41 @@
-# Verdandi Project Memory
+# Astra Project Memory
+
+## C++ protocol names are explicit
+
+Use full generated protocol names in handwritten C++, including tests and isolated probes.
+No wire/orbit/probe namespace aliases or using namespace directives for protocol packages.
+Use proto::astra::v1, proto::orbit::v1, proto::comet::v1 and proto::astra::bench::v1 as applicable.
+This is a source-readability change; schemas and generated code retain their existing definitions.
+
+## Current v1 regression recheck (2026-09-15)
+
+Debug, Release, ASan/UBSan and TSan each passed 10 CTests, 6 RPC cases and 13 process cases on Linux.
+Both Supervisor/generator checks and Linux Go race passed; Windows Python 44 and Admin 53 tests plus build passed.
+338 relevant files match across hosts; 704 frozen files and 3420 installed dependency files remain unchanged.
+No production source fix, downloads, unbounded tests, commit or push. Test services are stopped.
+See [current recheck evidence](testkit/results/protocol-v1-recheck-20260915.md).
+
+## Current protocol ownership: v1
+
+The latest maintainer decision supersedes all v6 and astra::cluster naming below.
+Handwritten C++ uses astra and <astra/...>. Schemas are proto/orbit.proto (Supervisor),
+proto/astra.proto (Star/Planet), and proto/comet.proto (future SDK, no messages or RPC yet).
+Generated C++ namespaces are proto::orbit::v1, proto::astra::v1, proto::comet::v1.
+Only protocol major 1 is accepted; signing domain is proto.orbit.v1.admission + NUL.
+Member and Role are defined only in Orbit. No compatibility aliases or old-version handlers.
+The old SDK remains frozen. See [current v1 contract](protocol-v1.md).
+
+## Astra migration: current working paths (2026-09-15)
+
+The active C++ service source is now `astra/`, with `astra::cluster` headers and namespace.
+Use `bash astra/build.sh ...`; binaries and dependency entry are `build/astra` and `build/deps/astra`.
+Go Supervisor, Admin and generated protocol use Astra; gRPC package is `astra.cluster.v1`, admission domain is
+`astra-admission-v6` + NUL. All participating services must upgrade together and re-register.
+The outer Windows/Linux directory and Git remote remain verdandi; Go module/import/go_package retain that repository path.
+Legacy SDKs, Redis contracts, retired Rust service/transport experiments and historical evidence are frozen.
+Linux current tests run at `/home/ubuntu/verdandi`, reusing migrated build trees and existing dependency installations.
+Details and current validation: [Astra migration](astra-migration.md). Earlier entries below are historical;
+paths beginning cluster-cpp now refer to astra. Store changes below were committed as `467dea7`.
 
 ## SyncStore review after aadcbb4 (2026-09-15)
 

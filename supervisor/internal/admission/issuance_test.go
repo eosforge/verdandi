@@ -39,7 +39,7 @@ func TestCommittedRequestCannotChangeRegistrationBinding(t *testing.T) {
 	if err != nil || !proto.Equal(first, again) {
 		t.Fatal("rejected request mutated original", err)
 	}
-	var member wire.RegistrationResponse_Member
+	var member wire.Member
 	if err := proto.Unmarshal(first.Admission, &member); err != nil || !membership.ID(member.Id) {
 		t.Fatal("issuer did not provide identity", err)
 	}

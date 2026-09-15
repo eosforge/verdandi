@@ -27,3 +27,5 @@ local advertised-endpoint validation.
 
 The tests do not install these certificates into an operating-system trust
 store. Transient databases, copied keys, processes and logs belong in build/.
+
+Astra reuses these public TLS fixtures byte-for-byte. Historical Verdandi URI SANs are not authorization inputs. New admission signatures use `proto.orbit.v1.admission` followed by NUL; no signed admission credential is stored in these fixtures.

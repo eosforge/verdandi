@@ -52,7 +52,7 @@ fn ordinary_build_never_changes_stale_registry() -> io::Result<()> {
         .as_nanos();
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../build/proto/test-locks");
     std::fs::create_dir_all(&directory)?;
-    let path = directory.join(format!("verdandi-ids-{}-{nonce}.lock", std::process::id()));
+    let path = directory.join(format!("astra-ids-{}-{nonce}.lock", std::process::id()));
     std::fs::OpenOptions::new().write(true).create_new(true).open(&path)?;
     let _cleanup = TestLock(path.clone());
     let previous = "1 p.Hello\n";

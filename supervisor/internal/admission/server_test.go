@@ -27,6 +27,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// 公开夹具保持原始密码及哈希, 产品更名不重签 TLS 证书或改写历史测试身份.
 const fixturePassword = "verdandi-public-test-only"
 
 func fixture(role string) string {
@@ -117,7 +118,7 @@ func TestSameAccountNodesReceiveIndependentVerifiableCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := first.(*wire.RegistrationResponse)
-	var local wire.RegistrationResponse_Member
+	var local wire.Member
 	if err := proto.Unmarshal(response.Admission, &local); err != nil {
 		t.Fatal(err)
 	}

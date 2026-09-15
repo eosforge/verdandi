@@ -1,4 +1,6 @@
-# Verdandi 基础 Star 设计草案
+# Astra 基础 Star 设计草案
+
+> 当前实现以 [Orbit/Astra/Comet v1](../protocol-v1.md) 和 [身份契约](identity-contract.md) 为准. 下文保留设计演进记录, 不作为旧协议兼容要求.
 
 > 2026-09-12: 旧 Rust 服务已废弃, 当前仅维护 C++ Star/Planet + Go Supervisor. 协议 v5、Supervisor 签发不透明 id 和重试规则以[身份与准入契约](identity-contract.md)为准. 下文旧 UUID/v4/Rust 对照描述保留为设计演进记录, 不再是当前实现要求.
 
@@ -92,7 +94,7 @@ Supervisor 的登记名单定义本层加入范围, Star 只从完整名单或�
 
 ### 2.3 当前已实现的网络底座
 
-- 独立 Rust crate 和只对子进程设置项目内缓存的 PowerShell/Bash 入口, 对外程序为 `verdandi.exe` / `verdandi`.
+- 独立 Rust crate 和只对子进程设置项目内缓存的 PowerShell/Bash 入口, 对外程序为 `astra.exe` / `astra`.
 - 从 `.proto` 生成消息类型及稳定 MessageID. 帧为 `[MessageID:uint16][PayloadLength:uint32][Payload]`, 不使用统一 Protobuf envelope.
 - 可取消 Hello, 默认 Ping/Pong 保活, 有界发现分页, 周期性从头查询和自动反向连接.
 - 短锁保护的已验证会话和候选表, 地址/Star ID 去重, 启动实例与 generation 替换保护.

@@ -1,17 +1,17 @@
-# Verdandi Coding and Comment Standard
+# Astra Coding and Comment Standard
 
 ## 1. Scope and Source of Truth
 
 The C++26 Star/Planet replacement is specified in
 [the skeleton design](cluster/cpp26-skeleton-design.md) and implemented under
-`cluster-cpp/`: C++ is the default Linux service entry, Rust checks below apply to
-the explicitly selected comparison, and the C++23
-SDK baseline is unchanged. The plan defines service-local reflection,
+`astra/`: C++ is the active Linux service entry. The old Rust service and
+Verdandi SDKs are frozen; their language-specific rules below remain historical reference.
+The standalone Rust protocol generator remains active. The plan defines service-local reflection,
 callback ownership, formatting and verification rules without applying them
 to existing SDKs. Actual C++ build, test results and remaining qualification
-limits are recorded in [its supplementary report](cluster-cpp/qualification-20260912.md).
+limits are recorded in [its supplementary report](astra/qualification-20260912.md).
 
-Verdandi follows the standard idioms and official formatters of each
+Astra follows the standard idioms and official formatters of each
 implementation language. This document defines cross-language quality,
 resource, API, testing, documentation, and comment expectations. It does not
 invent a common syntax or formatting dialect.

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from testkit.support import ROOT, temporary_directory
 
-sys.path.insert(0, str(ROOT / "cluster-cpp"))
+sys.path.insert(0, str(ROOT / "astra"))
 from test_endurance import Endurance, Journal, RequestedStop, parse_options, topology_ready
 
 

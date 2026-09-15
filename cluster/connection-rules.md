@@ -1,10 +1,12 @@
 # Star / Planet 基础连接规则
 
+> 当前实现以 [Orbit/Astra/Comet v1](../protocol-v1.md) 和 [身份契约](identity-contract.md) 为准. 下文保留设计演进记录, 不作为旧协议兼容要求.
+
 > 2026-09-12: 旧 Rust 服务已废弃, 当前仅维护 C++ Star/Planet + Go Supervisor. 协议 v5、Supervisor 签发不透明 id 和重试规则以[身份与准入契约](identity-contract.md)为准. 下文旧 UUID/v4/Rust 对照描述保留为设计演进记录, 不再是当前实现要求.
 
 日期: 2026-09-11. 本文描述当前实现, 业务复制仍按 [星图设计](../galaxy-architecture.md) 后续推进.
 
-C++26 目标按 [骨架设计](cpp26-skeleton-design.md) 在独立 [cluster-cpp/](../cluster-cpp/README.md) 实施和验证. 本文的角色、身份和连接规则作为迁移基准;
+C++26 目标按 [骨架设计](cpp26-skeleton-design.md) 在独立 [astra/](../astra/README.md) 实施和验证. 本文的角色、身份和连接规则作为迁移基准;
 Cargo/Rust 路径与运行时说明仍是当前实现事实, 不能直接当作未来 C++ 构建方法.
 C++ 迁移已获准用逻辑会话管理身份与代次, 底层连接交由 gRPC 复用/重建; 下文物理连接计数不再作为
 C++ 验收公式. 对应流控与解码策略差异以骨架设计第 13.1 节为准, 本文保留当前 Rust 行为记录.
@@ -15,9 +17,9 @@ C++ 验收公式. 对应流控与解码策略差异以骨架设计第 13.1 节�
 
 | 目录 | 所有者 | 责任 |
 | --- | --- | --- |
-| `common/src` | `verdandi-cluster-common` | 配置, 身份, gRPC, 准入, TLS/Hello, 保活, 退避及通用进程工具 |
-| `star/src` | `verdandi-star` | Star 成员索引, 全互联拨号, 入站会话, `star` 可执行程序 |
-| `planet/src` | `verdandi-planet` | 候选队列, 唯一活动上游, 故障切换, `planet` 可执行程序 |
+| `common/src` | `astra-cluster-common` | 配置, 身份, gRPC, 准入, TLS/Hello, 保活, 退避及通用进程工具 |
+| `star/src` | `astra-star` | Star 成员索引, 全互联拨号, 入站会话, `star` 可执行程序 |
+| `planet/src` | `astra-planet` | 候选队列, 唯一活动上游, 故障切换, `planet` 可执行程序 |
 | 各 crate 的 `tests/unit` | 对应 crate | 白盒用例, 不为测试扩大私有状态的可见性 |
 | `common/tests/support` | 测试工具 | 有界 TLS 夹具, 不进入发布库 |
 | `tests/fixtures` | 跨语言测试 | Go/Rust 共用公开身份和固定测试向量 |

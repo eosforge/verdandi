@@ -1,0 +1,345 @@
+{
+  "completed_at_utc": "2026-09-15T05:51:12.031541+00:00",
+  "source_files_match": 338,
+  "source_manifest_sha256": "c0874fd54b2f4f95cda91a24185b5390b4462a05a2a3020a052a688a5b3e67ce",
+  "dependency_files_size_mtime_unchanged": 3420,
+  "profiles": {
+    "debug": {
+      "ctest_passed": 10,
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions with Go Supervisor",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/astra/debug/star": "2f26dd52254eead280315d70da8182a59cea091e4ffa6a246a3185513b742b4c",
+          "/home/ubuntu/verdandi/build/astra/debug/planet": "5e4d8507f82bd8efe1a556731de4bac77d9598cbd80717e015fbb10ce11b348a",
+          "/home/ubuntu/verdandi/build/astra/debug/star_rpc_probe": "5da1dffbc8f97e54b74e32414446d030a3edc8927599ad1817ab308209445f30",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "21fa4df882a986fcc48deb28a1cc5bd2ef77748d96eab77d8db47570ecca4c75"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 30,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":829.245,\"p95\":1078.66,\"p99\":1210.87,\"max\":1332.87}}\n{\"slow_reader\":{\"attempted_pings\":236,\"close_ms\":33}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 829.245,
+          "p95": 1078.66,
+          "p99": 1210.87,
+          "max": 1332.87
+        },
+        "slow_reader": {
+          "attempted_pings": 236,
+          "close_ms": 33
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16192,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 19192,
+            "threads": 9,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 13036
+        }
+      },
+      "service_regression": {
+        "result": "/home/ubuntu/verdandi/build/testkit/results/services-1789450318496626347.json",
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "star_binaries": "/home/ubuntu/verdandi/build/astra/debug",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_star_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_star_wait",
+          "persistent_supervisor_restart_and_waiting_star_join",
+          "graceful_and_forced_star_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 21.254
+      },
+      "log_sha256": "e400726540a70005b4712623967b3b9cee4e19af56ceab438a0d3c6f123d74ec"
+    },
+    "release": {
+      "ctest_passed": 10,
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions with Go Supervisor",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/astra/release/star": "b5d0b6ff7289a0deddeb224380b70f8615ae8c0ca07a102675022123be7dbc7c",
+          "/home/ubuntu/verdandi/build/astra/release/planet": "a84cfdc0cb72b0940dffeacebc8cb5ba0b05f39b0bc815c00a0e07d89c42e91b",
+          "/home/ubuntu/verdandi/build/astra/release/star_rpc_probe": "487e6e66723a5953e2496c3588fab8d606d72332992b78cb98b0a5681081a03b",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "21fa4df882a986fcc48deb28a1cc5bd2ef77748d96eab77d8db47570ecca4c75"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 34,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":827.444,\"p95\":1036.16,\"p99\":1152.56,\"max\":1237.67}}\n{\"slow_reader\":{\"attempted_pings\":119,\"close_ms\":14}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 827.444,
+          "p95": 1036.16,
+          "p99": 1152.56,
+          "max": 1237.67
+        },
+        "slow_reader": {
+          "attempted_pings": 119,
+          "close_ms": 14
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16100,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 18172,
+            "threads": 9,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 13279
+        }
+      },
+      "service_regression": {
+        "result": "/home/ubuntu/verdandi/build/testkit/results/services-1789450668207283745.json",
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "star_binaries": "/home/ubuntu/verdandi/build/astra/release",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_star_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_star_wait",
+          "persistent_supervisor_restart_and_waiting_star_join",
+          "graceful_and_forced_star_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 22.063
+      },
+      "log_sha256": "bf1c31fd8db817700847d6183498f8d9ee7a6e9c70eb6059fa190ba5f1cf089b"
+    },
+    "asan": {
+      "ctest_passed": 10,
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions with Go Supervisor",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/astra/asan/star": "f1d3fc4669b266253c01fdf4f14f95535750ba55ed2b0922ec82cb607f711f04",
+          "/home/ubuntu/verdandi/build/astra/asan/planet": "a536d54e391504f45043d6546d3fb59cc5d7e06403b3bb6f91cbdbf4b7b8c5f5",
+          "/home/ubuntu/verdandi/build/astra/asan/star_rpc_probe": "82d921e3390bf5f0b807d4c756c6ec2d1ef504e433acd3cdd2b001741e5e018b",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "21fa4df882a986fcc48deb28a1cc5bd2ef77748d96eab77d8db47570ecca4c75"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 33,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":1191.77,\"p95\":1471.08,\"p99\":1651.19,\"max\":2131.41}}\n{\"slow_reader\":{\"attempted_pings\":1017,\"close_ms\":176}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 1191.77,
+          "p95": 1471.08,
+          "p99": 1651.19,
+          "max": 2131.41
+        },
+        "slow_reader": {
+          "attempted_pings": 1017,
+          "close_ms": 176
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16156,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 62112,
+            "threads": 9,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 13714
+        }
+      },
+      "service_regression": {
+        "result": "/home/ubuntu/verdandi/build/testkit/results/services-1789450997765760038.json",
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "star_binaries": "/home/ubuntu/verdandi/build/astra/asan",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_star_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_star_wait",
+          "persistent_supervisor_restart_and_waiting_star_join",
+          "graceful_and_forced_star_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 21.764
+      },
+      "log_sha256": "98416f6c84231dc65f2c992fbc44c623a136c2c38b6174fba7fc4442346f41c8"
+    },
+    "tsan": {
+      "ctest_passed": 10,
+      "rpc": {
+        "scope": "C++26 logical gRPC sessions with Go Supervisor",
+        "cases": [
+          "tls13_only_and_h2_negotiation",
+          "partial_tls_handshake_deadline_and_fd_cleanup",
+          "channel_reuse_duplicate_fencing_and_protocol_rejection",
+          "tls_without_http2_request_idle_cleanup",
+          "rpc_fixture_graceful_stop_and_listener_release",
+          "empty_candidates_refresh_when_star_joins"
+        ],
+        "passed": true,
+        "binary_sha256": {
+          "/home/ubuntu/verdandi/build/astra/tsan/star": "e2cb7db017fb1d8713802db76244b14d64bfb7c8e6f6090f1eba9b71bcb73596",
+          "/home/ubuntu/verdandi/build/astra/tsan/planet": "b8065762a3ed7deb3c67a28260798904f2cbffeacd7c572fd34060ac95f87024",
+          "/home/ubuntu/verdandi/build/astra/tsan/star_rpc_probe": "0b2f4c8204f9e11ffccbdba12348849130979458462349b6a8a2a2d09fab964a",
+          "/home/ubuntu/verdandi/build/supervisor/supervisor": "21fa4df882a986fcc48deb28a1cc5bd2ef77748d96eab77d8db47570ecca4c75"
+        },
+        "tls_descriptors": {
+          "baseline": 11,
+          "peak": 20,
+          "after_deadline": 8,
+          "connections": 24
+        },
+        "rpc_probe": "{\"control_rtt_us\":{\"samples\":500,\"p50\":2133.01,\"p95\":2920.26,\"p99\":3221.87,\"max\":3485.99}}\n{\"slow_reader\":{\"attempted_pings\":43,\"close_ms\":22}}\nPASS silent Hello deadline, logical session reuse, duplicate fencing, Ping/Pong, rejection without credential disclosure",
+        "control_rtt_us": {
+          "samples": 500,
+          "p50": 2133.01,
+          "p95": 2920.26,
+          "p99": 3221.87,
+          "max": 3485.99
+        },
+        "slow_reader": {
+          "attempted_pings": 43,
+          "close_ms": 22
+        },
+        "rpc_server_resources": {
+          "supervisor": {
+            "rss_kib": 16128,
+            "threads": 7,
+            "fds": 9
+          },
+          "star": {
+            "rss_kib": 63104,
+            "threads": 10,
+            "fds": 8
+          }
+        },
+        "idle_http2_connections": {
+          "count": 2,
+          "observed_closed_ms": 15000
+        }
+      },
+      "service_regression": {
+        "result": "/home/ubuntu/verdandi/build/testkit/results/services-1789451337268278441.json",
+        "status": "pass",
+        "platform": "linux",
+        "mode": "regression",
+        "mixed_hosts": false,
+        "star_binaries": "/home/ubuntu/verdandi/build/astra/tsan",
+        "cases": [
+          "service_cli_help_version_and_invalid_options",
+          "concurrent_three_star_full_mesh",
+          "supervisor_offline_existing_mesh_and_new_star_wait",
+          "persistent_supervisor_restart_and_waiting_star_join",
+          "graceful_and_forced_star_restart",
+          "invalid_identities_fail_closed",
+          "invalid_login_configuration_and_password_fail_closed",
+          "star_planet_account_roles_fail_closed",
+          "planet_prefers_local_group_without_joining_star_mesh",
+          "planet_cross_group_failover_while_supervisor_offline",
+          "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+          "one_active_upstream_per_planet",
+          "signals_process_exit_and_port_reuse"
+        ],
+        "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+        "elapsed_seconds": 37.146
+      },
+      "log_sha256": "58b41914121ad86adad39ed15d1c878bdb9ddcc2c895f8d2d8389e5be7b24a9a"
+    }
+  },
+  "linux_supervisor_checks_and_race": "pass",
+  "remaining_service_processes": [],
+  "windows_supervisor_checks": "pass",
+  "generator_tests_per_platform": 4,
+  "windows_python_tests": 44,
+  "admin_tests": 53,
+  "admin_format_boundaries_typecheck_build": "pass",
+  "admin_node_version": "24.19.0",
+  "cpp_proto_and_python_format_checks": "pass",
+  "frozen_files_unchanged": 704,
+  "unbounded_tests": false,
+  "sync_transport_registered": false,
+  "comet_sdk_implemented": false
+}

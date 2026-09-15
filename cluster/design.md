@@ -1,4 +1,6 @@
-# Verdandi Star 设计草案
+# Astra Star 设计草案
+
+> 当前实现以 [Orbit/Astra/Comet v1](../protocol-v1.md) 和 [身份契约](identity-contract.md) 为准. 下文保留设计演进记录, 不作为旧协议兼容要求.
 
 2026-09-12 同步方向更新：见[按 Key 对账与流式同步](key-stream-sync-design.md)。未来 SDK 按 Key 维护恢复进度，
 发布者跨 Star 保留自增版本；每 Key 有界历史不足时恢复该 Key 最新完整状态，删除通过明确依据对账。
@@ -29,7 +31,7 @@ Supervisor 可以兼任 Catalog Publisher, 不成为第二份恢复权威. 新 S
 
 最新启动约束为 CORE-012: `star --listen=... --super=... --cluster=...`, ID 为进程级 UUID, 重连复用而进程重启更换. 不增加 `--zone` 启动参数. 本文旧的稳定 owner Star 映射须先与进程身份分离; 不能因新 UUID 重置持久版本、直接接管旧 owner 或绕过 Supervisor 登记, 见 [Core 身份与配置](core-design.md#4-star-身份与配置).
 
-本文定义一组等价 Verdandi Star 替代 Redis 后的系统边界、数据模型、复制、SDK 同步、传输、持久化、安全、构建和验证方案。它承接[对等状态网络架构审核](../star-network-architecture-review-20260909.md)，但不修改当前 [architecture.md](../architecture.md)、[protocol.md](../protocol.md) 或已实现 SDK 的协议契约。
+本文定义一组等价 Astra Star 替代 Redis 后的系统边界、数据模型、复制、SDK 同步、传输、持久化、安全、构建和验证方案。它承接[对等状态网络架构审核](../star-network-architecture-review-20260909.md)，但不修改当前 [architecture.md](../architecture.md)、[protocol.md](../protocol.md) 或已实现 SDK 的协议契约。
 
 本文使用以下状态：
 
@@ -44,7 +46,7 @@ Supervisor 可以兼任 Catalog Publisher, 不成为第二份恢复权威. 新 S
 
 ## 1. 设计结论
 
-Verdandi Star 是独立的 Rust 服务. 所有 Star 运行同一实现、拥有同一能力并能接收 Publisher 或 SDK 连接. 数据通信保持对等, 某次写入连接到的 Star 只是本次操作入口; 成员登记由独立 Supervisor 集中负责, 不经过业务数据通路.
+Astra Star 是独立的 Rust 服务. 所有 Star 运行同一实现、拥有同一能力并能接收 Publisher 或 SDK 连接. 数据通信保持对等, 某次写入连接到的 Star 只是本次操作入口; 成员登记由独立 Supervisor 集中负责, 不经过业务数据通路.
 
 每个逻辑键只有一个授权 Publisher。完整产品层需要把键稳定映射到一个 owner Star；Publisher 可以先连接任意入口，但入口必须路由或重定向到 owner，只有 owner 为该键产生 Star 网络状态。owner Star 通过自己的 acceptor sessions 同步负责数据，replica 只在恢复时按需提供修复。Registry 是有效 Registration 的派生集合，不是一份需要单独写入的状态。SDK 连接一个 Star，取得该 Star 上自洽的快照和后续事件；Star 间复制不进入 Go、Rust、C++ 或 C# SDK。
 
@@ -72,7 +74,7 @@ flowchart LR
 | P-003 | 已确认 | Registry 从仍然有效的 Registration 推导，不作为独立写入值 |
 | P-004 | 已确认 | Star 只实现 Rust 版本，其他语言保留客户端 SDK |
 | P-005 | 已确认 | TCP 作为传输；生产连接的 TLS 与客户端身份方案留到 D-005 冻结 |
-| P-006 | 已确认 | Protobuf 定义跨语言消息，Verdandi 自行定义 framing、流控和状态语义 |
+| P-006 | 已确认 | Protobuf 定义跨语言消息，Astra 自行定义 framing、流控和状态语义 |
 | P-007 | 已确认 | Star 长期 KV 使用紧凑不可变正文，避免每值 `map<string, bytes>` |
 | P-008 | 已确认方向 | 同时保留完整 Update 与严格基线 Patch，完整状态始终是恢复单位 |
 | P-009 | 已确认 | Star 必须保证最终一致性：通信恢复且写入静默后，所有健康 Star 自动收敛到每键同一最高合法状态 |
@@ -581,9 +583,9 @@ Protobuf 负责结构及类型生成, 不负责消息优先级、流控、幂等
 
 ### 13.4 KV 正文
 
-Protobuf 不直接使用 `map<string, bytes>` 保存热路径正文。候选 `PackedFields` 使用连续 name/value slab 和 packed offsets，固定 Registration schema 可以只传 schema ID 与字段序号。规范哈希按 Verdandi 规定的字段字节顺序、长度和正文计算。
+Protobuf 不直接使用 `map<string, bytes>` 保存热路径正文。候选 `PackedFields` 使用连续 name/value slab 和 packed offsets，固定 Registration schema 可以只传 schema ID 与字段序号。规范哈希按 Astra 规定的字段字节顺序、长度和正文计算。
 
-是否由 `.proto` 完整定义 PackedFields，或由 Protobuf `bytes` 承载一个单独规范化正文，属于 D-003。推荐 Protobuf 定义控制结构，`bytes canonical_payload` 承载 Verdandi 的简单规范正文；这能让 Star 存储和转发正文而不构造每字段生成对象。
+是否由 `.proto` 完整定义 PackedFields，或由 Protobuf `bytes` 承载一个单独规范化正文，属于 D-003。推荐 Protobuf 定义控制结构，`bytes canonical_payload` 承载 Astra 的简单规范正文；这能让 Star 存储和转发正文而不构造每字段生成对象。
 
 ### 13.5 生成物
 
@@ -703,7 +705,7 @@ SDK 候选配置：
     "connect_stable_reset_ms": 30000,
     "operation_timeout_ms": 2000,
     "tls": {
-      "server_name": "verdandi.internal",
+      "server_name": "astra.internal",
       "ca_file": "...",
       "cert_file": "...",
       "key_file": "..."

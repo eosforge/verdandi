@@ -1,4 +1,6 @@
-# Verdandi Supervisor 成员登记、Catalog 发布与拓扑 UI 设计
+# Astra Supervisor 成员登记、Catalog 发布与拓扑 UI 设计
+
+> 当前实现以 [Orbit/Astra/Comet v1](../protocol-v1.md) 和 [身份契约](identity-contract.md) 为准. 下文保留设计演进记录, 不作为旧协议兼容要求.
 
 > 当前准入支持 Star/Planet 证书角色, 完整 Star 名单与独立有界候选应答, 见 [基础连接规则](connection-rules.md).
 

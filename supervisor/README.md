@@ -1,6 +1,6 @@
-# Verdandi Supervisor
+# Astra Supervisor
 
-当前准入为协议 v6, 单次 Register 完成账号认证和持久幂等登记, Supervisor 签发不透明 `id` 与 Hello 准入凭证. 不再使用启动票据, 详见[身份与准入契约](../cluster/identity-contract.md).
+当前准入为Orbit 协议 v1, 单次 Register 完成账号认证和持久幂等登记, Supervisor 签发不透明 `id` 与 Hello 准入凭证. 不再使用启动票据, 详见[身份与准入契约](../cluster/identity-contract.md).
 
 Go Supervisor 提供管理 HTTP 和独立 gRPC/TLS 准入入口, 通过账号密码授权节点,
 用 bbolt 持久保存成员, 签发每进程独立的 Ed25519 bearer 凭证. Star 获得完整 Star 名单,
@@ -11,7 +11,7 @@ Planet 获得最多 8 个候选. 同账号可运行多节点, 不承担节点间
 
 ```powershell
 ./supervisor/go.ps1 build -trimpath -p 2 -o ../build/supervisor/supervisor.exe ./cmd/supervisor
-./build/supervisor/supervisor.exe --listen=127.0.0.1:8080 --star-listen=192.168.0.25:7442 --cluster=alpha --identity=identity --members=build/supervisor/members-v6.db
+./build/supervisor/supervisor.exe --listen=127.0.0.1:8080 --star-listen=192.168.0.25:7442 --cluster=alpha --identity=identity --members=build/supervisor/members-v1.db
 ```
 
 Linux 使用 `bash supervisor/go.sh ...` 和无 `.exe` 的二进制. 数据库父目录需预先存在.
@@ -64,8 +64,7 @@ group 仅是入口偏好, 不授予业务权限. 不使用证书 URI 绑定账�
 客户端不提交 CAS 基线, 幂等记录由 Supervisor 持久维护, 重启后仍有效.
 断线不删除成员. 用户名/地址改变会创建新槽位, 当前没有在线退役和删除接口.
 
-v6 不兼容 v5 两阶段准入及更早协议. 现有 v5 的 id 成员记录可保留, 新登记创建私有启动索引;
-索引创建后不能降级给旧 Supervisor. 含旧 peer_id/public_key 的数据库仍拒绝, 不自动删除旧库.
+实现阶段仅支持当前 v1 格式, 不提供旧协议或旧库转换. 不支持的成员记录直接拒绝, 不自动删除数据库.
 一个库由文件锁限制为一个 Supervisor 写入. 启动索引满后可提高 --max-startups, 不自动回收历史请求.
 账号删除或密码变更只影响后续登录, 不会即时撤销已签名 bearer 凭证.
 凭证无独立 TTL, 不提供在线吊销、轮换或 Supervisor HA; 业务数据恢复尚未实现.
@@ -86,3 +85,5 @@ Windows 检查 Go: `scripts/check-services.ps1 -Service supervisor`; Linux Go/C+
 Linux 检查默认包含 Go race, Windows race 需要已有 cgo 编译器和显式开关.
 有限 fuzz: `scripts/check-services.ps1 -Service supervisor -FuzzSeconds 10` 或 `bash scripts/check-services.sh --fuzz-seconds=10`.
 当前整理和完整测试范围见 [骨架补强报告](../cluster/service-hardening-20260911.md).
+
+协议入口为 `proto/orbit.proto`, 签名域为 `proto.orbit.v1.admission` + NUL. 详见 [v1 修正记录](../protocol-v1.md).

@@ -6,3 +6,6 @@
 
 # TLS fixtures are reviewed text artifacts; keep their PEM framing stable.
 *.pem text eol=lf
+
+# Preserve protoc/grpc_cpp_plugin output, including their final blank line.
+astra/**/generated/*.grpc.pb.cc text eol=lf whitespace=-blank-at-eof
