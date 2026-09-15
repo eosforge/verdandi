@@ -1,5 +1,16 @@
 # Verdandi Worklog
 
+## SyncStore line review and bounded performance comparison (2026-09-15)
+
+Applied the maintainer's binary-search/reserve idea, Ranges member projection, lock-external record preparation,
+checked capacity and clearer storage ownership comments. Fixed the max-expiry sentinel regression and removed
+the redundant entry deleted flag. Measurements retained node version matching and upper-bound snapshot reserve;
+immediate erasure, versionless empty-node reclamation, exact live counting and forced append_range were not retained.
+Final Store unit/fault executables passed four profiles; 76 write and 7 read injected failures were verified.
+The new sentinel test fails against aadcbb4 and passes on the selected implementation. Added a bounded standalone
+benchmark and CMake target, detailed audit and structured results. No line coverage or whole-service rerun claimed.
+Report: [review](cluster-cpp/sync-store-performance-review-20260915.md).
+
 ## Sync foundation cleanup: validation complete (2026-09-15)
 
 Prepared fixes after `2bf279f`: private storage ownership, allocation-safe batches, bounded version

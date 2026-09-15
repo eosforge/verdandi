@@ -1,0 +1,733 @@
+{
+  "status": "pass",
+  "date": "2026-09-15",
+  "baseline": "aadcbb4",
+  "scope": "SyncStore implementation, tests and standalone microbenchmark; no network or SDK regression rerun",
+  "tests": {
+    "debug": {
+      "store": "pass",
+      "fault_injection": "pass",
+      "write_failures": 76,
+      "read_failures": 7
+    },
+    "release": {
+      "store": "pass",
+      "fault_injection": "pass",
+      "write_failures": 76,
+      "read_failures": 7
+    },
+    "asan": {
+      "store": "pass",
+      "fault_injection": "pass",
+      "write_failures": 76,
+      "read_failures": 7
+    },
+    "tsan": {
+      "store": "pass",
+      "fault_injection": "pass",
+      "write_failures": 76,
+      "read_failures": 7
+    }
+  },
+  "coverage_percentage": null,
+  "cmake_benchmark_target": "star_sync_store_bench built successfully",
+  "regression_proof": "Test failed: source/cluster-cpp/common/tests/sync_store_test.cpp:76: store.get_snapshot()->data.size() == 1",
+  "source_sha256": {
+    "cluster-cpp/CMakeLists.txt": "aee540c80d0b7153e9b83d70761c4a089dbc136794cd29804661ea5788a22981",
+    "cluster-cpp/common/src/sync_store.hpp": "0eaff98ddf145a7ab895a67360d7b4b2df374772a73f749fc9ae47216c92d65c",
+    "cluster-cpp/common/src/sync_store.cpp": "ec0462d4a1ee65adfda180f3f23719705666eeb5d202a020c4872cc3ce1ed82c",
+    "cluster-cpp/common/tests/sync_store_test.cpp": "5b762263faae2f8f00c80a587cf34663218f5195fb6cebb7b5c560a88c71bc06",
+    "cluster-cpp/common/tests/sync_store_fault_test.cpp": "375f067d73c0e4aeda5a8811e10235bd7c8ee02630b9fb5afb257bd87e5556f9",
+    "cluster-cpp/bench/sync_store.cpp": "6d50481da81e625a216121061f5bdb069bd0f7d9bf15dcb5553892fcd69cfa49"
+  },
+  "benchmark": {
+    "compiler": "GCC 16.2.0, C++26, -O3 -DNDEBUG, _GLIBCXX_ASSERTIONS=1, contracts enforce",
+    "method": "16 cases; two process runs per variant in forward/reverse order; each reported result is median of seven rounds; ns/op includes result destruction",
+    "variants": {
+      "baseline": {
+        "delta/b64/k8/d1": [
+          {
+            "case": "delta/b64/k8/d1",
+            "median_ns": 140.938,
+            "iterations": 10000,
+            "checksum": 4550000
+          },
+          {
+            "case": "delta/b64/k8/d1",
+            "median_ns": 112.126,
+            "iterations": 10000,
+            "checksum": 4550000
+          }
+        ],
+        "delta/b64/k8/d16": [
+          {
+            "case": "delta/b64/k8/d16",
+            "median_ns": 431.207,
+            "iterations": 6250,
+            "checksum": 3500000
+          },
+          {
+            "case": "delta/b64/k8/d16",
+            "median_ns": 453.128,
+            "iterations": 6250,
+            "checksum": 3500000
+          }
+        ],
+        "delta/b64/k8/d64": [
+          {
+            "case": "delta/b64/k8/d64",
+            "median_ns": 1503.92,
+            "iterations": 1562,
+            "checksum": 1399552
+          },
+          {
+            "case": "delta/b64/k8/d64",
+            "median_ns": 1568.84,
+            "iterations": 1562,
+            "checksum": 1399552
+          }
+        ],
+        "delta/b64/k128/d1": [
+          {
+            "case": "delta/b64/k128/d1",
+            "median_ns": 127.087,
+            "iterations": 10000,
+            "checksum": 4550000
+          },
+          {
+            "case": "delta/b64/k128/d1",
+            "median_ns": 133.547,
+            "iterations": 10000,
+            "checksum": 4550000
+          }
+        ],
+        "delta/b64/k128/d16": [
+          {
+            "case": "delta/b64/k128/d16",
+            "median_ns": 763.817,
+            "iterations": 6250,
+            "checksum": 3500000
+          },
+          {
+            "case": "delta/b64/k128/d16",
+            "median_ns": 847.902,
+            "iterations": 6250,
+            "checksum": 3500000
+          }
+        ],
+        "delta/b64/k128/d64": [
+          {
+            "case": "delta/b64/k128/d64",
+            "median_ns": 4784.89,
+            "iterations": 1562,
+            "checksum": 1399552
+          },
+          {
+            "case": "delta/b64/k128/d64",
+            "median_ns": 4694.49,
+            "iterations": 1562,
+            "checksum": 1399552
+          }
+        ],
+        "delta/b1000/k8/d1": [
+          {
+            "case": "delta/b1000/k8/d1",
+            "median_ns": 1414.01,
+            "iterations": 10000,
+            "checksum": 70070000
+          },
+          {
+            "case": "delta/b1000/k8/d1",
+            "median_ns": 1425.5,
+            "iterations": 10000,
+            "checksum": 70070000
+          }
+        ],
+        "delta/b1000/k8/d16": [
+          {
+            "case": "delta/b1000/k8/d16",
+            "median_ns": 1623.66,
+            "iterations": 6250,
+            "checksum": 44450000
+          },
+          {
+            "case": "delta/b1000/k8/d16",
+            "median_ns": 1826.83,
+            "iterations": 6250,
+            "checksum": 44450000
+          }
+        ],
+        "delta/b1000/k8/d1000": [
+          {
+            "case": "delta/b1000/k8/d1000",
+            "median_ns": 33676.8,
+            "iterations": 100,
+            "checksum": 1400000
+          },
+          {
+            "case": "delta/b1000/k8/d1000",
+            "median_ns": 37872.1,
+            "iterations": 100,
+            "checksum": 1400000
+          }
+        ],
+        "delta/b1000/k128/d1": [
+          {
+            "case": "delta/b1000/k128/d1",
+            "median_ns": 1262.09,
+            "iterations": 10000,
+            "checksum": 70070000
+          },
+          {
+            "case": "delta/b1000/k128/d1",
+            "median_ns": 1529.6,
+            "iterations": 10000,
+            "checksum": 70070000
+          }
+        ],
+        "delta/b1000/k128/d16": [
+          {
+            "case": "delta/b1000/k128/d16",
+            "median_ns": 2097.41,
+            "iterations": 6250,
+            "checksum": 44450000
+          },
+          {
+            "case": "delta/b1000/k128/d16",
+            "median_ns": 2425.75,
+            "iterations": 6250,
+            "checksum": 44450000
+          }
+        ],
+        "delta/b1000/k128/d1000": [
+          {
+            "case": "delta/b1000/k128/d1000",
+            "median_ns": 138090,
+            "iterations": 100,
+            "checksum": 1400000
+          },
+          {
+            "case": "delta/b1000/k128/d1000",
+            "median_ns": 140866,
+            "iterations": 100,
+            "checksum": 1400000
+          }
+        ],
+        "write/overwrite": [
+          {
+            "case": "write/overwrite",
+            "median_ns": 105.896,
+            "iterations": 10000,
+            "checksum": 2450035000
+          },
+          {
+            "case": "write/overwrite",
+            "median_ns": 95.5552,
+            "iterations": 10000,
+            "checksum": 2450035000
+          }
+        ],
+        "write/remove-recreate": [
+          {
+            "case": "write/remove-recreate",
+            "median_ns": 159.859,
+            "iterations": 10000,
+            "checksum": 9800070000
+          },
+          {
+            "case": "write/remove-recreate",
+            "median_ns": 158.969,
+            "iterations": 10000,
+            "checksum": 9800070000
+          }
+        ],
+        "snapshot/deleted0": [
+          {
+            "case": "snapshot/deleted0",
+            "median_ns": 134312,
+            "iterations": 300,
+            "checksum": 2102100
+          },
+          {
+            "case": "snapshot/deleted0",
+            "median_ns": 129041,
+            "iterations": 300,
+            "checksum": 2102100
+          }
+        ],
+        "snapshot/deleted900": [
+          {
+            "case": "snapshot/deleted900",
+            "median_ns": 20523.8,
+            "iterations": 300,
+            "checksum": 212100
+          },
+          {
+            "case": "snapshot/deleted900",
+            "median_ns": 22100.2,
+            "iterations": 300,
+            "checksum": 212100
+          }
+        ]
+      },
+      "proposal": {
+        "delta/b64/k8/d1": [
+          {
+            "case": "delta/b64/k8/d1",
+            "median_ns": 63.3335,
+            "iterations": 10000,
+            "checksum": 4550000
+          },
+          {
+            "case": "delta/b64/k8/d1",
+            "median_ns": 64.7135,
+            "iterations": 10000,
+            "checksum": 4550000
+          }
+        ],
+        "delta/b64/k8/d16": [
+          {
+            "case": "delta/b64/k8/d16",
+            "median_ns": 268.879,
+            "iterations": 6250,
+            "checksum": 3500000
+          },
+          {
+            "case": "delta/b64/k8/d16",
+            "median_ns": 265.246,
+            "iterations": 6250,
+            "checksum": 3500000
+          }
+        ],
+        "delta/b64/k8/d64": [
+          {
+            "case": "delta/b64/k8/d64",
+            "median_ns": 968.554,
+            "iterations": 1562,
+            "checksum": 1399552
+          },
+          {
+            "case": "delta/b64/k8/d64",
+            "median_ns": 949.731,
+            "iterations": 1562,
+            "checksum": 1399552
+          }
+        ],
+        "delta/b64/k128/d1": [
+          {
+            "case": "delta/b64/k128/d1",
+            "median_ns": 81.0244,
+            "iterations": 10000,
+            "checksum": 4550000
+          },
+          {
+            "case": "delta/b64/k128/d1",
+            "median_ns": 79.3343,
+            "iterations": 10000,
+            "checksum": 4550000
+          }
+        ],
+        "delta/b64/k128/d16": [
+          {
+            "case": "delta/b64/k128/d16",
+            "median_ns": 532.797,
+            "iterations": 6250,
+            "checksum": 3500000
+          },
+          {
+            "case": "delta/b64/k128/d16",
+            "median_ns": 755.369,
+            "iterations": 6250,
+            "checksum": 3500000
+          }
+        ],
+        "delta/b64/k128/d64": [
+          {
+            "case": "delta/b64/k128/d64",
+            "median_ns": 3643.6,
+            "iterations": 1562,
+            "checksum": 1399552
+          },
+          {
+            "case": "delta/b64/k128/d64",
+            "median_ns": 3013.41,
+            "iterations": 1562,
+            "checksum": 1399552
+          }
+        ],
+        "delta/b1000/k8/d1": [
+          {
+            "case": "delta/b1000/k8/d1",
+            "median_ns": 86.1746,
+            "iterations": 10000,
+            "checksum": 70070000
+          },
+          {
+            "case": "delta/b1000/k8/d1",
+            "median_ns": 71.1538,
+            "iterations": 10000,
+            "checksum": 70070000
+          }
+        ],
+        "delta/b1000/k8/d16": [
+          {
+            "case": "delta/b1000/k8/d16",
+            "median_ns": 263.998,
+            "iterations": 6250,
+            "checksum": 44450000
+          },
+          {
+            "case": "delta/b1000/k8/d16",
+            "median_ns": 188.97,
+            "iterations": 6250,
+            "checksum": 44450000
+          }
+        ],
+        "delta/b1000/k8/d1000": [
+          {
+            "case": "delta/b1000/k8/d1000",
+            "median_ns": 23380.3,
+            "iterations": 100,
+            "checksum": 1400000
+          },
+          {
+            "case": "delta/b1000/k8/d1000",
+            "median_ns": 19117,
+            "iterations": 100,
+            "checksum": 1400000
+          }
+        ],
+        "delta/b1000/k128/d1": [
+          {
+            "case": "delta/b1000/k128/d1",
+            "median_ns": 100.936,
+            "iterations": 10000,
+            "checksum": 70070000
+          },
+          {
+            "case": "delta/b1000/k128/d1",
+            "median_ns": 87.1947,
+            "iterations": 10000,
+            "checksum": 70070000
+          }
+        ],
+        "delta/b1000/k128/d16": [
+          {
+            "case": "delta/b1000/k128/d16",
+            "median_ns": 580.159,
+            "iterations": 6250,
+            "checksum": 44450000
+          },
+          {
+            "case": "delta/b1000/k128/d16",
+            "median_ns": 494.843,
+            "iterations": 6250,
+            "checksum": 44450000
+          }
+        ],
+        "delta/b1000/k128/d1000": [
+          {
+            "case": "delta/b1000/k128/d1000",
+            "median_ns": 157676,
+            "iterations": 100,
+            "checksum": 1400000
+          },
+          {
+            "case": "delta/b1000/k128/d1000",
+            "median_ns": 131224,
+            "iterations": 100,
+            "checksum": 1400000
+          }
+        ],
+        "write/overwrite": [
+          {
+            "case": "write/overwrite",
+            "median_ns": 110.716,
+            "iterations": 10000,
+            "checksum": 2450035000
+          },
+          {
+            "case": "write/overwrite",
+            "median_ns": 80.9744,
+            "iterations": 10000,
+            "checksum": 2450035000
+          }
+        ],
+        "write/remove-recreate": [
+          {
+            "case": "write/remove-recreate",
+            "median_ns": 194.05,
+            "iterations": 10000,
+            "checksum": 9800070000
+          },
+          {
+            "case": "write/remove-recreate",
+            "median_ns": 153.518,
+            "iterations": 10000,
+            "checksum": 9800070000
+          }
+        ],
+        "snapshot/deleted0": [
+          {
+            "case": "snapshot/deleted0",
+            "median_ns": 133056,
+            "iterations": 300,
+            "checksum": 2102100
+          },
+          {
+            "case": "snapshot/deleted0",
+            "median_ns": 130572,
+            "iterations": 300,
+            "checksum": 2102100
+          }
+        ],
+        "snapshot/deleted900": [
+          {
+            "case": "snapshot/deleted900",
+            "median_ns": 20057.4,
+            "iterations": 300,
+            "checksum": 212100
+          },
+          {
+            "case": "snapshot/deleted900",
+            "median_ns": 20128.8,
+            "iterations": 300,
+            "checksum": 212100
+          }
+        ]
+      },
+      "selected": {
+        "delta/b64/k8/d1": [
+          {
+            "case": "delta/b64/k8/d1",
+            "median_ns": 54.843,
+            "iterations": 10000,
+            "checksum": 4550000
+          },
+          {
+            "case": "delta/b64/k8/d1",
+            "median_ns": 62.0934,
+            "iterations": 10000,
+            "checksum": 4550000
+          }
+        ],
+        "delta/b64/k8/d16": [
+          {
+            "case": "delta/b64/k8/d16",
+            "median_ns": 220.412,
+            "iterations": 6250,
+            "checksum": 3500000
+          },
+          {
+            "case": "delta/b64/k8/d16",
+            "median_ns": 250.157,
+            "iterations": 6250,
+            "checksum": 3500000
+          }
+        ],
+        "delta/b64/k8/d64": [
+          {
+            "case": "delta/b64/k8/d64",
+            "median_ns": 765.918,
+            "iterations": 1562,
+            "checksum": 1399552
+          },
+          {
+            "case": "delta/b64/k8/d64",
+            "median_ns": 915.67,
+            "iterations": 1562,
+            "checksum": 1399552
+          }
+        ],
+        "delta/b64/k128/d1": [
+          {
+            "case": "delta/b64/k128/d1",
+            "median_ns": 71.7639,
+            "iterations": 10000,
+            "checksum": 4550000
+          },
+          {
+            "case": "delta/b64/k128/d1",
+            "median_ns": 90.1149,
+            "iterations": 10000,
+            "checksum": 4550000
+          }
+        ],
+        "delta/b64/k128/d16": [
+          {
+            "case": "delta/b64/k128/d16",
+            "median_ns": 469.449,
+            "iterations": 6250,
+            "checksum": 3500000
+          },
+          {
+            "case": "delta/b64/k128/d16",
+            "median_ns": 535.997,
+            "iterations": 6250,
+            "checksum": 3500000
+          }
+        ],
+        "delta/b64/k128/d64": [
+          {
+            "case": "delta/b64/k128/d64",
+            "median_ns": 3339.1,
+            "iterations": 1562,
+            "checksum": 1399552
+          },
+          {
+            "case": "delta/b64/k128/d64",
+            "median_ns": 3773.12,
+            "iterations": 1562,
+            "checksum": 1399552
+          }
+        ],
+        "delta/b1000/k8/d1": [
+          {
+            "case": "delta/b1000/k8/d1",
+            "median_ns": 71.7939,
+            "iterations": 10000,
+            "checksum": 70070000
+          },
+          {
+            "case": "delta/b1000/k8/d1",
+            "median_ns": 87.7647,
+            "iterations": 10000,
+            "checksum": 70070000
+          }
+        ],
+        "delta/b1000/k8/d16": [
+          {
+            "case": "delta/b1000/k8/d16",
+            "median_ns": 229.052,
+            "iterations": 6250,
+            "checksum": 44450000
+          },
+          {
+            "case": "delta/b1000/k8/d16",
+            "median_ns": 263.422,
+            "iterations": 6250,
+            "checksum": 44450000
+          }
+        ],
+        "delta/b1000/k8/d1000": [
+          {
+            "case": "delta/b1000/k8/d1000",
+            "median_ns": 20196.1,
+            "iterations": 100,
+            "checksum": 1400000
+          },
+          {
+            "case": "delta/b1000/k8/d1000",
+            "median_ns": 22397.2,
+            "iterations": 100,
+            "checksum": 1400000
+          }
+        ],
+        "delta/b1000/k128/d1": [
+          {
+            "case": "delta/b1000/k128/d1",
+            "median_ns": 89.0048,
+            "iterations": 10000,
+            "checksum": 70070000
+          },
+          {
+            "case": "delta/b1000/k128/d1",
+            "median_ns": 207.421,
+            "iterations": 10000,
+            "checksum": 70070000
+          }
+        ],
+        "delta/b1000/k128/d16": [
+          {
+            "case": "delta/b1000/k128/d16",
+            "median_ns": 497.019,
+            "iterations": 6250,
+            "checksum": 44450000
+          },
+          {
+            "case": "delta/b1000/k128/d16",
+            "median_ns": 655.939,
+            "iterations": 6250,
+            "checksum": 44450000
+          }
+        ],
+        "delta/b1000/k128/d1000": [
+          {
+            "case": "delta/b1000/k128/d1000",
+            "median_ns": 132966,
+            "iterations": 100,
+            "checksum": 1400000
+          },
+          {
+            "case": "delta/b1000/k128/d1000",
+            "median_ns": 153251,
+            "iterations": 100,
+            "checksum": 1400000
+          }
+        ],
+        "write/overwrite": [
+          {
+            "case": "write/overwrite",
+            "median_ns": 92.805,
+            "iterations": 10000,
+            "checksum": 2450035000
+          },
+          {
+            "case": "write/overwrite",
+            "median_ns": 110.976,
+            "iterations": 10000,
+            "checksum": 2450035000
+          }
+        ],
+        "write/remove-recreate": [
+          {
+            "case": "write/remove-recreate",
+            "median_ns": 153.718,
+            "iterations": 10000,
+            "checksum": 9800070000
+          },
+          {
+            "case": "write/remove-recreate",
+            "median_ns": 184.77,
+            "iterations": 10000,
+            "checksum": 9800070000
+          }
+        ],
+        "snapshot/deleted0": [
+          {
+            "case": "snapshot/deleted0",
+            "median_ns": 137911,
+            "iterations": 300,
+            "checksum": 2102100
+          },
+          {
+            "case": "snapshot/deleted0",
+            "median_ns": 158857,
+            "iterations": 300,
+            "checksum": 2102100
+          }
+        ],
+        "snapshot/deleted900": [
+          {
+            "case": "snapshot/deleted900",
+            "median_ns": 21188.8,
+            "iterations": 300,
+            "checksum": 212100
+          },
+          {
+            "case": "snapshot/deleted900",
+            "median_ns": 18316.7,
+            "iterations": 300,
+            "checksum": 212100
+          }
+        ]
+      }
+    }
+  },
+  "limits": [
+    "Single Hyper-V Ubuntu VM, noisy host scheduling, no contention/production throughput inference",
+    "Comparative timings are ranges of two medians, not confidence intervals",
+    "No claimed line, branch or function coverage percentage",
+    "No dependency downloads or installations"
+  ]
+}

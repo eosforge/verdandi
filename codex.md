@@ -1,5 +1,17 @@
 # Verdandi Project Memory
 
+## SyncStore review after aadcbb4 (2026-09-15)
+
+Reviewed Store implementation/tests line by line after the maintainer's upper_bound/reserve proposal.
+Use Ranges projection/subrange, checked reserve and measured iterator insert; prepare put records before locking.
+StoreEntry derives deletion from null payload but keeps its version for allocation-cache reuse. Immediate node
+erasure and exact snapshot pre-counting were rejected after benchmarks. Fixed the never-expire max sentinel.
+Detailed Chinese comments now cover fields, locals, function contracts and blocks, with ASCII punctuation;
+keep function signatures and opening braces together. Bounded Store tests passed in Debug/Release/ASan+UBSan/TSan
+with 76 write and 7 read allocation failures. No fresh coverage percentage or network/SDK regression is claimed.
+Review and reproducible benchmark: [Store performance review](cluster-cpp/sync-store-performance-review-20260915.md).
+These changes remain uncommitted; no downloads or persistent background test.
+
 ## Sync foundation cleanup: validated (2026-09-15)
 
 The maintainer requested fixes after WIP commit `2bf279f`, then explicitly required finishing
