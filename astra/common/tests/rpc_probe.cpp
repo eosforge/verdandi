@@ -72,7 +72,7 @@ proto::astra::v1::Hello admit(const Identity& identity, const std::string& super
     proto::orbit::v1::RegistrationRequest request;
     request.set_username(identity.username());
     request.set_password(identity.password());
-    request.set_cluster_id("alpha");
+    request.set_galaxy("alpha");
     request.set_advertise(advertise);
     std::string request_id(32, '\0');
     CHECK(RAND_bytes(reinterpret_cast<unsigned char*>(request_id.data()), request_id.size()) == 1);

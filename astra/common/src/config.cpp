@@ -1,4 +1,7 @@
 // 功能: 依据 C++26 字段反射解析 CLI, 校验参数并生成帮助和拥有数据的运行配置.
+// 详细说明: 这是一个前沿的 C++26 代码文件，利用新标准中的 `std::meta` 编译期反射机制，通过探测 
+// `detail::Options` 内部成员与其上挂载的注解，实现一套无需在运行时使用繁杂的映射表/注册逻辑
+// 的零开销或极低开销的命令行参数（CLI）解析器。最终将各个参数合法化并汇聚成为统一且所有权清晰的 `Config` 配置。
 #include <astra/config.hpp>
 
 #include "options.hpp"
@@ -10,99 +13,156 @@
 namespace astra {
 namespace {
 // 检查数值默认值是否落在 option 的包含式范围内, 供编译期元数据校验使用, 不修改输入.
+// 参数:
+// - value (std::uint64_t): 结构体定义中预设的默认数字值。
+// - option (const detail::Option&): 反射抓取到的属性配置。
+// 返回值: 默认值是否有效（即是否大于等于最小值，小于等于最大值）。
 constexpr bool valid_default(std::uint64_t value, const detail::Option& option) {
     return value >= option.minimum && value <= option.maximum;
 }
+
+// 检查字符串默认值是否有效。
 // 只检查字符串默认值的通用 4096 字节上限; 必填和字段业务格式在实际 CLI 解析时校验.
+// 参数:
+// - value (const std::string&): 结构体定义中预设的默认文本。
+// - (const detail::Option&): 当前参数未用到注解内容。
 constexpr bool valid_default(const std::string& value, const detail::Option&) {
     return value.size() <= 4096;
 }
+
 // 反射查询在编译期完成, 每次解析只使用固定 seen 位集, 不动态建立字段注册表.
 // clang-format off
+// 详细说明: 使用 C++26 (P2996) `^` 操作符获取 `detail::Options` 的类型的元信息。
+// `std::meta::nonstatic_data_members_of` 可以抽取出其所有非静态成员变量。最后用 `std::define_static_array` 变为 constexpr 数组。
 constexpr auto fields = std::define_static_array(std::meta::nonstatic_data_members_of(^^detail::Options, std::meta::access_context::current()));
+
 // 提取 field 唯一的 Option 注解, 数量或类型不匹配会阻止常量求值通过, 不生成运行时注册项.
+// 参数:
+// - field (std::meta::info): 一个成员变量的元信息结构。
+// 返回值: 返回该字段上挂载的属于 detail::Option 的注解实例。
 consteval detail::Option descriptor(std::meta::info field) {
     auto tags = std::meta::annotations_of(field);
-    if (tags.size() != 1) { throw "Each CLI field requires exactly one annotation"; }
+    if (tags.size() != 1) { throw "Each CLI field requires exactly one annotation"; } // 只允许严格打一个注解
     return std::meta::extract<detail::Option>(tags[0]);
 }
+
 // 检查名称唯一, 帮助非空, 范围有序和默认值边界; 返回 false 由 static_assert 阻止构建.
+// 详细说明: 这是一个在编译期运行的校验函数。如果注解写得不对，例如有两个同样的 CLI 选项名，或者范围配反了，代码根本编译不过。
 consteval bool valid_descriptors() {
     for (std::size_t i = 0; i < fields.size(); ++i) {
         auto tag = descriptor(fields[i]);
+        // 名字不能为空，描述不能为空，最小值不能大于最大值。
         if (tag.name[0] == '\0' || tag.description[0] == '\0' || tag.minimum > tag.maximum) { return false; }
+        
+        // 与排在前面的字段对比名称是否冲撞
         for (std::size_t j = 0; j < i; ++j) {
             if (std::string_view(descriptor(fields[j]).name) == tag.name) { return false; }
         }
     }
     const detail::Options defaults;
     bool valid = true;
+    
+    // 利用 C++26 `template for` 编译期展开。
+    // 使用 `[:field:]` 发起成员访问反射。
     template for (constexpr auto field : fields) {
         valid = valid && valid_default(defaults.[:field:], descriptor(field));
     }
     return valid;
 }
-static_assert(valid_descriptors());
+static_assert(valid_descriptors()); // 触发并在此确保所有的反射约束在编译时满足
 // clang-format on
 
 // 只接受完整十进制数字, 范围取自注解; 不使用会忽略尾部文本的转换函数.
+// 参数:
+// - output (std::uint64_t&): 转换成功后，结果回写的地址。
+// - text (std::string_view): 命令行输入提取到的值文本。
+// - option (const detail::Option&): 对应选项的定义配置。
+// 详细说明: 负责把传入的字符串用严格的方式转换成数字，且要求值落在所给定的极值范围内。
 Result<void> assign(std::uint64_t& output, std::string_view text, const detail::Option& option) {
     std::uint64_t value = 0;
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
+    // 判断是否有转换错误，或者是还有余留未能转换完毕的字符，或是最终数字越界。
     if (error != std::errc{} || end != text.data() + text.size() || value < option.minimum || value > option.maximum) {
-        return std::unexpected(Error{ErrorCode::configuration, "Invalid numeric option: --" + std::string(option.name)});
+        return Error::configuration("Invalid numeric option: --" + std::string(option.name));
     }
     output = value;
     return {};
 }
 
 // 字符串先转为拥有的值, 地址/名称关系在解析完全部字段后检查.
+// 参数:
+// - output (std::string&): 存储提取到的字符串引用。
+// - text (std::string_view): 命令行提取的文本。
 Result<void> assign(std::string& output, std::string_view text, const detail::Option&) {
     output = text;
     return {};
 }
 
 // 帮助使用普通重载处理字段值, 反射仅负责枚举, 不扩展异构模板分支.
+// 生成字符串参数结尾的默认值说明信息。为空则不输出默认值。
 std::string default_help(const std::string& value, const detail::Option&) {
     return value.empty() ? std::string{} : "; default=" + value;
 }
+
 // 使用数值 value 和注解 option 返回包含式范围与默认值文本, 不参与运行时参数赋值.
+// 生成数字型参数的取值范围和默认值说明。
 std::string default_help(std::uint64_t value, const detail::Option& option) {
     return " [" + std::to_string(option.minimum) + ", " + std::to_string(option.maximum) + "]; default=" + std::to_string(value);
 }
 } // namespace
 
-Result<Config> parse_options(std::span<const std::string_view> arguments, Role role) {
+// parse_options 函数实现
+// 参数:
+// - arguments (std::span<const std::string_view>): 操作系统的 argv 参数列表切片，丢弃了 arg[0]（自身程序名）。
+// - role (Role): 明确启动服务的类型。
+// 返回值: 成功返回完整检查且赋值通过的配置 Config，失败返回 unexpected 和原因。
+Result<Config> Config::parse(std::span<const std::string_view> arguments, Role role) {
     detail::Options options;
-    std::bitset<fields.size()> seen;
+    std::bitset<fields.size()> seen; // 用于追踪每个字段是否在命令行出现过，避免重复赋。
+    
     // 先统一 --name=value 与 --name value, 再分派字段; 借用的参数只在本次调用中有效.
     for (std::size_t i = 0; i < arguments.size(); ++i) {
         const auto argument = arguments[i];
         if (!argument.starts_with("--")) {
-            return std::unexpected(Error{ErrorCode::configuration, "Expected a named option"});
+            return Error::configuration("Expected a named option");
         }
+        
+        // 尝试分离键和值
         const auto separator = argument.find('=');
+        // 如果是 --name=value，则截取 -- 后到 = 的部分。否则截取 -- 后的所有。
         const auto name = argument.substr(2, separator == std::string_view::npos ? separator : separator - 2);
+        
         if (name == "worker-threads") {
-            return std::unexpected(Error{ErrorCode::configuration, "--worker-threads is unsupported: gRPC owns I/O workers"});
+            return Error::configuration("--worker-threads is unsupported: gRPC owns I/O workers");
         }
+        
         std::string_view value;
+        // 支持 `--name=value` 格式
         if (separator != std::string_view::npos) {
             value = argument.substr(separator + 1);
-        } else if (i + 1 < arguments.size()) {
+        } 
+        // 支持 `--name value` 格式，此时消耗下一个 argv 参数。
+        else if (i + 1 < arguments.size()) {
             value = arguments[++i];
         }
+        
+        // 值为空、值似乎被错写为另外一个旗帜形参、值太长均报错。
         if (value.empty() || value.starts_with("--") || value.size() > 4096) {
-            return std::unexpected(Error{ErrorCode::configuration, "Missing or oversized option value"});
+            return Error::configuration("Missing or oversized option value");
         }
+        
         bool found = false;
         std::size_t index = 0;
+        
         // 仅此字段分派使用 splice; 把异构访问展开为普通比较和赋值, 不引入虚函数或成员指针表.
+        // 详细说明: 这里利用了 C++26 的反射，在编译期生成了长串的 if (name == option.name) 来挨个匹配目标字段。
         // clang-format off
         template for (constexpr auto field : fields) {
             constexpr auto option = descriptor(field);
             if (name == option.name) {
-                if (seen.test(index)) { return std::unexpected(Error{ErrorCode::configuration, "Duplicate option"}); }
+                // 如果发现某项参数在 bitset 中已激活过，说明其被传入了两次。
+                if (seen.test(index)) { return Error::configuration("Duplicate option"); }
+                // 使用 `[:field:]` 访问 options 对象里的目标变量，调用之前的 assign 重载。
                 auto result = assign(options.[:field:], value, option);
                 if (!result) { return std::unexpected(result.error()); }
                 seen.set(index);
@@ -111,59 +171,117 @@ Result<Config> parse_options(std::span<const std::string_view> arguments, Role r
             ++index;
         }
         // clang-format on
+        
+        // 如果上面一大串展开的 if 没能匹配上任何注册的项，就报错未知的选项。
         if (!found) {
-            return std::unexpected(Error{ErrorCode::configuration, "Unknown option"});
+            return Error::configuration("Unknown option");
         }
     }
     std::size_t index = 0;
+    
     // 必填字段检查来自相同注解, 新增字段无需修改第二份条件列表.
+    // 详细说明: 再次编译期展开所有字段，看一看带有 required: true 标记的字段对应的 seen 状态是不是没有激活。
     // clang-format off
     template for (constexpr auto field : fields) {
-        if (descriptor(field).required && !seen.test(index)) { return std::unexpected(Error{ErrorCode::configuration, "Missing required option"}); }
+        if (descriptor(field).required && !seen.test(index)) { return Error::configuration("Missing required option"); }
         ++index;
     }
     // clang-format on
 
     // 跨字段约束保持普通代码, 不把地址关系塞入元编程规则引擎.
+    // 将解析出的临时 option 值，代入类型化的验证结构里。
     auto listen = Endpoint::parse(options.listen, true);
-    auto supervisor = supervisor_address(options.supervisor);
-    if (!listen || !supervisor || !valid_name(options.cluster) || !valid_name(options.group) || options.identity.empty()) {
-        return std::unexpected(Error{ErrorCode::configuration, "Invalid endpoint, name or identity path"});
+    auto supervisor = Config::format_supervisor(options.supervisor);
+    if (!listen || !supervisor || !Member::valid_name(options.galaxy) || !Member::valid_name(options.group) || options.identity.empty()) {
+        return Error::configuration("Invalid endpoint, name or identity path");
     }
+    
+    // 生成对外的宣告地址（如果不传则降级采用 listen 地址）。
     auto advertise = options.advertise.empty() ? listen : Endpoint::parse(options.advertise);
+    // 对外宣告的端点绝对不可以含有 0.0.0.0 或者 :: 这样指向模糊的通配符。必须能被别人明确寻址。
     if (!advertise || (listen->wildcard && options.advertise.empty())) {
-        return std::unexpected(Error{ErrorCode::configuration, "A concrete advertise endpoint is required"});
+        return Error::configuration("A concrete advertise endpoint is required");
     }
+    
     // 全部输入和跨字段约束通过后才形成运行配置, 派生入站预算并将 CLI 秒数统一转换为毫秒.
     Config result;
     result.role = role;
-    result.cluster = std::move(options.cluster);
+    result.galaxy = std::move(options.galaxy);
     result.group = std::move(options.group);
     result.listen = std::move(*listen);
     result.advertise = std::move(*advertise);
     result.supervisor = std::move(*supervisor);
     result.identity = std::move(options.identity);
+    // 成员预算设置
     result.max_members = options.maximum;
     result.max_inbound = options.maximum * 2;
+    // 心跳周期、超时以及状态发布周期做类型化时间转换
     result.heartbeat_interval = Milliseconds(options.heartbeat);
     result.pong_timeout = Milliseconds(options.pong);
     result.shutdown_timeout = std::chrono::seconds(options.shutdown);
     result.status_interval = std::chrono::seconds(options.status);
+    
+    // 注入新暴露的准入通道尺寸约束配置
+    result.max_admission_request_bytes = static_cast<std::uint32_t>(options.max_admission_request_bytes);
+    result.max_admission_response_bytes = static_cast<std::uint32_t>(options.max_admission_response_bytes);
+    
     return result;
 }
 
-std::string option_help(Role role) {
-    std::string result = "Usage: " + std::string(role == Role::star ? "star" : "planet") + " --listen=IP:PORT --super=HOST:PORT --cluster=ID [options]\n";
+// option_help 函数实现
+// 参数:
+// - role (Role): 明确启动服务角色以便于在帮助输出的标头动态打印可执行程序的名称。
+// 返回值: 帮助文档文本。
+std::string Config::help(Role role) {
+    std::string result = "Usage: " + std::string(role == Role::star ? "star" : "planet") + " --listen=IP:PORT --super=HOST:PORT --galaxy=ID [options]\n";
     const detail::Options defaults;
+    
     // 默认值直接读取同一结构, 修改初始化器会同步改变实例和帮助.
+    // 详细说明: 依然利用反射技术，自动将每个字段的注解名、描述、默认范围、以及标志性字串拼接成为格式化良好的命令帮助。
     // clang-format off
     template for (constexpr auto field : fields) {
         constexpr auto option = descriptor(field);
         result += "  --" + std::string(option.name) + "  " + std::string(option.description);
-        result += default_help(defaults.[:field:], option);
-        result += option.required ? " (required)\n" : "\n";
+        result += default_help(defaults.[:field:], option); // 填入范围和默认值
+        result += option.required ? " (required)\n" : "\n"; // 若为必填则增加对应提醒
     }
     // clang-format on
     return result + "  --help / --version\nTLS and Supervisor account login are required. Stop with SIGINT or SIGTERM.\n";
 }
+// 返回值: 解析通过并进行标准化处理后的字符串，或者错误信息。
+Result<std::string> Config::format_supervisor(std::string_view value) {
+    // 尝试先按数字端点（IP:PORT）去解析
+    if (auto endpoint = Endpoint::parse(value)) {
+        return endpoint->text();
+    }
+    
+    // 若不是 IP 格式，按 HOSTNAME:PORT 解析。
+    const auto separator = value.rfind(':');
+    if (separator == std::string_view::npos || !port_number(value.substr(separator + 1), false)) {
+        return Error::configuration("Supervisor requires HOST:PORT");
+    }
+    const auto host = value.substr(0, separator);
+    std::array<unsigned char, 4> numeric{};
+    // 为了防止部分 inet_pton 或域名解析 API 遇到伪装为非规范 IP 的边缘情况，再拦一道。
+    if (inet_pton(AF_INET, std::string(host).c_str(), numeric.data()) == 1) {
+        return Error::configuration("Invalid numeric Supervisor endpoint");
+    }
+    
+    // DNS 名字整体长度限制。
+    if (host.empty() || host.size() > 253) {
+        return Error::configuration("Invalid supervisor hostname");
+    }
+    
+    // 检查每一段 label 的合法性：不能超长，头尾不能是横杠，字符需符合规范。
+    for (auto label : host | std::views::split('.')) {
+        const std::string_view part(label.begin(), label.end());
+        if (part.empty() || part.size() > 63 || part.starts_with('-') || part.ends_with('-') || !std::ranges::all_of(part, [](unsigned char c) {
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
+            })) {
+            return Error::configuration("Invalid supervisor hostname");
+        }
+    }
+    return std::string(value);
+}
+
 } // namespace astra

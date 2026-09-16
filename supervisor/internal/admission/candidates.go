@@ -16,7 +16,7 @@ func encodeMember(cluster string, member membership.Member) *wire.Member {
 	if member.Role == membership.Planet {
 		role = wire.Role_ROLE_PLANET
 	}
-	return &wire.Member{ClusterId: cluster, Id: member.ID, Principal: member.Principal,
+	return &wire.Member{Galaxy: cluster, Id: member.ID, Principal: member.Principal,
 		Advertise: member.Address, Epoch: member.Epoch, Role: role, Group: member.Group}
 }
 

@@ -2,7 +2,7 @@
 
 Linux x64 / GCC 16.2.0 的 C++26 连接骨架, 与 Go Supervisor 通过 gRPC/TLS 协议 v1 协作.
 当前运行范围是准入、互联、心跳和有界资源清理, 尚无 Catalog/Registry 业务接口或 SDK 接入.
-已有内部 SyncStore 和同步协议草案; 之前的底层测试记录见 [性能与审查报告](sync-store-performance-review-20260915.md).
+已有内部 Store 和同步协议草案; 之前的底层测试记录见 [性能与审查报告](sync-store-performance-review-20260915.md).
 当前协议边界见 [Orbit/Astra/Comet v1](../protocol-v1.md). 更名时的测试与缓存路径见 [Astra 更名说明](../astra-migration.md), 不沿用旧版本的验证结论.
 
 首次阅读从本文的结构和启动方式开始, 然后查看[维护指南](CONTRIBUTING.md)与[身份契约](../cluster/identity-contract.md).

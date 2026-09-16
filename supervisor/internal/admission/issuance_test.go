@@ -24,7 +24,7 @@ func TestCommittedRequestCannotChangeRegistrationBinding(t *testing.T) {
 		"group":           func(r *wire.RegistrationRequest) { r.Group = "another" },
 		"role":            func(r *wire.RegistrationRequest) { r.Role = wire.Role_ROLE_PLANET },
 		"account":         func(r *wire.RegistrationRequest) { r.Username = "planets"; r.Role = wire.Role_ROLE_PLANET },
-		"cluster":         func(r *wire.RegistrationRequest) { r.ClusterId = "another" },
+		"galaxy":         func(r *wire.RegistrationRequest) { r.Galaxy = "another" },
 		"missing-request": func(r *wire.RegistrationRequest) { r.RequestId = nil },
 	} {
 		t.Run(name, func(t *testing.T) {

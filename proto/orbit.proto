@@ -10,7 +10,7 @@ service Admission {
 
 // 账号通过 TLS 提交, Supervisor 从已验证账号和规范端点构建指纹.
 message RegistrationRequest {
-    string cluster_id = 1;
+    string galaxy = 1;
     // 身份与代次由服务端分配, 以下编号不用于当前请求字段.
     reserved 2, 5, 11, 12;
     reserved "id", "expected_epoch", "ticket", "ticket_signature";
@@ -42,10 +42,10 @@ message RegistrationResponse {
 }
 
 message Member {
-    string cluster_id = 1;
+    string galaxy = 1;
     // Supervisor 签发的不透明 UTF-8 字符串, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
     string id = 2;
-    // SHA-256(username + NUL + cluster_id + NUL + advertise), 小写十六进制, 不替代本次启动的 id.
+    // SHA-256(username + NUL + galaxy + NUL + advertise), 小写十六进制, 不替代本次启动的 id.
     string principal = 3;
     string advertise = 4;
     // 每部署身份的重启代次, 不用于 Catalog/Registry 的业务版本排序.

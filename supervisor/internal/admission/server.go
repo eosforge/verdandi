@@ -24,8 +24,8 @@ const MaxResponseBytes = 2 * 1024 * 1024
 // Server 借用只读认证配置和持久成员表, 由 app 在 Serve 返回后释放存储.
 type Server struct {
 	wire.UnimplementedAdmissionServer
-	// Cluster 是启动验证的唯一 Galaxy, 不接受请求切换群组.
-	Cluster string
+	// Galaxy 是启动验证的唯一 Galaxy, 不接受请求切换群组.
+	Galaxy string
 	// Authority 借用启动后不可变的 TLS, 账号和签名配置, 必须由 Load 取得.
 	Authority *Authority
 	// Store 借用 app 独占的数据库, Serve 结束后才能关闭.
@@ -44,7 +44,7 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 // serve 共用生产处理链; 白盒 race 夹具只放宽 RPC 预算, 不替换密码验证或复制 gRPC 服务设置.
 // requestTimeout 必须为正; 生产入口固定五秒, 不暴露 CLI 或每节点可变的认证计时状态.
 func (s *Server) serve(ctx context.Context, listener net.Listener, requestTimeout time.Duration) error {
-	if ctx == nil || listener == nil || !membership.Name(s.Cluster) || s.Authority == nil || s.Authority.TLS == nil ||
+	if ctx == nil || listener == nil || !membership.Name(s.Galaxy) || s.Authority == nil || s.Authority.TLS == nil ||
 		s.Authority.accounts == nil || s.Store == nil || s.Logger == nil || s.MaximumConnections < 1 || s.MaximumConnections > 65536 || requestTimeout <= 0 {
 		if listener != nil {
 			_ = listener.Close()
@@ -74,7 +74,7 @@ func (s *Server) serve(ctx context.Context, listener net.Listener, requestTimeou
 			<-stopped
 		}
 	}()
-	s.Logger.Info("supervisor_registration_started", "listen", listener.Addr().String(), "cluster", s.Cluster)
+	s.Logger.Info("supervisor_registration_started", "listen", listener.Addr().String(), "galaxy", s.Galaxy)
 	err := server.Serve(owned)
 	if ctx.Err() != nil || errors.Is(err, grpc.ErrServerStopped) {
 		return nil
@@ -90,14 +90,14 @@ func (s *Server) Register(ctx context.Context, request *wire.RegistrationRequest
 	if err := s.Authority.accounts.authenticate(ctx, request.Username, request.Password, request.Role); err != nil {
 		return nil, err
 	}
-	if request.ClusterId != s.Cluster || !membership.Address(request.Advertise) || !membership.Name(request.Group) {
+	if request.Galaxy != s.Galaxy || !membership.Address(request.Advertise) || !membership.Name(request.Group) {
 		return nil, status.Error(codes.InvalidArgument, "invalid registration target")
 	}
 	role := membership.Star
 	if request.Role == wire.Role_ROLE_PLANET {
 		role = membership.Planet
 	}
-	principal := endpointPrincipal(request.Username, s.Cluster, request.Advertise)
+	principal := endpointPrincipal(request.Username, s.Galaxy, request.Advertise)
 	if len(request.RequestId) != 32 {
 		return nil, status.Error(codes.InvalidArgument, "invalid startup request")
 	}
@@ -105,14 +105,14 @@ func (s *Server) Register(ctx context.Context, request *wire.RegistrationRequest
 	if err != nil {
 		return nil, status.Error(codes.Internal, "identity issuance failed")
 	}
-	members, err := s.Store.Register(s.Cluster,
+	members, err := s.Store.Register(s.Galaxy,
 		membership.Member{ID: id, Principal: principal, Address: request.Advertise, Role: role, Group: request.Group}, request.RequestId)
 	if err != nil {
 		return nil, storeError(err)
 	}
 	result := &wire.RegistrationResponse{}
 	for _, member := range members {
-		encoded := encodeMember(s.Cluster, member)
+		encoded := encodeMember(s.Galaxy, member)
 		if member.Role == membership.Star {
 			result.Members = append(result.Members, encoded)
 		}

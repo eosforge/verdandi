@@ -10,7 +10,7 @@ message Hello {
     uint32 protocol_minor = 2;
     // 身份只在 Orbit 签名的 Member 正文中定义, 不在 Hello 重复.
     reserved 3, 4, 5, 6;
-    reserved "cluster_id", "id", "boot_id", "advertise";
+    reserved "galaxy", "id", "boot_id", "advertise";
     // 本端 payload 容量, 至少 1024 字节. 不改变当前阶段的硬上限.
     uint32 max_frame_bytes = 7;
     // 原样转发 Supervisor 返回的 Member 编码, 校验前不信任其中任何字段.

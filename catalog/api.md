@@ -189,7 +189,7 @@ func (*Entry) Status() Status
 func (*Entry) Revision() uint64
 func (*Entry) Synchronized() bool
 
-type Snapshot[T any] struct {
+type Store::Snapshot[T any] struct {
     Revision     uint64
     Status       Status
     Synchronized bool
@@ -202,7 +202,7 @@ func (*Entry) Load[
         *T
         verdandi.Decoder
     },
-]() (Snapshot[T], error)
+]() (Store::Snapshot[T], error)
 ```
 
 Callers name only `T`; Go infers `P` as `*T`. `Find` and `Load` perform no
@@ -220,7 +220,7 @@ Catalog is a child module and is not re-exported at crate root:
 use verdandi::{Client as RedisClient, Config as RedisConfig, FieldValue, Fields};
 use verdandi::catalog::{
     Client, Config, Entry, Kind, MutationResult, Patch, Path, Publisher,
-    Snapshot, Status, Subscriber, Subscription,
+    Store::Snapshot, Status, Subscriber, Subscription,
 };
 ```
 
@@ -310,10 +310,10 @@ impl Entry {
     pub fn status(&self) -> Status;
     pub fn revision(&self) -> u64;
     pub fn synchronized(&self) -> bool;
-    pub fn load<T: FieldValue>(&self) -> Result<Snapshot<T>>;
+    pub fn load<T: FieldValue>(&self) -> Result<Store::Snapshot<T>>;
 }
 
-pub struct Snapshot<T> {
+pub struct Store::Snapshot<T> {
     pub revision: u64,
     pub status: Status,
     pub synchronized: bool,

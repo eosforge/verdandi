@@ -396,7 +396,7 @@ class Service final : public proto::astra::bench::v1::TransportProbe::CallbackSe
 public:
     Service(Hub& hub, std::shared_ptr<Identity> identity) : hub_(hub), identity_(std::move(identity)) {
         proto::orbit::v1::Member member;
-        member.set_cluster_id("alpha");
+        member.set_galaxy("alpha");
         member.set_id("probe/" + std::to_string(hub_.config.fanout));
         member.set_principal(identity_->principal("alpha", "127.0.0.1:39001").text());
         member.set_advertise("127.0.0.1:39001");

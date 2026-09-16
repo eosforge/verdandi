@@ -970,7 +970,7 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
   most one temporary synchronization/repair task. While its latest generation
   has not crossed the synchronization fence, every public active, retained,
   snapshot, and policy view returns explicit `unavailable`.
-- Complete detached Snapshot is intentionally O(N) in time and memory. The
+- Complete detached Store::Snapshot is intentionally O(N) in time and memory. The
   first-version injected `One`/`Any` policy contract remains a simple O(N)
   candidate scan. Rust follows the same ownership and state invariants through
   Tokio channels, tasks, cancellation, and borrowing rather than copying Go's
@@ -1435,7 +1435,7 @@ verdandi:desired:<zone>:<target-hash>:chunk:<revision>:<index>
 
 ### SDK-024: Add an optional generated Go Selector reference path
 
-- Accepted 2026-09-02. The existing `One`, `Any`, `Find`, and `Snapshot` APIs
+- Accepted 2026-09-02. The existing `One`, `Any`, `Find`, and `Store::Snapshot` APIs
   remain the safe detached-value surface. Applications with a measured local
   selection hot path may generate a separate callback-only
   `ReferenceSelector` facade for their concrete Attr/Data structs.

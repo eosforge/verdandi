@@ -854,9 +854,9 @@ local-expiry changes become visible in the next bounded publication cycle.
 
 Every raw and typed public active, retained, policy, and complete-snapshot API
 returns explicit `unavailable` while the view is not synchronized. This applies
-to Snapshot, Find, FindRetained, One, and Any; a stale boolean marker is not a
+to Store::Snapshot, Find, FindRetained, One, and Any; a stale boolean marker is not a
 substitute for the error. `One` and `Any` use the initial simple O(N) policy
-scan. A detached complete Snapshot necessarily copies O(N) records and is
+scan. A detached complete Store::Snapshot necessarily copies O(N) records and is
 documented as a heavy operation accepted by its caller.
 
 During a network outage private last-known state may retain only records whose

@@ -63,13 +63,13 @@ public:
             return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Simulated reply loss after registration");
         }
         proto::orbit::v1::Member member;
-        member.set_cluster_id(request->cluster_id());
+        member.set_galaxy(request->galaxy());
         member.set_advertise(request->advertise());
         member.set_id(scenario_ == Scenario::changed_identity && attempt > 1 ? "other-instance" : "issued/session:α/42");
         member.set_role(request->role());
         member.set_group(scenario_ == Scenario::wrong_identity ? "wrong" : request->group());
         member.set_epoch(1);
-        member.set_principal(identity_->principal(member.cluster_id(), member.advertise()).text());
+        member.set_principal(identity_->principal(member.galaxy(), member.advertise()).text());
         response->set_admission(member.SerializeAsString());
         response->set_signature(test::sign(response->admission()));
         for (unsigned n = 0; n < (scenario_ == Scenario::excessive_members ? 5U : 1U); ++n) {
@@ -115,7 +115,7 @@ struct Fixture {
         server = builder.BuildAndStart();
         CHECK(server && port > 0);
         Config config;
-        config.cluster = "alpha";
+        config.galaxy = "alpha";
         config.advertise = *Endpoint::parse("127.0.0.1:7443");
         config.supervisor = address + ":" + std::to_string(port);
         config.max_members = 4;
@@ -168,7 +168,7 @@ int main() {
             Fixture fixture(*identity, Scenario::lost_reply);
             fixture.client->begin(0);
             auto first = fixture.result();
-            CHECK(!first && first.error().code == ErrorCode::transport);
+            CHECK(!first && first.error().code == Error::Code::transport);
             fixture.client->begin(0);
             CHECK(fixture.result());
             CHECK(fixture.authority.registrations == 2 && !fixture.authority.request_changed);
@@ -179,7 +179,7 @@ int main() {
             CHECK(fixture.result());
             fixture.client->begin(1);
             auto changed = fixture.result();
-            CHECK(!changed && changed.error().code == ErrorCode::identity);
+            CHECK(!changed && changed.error().code == Error::Code::identity);
             CHECK(!fixture.authority.request_changed);
         }
         for (auto scenario : {Scenario::excessive_members, Scenario::wrong_identity, Scenario::oversized_reply, Scenario::empty_member}) {
@@ -188,14 +188,14 @@ int main() {
             auto result = fixture.result();
             CHECK(!result);
             const bool capacity = scenario == Scenario::excessive_members || scenario == Scenario::oversized_reply;
-            CHECK(result.error().code == (capacity ? ErrorCode::capacity : ErrorCode::identity));
+            CHECK(result.error().code == (capacity ? Error::Code::capacity : Error::Code::identity));
         }
         for (auto scenario : {Scenario::registration_deadline}) {
             Fixture fixture(*identity, scenario);
             const auto start = Clock::now();
             fixture.client->begin(0);
             auto result = fixture.result();
-            CHECK(!result && result.error().code == ErrorCode::timeout);
+            CHECK(!result && result.error().code == Error::Code::timeout);
             // 单次登记继续受总期限限制, 不能因通道已连上而无限等待.
             CHECK(Clock::now() - start < Milliseconds(6500));
             CHECK(fixture.authority.registrations == 1U);
@@ -211,7 +211,7 @@ int main() {
             CHECK(fixture.authority.registrations == 1);
             fixture.client->cancel();
             auto result = fixture.result();
-            CHECK(!result && result.error().code == ErrorCode::cancelled);
+            CHECK(!result && result.error().code == Error::Code::cancelled);
         }
         std::cout << "PASS single RPC and retained startup request, reply limits, identity mismatch and in-flight cancellation\n";
         return 0;

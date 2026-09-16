@@ -376,14 +376,14 @@ Selection behavior:
   candidate, or duplicate `Any` candidate rolls back every staged mutation;
 - a valid non-empty result commits staged local predictions and returns detached
   selected candidates;
-- `One`, `Any`, `Find`, and `Snapshot` never perform Redis I/O;
+- `One`, `Any`, `Find`, and `Store::Snapshot` never perform Redis I/O;
 - while subscription/repair state is half-synchronized, `One`, `Any`, `Find`,
-  `FindRetained`, and `Snapshot` fail explicitly with `CodeUnavailable`; no
+  `FindRetained`, and `Store::Snapshot` fail explicitly with `CodeUnavailable`; no
   stale or partial view is exposed as usable; and
 - the first-version policy contract scans the borrowed candidate view in O(N).
-  A detached complete Snapshot is deliberately a heavy O(N) copy.
+  A detached complete Store::Snapshot is deliberately a heavy O(N) copy.
 
-The callback must not call `One`, `Any`, `Snapshot`, or `Find` recursively on
+The callback must not call `One`, `Any`, `Store::Snapshot`, or `Find` recursively on
 the same Selector and must not retain borrowed candidates after return.
 
 ### 5.1 Optional generated Go reference path

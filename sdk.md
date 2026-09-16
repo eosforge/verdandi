@@ -321,7 +321,7 @@ and/or Data.
 `unregister` removes the terminal UUID. Stale revisions are ignored and a gap
 uses bounded authoritative repair rather than a full Registry reload.
 
-Snapshot and Find perform no Redis I/O. One indexed deadline per UUID removes
+Store::Snapshot and Find perform no Redis I/O. One indexed deadline per UUID removes
 expired records locally even though natural Redis expiry emits no Verdandi
 event. A subscription disconnect, hidden reconnect, malformed event, PONG
 failure, or non-converging repair marks that generation unsynchronized and
@@ -343,7 +343,7 @@ selection immediately and may enter the retained view until
 `@timestamp + 2*@ttl`. A valid same-UUID event or fetched record can reactivate
 it. Explicit `unregister` purges it. Retained content remains stored internally
 during recovery but no public active, retained, snapshot, or policy view is
-readable while the Selector is half-synchronized. Raw and typed `Snapshot`,
+readable while the Selector is half-synchronized. Raw and typed `Store::Snapshot`,
 `Find`, `FindRetained`, `One`, and `Any` return `CodeUnavailable` until the
 generation crosses its fence. Retained content never extends Redis liveness.
 Its byte budget is independent from the active view:
@@ -352,7 +352,7 @@ earliest retained deadline is evicted first under pressure.
 The active and retained views are process-memory-only and disappear when the
 Selector process exits; they are never restored from local storage. `Find`,
 `One`, and `Any` borrow indexed process memory and perform no Redis I/O. A
-detached complete `Snapshot` necessarily copies the whole view and is an
+detached complete `Store::Snapshot` necessarily copies the whole view and is an
 explicit heavy O(N) operation; policy callbacks use the deliberately simple
 O(N) scan contract in SDK `1.0.0`.
 
@@ -607,7 +607,7 @@ if err := handle.Update(ctx, verdandi.Fields{
     return err
 }
 
-snapshot, err := selector.Snapshot(ctx)
+snapshot, err := selector.Store::Snapshot(ctx)
 if err != nil {
     return err // includes CodeUnavailable while synchronization is incomplete
 }

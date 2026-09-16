@@ -1,5 +1,12 @@
 # Astra Project Memory
 
+## Tests require explicit approval (2026-09-16)
+
+After implementation and cleanup, report changes and proposed test scope, then wait for explicit user approval before running tests or their prerequisite builds.
+This applies on Windows and Linux, including unit/regression, sanitizer, benchmark and endurance runs. Writing tests and formatting source remain allowed.
+A current explicit request to run tests is approval for its scope; earlier rounds are not standing authorization. See AGENTS.md.
+The Wheel test run already in progress had completed when this instruction arrived; no further tests were launched.
+
 ## C++ protocol names are explicit
 
 Use full generated protocol names in handwritten C++, including tests and isolated probes.
@@ -37,11 +44,11 @@ Linux current tests run at `/home/ubuntu/verdandi`, reusing migrated build trees
 Details and current validation: [Astra migration](astra-migration.md). Earlier entries below are historical;
 paths beginning cluster-cpp now refer to astra. Store changes below were committed as `467dea7`.
 
-## SyncStore review after aadcbb4 (2026-09-15)
+## Store review after aadcbb4 (2026-09-15)
 
 Reviewed Store implementation/tests line by line after the maintainer's upper_bound/reserve proposal.
 Use Ranges projection/subrange, checked reserve and measured iterator insert; prepare put records before locking.
-StoreEntry derives deletion from null payload but keeps its version for allocation-cache reuse. Immediate node
+Entry derives deletion from null payload but keeps its version for allocation-cache reuse. Immediate node
 erasure and exact snapshot pre-counting were rejected after benchmarks. Fixed the never-expire max sentinel.
 Detailed Chinese comments now cover fields, locals, function contracts and blocks, with ASCII punctuation;
 keep function signatures and opening braces together. Bounded Store tests passed in Debug/Release/ASan+UBSan/TSan
@@ -503,7 +510,7 @@ copy must recreate the local `alpha` push guard before using that branch. An
 authorized push temporarily bypasses that guard only for the exact reviewed
 commit and does not become standing permission for later pushes.
 
-## 13. Current Repository Snapshot
+## 13. Current Repository Store::Snapshot
 
 Historical v5 identity implementation (superseded by single-RPC v6 admission), 2026-09-12: Supervisor owns id issuance and generation format. All active own-identity fields use `id`, owned as `std::string` in C++. The signed startup ticket fixes the id, deployment binding and first CAS baseline; retries reuse it. Only committed registrations receive the separate v5 Hello admission signature. There is no client UUID generator or UUID format parser. Star/Planet are the only roles; shared code is `cluster-cpp/` / `verdandi::cluster`. The retired Rust service is outside current migration and checks. See [identity contract](cluster/identity-contract.md).
 
@@ -987,7 +994,7 @@ superseded entry; mark it superseded and link to its replacement.
   All celestial bodies use shared GLB geometry; unavailable nodes expose no
   planets or incident links, including when an input snapshot retains old data.
 - **Ownership:** One scene owns selection, one RAF loop and a reverse-order
-  resource scope. Snapshot replacement, retry, failed initialization and unmount
+  resource scope. Store::Snapshot replacement, retry, failed initialization and unmount
   release old resources; cancelled imports and GLB loads cannot mount a scene.
 - **Quality gates:** Node 24 built-in regression tests, strict Vue/TypeScript,
   Prettier and an import-boundary check run through `pnpm check`. No new
@@ -2371,7 +2378,7 @@ current; the request-queue representation below is superseded by the
   owner; it continues coalescing events while the temporary task builds and
   fences a candidate. Targeted repair stays in the current generation, while a
   successful full reconnect synchronization advances generation once. All
-  public active, retained, Snapshot, Find, One, and Any access is explicitly
+  public active, retained, Store::Snapshot, Find, One, and Any access is explicitly
   unavailable until the generation crosses its fence.
 - **Shutdown rule:** Client shutdown signals and joins every Registration's own
   worker within its bounded cleanup policy. Selector shutdown
@@ -2384,7 +2391,7 @@ current; the request-queue representation below is superseded by the
   serialized writes,
   subscribe-before-scan ordering, the PING/PONG fence, targeted repair, or
   joined shutdown.
-- **Policy boundary:** A detached complete Snapshot is explicitly heavy O(N).
+- **Policy boundary:** A detached complete Store::Snapshot is explicitly heavy O(N).
   SDK `0.1.0` keeps injected `One`/`Any` policy evaluation as a straightforward
   O(N) borrowed-view scan. Rust implements the same invariants with its native
   channel, task, cancellation, and borrow model.

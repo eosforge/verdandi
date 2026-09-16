@@ -1,5 +1,19 @@
 # Astra Worklog
 
+## Wheel correction and test approval rule (2026-09-16)
+
+Preserved the intrusive hierarchical timing wheel, corrected tick boundaries, and added stable pending-list ownership for callbacks and exceptions.
+Nodes automatically unlink on destruction; nodes and wheels cannot copy/move. Scheduling uses references, validates the delay limit, and reports rejection without cancelling prior work.
+Added deterministic boundary/lifetime/callback tests, 180000 reference-model operations and an independent C++ allocation test.
+CMake registers the two Wheel tests and follows the current store/store_fault source filenames. The maintainer requested committing all current changes together, including the separate Store and protocol edits.
+The previously launched final Debug, Release, ASan/UBSan and TSan component runs completed successfully before the new approval rule was processed.
+Each configuration passed both Wheel test executables; normal-path allocation count was zero, Node was 24 bytes and Wheel was 6168 bytes on Linux x64.
+These were isolated component checks under build/wheel-validation, not qualification of the other current service/protocol edits. Wheel is not wired into Store yet.
+The user now requires approval before all future tests and their prerequisite builds; recorded in AGENTS.md, coding.md and codex.md. No further tests were launched.
+Subsequent whole-bucket cascade, direct head-pop, bulk unlink and bit-width changes were reviewed statically.
+The final cleanup replaced max_delay's lambda with a bounded right-shift expression and clarified link invariants in comments; these latest edits have not been retested.
+No downloads, commit or push.
+
 ## Explicit C++ protocol names (2026-09-15)
 
 Removed wire, orbit and probe namespace aliases from 12 handwritten C++ service, test and probe files.
@@ -40,7 +54,7 @@ Debug and Release each passed 10 CTests, 6 RPC cases and 13 process cases. Both 
 protocol checks, Python harnesses and 53 Admin tests passed. Sanitizer caches were reconfigured, not rerun.
 No downloads, third-party rebuild, indefinite test, commit or push. Details: [Astra migration](astra-migration.md).
 Historical paths in entries below refer to the source directory before this move.
-## SyncStore line review and bounded performance comparison (2026-09-15)
+## Store line review and bounded performance comparison (2026-09-15)
 
 Applied the maintainer's binary-search/reserve idea, Ranges member projection, lock-external record preparation,
 checked capacity and clearer storage ownership comments. Fixed the max-expiry sentinel regression and removed
@@ -105,7 +119,7 @@ Maintain this file with the work it describes:
 - Do not use this file as a raw chat transcript.
 - Never state that uncommitted work exists in Git history or on GitHub.
 
-## 2. Current Snapshot
+## 2. Current Store::Snapshot
 
 Last updated: 2026-09-12
 
@@ -786,7 +800,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   pause it only after a user stop or a concrete unresolved external blocker.
 - Second attempt completed 7205.739 seconds / 833 fault cycles and entered steady
   operation at 2026-09-12 14:32:51.079 Asia/Shanghai. All three recovery checks
-  counted 833 completions. Snapshot evidence is
+  counted 833 completions. Store::Snapshot evidence is
   `testkit/results/peer-cpp-endurance-fault-20260912-r2.json`; binary hashes match
   maintenance qualification. All 25 steady process PIDs match their baseline.
   The final user stop completed at 2026-09-12 16:30:17.775 Asia/Shanghai.
@@ -2257,7 +2271,7 @@ Accepted engineering qualification gates, not maintainer decision blockers:
   Candidate/Selection handles, token-fenced Editors, and delayed read-only
   slice wrappers on top of the existing Selector operation gate, synchronized
   view, field-granular overlay, and remote reconciliation.
-- Preserved `One`, `Any`, `Find`, and `Snapshot` as the detached safe surface.
+- Preserved `One`, `Any`, `Find`, and `Store::Snapshot` as the detached safe surface.
   The new path builds no complete legacy Candidate slice, returns no detached
   result, and encodes only edited final selections. Unselected edits and every
   callback/context/foreign/duplicate/encoding/shape/limit failure roll back
@@ -3397,7 +3411,7 @@ by the 2026-08-28 single-slot Fields mailbox entry above.
   the timer remains due.
 - Kept every Selector at one persistent listener/state-machine worker and at
   most one temporary full-sync/targeted-repair worker. Targeted repair now marks
-  the public view unavailable immediately. Raw and typed Snapshot, Find,
+  the public view unavailable immediately. Raw and typed Store::Snapshot, Find,
   FindRetained, One, and Any return explicit `unavailable` while half-synchronized.
 - Added deterministic queue merge/order/no-op regressions, Update-versus-Renew
   timing coverage, raw/typed half-sync gates, and numeric runtime topology
@@ -3727,7 +3741,7 @@ by the 2026-08-28 single-slot Fields mailbox entry above.
   Mirror. Complete Values are deterministically diffed and split under the same
   field/byte limits as Go, and each changed call waits for local observation of
   its final Redis revision.
-- Cached each decoded revision as `Arc<T>`. Repeated Snapshot and floor-only
+- Cached each decoded revision as `Arc<T>`. Repeated Store::Snapshot and floor-only
   Compact reuse the same allocation; deleted/absent state is `None`, while a
   live empty external type remains `Some(Arc<T>)`.
 - The multi-Mirror live test exposed blocking `XREAD` head-of-line blocking on
@@ -4002,7 +4016,7 @@ by the 2026-08-28 single-slot Fields mailbox entry above.
 - Added same-revision `HMGET @revision @timestamp` reconciliation so active or
   retained content avoids `HGETALL`; changed revisions still fetch and validate
   complete records under the subscribed PING/PONG proof.
-- Added Go generic typed Registration/Selector/Snapshot/retained APIs plus
+- Added Go generic typed Registration/Selector/Store::Snapshot/retained APIs plus
   deterministic `verdandi-codegen` output for tagged flat primitive/byte
   structs. Generated codecs use canonical big-endian/scalar bytes, one shared
   capacity-limited output slab, defensive cloning, and no reflection on encode

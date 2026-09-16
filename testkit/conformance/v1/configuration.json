@@ -104,7 +104,7 @@
       "valid": false,
       "code": "invalid",
       "field": "redis.mode",
-      "document": { "version": "v1", "redis": { "mode": "cluster", "addresses": ["127.0.0.1:6379"] } }
+      "document": { "version": "v1", "redis": { "mode": "galaxy", "addresses": ["127.0.0.1:6379"] } }
     },
     {
       "name": "zero-command-timeout-is-not-default",

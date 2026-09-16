@@ -59,7 +59,7 @@ gRPC 使用完整服务/方法名路由. `message-ids.lock` 是原自定义帧�
 本轮仅重新编译受协议和 C++ 命名变更影响的项目目标. 不下载、不重编第三方依赖.
 没有无限时测试、后台耐久任务或自动 commit/push.
 
-当前仍是连接骨架和内部 SyncStore. SyncTransport 未注册, Comet SDK 未实现, Planet 业务推进继续暂停.
+当前仍是连接骨架和内部 Store. SyncTransport 未注册, Comet SDK 未实现, Planet 业务推进继续暂停.
 
 ## 首次迁移验证结果
 

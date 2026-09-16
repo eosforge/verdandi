@@ -55,7 +55,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) (result error) {
 	defer starListener.Close()
 	lifetime, cancel := context.WithCancel(ctx)
 	defer cancel()
-	registration := &admission.Server{Cluster: cfg.Cluster, Authority: authority, Store: store, MaximumConnections: cfg.MaxConnections, Logger: logger}
+	registration := &admission.Server{Galaxy: cfg.Galaxy, Authority: authority, Store: store, MaximumConnections: cfg.MaxConnections, Logger: logger}
 	results := make(chan error, 2)
 	go func() { results <- registration.Serve(lifetime, starListener) }()
 	go func() { results <- serve(lifetime, cfg, logger, listener, management.Handler()) }()

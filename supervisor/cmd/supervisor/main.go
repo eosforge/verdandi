@@ -44,7 +44,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	flags.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout, "graceful shutdown timeout (0, 1m]")
 	flags.IntVar(&cfg.MaxConnections, "max-connections", cfg.MaxConnections, "maximum accepted HTTP connections [1, 65536]")
 	flags.StringVar(&cfg.StarListen, "star-listen", "", "registration gRPC/TLS IP:PORT; empty means management only")
-	flags.StringVar(&cfg.Cluster, "cluster", "", "authorized registration cluster")
+	flags.StringVar(&cfg.Galaxy, "galaxy", "", "authorized registration cluster")
 	flags.StringVar(&cfg.Identity, "identity", "", "directory containing TLS identity, signing key and accounts.json")
 	flags.StringVar(&cfg.Members, "members", "", "persistent member database file")
 	flags.IntVar(&cfg.MaxMembers, "max-members", cfg.MaxMembers, "maximum registered stars in the cluster [1, 4096]")

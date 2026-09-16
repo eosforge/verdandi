@@ -300,7 +300,7 @@ reads within that callback. `Mutate` encodes a complete replacement Data and
 updates the native local prediction transaction without Redis I/O. A successful
 non-empty `One`/`Any` commits staged predictions and returns fully detached
 candidates. Empty selection, callback error or exception, invalid Choice, and
-native failure roll back. `Snapshot()` is the explicit O(N) detached active and
+native failure roll back. `Store::Snapshot()` is the explicit O(N) detached active and
 retained view.
 
 The managed binding adds no Selector task. The C++ core still owns one

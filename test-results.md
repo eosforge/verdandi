@@ -1947,7 +1947,7 @@ one independent 256-entry queue, one long-lived synchronization worker/task,
 one desired/confirmed state, and one renewal timer. Consecutive Updates coalesce
 in that Registration's admission order. Every Selector keeps one persistent
 listener/state-machine worker and at most one temporary synchronization/repair
-worker. Public active, retained, Snapshot, Find, One, and Any APIs return
+worker. Public active, retained, Store::Snapshot, Find, One, and Any APIs return
 explicit `unavailable` while the view is half-synchronized.
 
 Current-source gates passed before the formal two-hour run:

@@ -61,7 +61,7 @@ target_include_directories(star_planet PUBLIC planet/src)
 target_link_libraries(star_planet PUBLIC star_core)
 
 # 存储工具和分配失败测试不链接 gRPC, 也可在 core-only 模式独立编译.
-add_library(star_sync_store STATIC common/src/sync_store.cpp)
+add_library(star_sync_store STATIC common/src/store.cpp)
 target_include_directories(star_sync_store PUBLIC common/src common/include)
 target_link_libraries(star_sync_store PUBLIC star_options Threads::Threads)
 
@@ -79,11 +79,19 @@ if(BUILD_TESTING)
         --compiler "${CMAKE_CXX_COMPILER}" --probe "$<TARGET_FILE:star_contracts_probe>"
         --semantic "${ASTRA_CONTRACT_SEMANTIC}" --temporary-root "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(cpp_language PROPERTIES TIMEOUT 180)
-    foreach(suite IN ITEMS sync_store sync_store_fault)
+    foreach(suite IN ITEMS store store_fault)
         add_executable("star_${suite}_test" "common/tests/${suite}_test.cpp")
         target_link_libraries("star_${suite}_test" PRIVATE star_sync_store)
         add_test(NAME "cpp_${suite}" COMMAND "star_${suite}_test")
         set_tests_properties("cpp_${suite}" PROPERTIES TIMEOUT 30)
+    endforeach()
+    # 时间轮是独立头文件工具, 不链接服务或存储; Release 和 sanitizer 使用相同断言与测试入口.
+    foreach(suite IN ITEMS wheel wheel_allocation)
+        add_executable("star_${suite}_test" "common/tests/${suite}_test.cpp")
+        target_include_directories("star_${suite}_test" PRIVATE common/src)
+        target_link_libraries("star_${suite}_test" PRIVATE star_options)
+        add_test(NAME "cpp_${suite}" COMMAND "star_${suite}_test")
+        set_tests_properties("cpp_${suite}" PROPERTIES TIMEOUT 60)
     endforeach()
 endif()
 
@@ -155,7 +163,7 @@ add_executable(planet planet/src/main.cpp)
 target_link_libraries(planet PRIVATE star_planet star_runtime)
 if(ASTRA_BUILD_BENCHMARKS)
     # 存储微基准独立链接内部模块, 不启动网络服务或读取业务配置.
-    add_executable(star_sync_store_bench bench/sync_store.cpp)
+    add_executable(star_sync_store_bench bench/store.cpp)
     target_link_libraries(star_sync_store_bench PRIVATE star_sync_store)
     add_library(star_bench_wire STATIC bench/generated/probe.pb.cc bench/generated/probe.grpc.pb.cc)
     target_include_directories(star_bench_wire SYSTEM PUBLIC bench/generated)

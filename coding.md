@@ -1,5 +1,8 @@
 # Astra Coding and Comment Standard
 
+Before running tests or test prerequisite builds, obtain explicit user approval for the current scope as required by [AGENTS.md](AGENTS.md).
+Implementation, static review and required source formatting do not authorize automatic testing.
+
 ## 1. Scope and Source of Truth
 
 The C++26 Star/Planet replacement is specified in

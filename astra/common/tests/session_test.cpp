@@ -12,11 +12,11 @@ using namespace astra;
 // 测试专用凭据使用仓库公开私钥, 不读取开发者部署身份.
 std::shared_ptr<proto::astra::v1::Hello> hello(const Identity& identity) {
     proto::orbit::v1::Member member;
-    member.set_cluster_id("alpha");
+    member.set_galaxy("alpha");
     member.set_group("default");
     member.set_id("00000001000040008000000000000000");
     member.set_advertise("127.0.0.1:7443");
-    member.set_principal(identity.principal(member.cluster_id(), member.advertise()).text());
+    member.set_principal(identity.principal(member.galaxy(), member.advertise()).text());
     member.set_epoch(1);
     member.set_role(proto::orbit::v1::ROLE_STAR);
     auto result = std::make_shared<proto::astra::v1::Hello>();
@@ -37,11 +37,11 @@ struct RecordingPolicy final : Policy {
         ++installations;
         return std::vector<SessionGeneration>{};
     }
-    void closed(SessionGeneration, std::optional<ErrorCode>, Clock::time_point) override {}
+    void closed(SessionGeneration, std::optional<Error::Code>, Clock::time_point) override {}
     std::optional<Member> due(Clock::time_point) override {
         return {};
     }
-    void failed(const Member&, ErrorCode, Clock::time_point) override {}
+    void failed(const Member&, Error::Code, Clock::time_point) override {}
     bool needs_refresh(Clock::time_point) override {
         return false;
     }
@@ -91,7 +91,7 @@ struct ControlledSession final : RpcSession {
     void request_cancel(bool force) override {
         forced += force;
     }
-    void finish_call(ErrorCode) override {
+    void finish_call(Error::Code) override {
         ++finishes;
         if (finish_immediately) {
             complete();
@@ -148,7 +148,7 @@ private:
         CHECK(!writing_.exchange(true));
     }
     void request_cancel(bool) override {}
-    void finish_call(ErrorCode) override {}
+    void finish_call(Error::Code) override {}
     std::atomic<proto::astra::v1::SessionPacket*> reading_{};
     std::atomic_bool writing_{};
     std::atomic_uint delivered_{};
@@ -180,13 +180,13 @@ int main() {
         };
         {
             ControlledSession session(config, Direction::inbound, {1}, greeting, std::nullopt, [] {});
-            session.cancel(ErrorCode::timeout);
-            session.cancel(ErrorCode::identity);
-            CHECK(session.error() == ErrorCode::timeout);
+            session.cancel(Error::Code::timeout);
+            session.cancel(Error::Code::identity);
+            CHECK(session.error() == Error::Code::timeout);
             session.pump(policy, **identity, now);
             CHECK(session.done() && session.calls == 0 && session.reads == 0 && session.writes == 0 && session.finishes == 1);
             session.cancel();
-            CHECK(session.error() == ErrorCode::timeout);
+            CHECK(session.error() == Error::Code::timeout);
         }
         {
             ControlledSession session(config, Direction::inbound, {2}, greeting, std::nullopt, [] {});
@@ -201,7 +201,7 @@ int main() {
             // 正确 Pong 恰好落在原截止上仍超时, 不允许陈旧响应刷新期限.
             session.deliver(ping(id, true));
             session.pump(policy, **identity, now + Milliseconds(70));
-            CHECK(session.done() && session.error() == ErrorCode::timeout);
+            CHECK(session.done() && session.error() == Error::Code::timeout);
         }
         {
             ControlledSession session(config, Direction::inbound, {3}, greeting, std::nullopt, [] {});
@@ -211,7 +211,7 @@ int main() {
                 session.deliver(ping(id));
                 session.pump(policy, **identity, now + Milliseconds(1));
             }
-            CHECK(session.error() == ErrorCode::capacity && !session.done());
+            CHECK(session.error() == Error::Code::capacity && !session.done());
             const auto writes = session.writes;
             session.acknowledge();
             session.pump(policy, **identity, now + Milliseconds(2));
@@ -223,7 +223,7 @@ int main() {
             session.deliver(ping(1));
             session.pump(policy, **identity, now + Milliseconds(1));
             session.pump(policy, **identity, now + Milliseconds(51));
-            CHECK(session.error() == ErrorCode::timeout);
+            CHECK(session.error() == Error::Code::timeout);
             session.pump(policy, **identity, Clock::now() + Milliseconds(300));
             CHECK(session.forced == 1);
             session.acknowledge();
@@ -241,7 +241,7 @@ int main() {
             session.deliver(ping(1));
             session.pump(policy, **identity, now + Milliseconds(1));
             session.pump(policy, **identity, now + Milliseconds(51));
-            CHECK(session.error() == ErrorCode::timeout && session.writes == 0);
+            CHECK(session.error() == Error::Code::timeout && session.writes == 0);
             session.acknowledge_metadata();
             session.pump(policy, **identity, now + Milliseconds(52));
             CHECK(session.done());
@@ -253,7 +253,7 @@ int main() {
             session.pump(policy, **identity, now);
             CHECK(session.calls == 0 && session.writes == 0);
             session.pump(policy, **identity, Clock::now() + config.connect_timeout);
-            CHECK(session.done() && session.error() == ErrorCode::timeout && session.calls == 1 && session.writes == 0);
+            CHECK(session.done() && session.error() == Error::Code::timeout && session.calls == 1 && session.writes == 0);
         }
         CHECK(policy.installations == 4);
         {

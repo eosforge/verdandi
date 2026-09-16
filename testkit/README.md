@@ -11,7 +11,7 @@ bash scripts/test-services.sh
 Windows 使用 `scripts/check-services.ps1 -Service supervisor` 验证 Go; C++26 当前仅支持 Linux / GCC 16.2.
 独立配置检查见 [C++ 服务说明](../astra/README.md).
 
-当前覆盖准入、TLS/RPC、拓扑、故障恢复和内部 SyncStore, 不代表已经实现 Catalog/Registry 业务服务或新 SDK.
+当前覆盖准入、TLS/RPC、拓扑、故障恢复和内部 Store, 不代表已经实现 Catalog/Registry 业务服务或新 SDK.
 Planet 仅维持现有连接回归, 业务推进暂停. 已退休 Rust 服务不参与当前测试.
 
 [Verdandi SDK 测试文档](legacy-sdk.md)、Redis 场景、`transport/` 旧实验和历史 `results/` 保留原样.

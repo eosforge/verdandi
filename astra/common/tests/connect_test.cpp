@@ -42,7 +42,7 @@ struct Socket {
 
 void blocked(const std::shared_ptr<Identity>& identity, std::string address, bool cancel) {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     config.advertise = *Endpoint::parse("127.0.0.1:7443");
     config.supervisor = std::move(address);
     config.connect_timeout = Milliseconds(300);
@@ -55,7 +55,7 @@ void blocked(const std::shared_ptr<Identity>& identity, std::string address, boo
             client.cancel();
         }
         if (auto result = client.poll()) {
-            CHECK(!*result && result->error().code == (cancel ? ErrorCode::cancelled : ErrorCode::timeout));
+            CHECK(!*result && result->error().code == (cancel ? Error::Code::cancelled : Error::Code::timeout));
             CHECK(!client.pending());
             return;
         }

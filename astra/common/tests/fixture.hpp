@@ -17,7 +17,7 @@ inline std::string read(const std::filesystem::path& path) {
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
-inline std::string sign(std::string_view payload, std::string_view domain = admission_signature_domain) {
+inline std::string sign(std::string_view value, std::string_view domain = admission_signature_domain) {
     const auto pem = read(std::filesystem::path(ASTRA_FIXTURES) / "supervisor/admission.key");
     bssl::UniquePtr<BIO> input(BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())));
     bssl::UniquePtr<EVP_PKEY> key(input ? PEM_read_bio_PrivateKey(input.get(), nullptr, nullptr, nullptr) : nullptr);
@@ -28,7 +28,7 @@ inline std::string sign(std::string_view payload, std::string_view domain = admi
         throw std::runtime_error("Invalid public signing fixture");
     }
     ED25519_keypair_from_seed(pub.data(), secret.data(), seed.data());
-    const auto bytes = std::string(domain) + '\0' + std::string(payload);
+    const auto bytes = std::string(domain) + '\0' + std::string(value);
     std::string signature(64, '\0');
     if (ED25519_sign(reinterpret_cast<std::uint8_t*>(signature.data()), reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size(), secret.data()) !=
         1) {

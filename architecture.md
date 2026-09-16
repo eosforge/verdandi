@@ -132,7 +132,7 @@ synchronization; reconnect does not accumulate generation readers.
 
 The public view is usable only after the current generation crosses its
 subscribe/scan/PING or targeted-repair fence. During initial sync, reconnect,
-or repair, Snapshot, Find, FindRetained, One, and Any return explicit
+or repair, Store::Snapshot, Find, FindRetained, One, and Any return explicit
 `unavailable`; private last-known and retained state may still be used only to
 build the next candidate view.
 
@@ -149,7 +149,7 @@ values. Redis publication continues through the owning Registration; selection
 itself performs no Redis I/O.
 
 SDK `0.1.0` deliberately evaluates injected `One`/`Any` policy by scanning the
-borrowed candidate view in O(N). A detached complete Snapshot is an explicit
+borrowed candidate view in O(N). A detached complete Store::Snapshot is an explicit
 heavy operation and copies O(N) records; callers requesting it accept that
 time and memory cost.
 

@@ -24,8 +24,8 @@ type Config struct {
 	MaxConnections int
 	// StarListen 默认空, 仅管理模式; 启用登记时设置 IP:PORT, 测试允许端口零.
 	StarListen string
-	// Cluster 启用登记时必填, 使用共享的群组名称约束.
-	Cluster string
+	// Galaxy 启用登记时必填, 使用共享的群组名称约束.
+	Galaxy string
 	// Identity 是包含部署证书和准入签名密钥的项目配置目录, 启用登记时必填.
 	Identity string
 	// Members 是成员数据库文件路径, 启用登记时必填, 不隐式选择全局目录.
@@ -57,14 +57,14 @@ func (c Config) Validate() error {
 	}
 	// 管理模式保持独立. 部分填写登记配置属于错误, 不能悄悄忽略安全配置.
 	if c.StarListen == "" {
-		if c.Cluster != "" || c.Identity != "" || c.Members != "" {
+		if c.Galaxy != "" || c.Identity != "" || c.Members != "" {
 			return fmt.Errorf("star-listen is required for registration configuration")
 		}
 	} else {
 		if _, err := netip.ParseAddrPort(c.StarListen); err != nil {
 			return fmt.Errorf("star-listen: expected IP:PORT")
 		}
-		if !membership.Name(c.Cluster) || c.Identity == "" || c.Members == "" {
+		if !membership.Name(c.Galaxy) || c.Identity == "" || c.Members == "" {
 			return fmt.Errorf("cluster, identity and members are required for registration")
 		}
 	}

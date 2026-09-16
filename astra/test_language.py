@@ -18,10 +18,10 @@ def compile_metadata(compiler, directory):
     """只改临时副本, 以真实配置翻译单元验证编译期拒绝, 不复制描述检查算法."""
     original = (SOURCE / "common/src/options.hpp").read_text(encoding="utf-8")
     (directory / "config.cpp").write_text((SOURCE / "common/src/config.cpp").read_text(encoding="utf-8"), encoding="utf-8")
-    cluster = '[[=Option{"cluster", "Galaxy identifier: 1..64 safe ASCII bytes", 0, 0, true}]]'
+    cluster = '[[=Option{"galaxy", "Galaxy identifier: 1..64 safe ASCII bytes", 0, 0, true}]]'
     cases = [
         ("valid_metadata", None, None, None),
-        ("duplicate_name", 'Option{"listen",', 'Option{"cluster",', "static assertion failed"),
+        ("duplicate_name", 'Option{"listen",', 'Option{"galaxy",', "static assertion failed"),
         ("missing_annotation", cluster, "", "Each CLI field requires exactly one annotation"),
         ("empty_description", '"Preferred connection group; 1..64 safe ASCII bytes"', '""', "static assertion failed"),
         (
@@ -32,7 +32,7 @@ def compile_metadata(compiler, directory):
         ),
         ("invalid_default", "std::uint64_t maximum = 64;", "std::uint64_t maximum = 0;", "static assertion failed"),
         ("unsupported_type", 'std::string identity = "identity";', 'std::string_view identity = "identity";', "no matching function"),
-        ("annotation_capacity", 'Option{"cluster",', 'Option{"' + "c" * 48 + '",', "CLI annotation text exceeds its compile-time capacity"),
+        ("annotation_capacity", 'Option{"galaxy",', 'Option{"' + "c" * 48 + '",', "CLI annotation text exceeds its compile-time capacity"),
     ]
     passed = []
     env = dict(os.environ, LC_ALL="C")

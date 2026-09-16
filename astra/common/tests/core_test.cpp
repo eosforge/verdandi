@@ -15,7 +15,7 @@ using namespace astra;
 
 Member member(unsigned n, Role role = Role::star, std::uint64_t epoch = 1) {
     Member result;
-    result.cluster = "alpha";
+    result.galaxy = "alpha";
     result.group = "default";
     result.id = "issued/" + std::to_string(1000 + n);
     result.principal.bytes[0] = static_cast<std::uint8_t>(n);
@@ -26,45 +26,45 @@ Member member(unsigned n, Role role = Role::star, std::uint64_t epoch = 1) {
 }
 
 void configuration() {
-    const std::array<std::string_view, 3> args{"--cluster=alpha", "--listen=127.0.0.1:7443", "--super=localhost:7444"};
-    auto parsed = parse_options(args, Role::star);
+    const std::array<std::string_view, 3> args{"--galaxy=alpha", "--listen=127.0.0.1:7443", "--super=localhost:7444"};
+    auto parsed = Config::parse(args, Role::star);
     CHECK(parsed);
     CHECK(parsed->max_members == 64);
     CHECK(parsed->max_inbound == 128);
     CHECK(parsed->heartbeat_interval == Milliseconds(10000));
     CHECK(parsed->identity == "identity");
-    CHECK(option_help(Role::planet).contains("Usage: planet"));
-    CHECK(option_help(Role::star).contains("default=5000"));
+    CHECK(Config::help(Role::planet).contains("Usage: planet"));
+    CHECK(Config::help(Role::star).contains("default=5000"));
     for (const auto bad : {"--max-members=0", "--max-members=4097", "--max-members=1x", "--max-members=18446744073709551616", "--max-members=-1",
-                           "--cluster=beta", "--worker-threads=2", "--role=star", "--identity=", "--pong-timeout-ms=0", "--shutdown-timeout-seconds=61"}) {
+                           "--galaxy=beta", "--worker-threads=2", "--role=star", "--identity=", "--pong-timeout-ms=0", "--shutdown-timeout-seconds=61"}) {
         std::vector<std::string_view> values(args.begin(), args.end());
         values.push_back(bad);
-        CHECK(!parse_options(values, Role::star));
+        CHECK(!Config::parse(values, Role::star));
     }
-    const std::array<std::string_view, 8> separated{"--cluster", "alpha",          "--listen",    "0.0.0.0:7443",
+    const std::array<std::string_view, 8> separated{"--galaxy", "alpha",          "--listen",    "0.0.0.0:7443",
                                                     "--super",   "localhost:7444", "--advertise", "127.0.0.1:7443"};
-    CHECK(parse_options(separated, Role::planet));
-    CHECK(!parse_options(std::span(separated).first<6>(), Role::planet));
-    CHECK(!parse_options({}, Role::star));
+    CHECK(Config::parse(separated, Role::planet));
+    CHECK(!Config::parse(std::span(separated).first<6>(), Role::planet));
+    CHECK(!Config::parse({}, Role::star));
     CHECK(!Endpoint::parse("127.000.0.1:7443"));
     CHECK(!Endpoint::parse("[::ffff:127.0.0.1]:7443"));
     CHECK(!Endpoint::parse("[fe80::1%2]:7443"));
     CHECK(!Endpoint::parse("224.0.0.1:7443"));
     CHECK(!Endpoint::parse("0.0.0.0:7443"));
-    CHECK(!supervisor_address("0.0.0.0:7443"));
-    CHECK(!supervisor_address("224.0.0.1:7443"));
+    CHECK(!Config::format_supervisor("0.0.0.0:7443"));
+    CHECK(!Config::format_supervisor("224.0.0.1:7443"));
     CHECK(Endpoint::parse("0.0.0.0:0", true));
     CHECK(Endpoint::parse("[2001:0DB8:0:0:0:0:0:1]:7443")->text() == "[2001:db8::1]:7443");
-    CHECK(valid_id("short"));
-    CHECK(valid_id(member(1).id));
-    CHECK(!valid_id(Id{}));
-    CHECK(!valid_name("alpha/beta"));
-    CHECK(!valid_name(std::string(65, 'a')));
+    CHECK(Member::valid_id("short"));
+    CHECK(Member::valid_id(member(1).id));
+    CHECK(!Member::valid_id(Id{}));
+    CHECK(!Member::valid_name("alpha/beta"));
+    CHECK(!Member::valid_name(std::string(65, 'a')));
 }
 
 void stars() {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     config.max_members = 3;
     StarTopology topology(config);
     const auto a = member(1), b = member(2);
@@ -99,7 +99,7 @@ void stars() {
 
 void single_dial_ownership() {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     StarTopology topology(config);
     const auto a = member(1), b = member(2), c = member(3);
     const auto now = Clock::now();
@@ -108,7 +108,7 @@ void single_dial_ownership() {
     const auto first = topology.due(now), second = topology.due(now);
     CHECK(first && second && *first != *second);
     CHECK(!topology.due(now));
-    topology.failed(*first, ErrorCode::transport, now);
+    topology.failed(*first, Error::Code::transport, now);
     CHECK(!topology.due(now));
     const auto retry = topology.due(now + config.reconnect_max);
     CHECK(retry == first && !topology.due(now + config.reconnect_max));
@@ -120,7 +120,7 @@ void single_dial_ownership() {
     CHECK(topology.accept(restarted, Direction::inbound, {20}, std::nullopt));
     const auto replacement = topology.due(now + config.reconnect_max);
     CHECK(replacement && *replacement == restarted);
-    topology.failed(*first, ErrorCode::transport, now);
+    topology.failed(*first, Error::Code::transport, now);
     CHECK(!topology.due(now + config.reconnect_max));
     CHECK(topology.accept(restarted, Direction::outbound, {21}, replacement));
     CHECK(topology.status().outbound == 1);
@@ -141,7 +141,7 @@ void principal_encoding() {
 
 void planets() {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     config.role = Role::planet;
     PlanetUpstream upstream(config);
     const auto local = member(9, Role::planet), a = member(1);
@@ -153,7 +153,7 @@ void planets() {
     auto first = upstream.due(now);
     CHECK(first && *first == a);
     CHECK(!upstream.due(now));
-    upstream.failed(*first, ErrorCode::transport, now);
+    upstream.failed(*first, Error::Code::transport, now);
     auto fallback = upstream.due(now);
     CHECK(fallback && *fallback == b);
     auto restarted = b;
@@ -165,12 +165,12 @@ void planets() {
     CHECK(!upstream.needs_refresh(now));
     upstream.closed({9}, {}, now);
     CHECK(upstream.status().active_member);
-    upstream.closed({10}, ErrorCode::transport, now);
+    upstream.closed({10}, Error::Code::transport, now);
     CHECK(!upstream.status().active_member);
     CHECK(upstream.initialize(local, list));
     auto again = upstream.due(now + std::chrono::seconds(6));
     CHECK(again);
-    upstream.failed(*again, ErrorCode::identity, now);
+    upstream.failed(*again, Error::Code::identity, now);
     CHECK(upstream.initialize(local, list));
     auto other = upstream.due(now + std::chrono::seconds(6));
     CHECK(other && other->principal != again->principal);
@@ -180,7 +180,7 @@ void planets() {
 
 void atomic_lists_and_capacity() {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     config.max_members = 2;
     const auto a = member(1), b = member(2);
     StarTopology star(config);
@@ -235,7 +235,7 @@ void atomic_lists_and_capacity() {
 
 void concurrent_snapshots() {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     const auto a = member(1), b = member(2);
     StarTopology topology(config);
     const std::array list{a, b};
@@ -262,7 +262,7 @@ void concurrent_snapshots() {
 
 void candidate_group_changes() {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     config.role = Role::planet;
     PlanetUpstream planet(config);
     auto a = member(1), b = member(2);
@@ -276,14 +276,14 @@ void candidate_group_changes() {
     a.id += "/restart";
     a.group = "remote";
     CHECK(planet.accept(a, Direction::outbound, {1}, *first));
-    planet.closed({1}, ErrorCode::transport, now);
+    planet.closed({1}, Error::Code::transport, now);
     auto second = planet.due(now);
     CHECK(second && *second == b);
     b.epoch = {2};
     b.id += "/restart";
     b.group = "default";
     CHECK(planet.accept(b, Direction::outbound, {2}, *second));
-    planet.closed({2}, ErrorCode::transport, now);
+    planet.closed({2}, Error::Code::transport, now);
     // 不依赖 Supervisor 刷新, 下一轮仍优先当前的同组 Star, 而不是原名单中排第一的 Star.
     const auto preferred = planet.due(now + std::chrono::seconds(6));
     CHECK(preferred && *preferred == b);
@@ -291,7 +291,7 @@ void candidate_group_changes() {
 
 void salted_candidate_selection() {
     Config config;
-    config.cluster = "alpha";
+    config.galaxy = "alpha";
     config.role = Role::planet;
     std::vector<Member> choices;
     for (unsigned i = 1; i <= 8; ++i) {

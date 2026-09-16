@@ -40,7 +40,7 @@ func TestSharedCppGoAdmissionVectors(t *testing.T) {
 		IDs        []validation `json:"ids"`
 		Principals []struct {
 			Username string `json:"username"`
-			Cluster  string `json:"cluster"`
+			Galaxy  string `json:"galaxy"`
 			Address  string `json:"address"`
 			SHA256   string `json:"sha256"`
 		} `json:"principals"`
@@ -66,7 +66,7 @@ func TestSharedCppGoAdmissionVectors(t *testing.T) {
 		}
 	}
 	for _, entry := range vectors.Principals {
-		if endpointPrincipal(entry.Username, entry.Cluster, entry.Address) != entry.SHA256 {
+		if endpointPrincipal(entry.Username, entry.Galaxy, entry.Address) != entry.SHA256 {
 			t.Fatal("endpoint principal encoding changed")
 		}
 	}

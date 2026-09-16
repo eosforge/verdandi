@@ -1,7 +1,7 @@
-# SyncStore 逐行审核与性能整理
+# Store 逐行审核与性能整理
 
 基线为 `aadcbb4`, 包含维护者新增的二分定位和预分配提案. 本轮审核范围是
-`sync_store.hpp/.cpp`、两个存储测试文件及新增存储微基准, 不表示重新逐行审核整个仓库.
+`store.hpp/.cpp`、两个存储测试文件及新增存储微基准, 不表示重新逐行审核整个仓库.
 修改保留在工作区, 未提交或推送. 结构化结果见
 [测试与微基准数据](../testkit/results/store-performance-review-20260915.json).
 
@@ -12,28 +12,28 @@
   保留实测表现更稳妥的迭代器 `insert`, 不强行使用 `append_range`.
 - 将 `put` 中可以提前完成的 Key 复制和记录数组分配移到锁外, 锁内只补上提交序号.
 - `emplace_back` 直接构造聚合记录, 避免为了追加记录再显式创建临时对象.
-- 去掉 `StoreEntry::deleted`, 由空 `payload` 表达可复用的删除节点.
-  空载荷指针与合法的零字节载荷不同, 对外 `DeltaRecord::deleted` 继续保留.
+- 去掉 `Entry::deleted`, 由空 `payload` 表达可复用的删除节点.
+  空载荷指针与合法的零字节载荷不同, 对外 `Store::Delta::deleted` 继续保留.
 - 保留节点版本, 用于防止旧删除记录淘汰时提前回收新近删除的可复用节点.
   版本不是新增业务代次, 不承担 Catalog CAS 或跨 Star 身份判断.
-- 修复 `evict_expired(max())` 误删永不过期数据的问题.
-- 明确 `current_version` 是完整结果的确认屏障, 完整应用之前不能提前推进游标.
+- 修复 `sweep(max())` 误删永不过期数据的问题.
+- 明确 `version` 是完整结果的确认屏障, 完整应用之前不能提前推进游标.
 
 ## 逐函数审核
 
 | 位置 | 审核结论与处理 |
 | --- | --- |
-| `DeltaRecord` / `SyncResult` / `Snapshot` | Key 和返回容器独立拥有; 只共享不可变 payload. 补齐每个字段的语义和生命周期注释. |
+| `Store::Delta` / `Store::Extraction` / `Store::Snapshot` | Key 和返回容器独立拥有; 只共享不可变 payload. 补齐每个字段的语义和生命周期注释. |
 | 构造函数 | 容量限制完整批次数, 0 容量有效, 不是字节预算. 未引入动态配置或新计数状态. |
 | `put` | 在锁外准备可提前执行的分配. 锁内新节点仍有失败回滚; 历史追加成功后才发布值与版本. |
 | `remove` | 不存在或空节点时不推进版本; 删除指令先分配后提交. 复用节点避免反复分配长 Key 与 Map 节点. |
-| `evict_expired` | 先收集完整批次, 再提交. 有限截止才能到期, max 哨兵始终跳过. 未增加堆索引或额外时钟状态. |
-| `global_version` | 与 Map/历史共用一把锁, 不引入可能与当前状态不同步的 atomic 计数器. |
-| `get_snapshot` | 同版本复用同一快照, 新快照完整构建后才替换缓存. 分配失败不破坏已发布快照. |
-| `create_snapshot_locked` | 一次扫描有效值, Map 节点和 Key 仍需分配. 未把 shared_ptr 误称为整个快照零拷贝. |
-| `extract_since` | 严格排除游标本身, 整批返回. 历史不足、未来游标及当前版本快路径保留. 记录求和防溢出. |
-| `next_version_locked` | 耗尽显式失败, 不允许回绕破坏历史排序. 此极限分支仅作静态检查, 未声称已动态覆盖. |
-| `trim_history_locked` | 只淘汰完整批次; 有效重建值不能删除, 新近删除的节点继续按版本保留复用机会. |
+| `sweep` | 先收集完整批次, 再提交. 有限截止才能到期, max 哨兵始终跳过. 未增加堆索引或额外时钟状态. |
+| `version` | 与 Map/历史共用一把锁, 不引入可能与当前状态不同步的 atomic 计数器. |
+| `snapshot` | 同版本复用同一快照, 新快照完整构建后才替换缓存. 分配失败不破坏已发布快照. |
+| `dump` | 一次扫描有效值, Map 节点和 Key 仍需分配. 未把 shared_ptr 误称为整个快照零拷贝. |
+| `extract` | 严格排除游标本身, 整批返回. 历史不足、未来游标及当前版本快路径保留. 记录求和防溢出. |
+| `advance` | 耗尽显式失败, 不允许回绕破坏历史排序. 此极限分支仅作静态检查, 未声称已动态覆盖. |
+| `trim` | 只淘汰完整批次; 有效重建值不能删除, 新近删除的节点继续按版本保留复用机会. |
 | 两个测试文件 | 增补极值、长历史、结果生命周期、重复删除/重建及查询分配失败测试; Release 断言仍有效. |
 
 成员变量、局部变量、函数参数/返回值、异常与所有权约束及关键代码块均补充中文说明,
@@ -86,7 +86,7 @@ GCC 16.2.0, C++26, `-O3 -DNDEBUG`, 开启项目原有 STL 断言和契约配置.
 - clang-format 和 diff 空白检查通过, 新增 CMake 目标 `star_sync_store_bench` 构建通过.
 - 未采集行/分支/函数覆盖率, 不将通过率当作覆盖率. 本轮没有重跑网络服务或 SDK 回归.
 
-对过期哨兵错误检索了其他 SDK、旧 Cluster 和 Supervisor 实现, 未发现对应的 `SyncStore`
+对过期哨兵错误检索了其他 SDK、旧 Cluster 和 Supervisor 实现, 未发现对应的 `Store`
 或相同租约哨兵清理逻辑. 这不是其他语言全量代码审计的替代结论.
 
 原始日志、各候选方案结果及最终源码哈希保存在 `build/store-review-20260915/`.
@@ -103,5 +103,5 @@ cmake --build build/cluster-cpp/release --target star_sync_store_bench --paralle
 build/cluster-cpp/release/star_sync_store_bench
 ```
 
-比较旧版本时应将相同 `bench/sync_store.cpp` 分别链接到对应版本的 `sync_store.cpp/.hpp`,
+比较旧版本时应将相同 `bench/store.cpp` 分别链接到对应版本的 `store.cpp/.hpp`,
 保持编译参数一致. 不把不同测试输入、未消费的结果或重建开销混入对比.

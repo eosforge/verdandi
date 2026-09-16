@@ -31,7 +31,7 @@ import (
 const fixturePassword = "verdandi-public-test-only"
 
 func fixture(role string) string {
-	return filepath.Join("..", "..", "..", "cluster", "tests", "fixtures", role)
+	return filepath.Join("..", "..", "..", "galaxy", "tests", "fixtures", role)
 }
 func testServer(t *testing.T) (*Server, string, context.CancelFunc, <-chan error) {
 	t.Helper()
@@ -48,7 +48,7 @@ func testServer(t *testing.T) (*Server, string, context.CancelFunc, <-chan error
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	server := &Server{Cluster: "alpha", Authority: authority, Store: store, MaximumConnections: 4, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	server := &Server{Galaxy: "alpha", Authority: authority, Store: store, MaximumConnections: 4, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	result, done := make(chan error, 1), make(chan struct{})
 	// race 插桩使固定 KDF 明显变慢, 本夹具使用十五秒; 真实进程回归仍调用固定五秒的 Serve.
 	go func() { result <- server.serve(ctx, listener, 15*time.Second); close(done) }()
@@ -82,7 +82,7 @@ func connect(address, role string) (*grpc.ClientConn, error) {
 func request(index int) *wire.RegistrationRequest {
 	requestID := make([]byte, 32)
 	rand.Read(requestID)
-	return &wire.RegistrationRequest{RequestId: requestID, Role: wire.Role_ROLE_STAR, Group: "default", ClusterId: "alpha",
+	return &wire.RegistrationRequest{RequestId: requestID, Role: wire.Role_ROLE_STAR, Group: "default", Galaxy: "alpha",
 		Advertise: fmt.Sprintf("127.0.0.1:%d", 12000+index)}
 }
 func exchange(address, role string, r *wire.RegistrationRequest) (proto.Message, error) {
@@ -163,7 +163,7 @@ func TestLoginAndRoleFailClosed(t *testing.T) {
 	}{
 		{"password", func(r *wire.RegistrationRequest) { r.Password = "wrong" }, codes.Unauthenticated},
 		{"unknown-account", func(r *wire.RegistrationRequest) { r.Username = "unknown" }, codes.Unauthenticated},
-		{"cluster", func(r *wire.RegistrationRequest) { r.ClusterId = "beta" }, codes.InvalidArgument},
+		{"galaxy", func(r *wire.RegistrationRequest) { r.Galaxy = "beta" }, codes.InvalidArgument},
 		{"request-id", func(r *wire.RegistrationRequest) { r.RequestId = []byte("bad") }, codes.InvalidArgument},
 		{"wildcard", func(r *wire.RegistrationRequest) { r.Advertise = "0.0.0.0:7443" }, codes.InvalidArgument},
 		{"role", func(r *wire.RegistrationRequest) { r.Role = wire.Role_ROLE_PLANET }, codes.PermissionDenied},

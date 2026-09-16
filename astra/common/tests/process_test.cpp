@@ -72,7 +72,7 @@ void bounded_log() {
     {
         Logger logger(Role::planet);
         CHECK((fcntl(STDOUT_FILENO, F_GETFL) & O_NONBLOCK) != 0);
-        logger.failure("connect_failed", ErrorCode::identity);
+        logger.failure("connect_failed", Error::Code::identity);
         const auto record = output.read();
         CHECK(record.ends_with("}\n"));
         CHECK(record.contains("\"component\":\"planet\""));

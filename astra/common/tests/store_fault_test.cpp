@@ -1,7 +1,7 @@
 // 功能: 在独立进程逐个注入分配失败, 验证状态, 历史, 快照和版本没有部分提交.
 // 此目标仅链接存储模块, 替换型 new 不进入服务或其他测试进程.
 #include "check.hpp"
-#include "sync_store.hpp"
+#include "store.hpp"
 
 #include <cstddef>
 #include <cstdlib>
@@ -117,7 +117,7 @@ std::size_t sweep(Operation operation, unsigned prefix) {
     // point 表示本次测试要失败的第几次分配, 上限只是测试防死循环预算.
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
         // store 只保留两批历史, 成功提交同时覆盖历史淘汰路径.
-        SyncStore store(2);
+        Store store(2);
         store.put(first, {1}, Clock::time_point{});
         store.put(second, {1}, Clock::time_point{});
         // i 仅推进预置提交位置, 不进入注入范围.
@@ -125,7 +125,7 @@ std::size_t sweep(Operation operation, unsigned prefix) {
             store.put("seed", {1});
         }
         // before 保存操作前快照, 既用于版本检查也用于实际数据对照.
-        const auto before = store.get_snapshot();
+        const auto before = store.snapshot();
         // failed 只接受可见的 bad_alloc, 被吞掉的异常由 injected 检查发现.
         bool failed = false;
         {
@@ -143,7 +143,7 @@ std::size_t sweep(Operation operation, unsigned prefix) {
                     store.remove(first);
                     break;
                 case Operation::expire:
-                    store.evict_expired(Clock::now());
+                    store.sweep(Clock::now());
                     break;
                 }
             } catch (const std::bad_alloc&) {
@@ -153,31 +153,31 @@ std::size_t sweep(Operation operation, unsigned prefix) {
         if (!failed) {
             CHECK(!injected);
             CHECK(failures != 0);
-            CHECK(store.global_version() == before->global_version + 1);
+            CHECK(store.version() == before->version + 1);
             return failures;
         }
         CHECK(injected);
         ++failures;
-        CHECK(store.global_version() == before->global_version);
+        CHECK(store.version() == before->version);
         // history 检查失败操作没有留下新增量或版本空洞.
-        const auto history = store.extract_since(before->global_version);
-        CHECK(!history.require_snapshot && history.deltas.empty());
-        CHECK(store.get_snapshot() == before);
+        const auto history = store.extract(before->version);
+        CHECK(!history.stale && history.deltas.empty());
+        CHECK(store.snapshot() == before);
 
         // 再成功提交一个独立标记, 强制重建快照, 防止旧缓存遮蔽版本未变但 Map 已被修改的错误.
         store.put("probe", {3});
         // after 是强制重建后的实际 Map, 不允许旧快照缓存掩盖部分写入.
-        const auto after = store.get_snapshot();
-        CHECK(after->global_version == before->global_version + 1);
+        const auto after = store.snapshot();
+        CHECK(after->version == before->version + 1);
         CHECK(after->data.size() == before->data.size() + 1);
-        // key/payload 借用旧快照, 所有原值必须在失败后的新快照中保持一致.
-        for (const auto& [key, payload] : before->data) {
+        // key/value 借用旧快照, 所有原值必须在失败后的新快照中保持一致.
+        for (const auto& [key, value] : before->data) {
             CHECK(after->data.contains(key));
-            CHECK(*after->data.at(key) == *payload);
+            CHECK(*after->data.at(key) == *value);
         }
         // delta 只能包含主动写入的 probe 标记, 不得出现失败操作的任何记录.
-        const auto delta = store.extract_since(before->global_version);
-        CHECK(!delta.require_snapshot && delta.deltas.size() == 1 && delta.deltas.front().key == "probe");
+        const auto delta = store.extract(before->version);
+        CHECK(!delta.stale && delta.deltas.size() == 1 && delta.deltas.front().key == "probe");
     }
     throw std::runtime_error("Allocation sweep did not reach a successful operation");
 }
@@ -192,10 +192,10 @@ std::size_t sweep_read(bool snapshot) {
     // point 逐个移动失败位置, 每次重新创建未缓存的新版本.
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
         // store 默认容量足以保留两个写入批次.
-        SyncStore store;
+        Store store;
         store.put(key, {1});
         // previous 在查询失败前已经交给读者, 必须始终保持第一版内容.
-        const auto previous = store.get_snapshot();
+        const auto previous = store.snapshot();
         store.put(key, {2});
         // failed 记录查询是否向调用者传播注入的异常.
         bool failed = false;
@@ -204,18 +204,18 @@ std::size_t sweep_read(bool snapshot) {
             FailureScope failure(point);
             try {
                 if (snapshot) {
-                    CHECK(store.get_snapshot()->data.at(key)->front() == 2);
+                    CHECK(store.snapshot()->data.at(key)->front() == 2);
                 } else {
-                    CHECK(store.extract_since(0).deltas.size() == 2);
+                    CHECK(store.extract(0).deltas.size() == 2);
                 }
             } catch (const std::bad_alloc&) {
                 failed = true;
             }
         }
-        CHECK(store.global_version() == 2);
-        CHECK(previous->global_version == 1 && previous->data.at(key)->front() == 1);
-        CHECK(store.get_snapshot()->data.at(key)->front() == 2);
-        CHECK(store.extract_since(0).deltas.size() == 2);
+        CHECK(store.version() == 2);
+        CHECK(previous->version == 1 && previous->data.at(key)->front() == 1);
+        CHECK(store.snapshot()->data.at(key)->front() == 2);
+        CHECK(store.extract(0).deltas.size() == 2);
         if (!failed) {
             CHECK(!injected && failures != 0);
             return failures;

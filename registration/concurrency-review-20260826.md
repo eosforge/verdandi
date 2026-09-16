@@ -25,7 +25,7 @@ The frozen 2026-08-26 source used these exact ownership rules:
 - a half-synchronized Selector view is unavailable, not a readable stale
   selection view; and
 - first-version `One` and `Any` policy evaluation remains O(number of active
-  candidates). A complete detached Snapshot is deliberately a heavy O(N)
+  candidates). A complete detached Store::Snapshot is deliberately a heavy O(N)
   operation.
 
 Registration and Selector do not share a queue or mutable state. They share
@@ -150,7 +150,7 @@ slot and cannot overlap.
 
 When a revision gap starts targeted repair, or when the subscription generation
 is lost, the published view is immediately marked unavailable. Raw and typed
-`Snapshot`, `Find`, `FindRetained`, `One`, and `Any` return the explicit
+`Store::Snapshot`, `Find`, `FindRetained`, `One`, and `Any` return the explicit
 `unavailable` code until the next fence succeeds. Retained payload may remain
 inside the private recovery state, but it is not exposed through a half-synced
 public view.
@@ -308,7 +308,7 @@ Trade-offs:
   bursts free;
 - multiple valid calls absorbed into one batch share one revision and outcome,
   so intermediate values are intentionally not observable;
-- full synchronization and detached Snapshot remain O(N) in time and memory;
+- full synchronization and detached Store::Snapshot remain O(N) in time and memory;
 - first-version policy callbacks scan O(N), and local Power prediction is not a
   distributed reservation; and
 - the exact-percentile endurance harness retains O(operation count) timing

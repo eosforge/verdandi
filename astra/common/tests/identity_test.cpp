@@ -26,12 +26,12 @@ void vectors(const Identity& identity) {
             const auto expected = yyjson_get_bool(yyjson_obj_get(item, "valid"));
             bool actual = false;
             if (std::string_view(field) == "names") {
-                actual = valid_name(value);
+                actual = Member::valid_name(value);
             } else if (std::string_view(field) == "addresses") {
                 auto endpoint = Endpoint::parse(value);
                 actual = endpoint && endpoint->text() == value;
             } else {
-                actual = valid_id(value);
+                actual = Member::valid_id(value);
             }
             CHECK(actual == expected);
         }
@@ -42,31 +42,31 @@ void vectors(const Identity& identity) {
 
 void signatures(const Identity& identity) {
     proto::orbit::v1::Member member;
-    member.set_cluster_id("alpha");
+    member.set_galaxy("alpha");
     member.set_group("default");
     member.set_id("format-vNext/星体\"\nidentity");
     member.set_principal(identity.principal("alpha", "127.0.0.1:7443").text());
     member.set_advertise("127.0.0.1:7443");
     member.set_epoch(1);
     member.set_role(proto::orbit::v1::ROLE_STAR);
-    auto payload = member.SerializeAsString();
-    auto signature = test::sign(payload);
+    auto value = member.SerializeAsString();
+    auto signature = test::sign(value);
     auto as_bytes = [](std::string_view sv) { return std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(sv.data()), sv.size()); };
-    CHECK(identity.verify(as_bytes(payload), as_bytes(signature)));
-    CHECK(identity.verify(as_bytes(payload), as_bytes(signature))->id == member.id());
+    CHECK(identity.verify(as_bytes(value), as_bytes(signature)));
+    CHECK(identity.verify(as_bytes(value), as_bytes(signature))->id == member.id());
     // 不同用途的签名不能作为准入凭证.
-    const auto other_purpose_signature = test::sign(payload, "proto.orbit.v1.other-purpose");
-    CHECK(!identity.verify(as_bytes(payload), as_bytes(other_purpose_signature)));
+    const auto other_purpose_signature = test::sign(value, "proto.orbit.v1.other-purpose");
+    CHECK(!identity.verify(as_bytes(value), as_bytes(other_purpose_signature)));
     // 相同密钥和正文也不能跨协议所有者使用; 准入属于 Orbit.
-    const auto other_owner_signature = test::sign(payload, "proto.astra.v1.admission");
-    CHECK(!identity.verify(as_bytes(payload), as_bytes(other_owner_signature)));
-    CHECK(!identity.verify(as_bytes(payload), as_bytes(test::sign(payload, "wrong-domain"))));
-    CHECK(!identity.verify(as_bytes(payload + "\x78\x01"), as_bytes(signature)));
-    const auto extended = payload + "\x78\x01";
+    const auto other_owner_signature = test::sign(value, "proto.astra.v1.admission");
+    CHECK(!identity.verify(as_bytes(value), as_bytes(other_owner_signature)));
+    CHECK(!identity.verify(as_bytes(value), as_bytes(test::sign(value, "wrong-domain"))));
+    CHECK(!identity.verify(as_bytes(value + "\x78\x01"), as_bytes(signature)));
+    const auto extended = value + "\x78\x01";
     CHECK(identity.verify(as_bytes(extended), as_bytes(test::sign(extended))));
-    CHECK(!identity.verify(as_bytes(payload), as_bytes(signature.substr(1))));
+    CHECK(!identity.verify(as_bytes(value), as_bytes(signature.substr(1))));
     signature[0] ^= 1;
-    CHECK(!identity.verify(as_bytes(payload), as_bytes(signature)));
+    CHECK(!identity.verify(as_bytes(value), as_bytes(signature)));
     CHECK(!identity.verify(as_bytes(std::string(1025, 'x')), as_bytes(std::string(64, 'x'))));
     member.set_epoch(0);
     CHECK(!decode_member(member));
