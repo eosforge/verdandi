@@ -242,14 +242,14 @@ void test_concurrent_snapshots() {
 
 void test_retention_and_idle_maintenance() {
     const auto start = Clock::now();
-    Store store(100, 1h, 1ms, start);
+    Store store(100, 1h, 1h, start);
     store.put("live", {1});
     store.put("removed", {2});
     store.remove("removed");
     const auto written = Clock::now();
-    CHECK(store.tick(start - 1ns) == 0);
+    store.tick(start - 1ns);
     CHECK(!store.extract(0).stale && store.extract(0).deltas.size() == 3);
-    CHECK(store.tick(written + 1h, 1) != 0);
+    store.tick(written + 1h);
     CHECK(store.version() == 3 && store.extract(0).stale && store.extract(2).stale);
     CHECK(!store.extract(3).stale && store.extract(3).deltas.empty());
     CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.at("live")->front() == 1);
@@ -289,7 +289,7 @@ void test_invalidated_snapshot_release() {
         } else if (operation == 1) {
             store.remove("payload");
         } else {
-            CHECK(store.tick(Clock::time_point{} + 1ms) == 0);
+            store.tick(Clock::time_point{} + 1ms);
         }
         CHECK(store.version() == 2 && old_snapshot.expired() && old_payload.expired());
     }

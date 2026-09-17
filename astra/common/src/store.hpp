@@ -73,7 +73,7 @@ public:
     // interval 是 TTL 精度, 默认 10ms 且必须为正; initial 是同一单调时钟域的起点, 测试可指定固定值.
     explicit Store(std::size_t capacity = 1000, Clock::duration retention = std::chrono::minutes(10), Clock::duration interval = std::chrono::milliseconds(10),
                    Clock::time_point initial = Clock::now())
-        : capacity_(capacity), retention_(retention), interval_(interval), tick_time_(initial) {
+        : capacity_(capacity), retention_(retention), interval_(interval), clock_(initial) {
         if (interval_ <= Clock::duration::zero()) {
             throw std::invalid_argument("Store tick interval must be positive");
         }
@@ -99,7 +99,7 @@ public:
     // now 默认读取单调时钟; 重复或倒退的时间不推进. max 截止永不过期, 长 TTL 分段调度后核对真实截止.
     // 分配失败或版本耗尽向调用方传播; 数据, 历史和版本保持原状, 已摘节点在下一拍重试.
     // 时间轮逐拍推进, 大跨度补拍的工作量包含空拍; 同批处理不承诺 O(1) 或固定延迟上限.
-    std::uint64_t tick(Clock::time_point now = Clock::now(), std::uint64_t max_ticks = 1024);
+    void tick(Clock::time_point now = Clock::now());
 
     // version 函数: 加锁返回本实例已完整提交的版本. 不分配内存, 不能据此推断其他实例的同步进度.
     // 返回值: 内部全局的递增版本号。
@@ -171,9 +171,9 @@ private:
 
     // retention_: 历史批次在队列中的最长存活时间.
     Clock::duration retention_;
-    // interval_ 是正的拍间隔; tick_time_ 与 wheel_.now() 同步, 异常后也不重复推进已完成的拍.
+    // interval_ 是正的拍间隔; clock_ 与 wheel_.now() 同步, 异常后也不重复推进已完成的拍.
     Clock::duration interval_;
-    Clock::time_point tick_time_;
+    Clock::time_point clock_;
     // wheel_ 先于 entries_ 析构并解除全部钩子; 成员节点析构仍可安全重复取消.
     Timer wheel_{};
 

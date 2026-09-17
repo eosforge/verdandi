@@ -17,7 +17,7 @@ namespace astra {
 // Levels 为层数, Bits 为每层索引位数. 单线程使用, 或由外部同一把锁串行保护全部操作及节点销毁.
 // 每次 tick 推进一个逻辑时间单位; 同拍回调无顺序承诺. 不读取时钟, 不自动跳过空槽或限制单拍回调数.
 template <std::size_t Levels = 5, std::size_t Bits = 8>
-    requires(Levels > 0 && Bits > 0 && Bits <= 8 && Levels <= 64 / Bits)
+    requires(Levels > 0 && Bits > 0 && Bits <= 10 && Levels <= 64 / Bits)
 class Wheel {
     // 每层至多 256 槽, 总索引位数至多 64. 这些约束同时排除无效移位和意外的巨型槽数组.
     static constexpr std::size_t slots = std::size_t{1} << Bits;

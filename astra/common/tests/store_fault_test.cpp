@@ -267,21 +267,22 @@ std::size_t sweep_large_expiry() {
     throw std::runtime_error("Large TTL allocation sweep did not reach success");
 }
 
-std::size_t sweep_budgeted_expiry() {
+// 跨多个到期拍的一次补齐仍只提交一个批次, 任意分配失败后都能完整恢复.
+std::size_t sweep_catchup_expiry() {
     std::size_t failures = 0;
     const auto origin = Clock::time_point{};
-    const auto target = origin + std::chrono::milliseconds(10);
+    const auto target = origin + std::chrono::milliseconds(3000);
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
         Store store(20, std::chrono::minutes(10), std::chrono::milliseconds(1), origin);
         for (unsigned index = 1; index <= 3; ++index) {
-            store.put(std::string(80, 'b') + std::to_string(index), {1}, origin + std::chrono::milliseconds(index));
+            store.put(std::string(80, 'b') + std::to_string(index), {1}, origin + std::chrono::milliseconds(index * 1000 - 1));
         }
         const auto before = store.snapshot();
         bool failed = false;
         {
             FailureScope failure(point);
             try {
-                CHECK(store.tick(target, 2) == 8);
+                store.tick(target);
             } catch (const std::bad_alloc&) {
                 failed = true;
             }
@@ -291,23 +292,18 @@ std::size_t sweep_budgeted_expiry() {
             CHECK(store.extract(3).deltas.empty());
             ++failures;
         } else {
-            CHECK(!injected && failures != 0 && store.version() == 4 && store.snapshot()->data.size() == 1);
+            CHECK(!injected && failures != 0 && store.version() == 4 && store.snapshot()->data.empty());
         }
-        auto pending = store.tick(target, 1);
-        CHECK(pending < 10);
-        for (unsigned step = 0; pending != 0 && step < 10; ++step) {
-            const auto next = store.tick(target, 1);
-            CHECK(next + 1 == pending);
-            pending = next;
-        }
-        CHECK(pending == 0 && store.snapshot()->data.empty());
+        // 提交分配失败时逻辑轮可能已到 target, 重排项在下一拍重试, 不再依赖剩余拍计数.
+        store.tick(target + std::chrono::milliseconds(1));
+        CHECK(store.version() == 4 && store.snapshot()->data.empty());
         const auto changes = store.extract(3);
         CHECK(!changes.stale && changes.deltas.size() == 3);
         for (unsigned index = 1; index <= 3; ++index) {
             const auto key = std::string(80, 'b') + std::to_string(index);
             std::size_t count = 0;
             for (const auto& delta : changes.deltas) {
-                CHECK(delta.deleted && !delta.value);
+                CHECK(delta.deleted && !delta.value && delta.version == 4);
                 count += delta.key == key;
             }
             CHECK(count == 1);
@@ -316,7 +312,7 @@ std::size_t sweep_budgeted_expiry() {
             return failures;
         }
     }
-    throw std::runtime_error("Budgeted TTL allocation sweep did not reach success");
+    throw std::runtime_error("Catch-up TTL allocation sweep did not reach success");
 }
 
 // 没有到期条目的补拍不分配数组, 即使禁止下一次 new 也能完成.
@@ -325,8 +321,8 @@ void test_empty_tick_allocation() {
     store.put("permanent", {1});
     {
         FailureScope failure(0);
-        CHECK(store.tick(Clock::time_point{} + std::chrono::milliseconds(20), 3) == 17);
-        CHECK(store.tick(Clock::time_point{} + std::chrono::milliseconds(20)) == 0);
+        store.tick(Clock::time_point{} + std::chrono::seconds(3));
+        store.tick(Clock::time_point{} + std::chrono::seconds(3));
         CHECK(!injected);
     }
     CHECK(store.version() == 1);
@@ -346,7 +342,7 @@ int main() {
         // read_failures 另行统计查询分配失败, 不与写入原子性覆盖混淆.
         const auto read_failures = sweep_read(true) + sweep_read(false);
         failures += sweep_large_expiry();
-        failures += sweep_budgeted_expiry();
+        failures += sweep_catchup_expiry();
         test_empty_tick_allocation();
         std::cout << "PASS store atomicity under " << failures << " write and " << read_failures << " read allocation failures\n";
         return 0;

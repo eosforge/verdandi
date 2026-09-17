@@ -1,0 +1,201 @@
+{
+  "date": "2026-09-17",
+  "base_commit": "179f31611d2cfcc43e4067ec559b73ee74eff534",
+  "tested_revision": "Working tree with complete catch-up and Wheel<4,10> fixes; source hashes below identify the tested inputs",
+  "platform": "Ubuntu Linux x86_64, GCC 16.2.0",
+  "scope": "Five Store/Wheel component suites only",
+  "profiles": {
+    "debug": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "wall_seconds": 1.11,
+      "timestamp_utc": "2026-09-17T06:00:01",
+      "tests": [
+        {
+          "name": "cpp_store",
+          "seconds": 0.0179849,
+          "output": "All tests passed.\n"
+        },
+        {
+          "name": "cpp_store_fault",
+          "seconds": 0.120414,
+          "output": "PASS store atomicity under 174 write and 7 read allocation failures\n"
+        },
+        {
+          "name": "cpp_store_ttl",
+          "seconds": 0.420241,
+          "output": "Store TTL clock, renewal, batch, rehash and extreme boundaries passed\n"
+        },
+        {
+          "name": "cpp_wheel",
+          "seconds": 0.538499,
+          "output": "Wheel boundary, lifetime, callback and 240000 model operations passed\n"
+        },
+        {
+          "name": "cpp_wheel_allocation",
+          "seconds": 0.00822204,
+          "output": "Wheel<5,8>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes\nWheel<4,10>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=32792 bytes\n"
+        }
+      ],
+      "binaries_sha256": {
+        "/home/ubuntu/verdandi/build/astra/debug/star_store_test": "d5a156e190a61a2d8285adf758ef6d0eebec3b254e853693b030fec558f5e694",
+        "/home/ubuntu/verdandi/build/astra/debug/star_store_ttl_test": "a0fc1ff1a30e80960f498abb89319023145509167999b60f09295a8ef0fb6134",
+        "/home/ubuntu/verdandi/build/astra/debug/star_store_fault_test": "af3b2d76591b278b9d23c8189686d13126cc48f17e1ed2f2fc85174e421c6243",
+        "/home/ubuntu/verdandi/build/astra/debug/star_wheel_test": "e5eb2ebd353842c7fc36733604a11c9d3a9512f98a55878eea7a094cdc9adb48",
+        "/home/ubuntu/verdandi/build/astra/debug/star_wheel_allocation_test": "8f35a797687cf6c68571b99afcf50b9f64cc2350d4d3f9242392ba66bd827845"
+      },
+      "log_sha256": "b77ef68f6278fe38c495f0432b0e48885c514189fec09f877d8e823f10d945db"
+    },
+    "release": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "wall_seconds": 0.14,
+      "timestamp_utc": "2026-09-17T06:00:34",
+      "tests": [
+        {
+          "name": "cpp_store",
+          "seconds": 0.00524548,
+          "output": "All tests passed.\n"
+        },
+        {
+          "name": "cpp_store_fault",
+          "seconds": 0.0198218,
+          "output": "PASS store atomicity under 174 write and 7 read allocation failures\n"
+        },
+        {
+          "name": "cpp_store_ttl",
+          "seconds": 0.0462158,
+          "output": "Store TTL clock, renewal, batch, rehash and extreme boundaries passed\n"
+        },
+        {
+          "name": "cpp_wheel",
+          "seconds": 0.0544493,
+          "output": "Wheel boundary, lifetime, callback and 240000 model operations passed\n"
+        },
+        {
+          "name": "cpp_wheel_allocation",
+          "seconds": 0.00644404,
+          "output": "Wheel<5,8>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes\nWheel<4,10>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=32792 bytes\n"
+        }
+      ],
+      "binaries_sha256": {
+        "/home/ubuntu/verdandi/build/astra/release/star_store_test": "a70aca43e07df2a08b19e4406c1c23bc52dd9ddb0b021a9755d670960fae68bb",
+        "/home/ubuntu/verdandi/build/astra/release/star_store_ttl_test": "0c1a781eb8ce54a88b56d0a9e7f6bc88c3fd21d404cc38c7052cc38ae1289f4c",
+        "/home/ubuntu/verdandi/build/astra/release/star_store_fault_test": "c9989de23f6a2b0bdab6696d0b752d0a5058f5ecff818ed5ec2ee76a6f982fd7",
+        "/home/ubuntu/verdandi/build/astra/release/star_wheel_test": "05b38b670c5aadd48ff84f43508d5a6a68ee7b8a369e359e5423448a08da92c9",
+        "/home/ubuntu/verdandi/build/astra/release/star_wheel_allocation_test": "7b5a41be86dcefdfb4e4d3f699aa4f439170516e0a295c21ed462c9f95a45e52"
+      },
+      "log_sha256": "9ad7f9ff48b80a8ebb48687bb2c645f48bf262f18d428aa58c5af3ae0918705a"
+    },
+    "asan": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "wall_seconds": 3.98,
+      "timestamp_utc": "2026-09-17T06:01:05",
+      "tests": [
+        {
+          "name": "cpp_store",
+          "seconds": 0.105097,
+          "output": "All tests passed.\n"
+        },
+        {
+          "name": "cpp_store_fault",
+          "seconds": 0.494565,
+          "output": "PASS store atomicity under 174 write and 7 read allocation failures\n"
+        },
+        {
+          "name": "cpp_store_ttl",
+          "seconds": 1.27751,
+          "output": "Store TTL clock, renewal, batch, rehash and extreme boundaries passed\n"
+        },
+        {
+          "name": "cpp_wheel",
+          "seconds": 2.06027,
+          "output": "Wheel boundary, lifetime, callback and 240000 model operations passed\n"
+        },
+        {
+          "name": "cpp_wheel_allocation",
+          "seconds": 0.0390266,
+          "output": "Wheel<5,8>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes\nWheel<4,10>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=32792 bytes\n"
+        }
+      ],
+      "binaries_sha256": {
+        "/home/ubuntu/verdandi/build/astra/asan/star_store_test": "cb59b1b5f4e280bb4a63aff1ed4b6f98c5762859d6c716745168d7961dd1d9e1",
+        "/home/ubuntu/verdandi/build/astra/asan/star_store_ttl_test": "295244227625c60d7e7b780faaffbd68f14bf88c42f830c7dff10289ad370560",
+        "/home/ubuntu/verdandi/build/astra/asan/star_store_fault_test": "b1ae28c0df2f6e1c8953e5fbb972ae0a6683d09b2b9e29930bafc83eef472fbb",
+        "/home/ubuntu/verdandi/build/astra/asan/star_wheel_test": "92c0544e92698d1ed7ac282caa85fe92b0679e82b5fb11a059117bcd8962a29e",
+        "/home/ubuntu/verdandi/build/astra/asan/star_wheel_allocation_test": "498b2493032dc766c81bfe531e4753081108a16e641256ed5aaae6da5ebc5a14"
+      },
+      "log_sha256": "52e541a046eeee5cf5257d5c79b4f05051cf81cdc1b1c6cf1b2b32595bb522b9"
+    },
+    "tsan": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "wall_seconds": 5.01,
+      "timestamp_utc": "2026-09-17T06:01:32",
+      "tests": [
+        {
+          "name": "cpp_store",
+          "seconds": 0.116209,
+          "output": "All tests passed.\n"
+        },
+        {
+          "name": "cpp_store_fault",
+          "seconds": 0.628669,
+          "output": "PASS store atomicity under 174 write and 7 read allocation failures\n"
+        },
+        {
+          "name": "cpp_store_ttl",
+          "seconds": 1.92269,
+          "output": "Store TTL clock, renewal, batch, rehash and extreme boundaries passed\n"
+        },
+        {
+          "name": "cpp_wheel",
+          "seconds": 2.28576,
+          "output": "Wheel boundary, lifetime, callback and 240000 model operations passed\n"
+        },
+        {
+          "name": "cpp_wheel_allocation",
+          "seconds": 0.0536337,
+          "output": "Wheel<5,8>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes\nWheel<4,10>: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=32792 bytes\n"
+        }
+      ],
+      "binaries_sha256": {
+        "/home/ubuntu/verdandi/build/astra/tsan/star_store_test": "b88ea0506dc9f96ea244ea7e1603debb0060567ff21911746e2d8a72882367d6",
+        "/home/ubuntu/verdandi/build/astra/tsan/star_store_ttl_test": "2de926fb9fc6ba8011a88b0bb717fbde6cf29cf521d86d9112a12f2fb2772f99",
+        "/home/ubuntu/verdandi/build/astra/tsan/star_store_fault_test": "d3e2ca1dbd8c3411ffb17cd3ec5867de26e7b044ee950a24cf76b62d96269b71",
+        "/home/ubuntu/verdandi/build/astra/tsan/star_wheel_test": "d0a0fff05e3952953ccd9510dd88ae3a49bcbc332f22b229f500efa39963400d",
+        "/home/ubuntu/verdandi/build/astra/tsan/star_wheel_allocation_test": "a913fa248a1f754084aa1d9b2c92140a162d1af7ca742988f521fc800bad796a"
+      },
+      "log_sha256": "caba50278a79d9e34bbb3a8960f03360ad828f6776674e94ceb8c81e52287e76"
+    }
+  },
+  "source_sha256": {
+    "astra/CMakeLists.txt": "1f4ed1e99cf9054c7c1fe02efa762455401850ff46048315336a29c9560b2778",
+    "astra/common/include/astra/types.hpp": "318c5b17afe6c0405d529d894b1fa842452eee062bc60051b838f064c76ab32b",
+    "astra/common/src/store.hpp": "ba62915e07a2a271431ba43758f2552b310eafa72482c9126504ec08b1b71ee8",
+    "astra/common/src/store.cpp": "ae0c5868f39f7b203bfbce4e47a4702b0ebc06a60beb74731f3edbf6d06b917f",
+    "astra/common/src/wheel.hpp": "9bc29a5b54e7a848e813d567268b220da08c26ef0eb3eb794d3ab1be365fa968",
+    "astra/common/tests/check.hpp": "07cf463d7aa0ff03e2d7daa3b4c79988e692197b9e9b030b387bbf2a339284db",
+    "astra/common/tests/store_test.cpp": "962401a7ee84fecd66e8c9be794c04254e71bc9e501e1e968ddd06a582cecf77",
+    "astra/common/tests/store_fault_test.cpp": "b77a2d4d655cf42dc8a3a7411496ee0f6a9a8dd15538dd4ff11b594ba7aca5fe",
+    "astra/common/tests/store_ttl_test.cpp": "02cbb4d1fa0e5d2754bf4530000c0f1d722f981c97776eb0ce7206986b7d396e",
+    "astra/common/tests/wheel_test.cpp": "14f1e0950599127bdc5382beae8356e639570432df88a7006df79734cca31e8d",
+    "astra/common/tests/wheel_allocation_test.cpp": "1f07969fa8683fb29bbfaa9e272d34aa86e53821cf5493cb4989ed8c89b9e044"
+  },
+  "source_files_verified": 280,
+  "cleanup": {
+    "live_test_processes": [],
+    "cleanup": "passed"
+  },
+  "raw_evidence": "build/astra-store-regression-20260917",
+  "sanitizer_options": {
+    "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1",
+    "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1",
+    "TSAN_OPTIONS": "halt_on_error=1:exitcode=66"
+  }
+}

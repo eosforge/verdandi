@@ -112,6 +112,13 @@ void test_extreme_clock() {
     store.tick(Clock::time_point::max());
     CHECK(store.version() == 3 && store.snapshot()->data.size() == 1);
     CHECK(store.snapshot()->data.contains("permanent"));
+    // direct 在一次调用中跨越整个有符号时钟域, 仍仅补两拍, 避免遍历 UINT64_MAX 拍.
+    Store direct(1000, 10min, interval, Clock::time_point::min());
+    direct.put("last", {1}, Clock::time_point::max() - Clock::duration{1});
+    direct.put("permanent", {2});
+    direct.tick(Clock::time_point::max());
+    CHECK(direct.version() == 3 && direct.snapshot()->data.size() == 1);
+    CHECK(direct.snapshot()->data.contains("permanent"));
     // 远超单轮上限的有限截止只可分段唤醒, 不应被裁剪成近期过期或转换为无限租约.
     Store distant(1000, 10min, 1ns, origin);
     distant.put("distant", {1}, origin + Clock::duration{static_cast<Clock::duration::rep>(Store::Timer::limit + 1)});
@@ -158,46 +165,59 @@ void test_concurrent_ttl() {
             std::rethrow_exception(error);
         }
     }
-    CHECK(store.tick(origin + 2s) == 776);
-    CHECK(store.tick(origin + 2s) == 0);
+    store.tick(origin + 2s);
     CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.contains("live"));
 }
-void test_bounded_catchup() {
+
+// 超过原预算的补拍必须一次完成, 不足一拍的截止继续保留, 重复或倒退时间不产生新提交.
+void test_complete_catchup() {
     Store store(1000, 10min, 1ms, origin);
     store.put("boundary", {1}, origin + 1024ms);
-    store.put("renew", {2}, origin + 1025ms);
+    store.put("next", {2}, origin + 1025ms);
     store.put("later", {3}, origin + 2500ms);
+    store.put("fraction", {4}, origin + 3000ms + 1ns);
+    store.put("permanent", {5});
     const auto target = origin + 3000ms + 500ns;
-    CHECK(store.tick(target) == 1976);
-    CHECK(store.version() == 4 && store.snapshot()->data.size() == 2);
-    const auto first = store.extract(3);
-    CHECK(!first.stale && first.deltas.size() == 1 && first.deltas.front().key == "boundary");
-    store.put("renew", {4});
-    CHECK(store.tick(target, 512) == 1464);
-    CHECK(store.version() == 5 && store.snapshot()->data.contains("later"));
-    CHECK(store.tick(target) == 440);
-    CHECK(store.version() == 6 && !store.snapshot()->data.contains("later"));
-    CHECK(store.tick(target) == 0 && store.tick(target) == 0);
-    CHECK(store.tick(origin) == 0 && store.tick(origin + 3001ms, 1) == 0);
-    CHECK(store.version() == 6 && store.snapshot()->data.at("renew")->front() == 4);
-
-    bool rejected = false;
-    const auto before = store.snapshot();
-    try {
-        store.tick(origin + 1h, 0);
-    } catch (const std::invalid_argument&) {
-        rejected = true;
+    store.tick(target);
+    const auto snapshot = store.snapshot();
+    CHECK(snapshot->version == 6 && snapshot->data.size() == 2);
+    CHECK(snapshot->data.contains("fraction") && snapshot->data.contains("permanent"));
+    const auto changes = store.extract(5);
+    CHECK(!changes.stale && changes.version == 6 && changes.deltas.size() == 3);
+    std::set<std::string> keys;
+    for (const auto& delta : changes.deltas) {
+        CHECK(delta.deleted && !delta.value && delta.version == 6);
+        CHECK(keys.insert(delta.key).second);
     }
-    CHECK(rejected && store.snapshot() == before);
+    CHECK(keys.contains("boundary") && keys.contains("next") && keys.contains("later"));
+    store.tick(target);
+    store.tick(origin);
+    CHECK(store.snapshot() == snapshot);
+    store.tick(origin + 3001ms);
+    CHECK(store.version() == 7 && store.snapshot()->data.size() == 1);
+    CHECK(store.snapshot()->data.contains("permanent"));
+}
 
-    Store empty(0, 10min, 1ms, origin);
-    CHECK(empty.tick(origin + 24h) == 86'400'000 - 1024);
-    CHECK(empty.tick(origin + 24h, 1) == 86'400'000 - 1025);
-    CHECK(empty.version() == 0);
-
-    Store extreme(0, 10min, Clock::duration{1}, Clock::time_point::min());
-    CHECK(extreme.tick(Clock::time_point::max()) == UINT64_MAX - 1024);
-    CHECK(extreme.tick(Clock::time_point::max(), 1) == UINT64_MAX - 1025);
+// 模拟一小时未驱动, 补拍前后写入的五秒绝对租约必须在同一真实截止失效.
+void test_pause_and_new_lease() {
+    Store store(100, Clock::duration::max(), 10ms, origin);
+    const auto resumed = origin + 1h;
+    const auto deadline = resumed + 5s;
+    store.put("old", {1}, origin + 1s);
+    store.put("before-catchup", {2}, deadline);
+    store.tick(resumed);
+    CHECK(store.version() == 3 && store.snapshot()->data.size() == 1);
+    CHECK(store.snapshot()->data.contains("before-catchup"));
+    store.put("after-catchup", {3}, deadline);
+    store.tick(deadline - 1ns);
+    CHECK(store.version() == 4 && store.snapshot()->data.size() == 2);
+    store.tick(deadline);
+    CHECK(store.version() == 5 && store.snapshot()->data.empty());
+    const auto changes = store.extract(4);
+    CHECK(!changes.stale && changes.deltas.size() == 2);
+    for (const auto& delta : changes.deltas) {
+        CHECK(delta.deleted && delta.version == 5);
+    }
 }
 void test_store_model() {
     constexpr std::uint64_t capacity = 8;
@@ -207,7 +227,6 @@ void test_store_model() {
         std::vector<Store::Delta> log;
         std::uint64_t version = 0;
         std::uint64_t observed = 0;
-        std::uint64_t advanced = 0;
         std::mt19937_64 random(seed);
         const auto at = [](std::uint64_t tick) { return origin + std::chrono::milliseconds(static_cast<std::int64_t>(tick)); };
         const auto check_snapshot = [&](const auto& snapshot) {
@@ -235,14 +254,13 @@ void test_store_model() {
                 }
                 break;
             case 2: {
+                const auto previous = observed;
                 observed += random() % 7;
-                const std::uint64_t budget = 1 + random() % 5;
-                const auto next = std::min(observed, advanced + budget);
-                CHECK(store.tick(at(observed), budget) == observed - next);
+                store.tick(at(observed));
                 bool changed = false;
-                if (next != advanced) {
+                if (observed != previous) {
                     for (auto entry = state.begin(); entry != state.end();) {
-                        if (entry->second.second <= next) {
+                        if (entry->second.second <= observed) {
                             if (!changed) {
                                 ++version;
                                 changed = true;
@@ -254,11 +272,11 @@ void test_store_model() {
                         }
                     }
                 }
-                advanced = next;
                 break;
             }
             default:
-                CHECK(store.tick(at(advanced), 1) == 0);
+                store.tick(at(observed));
+                store.tick(at(observed) - 1ms);
                 break;
             }
             CHECK(store.version() == version);
@@ -306,7 +324,8 @@ int main() {
         test_rehash_and_recreation();
         test_extreme_clock();
         test_concurrent_ttl();
-        test_bounded_catchup();
+        test_complete_catchup();
+        test_pause_and_new_lease();
         test_store_model();
         std::cout << "Store TTL clock, renewal, batch, rehash and extreme boundaries passed\n";
         return 0;

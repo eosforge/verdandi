@@ -1,5 +1,36 @@
 # Astra Worklog
 
+## Store clock member rename before commit (2026-09-17)
+
+After the component regression, the maintainer renamed tick_time_ to clock_ in store.hpp and store.cpp.
+Compared both files with the archived tested source and confirmed only that identifier/comment-name replacement.
+Included the rename with the complete-catch-up fixes; no rebuild or test rerun was authorized for this commit turn.
+The regression report now states this boundary; its source hashes continue to identify the binaries' tested inputs.
+
+## Astra Store/Wheel component regression (2026-09-17)
+
+The maintainer authorized the five proposed component suites after complete catch-up fixes.
+Reused the Ubuntu project GCC 16.2.0 and existing Debug, Release, ASan/UBSan and TSan caches; built only the five test targets with one job.
+All four profiles passed cpp_store, cpp_store_ttl, cpp_store_fault, cpp_wheel and cpp_wheel_allocation: 20 CTest executions, no failures or skips.
+Each profile covered 174 write and 7 read allocation failures, 6000 Store model operations and 240000 Wheel model operations.
+Both wheel configurations reported zero heap allocations and 2048 callbacks; Wheel<4,10> was 32792 bytes and its Node was 24 bytes on Linux x64.
+No sanitizer findings. Tests required no further source changes. The 280-file synchronized set matched after execution; no tested component processes remained.
+No dependency downloads, network-service regression, Proto Proxy tests, benchmark, endurance run, commit or push.
+Results and limitations: [Store/Wheel regression](astra/store-regression-20260917.md). Original logs remain under build/astra-store-regression-20260917 on both hosts.
+
+## Astra complete catch-up and wide-wheel alignment (2026-09-17, not tested)
+
+Kept the maintainer's removal of max_ticks: Store::tick(now) returns void and processes all elapsed whole ticks in one call.
+Retained Store's Wheel<4,10> and default 10ms interval; widened the Wheel constraint to accept up to 10 index bits per level.
+Updated all Store tests that depended on the removed budget/return value, including the reference model and allocation-failure sweep.
+Added source cases for one-hour catch-up, five-second leases written before and after catch-up, and one-batch expiry across multiple ticks.
+Replaced the UINT64_MAX-tick test with a full signed clock-span case using a large interval and only two logical ticks.
+Idle-history maintenance uses a coarse test interval, avoiding unnecessary millions of empty ticks.
+Added wide-wheel boundary and model cases; the allocation suite now checks both Wheel<5,8> and Wheel<4,10>.
+Existing README and source comments were not rewritten. Historical bounded-catch-up notes below are superseded.
+Only source formatting and static review were performed. No builds, test execution, downloads, Linux synchronization, commit or push.
+Suggested next authorized scope: cpp_store, cpp_store_ttl, cpp_store_fault, cpp_wheel and cpp_wheel_allocation, then relevant sanitizer runs.
+
 ## Astra static-audit fixes and bounded catch-up (2026-09-17, not tested)
 
 Authorized fixes after the static audit, excluding README and existing source-comment rewrites.

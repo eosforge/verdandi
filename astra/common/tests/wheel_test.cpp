@@ -12,14 +12,18 @@
 namespace {
 // 测试默认五层轮. 每个测试拥有独立轮与节点, 不依赖墙钟或测试执行次序.
 using Timer = astra::Wheel<>;
+// WideTimer 对应 Store 当前采用的四层 1024 槽配置, 与默认轮分别覆盖.
+using WideTimer = astra::Wheel<4, 10>;
 
 // 通过 requires 表达模板参数可用性, 无效配置必须在实例化前拒绝.
 template <std::size_t Levels, std::size_t Bits>
 concept ValidWheel = requires { typename astra::Wheel<Levels, Bits>; };
 
-static_assert(!ValidWheel<0, 8> && !ValidWheel<3, 0> && !ValidWheel<1, 9> && !ValidWheel<9, 8>);
+static_assert(!ValidWheel<0, 8> && !ValidWheel<3, 0> && !ValidWheel<1, 11> && !ValidWheel<9, 8> && !ValidWheel<7, 10>);
 static_assert(ValidWheel<1, 1> && ValidWheel<3, 8> && ValidWheel<8, 8> && ValidWheel<64, 1>);
+static_assert(ValidWheel<1, 9> && ValidWheel<4, 10> && ValidWheel<6, 10>);
 static_assert(Timer::limit == 1'099'511'627'775 && astra::Wheel<8, 8>::limit == UINT64_MAX);
+static_assert(WideTimer::limit == Timer::limit);
 static_assert(!std::is_copy_constructible_v<Timer> && !std::is_move_constructible_v<Timer>);
 static_assert(!std::is_copy_assignable_v<Timer> && !std::is_move_assignable_v<Timer>);
 static_assert(!std::is_copy_constructible_v<Timer::Node> && !std::is_move_constructible_v<Timer::Node>);
@@ -75,6 +79,26 @@ void test_deadlines() {
     for (const auto boundary : {std::uint64_t{1} << 24, std::uint64_t{1} << 32, std::uint64_t{1} << 40}) {
         check_deadline<Timer>(boundary - 257, 1024);
     }
+}
+
+// 宽槽轮覆盖 1024 槽边界, 高层级联和整数回绕; 最大延迟只验证调度/取消, 不遍历整个跨度.
+void test_wide_deadlines() {
+    for (const auto delay : {0U, 1U, 1023U, 1024U, 1025U}) {
+        check_deadline<WideTimer>(0, delay);
+        check_deadline<WideTimer>(UINT64_MAX - 1025, delay);
+    }
+    // 该节点实际从第三层下沉, 其余高位边界从附近起步以控制测试工作量.
+    check_deadline<WideTimer>(0, (std::uint64_t{1} << 20) + 1);
+    for (const auto boundary : {std::uint64_t{1} << 20, std::uint64_t{1} << 30, std::uint64_t{1} << 40}) {
+        check_deadline<WideTimer>(boundary - 1025, 4096);
+    }
+    WideTimer wheel(UINT64_MAX - 1024);
+    WideTimer::Node node;
+    CHECK(wheel.schedule(node, WideTimer::limit));
+    CHECK(!wheel.schedule(node, WideTimer::limit + 1) && node.scheduled());
+    WideTimer::cancel(node);
+    wheel.tick([](auto*) { CHECK(false); });
+    CHECK(!node.scheduled());
 }
 
 // 无效改期保留原计划; 有效改期移除旧计划, cancel 可重复调用且能处理桶头/中间/尾部.
@@ -352,6 +376,7 @@ template <typename W> void test_model(std::uint64_t initial, std::uint64_t seed)
 int main() {
     try {
         test_deadlines();
+        test_wide_deadlines();
         test_schedule_and_cancel();
         test_callback_cancel();
         test_callback_destroy();
@@ -365,7 +390,9 @@ int main() {
         test_model<Timer>(UINT64_MAX - 1024, 44);
         test_model<astra::Wheel<8, 8>>(UINT64_MAX - 1024, 55);
         test_model<astra::Wheel<64, 1>>(UINT64_MAX - 1024, 66);
-        std::cout << "Wheel boundary, lifetime, callback and 180000 model operations passed\n";
+        test_model<WideTimer>(1020, 77);
+        test_model<WideTimer>(UINT64_MAX - 1024, 88);
+        std::cout << "Wheel boundary, lifetime, callback and 240000 model operations passed\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -81,24 +81,24 @@ void operator delete[](void* address, std::size_t, std::align_val_t) noexcept {
 }
 
 // 先验证计数器确实捕获 new, 再在栈上运行调度/取消/到期/自改期; 非零退出直接使 CTest 失败.
-int main() {
+template <typename W> bool check_allocation(const char* name) {
     // baseline/control 用于校准计数器, 防止一个失效的测量器给出假零结果.
     const auto baseline = allocations;
     void* control = ::operator new(1);
     ::operator delete(control);
     if (allocations != baseline + 1) {
-        return 1;
+        return false;
     }
     // before 在轮和节点构造前取值, after 在它们析构后取值, 生命周期整体包含在测量范围内.
     const auto before = allocations;
     bool valid = true;
     std::size_t expired = 0;
     {
-        astra::Wheel<> wheel;
-        std::array<astra::Wheel<>::Node, 1024> nodes;
+        W wheel;
+        std::array<typename W::Node, 1024> nodes;
         for (std::size_t id = 0; id < nodes.size(); ++id) {
             valid &= wheel.schedule(nodes[id], id + 1);
-            astra::Wheel<>::cancel(nodes[id]);
+            W::cancel(nodes[id]);
             valid &= wheel.schedule(nodes[id], id + 1);
         }
         // 第一次到期时为所有节点改期 1, 验证回调路径也不隐式分配.
@@ -121,7 +121,13 @@ int main() {
         }
     }
     const auto after = allocations;
-    std::printf("Wheel: %zu allocations, %zu callbacks, Node=%zu bytes, Wheel=%zu bytes\n", after - before, expired, sizeof(astra::Wheel<>::Node),
-                sizeof(astra::Wheel<>));
-    return valid && after == before ? 0 : 1;
+    std::printf("%s: %zu allocations, %zu callbacks, Node=%zu bytes, Wheel=%zu bytes\n", name, after - before, expired, sizeof(typename W::Node), sizeof(W));
+    return valid && after == before;
+}
+
+// 两种配置都执行完整生命周期检查, 不把默认五层轮的分配结论直接套用到 Store 的宽槽轮.
+int main() {
+    const bool basic = check_allocation<astra::Wheel<>>("Wheel<5,8>");
+    const bool store = check_allocation<astra::Wheel<4, 10>>("Wheel<4,10>");
+    return basic && store ? 0 : 1;
 }

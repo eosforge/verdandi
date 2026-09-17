@@ -54,7 +54,7 @@ void Store::put(const std::string& key, Buffer value, Clock::time_point expire) 
     it->second.expire = expire;
 
     // 从已推进的拍边界安排绝对截止, 不把事件循环的延迟再次加到租约上.
-    schedule(it->second, tick_time_);
+    schedule(it->second, clock_);
 
     version_ = version;
     trim(now);
@@ -92,25 +92,22 @@ void Store::remove(const std::string& key) {
 }
 
 // 在同一临界区补拍并准备整批历史. 准备阶段只摘调度钩子, 不修改可观察的状态和版本.
-std::uint64_t Store::tick(Clock::time_point now, std::uint64_t max_ticks) {
-    if (max_ticks == 0) {
-        throw std::invalid_argument("Store tick budget must be positive");
-    }
+void Store::tick(Clock::time_point now) {
     std::shared_ptr<const Snapshot> retired;
     std::lock_guard lock(mutex_);
-    const auto pending = now > tick_time_ ? distance(now, tick_time_) / static_cast<std::uint64_t>(interval_.count()) : 0;
-    const auto ticks = std::min(pending, max_ticks);
+    const auto pending = now > clock_ ? distance(now, clock_) / static_cast<std::uint64_t>(interval_.count()) : 0;
+
     // records 同时保存提交内容和失败时需重排的 Key. 空拍不预分配数组.
     std::vector<Store::Delta> records;
     try {
-        for (std::uint64_t step = 0; step < ticks; ++step) {
+        for (std::uint64_t step = 0; step < pending; ++step) {
             // before 区分前次异常遗留回调与本次推进. 两者的真实拍边界可能不同.
             const auto before = wheel_.now();
             try {
                 wheel_.tick([&](Timer::Node* node) {
                     // entry 在状态锁内地址稳定; 到期值仍以真实截止核对, 不把分段唤醒当成过期.
                     auto& entry = *static_cast<Entry*>(node);
-                    const auto boundary = tick_time_ + (wheel_.now() == before ? Clock::duration::zero() : interval_);
+                    const auto boundary = clock_ + (wheel_.now() == before ? Clock::duration::zero() : interval_);
                     if (entry.expire > boundary) {
                         schedule(entry, boundary);
                         return;
@@ -126,15 +123,15 @@ std::uint64_t Store::tick(Clock::time_point now, std::uint64_t max_ticks) {
             } catch (...) {
                 // Wheel 可能已推进但回调失败; 与其逻辑时钟保持一致, 不重复计算这一拍.
                 if (wheel_.now() != before) {
-                    tick_time_ += interval_;
+                    clock_ += interval_;
                 }
                 throw;
             }
-            tick_time_ += interval_;
+            clock_ += interval_;
         }
         if (records.empty()) {
             trim(now);
-            return pending - ticks;
+            return;
         }
         // version 只计算不发布. 先分配空历史批次, 成功后用无异常 swap 移交记录.
         const auto version = advance();
@@ -145,7 +142,7 @@ std::uint64_t Store::tick(Clock::time_point now, std::uint64_t max_ticks) {
     } catch (...) {
         // 所有已收集节点仍在 Map 中; 重排不分配内存, 也不扫描未到期条目.
         for (const auto& record : records) {
-            schedule(entries_.find(record.key)->second, tick_time_);
+            schedule(entries_.find(record.key)->second, clock_);
         }
         throw;
     }
@@ -163,7 +160,6 @@ std::uint64_t Store::tick(Clock::time_point now, std::uint64_t max_ticks) {
     version_ = version;
     trim(now);
     retired = std::move(cache_);
-    return pending - ticks;
 }
 
 // 仅在已经确认顺序后进行无符号差值, 覆盖最小至最大有限 time_point 的完整距离.
