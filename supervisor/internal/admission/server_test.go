@@ -31,7 +31,7 @@ import (
 const fixturePassword = "verdandi-public-test-only"
 
 func fixture(role string) string {
-	return filepath.Join("..", "..", "..", "galaxy", "tests", "fixtures", role)
+	return filepath.Join("..", "..", "..", "cluster", "tests", "fixtures", role)
 }
 func testServer(t *testing.T) (*Server, string, context.CancelFunc, <-chan error) {
 	t.Helper()

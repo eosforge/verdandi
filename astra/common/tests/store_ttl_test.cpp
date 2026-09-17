@@ -1,0 +1,317 @@
+// 功能: 用可控单调时间验证 TTL 精度, 补拍, 续租, 取消, 节点稳定性与极值距离.
+#include "check.hpp"
+#include "store.hpp"
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <random>
+#include <set>
+#include <thread>
+
+using namespace astra;
+using namespace std::chrono_literals;
+
+namespace {
+// origin 是本测试的单调时钟起点, 所有时间均显式构造, 不读取墙钟或休眠.
+constexpr auto origin = Clock::time_point{};
+
+// 零与负间隔必须在进入调度前拒绝, 防止除零和永不前进的补拍循环.
+void test_interval() {
+    for (const auto interval : {Clock::duration::zero(), Clock::duration{-1}}) {
+        bool rejected = false;
+        try {
+            Store store(1000, 10min, interval, origin);
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        CHECK(rejected);
+    }
+}
+
+// 不足一拍的余量保留到下次调用; 截止向上取整, 相同时间和倒退时间不会额外推进.
+void test_precision_and_clock() {
+    Store store(1000, 10min, 10ms, origin);
+    store.put("boundary", {1}, origin + 10ms);
+    store.put("fraction", {2}, origin + 10ms + 1ns);
+    store.put("permanent", {3});
+    store.tick(origin + 9ms);
+    CHECK(store.version() == 3);
+    store.tick(origin + 10ms);
+    CHECK(store.version() == 4 && !store.snapshot()->data.contains("boundary"));
+    CHECK(store.snapshot()->data.contains("fraction"));
+    store.tick(origin + 10ms);
+    store.tick(origin - 1ms);
+    store.tick(origin + 19ms);
+    CHECK(store.version() == 4);
+    store.tick(origin + 20ms);
+    CHECK(store.version() == 5 && store.snapshot()->data.size() == 1);
+    CHECK(store.snapshot()->data.contains("permanent"));
+}
+
+// 调度使用 Store 已推进的时刻, 不能把系统读取时间或驱动迟到额外加到绝对租约上.
+void test_renewal_and_catchup() {
+    Store store(1000, 10min, 1ms, origin);
+    store.put("renew", {1}, origin + 5ms);
+    store.put("early", {2}, origin + 20ms);
+    store.put("cancel", {3}, origin + 4ms);
+    store.tick(origin + 2ms);
+    store.put("renew", {4}, origin + 10ms);
+    store.put("early", {5}, origin + 3ms);
+    store.put("cancel", {6});
+    store.tick(origin + 3ms);
+    CHECK(!store.snapshot()->data.contains("early"));
+    store.tick(origin + 5ms);
+    CHECK(store.snapshot()->data.at("renew")->front() == 4);
+    CHECK(store.snapshot()->data.at("cancel")->front() == 6);
+    // delta 截止只属于本时钟域, 保留有限值和 max 哨兵以支持本地检查.
+    const auto changes = store.extract(3);
+    CHECK(changes.deltas[0].expire == origin + 10ms);
+    CHECK(changes.deltas[2].expire == Clock::time_point::max());
+    store.put("overdue", {7}, origin + 1ms);
+    store.put("later", {8}, origin + 40ms);
+    const auto before = store.version();
+    store.tick(origin + 50ms);
+    CHECK(store.version() == before + 1);
+    const auto expired = store.extract(before);
+    CHECK(expired.deltas.size() == 3);
+    for (const auto& delta : expired.deltas) {
+        CHECK(delta.deleted && delta.version == before + 1 && delta.expire == Clock::time_point::max());
+    }
+    CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.contains("cancel"));
+}
+
+// unordered_map 扩容后钩子和 Key 地址必须保持有效; 删除重建不能触发旧租约.
+void test_rehash_and_recreation() {
+    Store store(0, 10min, 1ms, origin);
+    for (unsigned index = 0; index < 2048; ++index) {
+        store.put("ttl/" + std::to_string(index), {1}, origin + 5ms);
+    }
+    store.remove("ttl/0");
+    store.put("ttl/0", {2}, origin + 10ms);
+    store.tick(origin + 5ms);
+    CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.at("ttl/0")->front() == 2);
+    store.tick(origin + 10ms);
+    CHECK(store.snapshot()->data.empty());
+    store.put("ttl/0", {3}, origin + 11ms);
+    store.tick(origin + 11ms);
+    CHECK(store.snapshot()->data.empty());
+}
+
+// 跨有符号极值的距离不允许溢出; 大间隔把完整边界测试压缩为两拍.
+void test_extreme_clock() {
+    const auto interval = Clock::duration::max();
+    Store store(1000, 10min, interval, Clock::time_point::min());
+    store.put("last", {1}, Clock::time_point::max() - Clock::duration{1});
+    store.put("permanent", {2});
+    store.tick(Clock::time_point{});
+    CHECK(store.version() == 2);
+    store.tick(Clock::time_point::max());
+    CHECK(store.version() == 3 && store.snapshot()->data.size() == 1);
+    CHECK(store.snapshot()->data.contains("permanent"));
+    // 远超单轮上限的有限截止只可分段唤醒, 不应被裁剪成近期过期或转换为无限租约.
+    Store distant(1000, 10min, 1ns, origin);
+    distant.put("distant", {1}, origin + Clock::duration{static_cast<Clock::duration::rep>(Store::Timer::limit + 1)});
+    distant.tick(origin + 5ns);
+    CHECK(distant.version() == 1 && distant.snapshot()->data.contains("distant"));
+}
+
+// 写入, 补拍和快照在不同线程竞争同一 Store 锁, 验证侵入式钩子的全部访问也在同步边界内.
+void test_concurrent_ttl() {
+    Store store(1000, 10min, 1ms, origin);
+    // errors 各槽由独立线程写, join 后读取; finished 只用于控制读者循环.
+    std::array<std::exception_ptr, 2> errors{};
+    std::atomic_bool finished{false};
+    std::jthread writer([&] {
+        try {
+            for (unsigned index = 0; index < 512; ++index) {
+                store.put("ttl/" + std::to_string(index), {1}, origin + 1ms);
+                store.put("live", {2});
+            }
+        } catch (...) {
+            errors[0] = std::current_exception();
+        }
+        finished.store(true);
+    });
+    std::jthread ticker([&] {
+        try {
+            for (unsigned step = 1; step <= 200; ++step) {
+                store.tick(origin + std::chrono::milliseconds(step));
+            }
+        } catch (...) {
+            errors[1] = std::current_exception();
+        }
+    });
+    do {
+        const auto snapshot = store.snapshot();
+        for (const auto& [key, value] : snapshot->data) {
+            CHECK(value && value->size() == 1 && value->front() == (key == "live" ? 2 : 1));
+        }
+    } while (!finished.load());
+    writer.join();
+    ticker.join();
+    for (const auto& error : errors) {
+        if (error) {
+            std::rethrow_exception(error);
+        }
+    }
+    CHECK(store.tick(origin + 2s) == 776);
+    CHECK(store.tick(origin + 2s) == 0);
+    CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.contains("live"));
+}
+void test_bounded_catchup() {
+    Store store(1000, 10min, 1ms, origin);
+    store.put("boundary", {1}, origin + 1024ms);
+    store.put("renew", {2}, origin + 1025ms);
+    store.put("later", {3}, origin + 2500ms);
+    const auto target = origin + 3000ms + 500ns;
+    CHECK(store.tick(target) == 1976);
+    CHECK(store.version() == 4 && store.snapshot()->data.size() == 2);
+    const auto first = store.extract(3);
+    CHECK(!first.stale && first.deltas.size() == 1 && first.deltas.front().key == "boundary");
+    store.put("renew", {4});
+    CHECK(store.tick(target, 512) == 1464);
+    CHECK(store.version() == 5 && store.snapshot()->data.contains("later"));
+    CHECK(store.tick(target) == 440);
+    CHECK(store.version() == 6 && !store.snapshot()->data.contains("later"));
+    CHECK(store.tick(target) == 0 && store.tick(target) == 0);
+    CHECK(store.tick(origin) == 0 && store.tick(origin + 3001ms, 1) == 0);
+    CHECK(store.version() == 6 && store.snapshot()->data.at("renew")->front() == 4);
+
+    bool rejected = false;
+    const auto before = store.snapshot();
+    try {
+        store.tick(origin + 1h, 0);
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    CHECK(rejected && store.snapshot() == before);
+
+    Store empty(0, 10min, 1ms, origin);
+    CHECK(empty.tick(origin + 24h) == 86'400'000 - 1024);
+    CHECK(empty.tick(origin + 24h, 1) == 86'400'000 - 1025);
+    CHECK(empty.version() == 0);
+
+    Store extreme(0, 10min, Clock::duration{1}, Clock::time_point::min());
+    CHECK(extreme.tick(Clock::time_point::max()) == UINT64_MAX - 1024);
+    CHECK(extreme.tick(Clock::time_point::max(), 1) == UINT64_MAX - 1025);
+}
+void test_store_model() {
+    constexpr std::uint64_t capacity = 8;
+    for (const auto seed : {11U, 29U, 71U}) {
+        Store store(capacity, Clock::duration::max(), 1ms, origin);
+        std::map<std::string, std::pair<Store::Buffer, std::uint64_t>> state;
+        std::vector<Store::Delta> log;
+        std::uint64_t version = 0;
+        std::uint64_t observed = 0;
+        std::uint64_t advanced = 0;
+        std::mt19937_64 random(seed);
+        const auto at = [](std::uint64_t tick) { return origin + std::chrono::milliseconds(static_cast<std::int64_t>(tick)); };
+        const auto check_snapshot = [&](const auto& snapshot) {
+            CHECK(snapshot->version == version && snapshot->data.size() == state.size());
+            for (const auto& [key, item] : state) {
+                CHECK(snapshot->data.contains(key) && *snapshot->data.at(key) == item.first);
+            }
+        };
+        for (unsigned step = 0; step < 2000; ++step) {
+            const auto key = "model/" + std::to_string(random() % 32);
+            switch (random() % 4) {
+            case 0: {
+                const Store::Buffer value{static_cast<std::uint8_t>(random() % 256)};
+                const auto expiry = random() % 4 == 0 ? UINT64_MAX : observed + random() % 24;
+                const auto deadline = expiry == UINT64_MAX ? Clock::time_point::max() : at(expiry);
+                store.put(key, value, deadline);
+                state.insert_or_assign(key, std::pair{value, expiry});
+                log.emplace_back(key, std::make_shared<const Store::Buffer>(value), false, ++version, deadline);
+                break;
+            }
+            case 1:
+                store.remove(key);
+                if (state.erase(key) != 0) {
+                    log.emplace_back(key, nullptr, true, ++version, Clock::time_point::max());
+                }
+                break;
+            case 2: {
+                observed += random() % 7;
+                const std::uint64_t budget = 1 + random() % 5;
+                const auto next = std::min(observed, advanced + budget);
+                CHECK(store.tick(at(observed), budget) == observed - next);
+                bool changed = false;
+                if (next != advanced) {
+                    for (auto entry = state.begin(); entry != state.end();) {
+                        if (entry->second.second <= next) {
+                            if (!changed) {
+                                ++version;
+                                changed = true;
+                            }
+                            log.emplace_back(entry->first, nullptr, true, version, Clock::time_point::max());
+                            entry = state.erase(entry);
+                        } else {
+                            ++entry;
+                        }
+                    }
+                }
+                advanced = next;
+                break;
+            }
+            default:
+                CHECK(store.tick(at(advanced), 1) == 0);
+                break;
+            }
+            CHECK(store.version() == version);
+            const auto snapshot = store.snapshot();
+            check_snapshot(snapshot);
+            CHECK(store.snapshot() == snapshot);
+
+            const auto cursor = random() % 4 == 0 ? version + 1 : version - random() % std::min(version + 1, capacity + 2);
+            const auto result = store.extract(cursor);
+            const auto oldest = version > capacity ? version - capacity : 0;
+            CHECK(result.version == version && result.stale == (cursor > version || cursor < oldest));
+            if (result.stale) {
+                CHECK(result.deltas.empty());
+                continue;
+            }
+            std::set<std::pair<std::uint64_t, std::string>> remaining;
+            for (const auto& delta : log) {
+                if (delta.version > cursor) {
+                    CHECK(remaining.emplace(delta.version, delta.key).second);
+                }
+            }
+            auto previous = cursor;
+            for (const auto& delta : result.deltas) {
+                CHECK(delta.version >= previous && remaining.erase({delta.version, delta.key}) == 1);
+                previous = delta.version;
+                const auto expected = std::ranges::find_if(log, [&](const auto& item) { return item.version == delta.version && item.key == delta.key; });
+                CHECK(expected != log.end() && delta.deleted == expected->deleted && delta.expire == expected->expire);
+                CHECK(static_cast<bool>(delta.value) == static_cast<bool>(expected->value));
+                if (delta.value) {
+                    CHECK(*delta.value == *expected->value);
+                }
+            }
+            CHECK(remaining.empty());
+        }
+    }
+}
+} // namespace
+
+// 独立进程执行全部边界用例, 任一断言失败都以非零退出码结束.
+int main() {
+    try {
+        test_interval();
+        test_precision_and_clock();
+        test_renewal_and_catchup();
+        test_rehash_and_recreation();
+        test_extreme_clock();
+        test_concurrent_ttl();
+        test_bounded_catchup();
+        test_store_model();
+        std::cout << "Store TTL clock, renewal, batch, rehash and extreme boundaries passed\n";
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}

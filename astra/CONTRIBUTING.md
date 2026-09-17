@@ -16,7 +16,8 @@ Supervisor 使用 Go, 旧 Rust Star 已废弃; 当前准入见[身份契约](../
 | `common/src/rpc_status.hpp` | 稳定 gRPC 错误分类 | 只依据状态码, 不把远端 message/details 写入日志 |
 | `common/src/process.*` | 信号、唤醒和 JSON 日志 | 私有进程设施, 有明确所有者和恢复路径 |
 | `common/src/runtime.cpp` | 生命周期协调 | 按会话、准入、拨号、诊断的次序推进, 退出时等待完成 |
-| `common/src/sync_store.*` | 内部状态、批次历史和只读快照 | 先准备分配再提交, 不混入业务鉴权或跨实例游标判断 |
+| `common/src/store.*` | 内部状态、批次历史、只读快照和 TTL 驱动 | 先准备分配再提交, 在同一把状态锁内补拍和处理续租 |
+| `common/src/wheel.hpp` | 无动态分配的侵入式分层时间轮 | 不管理线程或读取时钟, Store 负责时间换算、批次提交和失败重排 |
 | `star/src`, `planet/src` | 两个具体角色策略和各自入口 | 只维护内存索引, 不直接联网或在锁中取消 RPC |
 | `common/tests` | 单元与真实 RPC 夹具 | `check.hpp` 的断言在 Release 也生效, `fixture.hpp` 只读取公开测试身份 |
 | `bench` | 隔离的推流对照与存储微基准 | 不链接进服务, 不用实验消息扩充生产协议 |

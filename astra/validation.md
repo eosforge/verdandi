@@ -1,6 +1,6 @@
 # C++26 Star / Planet 首版验证记录
 
-> 本文保留早期协议的验证历史. 当前准入协议 v6 的 Debug/Release、ASan/UBSan、TSan 和 Go race 结果见[准入精简记录](admission-simplification-20260912.md); 不将本文旧长测成绩转记为 v6 证据.
+> 本文保留早期协议的验证历史. 当前 v1 骨架、Store/Wheel 和协议代理的结果见 [2026-09-17 回归记录](regression-20260917.md). 下文的旧长测成绩不转记为当前代码的验证证据.
 
 日期: 2026-09-11. 状态: 接收交接竞争已修复, 最终 Debug/Release、ASan/UBSan、完整 TSan 与一小时故障循环通过.
 2026-09-11 保存 TSan 结果后按维护者要求暂停. 2026-09-12 已完成剩余连接验收并切换默认 Linux 入口;

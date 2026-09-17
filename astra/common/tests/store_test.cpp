@@ -46,20 +46,18 @@ void test_put_and_remove() {
 // 相等的单调截止必须到期, Catalog 的 max 截止不随普通租约清理.
 void test_evict_expired() {
     // store 同时持有有限租约和永不过期数据, 验证两者使用同一个清理入口.
-    Store store;
-
-    // now 为固定测试基准, 不依赖实际等待或调度速度.
-    const auto now = Clock::now();
+    const auto now = Clock::time_point{};
+    Store store(1000, 10min, 1s, now);
 
     store.put("key1", {1}, now + 10s);
     store.put("key2", {2}, Clock::time_point::max());
 
     CHECK(store.version() == 2);
 
-    store.sweep(now + 5s);
+    store.tick(now + 5s);
     CHECK(store.version() == 2);
 
-    store.sweep(now + 10s);
+    store.tick(now + 10s);
     CHECK(store.version() == 3);
 
     // snapshot 确认截止相等时只删除有限租约 Key.
@@ -70,13 +68,16 @@ void test_evict_expired() {
     CHECK(snapshot->data.find("key1") == snapshot->data.end());
 
     // 极值 now 仍不能删除 max 哨兵, 而真实的最大有限截止应当到期.
-    store.put("last_finite", {3}, Clock::time_point::max() - Clock::duration{1});
-    store.sweep(Clock::time_point::max());
-    CHECK(store.version() == 5);
-    CHECK(store.snapshot()->data.size() == 1);
-    CHECK(store.snapshot()->data.contains("key2"));
-    store.sweep(Clock::time_point::max());
-    CHECK(store.version() == 5);
+    // 只推进极值附近的两拍, 不用从普通时刻补数十亿空拍来覆盖相同边界.
+    Store edge(1000, 10min, Clock::duration{1}, Clock::time_point::max() - Clock::duration{2});
+    edge.put("permanent", {2});
+    edge.put("last_finite", {3}, Clock::time_point::max() - Clock::duration{1});
+    edge.tick(Clock::time_point::max());
+    CHECK(edge.version() == 3);
+    CHECK(edge.snapshot()->data.size() == 1);
+    CHECK(edge.snapshot()->data.contains("permanent"));
+    edge.tick(Clock::time_point::max());
+    CHECK(edge.version() == 3);
 }
 
 // 淘汰边界为最后淘汰的完整批次, 未来游标必须显式回退到快照.
@@ -113,10 +114,10 @@ void test_extract_since_and_history_trim() {
 // 同次过期删除不能因缓存容量被截成部分批次, 重新写入的 Key 不受旧删除记录淘汰影响.
 void test_batches_and_recreation() {
     // store 的容量是批次数而非记录数, 一批两个删除都必须保留.
-    Store store(1);
+    Store store(1, 10min, 1ms, Clock::time_point{});
     store.put("a", {1}, Clock::time_point{});
     store.put("b", {2}, Clock::time_point{});
-    store.sweep(Clock::now());
+    store.tick(Clock::time_point{} + 1ms);
     // expired 持有历史批次副本, 后续淘汰不影响这个结果的生命周期.
     const auto expired = store.extract(2);
     CHECK(!expired.stale && expired.version == 3 && expired.deltas.size() == 2);
@@ -239,6 +240,72 @@ void test_concurrent_snapshots() {
     CHECK(store.snapshot()->version == 200);
 }
 
+void test_retention_and_idle_maintenance() {
+    const auto start = Clock::now();
+    Store store(100, 1h, 1ms, start);
+    store.put("live", {1});
+    store.put("removed", {2});
+    store.remove("removed");
+    const auto written = Clock::now();
+    CHECK(store.tick(start - 1ns) == 0);
+    CHECK(!store.extract(0).stale && store.extract(0).deltas.size() == 3);
+    CHECK(store.tick(written + 1h, 1) != 0);
+    CHECK(store.version() == 3 && store.extract(0).stale && store.extract(2).stale);
+    CHECK(!store.extract(3).stale && store.extract(3).deltas.empty());
+    CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.at("live")->front() == 1);
+    store.put("removed", {3});
+    const auto changes = store.extract(3);
+    CHECK(!changes.stale && changes.deltas.size() == 1 && !changes.deltas.front().deleted);
+    CHECK(store.snapshot()->data.at("removed")->front() == 3);
+
+    Store no_retention(100, Clock::duration::zero());
+    no_retention.put("live", {1});
+    CHECK(no_retention.extract(0).stale && !no_retention.extract(1).stale);
+    no_retention.remove("live");
+    CHECK(no_retention.extract(1).stale && !no_retention.extract(2).stale);
+    no_retention.put("live", {2});
+    CHECK(no_retention.snapshot()->data.at("live")->front() == 2);
+
+    bool rejected = false;
+    try {
+        Store invalid(100, -1ns);
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    CHECK(rejected);
+}
+
+void test_invalidated_snapshot_release() {
+    for (unsigned operation = 0; operation < 3; ++operation) {
+        Store store(0, 10min, 1ms, Clock::time_point{});
+        store.put("payload", Store::Buffer(4096, 7), Clock::time_point{} + 1ms);
+        auto snapshot = store.snapshot();
+        std::weak_ptr<const Store::Snapshot> old_snapshot = snapshot;
+        std::weak_ptr<const Store::Buffer> old_payload = snapshot->data.at("payload");
+        snapshot.reset();
+        CHECK(!old_snapshot.expired() && !old_payload.expired());
+        if (operation == 0) {
+            store.put("payload", {8});
+        } else if (operation == 1) {
+            store.remove("payload");
+        } else {
+            CHECK(store.tick(Clock::time_point{} + 1ms) == 0);
+        }
+        CHECK(store.version() == 2 && old_snapshot.expired() && old_payload.expired());
+    }
+
+    Store store(0);
+    store.put("held", {9});
+    auto snapshot = store.snapshot();
+    std::weak_ptr<const Store::Buffer> payload = snapshot->data.at("held");
+    store.remove("missing");
+    CHECK(store.snapshot() == snapshot);
+    store.remove("held");
+    CHECK(!payload.expired() && snapshot->data.at("held")->front() == 9);
+    snapshot.reset();
+    CHECK(payload.expired());
+}
+
 // 所有断言在 Release 也生效, 异常使 CTest 明确失败.
 int main() {
     try {
@@ -249,6 +316,8 @@ int main() {
         test_long_history_suffix();
         test_result_lifetime();
         test_concurrent_snapshots();
+        test_retention_and_idle_maintenance();
+        test_invalidated_snapshot_release();
         std::cout << "All tests passed.\n";
         return 0;
     } catch (const std::exception& error) {

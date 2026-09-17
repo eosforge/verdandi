@@ -1,5 +1,5 @@
 // 功能: 依据 C++26 字段反射解析 CLI, 校验参数并生成帮助和拥有数据的运行配置.
-// 详细说明: 这是一个前沿的 C++26 代码文件，利用新标准中的 `std::meta` 编译期反射机制，通过探测 
+// 详细说明: 这是一个前沿的 C++26 代码文件，利用新标准中的 `std::meta` 编译期反射机制，通过探测
 // `detail::Options` 内部成员与其上挂载的注解，实现一套无需在运行时使用繁杂的映射表/注册逻辑
 // 的零开销或极低开销的命令行参数（CLI）解析器。最终将各个参数合法化并汇聚成为统一且所有权清晰的 `Config` 配置。
 #include <astra/config.hpp>
@@ -119,41 +119,41 @@ std::string default_help(std::uint64_t value, const detail::Option& option) {
 Result<Config> Config::parse(std::span<const std::string_view> arguments, Role role) {
     detail::Options options;
     std::bitset<fields.size()> seen; // 用于追踪每个字段是否在命令行出现过，避免重复赋。
-    
+
     // 先统一 --name=value 与 --name value, 再分派字段; 借用的参数只在本次调用中有效.
     for (std::size_t i = 0; i < arguments.size(); ++i) {
         const auto argument = arguments[i];
         if (!argument.starts_with("--")) {
             return Error::configuration("Expected a named option");
         }
-        
+
         // 尝试分离键和值
         const auto separator = argument.find('=');
         // 如果是 --name=value，则截取 -- 后到 = 的部分。否则截取 -- 后的所有。
         const auto name = argument.substr(2, separator == std::string_view::npos ? separator : separator - 2);
-        
+
         if (name == "worker-threads") {
             return Error::configuration("--worker-threads is unsupported: gRPC owns I/O workers");
         }
-        
+
         std::string_view value;
         // 支持 `--name=value` 格式
         if (separator != std::string_view::npos) {
             value = argument.substr(separator + 1);
-        } 
+        }
         // 支持 `--name value` 格式，此时消耗下一个 argv 参数。
         else if (i + 1 < arguments.size()) {
             value = arguments[++i];
         }
-        
+
         // 值为空、值似乎被错写为另外一个旗帜形参、值太长均报错。
         if (value.empty() || value.starts_with("--") || value.size() > 4096) {
             return Error::configuration("Missing or oversized option value");
         }
-        
+
         bool found = false;
         std::size_t index = 0;
-        
+
         // 仅此字段分派使用 splice; 把异构访问展开为普通比较和赋值, 不引入虚函数或成员指针表.
         // 详细说明: 这里利用了 C++26 的反射，在编译期生成了长串的 if (name == option.name) 来挨个匹配目标字段。
         // clang-format off
@@ -171,14 +171,14 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
             ++index;
         }
         // clang-format on
-        
+
         // 如果上面一大串展开的 if 没能匹配上任何注册的项，就报错未知的选项。
         if (!found) {
             return Error::configuration("Unknown option");
         }
     }
     std::size_t index = 0;
-    
+
     // 必填字段检查来自相同注解, 新增字段无需修改第二份条件列表.
     // 详细说明: 再次编译期展开所有字段，看一看带有 required: true 标记的字段对应的 seen 状态是不是没有激活。
     // clang-format off
@@ -195,14 +195,14 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
     if (!listen || !supervisor || !Member::valid_name(options.galaxy) || !Member::valid_name(options.group) || options.identity.empty()) {
         return Error::configuration("Invalid endpoint, name or identity path");
     }
-    
+
     // 生成对外的宣告地址（如果不传则降级采用 listen 地址）。
     auto advertise = options.advertise.empty() ? listen : Endpoint::parse(options.advertise);
     // 对外宣告的端点绝对不可以含有 0.0.0.0 或者 :: 这样指向模糊的通配符。必须能被别人明确寻址。
     if (!advertise || (listen->wildcard && options.advertise.empty())) {
         return Error::configuration("A concrete advertise endpoint is required");
     }
-    
+
     // 全部输入和跨字段约束通过后才形成运行配置, 派生入站预算并将 CLI 秒数统一转换为毫秒.
     Config result;
     result.role = role;
@@ -220,11 +220,11 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
     result.pong_timeout = Milliseconds(options.pong);
     result.shutdown_timeout = std::chrono::seconds(options.shutdown);
     result.status_interval = std::chrono::seconds(options.status);
-    
+
     // 注入新暴露的准入通道尺寸约束配置
     result.max_admission_request_bytes = static_cast<std::uint32_t>(options.max_admission_request_bytes);
     result.max_admission_response_bytes = static_cast<std::uint32_t>(options.max_admission_response_bytes);
-    
+
     return result;
 }
 
@@ -235,7 +235,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
 std::string Config::help(Role role) {
     std::string result = "Usage: " + std::string(role == Role::star ? "star" : "planet") + " --listen=IP:PORT --super=HOST:PORT --galaxy=ID [options]\n";
     const detail::Options defaults;
-    
+
     // 默认值直接读取同一结构, 修改初始化器会同步改变实例和帮助.
     // 详细说明: 依然利用反射技术，自动将每个字段的注解名、描述、默认范围、以及标志性字串拼接成为格式化良好的命令帮助。
     // clang-format off
@@ -248,40 +248,4 @@ std::string Config::help(Role role) {
     // clang-format on
     return result + "  --help / --version\nTLS and Supervisor account login are required. Stop with SIGINT or SIGTERM.\n";
 }
-// 返回值: 解析通过并进行标准化处理后的字符串，或者错误信息。
-Result<std::string> Config::format_supervisor(std::string_view value) {
-    // 尝试先按数字端点（IP:PORT）去解析
-    if (auto endpoint = Endpoint::parse(value)) {
-        return endpoint->text();
-    }
-    
-    // 若不是 IP 格式，按 HOSTNAME:PORT 解析。
-    const auto separator = value.rfind(':');
-    if (separator == std::string_view::npos || !port_number(value.substr(separator + 1), false)) {
-        return Error::configuration("Supervisor requires HOST:PORT");
-    }
-    const auto host = value.substr(0, separator);
-    std::array<unsigned char, 4> numeric{};
-    // 为了防止部分 inet_pton 或域名解析 API 遇到伪装为非规范 IP 的边缘情况，再拦一道。
-    if (inet_pton(AF_INET, std::string(host).c_str(), numeric.data()) == 1) {
-        return Error::configuration("Invalid numeric Supervisor endpoint");
-    }
-    
-    // DNS 名字整体长度限制。
-    if (host.empty() || host.size() > 253) {
-        return Error::configuration("Invalid supervisor hostname");
-    }
-    
-    // 检查每一段 label 的合法性：不能超长，头尾不能是横杠，字符需符合规范。
-    for (auto label : host | std::views::split('.')) {
-        const std::string_view part(label.begin(), label.end());
-        if (part.empty() || part.size() > 63 || part.starts_with('-') || part.ends_with('-') || !std::ranges::all_of(part, [](unsigned char c) {
-                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
-            })) {
-            return Error::configuration("Invalid supervisor hostname");
-        }
-    }
-    return std::string(value);
-}
-
 } // namespace astra

@@ -900,15 +900,14 @@ var File_astra_proto protoreflect.FileDescriptor
 
 const file_astra_proto_rawDesc = "" +
 	"\n" +
-	"\vastra.proto\x12\x0eproto.astra.v1\"\x9d\x02\n" +
+	"\vastra.proto\x12\x0eproto.astra.v1\"\x99\x02\n" +
 	"\x05Hello\x12%\n" +
 	"\x0eprotocol_major\x18\x01 \x01(\rR\rprotocolMajor\x12%\n" +
 	"\x0eprotocol_minor\x18\x02 \x01(\rR\rprotocolMinor\x12&\n" +
 	"\x0fmax_frame_bytes\x18\a \x01(\rR\rmaxFrameBytes\x12\x1c\n" +
 	"\tadmission\x18\b \x01(\fR\tadmission\x12/\n" +
 	"\x13admission_signature\x18\t \x01(\fR\x12admissionSignatureJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\n" +
-	"\x10\vR\n" +
-	"cluster_idR\x02idR\aboot_idR\tadvertiseR\rsession_proof\"%\n" +
+	"\x10\vR\x06galaxyR\x02idR\aboot_idR\tadvertiseR\rsession_proof\"%\n" +
 	"\x04Ping\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\"%\n" +

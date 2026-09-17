@@ -1,5 +1,36 @@
 # Astra Worklog
 
+## Astra static-audit fixes and bounded catch-up (2026-09-17, not tested)
+
+Authorized fixes after the static audit, excluding README and existing source-comment rewrites.
+Store now trims history on idle ticks, rejects negative retention, treats zero retention as no history,
+and releases invalidated snapshot ownership after unlocking successful mutations. External snapshots remain valid.
+All 51 Proto Mutator setters now return the lightweight proxy by value.
+Store::tick(now, max_ticks=1024) returns the number of remaining whole ticks and preserves progress between calls.
+The budget limits tick count, not callbacks or elapsed execution time; unfinished TTL work remains pending.
+Added source tests for idle history, snapshot lifetime, bounded progress, allocation-failure recovery,
+6000 model operations, proxy lifetime and target/cross-Arena ownership. Tests and builds were not run.
+Formatted edited C++ files with the existing formatter and statically checked preserved comment text/README.
+No downloads, Linux synchronization, commit or push. Details and pending validation:
+[audit fixes](astra/audit-fixes-20260917.md). Earlier regression evidence does not cover these edits.
+
+## Astra TTL integration and complete regression (2026-09-17)
+
+The maintainer explicitly authorized completing astra/ tests and running this regression.
+Confirmed Store::tick(now) follows monotonic time and catches up elapsed ticks internally. Added positive tick configuration,
+ceiling deadline conversion, renewal/cancellation, segmented long deadlines and allocation-failure rescheduling while retaining atomic batches.
+Kept the Wheel algorithm and the maintainer's five-level/limit naming. Added Store TTL and Proto Proxy suites,
+expanded Wheel high-level boundaries, allocation-fault retry coverage and configurable admission-message limit tests.
+Fixed incomplete galaxy renames, a moved address helper, stale C++/Go generated sources and invalid Proto Proxy setters/types.
+Repaired Supervisor fixture paths and preserved the shared historical JSON vector format; formatted affected Go sources.
+
+Linux Debug, Release, ASan/UBSan and TSan each passed 14 CTests, 6 TLS/RPC cases and 13 process cases.
+Each profile passed 168 write and 7 read allocation-failure points, 180000 Wheel model operations and zero-allocation Wheel checks.
+Windows Supervisor tests/vet, Linux Supervisor tests/race/vet and offline generator gates passed.
+Python harnesses passed on both hosts; the one Windows-only file-sharing test was skipped on Linux. Windows build-entry tests also passed.
+Reused project-local dependencies and build caches, with no downloads or new long-running campaign. Test services and owned resources were cleaned.
+Changes are uncommitted. Current scope, limitations and evidence are recorded in [the regression report](astra/regression-20260917.md).
+
 ## Wheel correction and test approval rule (2026-09-16)
 
 Preserved the intrusive hierarchical timing wheel, corrected tick boundaries, and added stable pending-list ownership for callbacks and exceptions.

@@ -10,7 +10,7 @@
 #include <type_traits>
 
 namespace {
-// 测试默认三层轮. 每个测试拥有独立轮与节点, 不依赖墙钟或测试执行次序.
+// 测试默认五层轮. 每个测试拥有独立轮与节点, 不依赖墙钟或测试执行次序.
 using Timer = astra::Wheel<>;
 
 // 通过 requires 表达模板参数可用性, 无效配置必须在实例化前拒绝.
@@ -19,7 +19,7 @@ concept ValidWheel = requires { typename astra::Wheel<Levels, Bits>; };
 
 static_assert(!ValidWheel<0, 8> && !ValidWheel<3, 0> && !ValidWheel<1, 9> && !ValidWheel<9, 8>);
 static_assert(ValidWheel<1, 1> && ValidWheel<3, 8> && ValidWheel<8, 8> && ValidWheel<64, 1>);
-static_assert(Timer::max_delay == 16'777'215 && astra::Wheel<8, 8>::max_delay == UINT64_MAX);
+static_assert(Timer::limit == 1'099'511'627'775 && astra::Wheel<8, 8>::limit == UINT64_MAX);
 static_assert(!std::is_copy_constructible_v<Timer> && !std::is_move_constructible_v<Timer>);
 static_assert(!std::is_copy_assignable_v<Timer> && !std::is_move_assignable_v<Timer>);
 static_assert(!std::is_copy_constructible_v<Timer::Node> && !std::is_move_constructible_v<Timer::Node>);
@@ -57,13 +57,24 @@ void test_deadlines() {
         check_deadline<Timer>(UINT64_MAX - 257, delay);
     }
     for (std::uint64_t initial = 0; initial < 64; ++initial) {
-        for (std::uint64_t delay = 0; delay <= astra::Wheel<3, 2>::max_delay; ++delay) {
+        for (std::uint64_t delay = 0; delay <= astra::Wheel<3, 2>::limit; ++delay) {
             check_deadline<astra::Wheel<3, 2>>(initial, delay);
         }
     }
     check_deadline<astra::Wheel<1, 1>>(UINT64_MAX, 1);
     check_deadline<astra::Wheel<8, 8>>(UINT64_MAX - 1, 3);
     check_deadline<astra::Wheel<64, 1>>(UINT64_MAX - 1, 3);
+    // 压缩槽宽覆盖五层的全部级联和最大延迟, 避免测试默认第五层时逐拍等待 2^32 次.
+    for (std::uint64_t initial = 0; initial < 32; ++initial) {
+        for (std::uint64_t delay = 0; delay <= astra::Wheel<5, 1>::limit; ++delay) {
+            check_deadline<astra::Wheel<5, 1>>(initial, delay);
+        }
+    }
+    check_deadline<astra::Wheel<5, 2>>(1000, astra::Wheel<5, 2>::limit);
+    // 默认槽宽在高位边界与整数回绕附近运行, 保证 countr_zero 触发的多层路径有覆盖.
+    for (const auto boundary : {std::uint64_t{1} << 24, std::uint64_t{1} << 32, std::uint64_t{1} << 40}) {
+        check_deadline<Timer>(boundary - 257, 1024);
+    }
 }
 
 // 无效改期保留原计划; 有效改期移除旧计划, cancel 可重复调用且能处理桶头/中间/尾部.
@@ -72,7 +83,7 @@ void test_schedule_and_cancel() {
     std::array<Timer::Node, 3> nodes;
     std::size_t calls = 0;
     CHECK(wheel.schedule(nodes[0], 1));
-    CHECK(!wheel.schedule(nodes[0], Timer::max_delay + 1));
+    CHECK(!wheel.schedule(nodes[0], Timer::limit + 1));
     CHECK(nodes[0].scheduled());
     wheel.tick([&](auto*) { ++calls; });
     CHECK(calls == 1);
@@ -286,7 +297,7 @@ template <typename W> void test_model(std::uint64_t initial, std::uint64_t seed)
     std::array<std::optional<std::uint64_t>, 64> remaining{};
     std::array<bool, 64> seen{};
     std::mt19937_64 random(seed);
-    const auto limit = std::min(W::max_delay, std::uint64_t{1000});
+    const auto limit = std::min(W::limit, std::uint64_t{1000});
     std::uint64_t elapsed = 0;
     for (std::size_t id = 0; id < items.size(); ++id) {
         items[id].id = id;

@@ -26,14 +26,14 @@ Admission::Admission(const Config& config, std::shared_ptr<Identity> identity, s
     : config_(config), identity_(std::move(identity)), wake_(std::move(wake)) {
     // 禁用 gRPC 内建重试, 使应用层复用启动幂等键并拥有完整尝试截止与失败分类.
     grpc::ChannelArguments args;
-    args.SetMaxReceiveMessageSize(config_.max_admission_response_bytes);
-    args.SetMaxSendMessageSize(config_.max_admission_request_bytes);
-    args.SetInt("grpc.enable_retries", 0);          // 关闭重试机制
+    args.SetMaxReceiveMessageSize(static_cast<int>(config_.max_admission_response_bytes));
+    args.SetMaxSendMessageSize(static_cast<int>(config_.max_admission_request_bytes));
+    args.SetInt("grpc.enable_retries", 0); // 关闭重试机制
     // 根据提供的 Supervisor 地址和 TLS 凭据创建 gRPC 通道
     channel_ = grpc::CreateCustomChannel(config_.supervisor, identity_->channel_credentials(), args);
     // 实例化对应的 RPC Stub
     stub_ = proto::orbit::v1::Admission::NewStub(channel_);
-    
+
     // 随机值只用于幂等, 不成为 Star 身份. 整个进程的重试和候选刷新始终复用它.
     std::string request_id(32, '\0');
     // 生成 32 字节的安全随机数作为请求的唯一标识 (幂等键)
@@ -161,11 +161,11 @@ Result<Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& respo
     auto hello = std::make_shared<proto::astra::v1::Hello>();
     mutate(*hello)
         .protocol_major(protocol_major)
-        .protocol_minor(0)
+        .protocol_minor(0U)
         .max_frame_bytes(config_.max_frame_bytes)
         .admission(std::move(*response.mutable_admission()))
         .admission_signature(std::move(*response.mutable_signature()));
-    
+
     // 返回成功验证后的完整 Joined 对象
     return Joined{std::move(*local), std::move(members), std::move(hello)};
 }

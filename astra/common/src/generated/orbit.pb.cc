@@ -68,10 +68,10 @@ constexpr RegistrationRequest::ParseTableT_ RegistrationRequest::InternalGenerat
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
       {::_pbi::TcParser::MiniParse, {}},
-      // string cluster_id = 1;
+      // string galaxy = 1;
       {::_pbi::TcParser::FastUS1,
        {10, 0, 0,
-        PROTOBUF_FIELD_OFFSET(RegistrationRequest, _impl_.cluster_id_)}},
+        PROTOBUF_FIELD_OFFSET(RegistrationRequest, _impl_.galaxy_)}},
       {::_pbi::TcParser::MiniParse, {}},
       // string advertise = 3;
       {::_pbi::TcParser::FastUS1,
@@ -110,8 +110,8 @@ constexpr RegistrationRequest::ParseTableT_ RegistrationRequest::InternalGenerat
     }}, {{
       65535, 65535
     }}, {{
-      // string cluster_id = 1;
-      {PROTOBUF_FIELD_OFFSET(RegistrationRequest, _impl_.cluster_id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // string galaxy = 1;
+      {PROTOBUF_FIELD_OFFSET(RegistrationRequest, _impl_.galaxy_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
       // string advertise = 3;
       {PROTOBUF_FIELD_OFFSET(RegistrationRequest, _impl_.advertise_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
       // .proto.orbit.v1.Role role = 6;
@@ -129,9 +129,9 @@ constexpr RegistrationRequest::ParseTableT_ RegistrationRequest::InternalGenerat
     }},
     // no aux_entries
     {{
-      "\42\12\11\0\5\0\10\10\0\0\0\0\0\0\0\0"
+      "\42\6\11\0\5\0\10\10\0\0\0\0\0\0\0\0"
       "proto.orbit.v1.RegistrationRequest"
-      "cluster_id"
+      "galaxy"
       "advertise"
       "group"
       "username"
@@ -144,7 +144,7 @@ constexpr RegistrationRequest::ParseTableT_ RegistrationRequest::InternalGenerat
 inline constexpr RegistrationRequest::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     ::_pbi::ConstantInitialized) noexcept
-      : cluster_id_(
+      : galaxy_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
         advertise_(
@@ -287,10 +287,10 @@ constexpr Member::ParseTableT_ Member::InternalGenerateParseTable_(const ::_pbi:
       {::_pbi::TcParser::FastUS1,
        {66, 4, 0,
         PROTOBUF_FIELD_OFFSET(Member, _impl_.group_)}},
-      // string cluster_id = 1;
+      // string galaxy = 1;
       {::_pbi::TcParser::FastUS1,
        {10, 0, 0,
-        PROTOBUF_FIELD_OFFSET(Member, _impl_.cluster_id_)}},
+        PROTOBUF_FIELD_OFFSET(Member, _impl_.galaxy_)}},
       // string id = 2;
       {::_pbi::TcParser::FastUS1,
        {18, 1, 0,
@@ -315,8 +315,8 @@ constexpr Member::ParseTableT_ Member::InternalGenerateParseTable_(const ::_pbi:
     }}, {{
       65535, 65535
     }}, {{
-      // string cluster_id = 1;
-      {PROTOBUF_FIELD_OFFSET(Member, _impl_.cluster_id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // string galaxy = 1;
+      {PROTOBUF_FIELD_OFFSET(Member, _impl_.galaxy_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
       // string id = 2;
       {PROTOBUF_FIELD_OFFSET(Member, _impl_.id_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
       // string principal = 3;
@@ -332,9 +332,9 @@ constexpr Member::ParseTableT_ Member::InternalGenerateParseTable_(const ::_pbi:
     }},
     // no aux_entries
     {{
-      "\25\12\2\11\11\0\0\5"
+      "\25\6\2\11\11\0\0\5"
       "proto.orbit.v1.Member"
-      "cluster_id"
+      "galaxy"
       "id"
       "principal"
       "advertise"
@@ -347,7 +347,7 @@ constexpr Member::ParseTableT_ Member::InternalGenerateParseTable_(const ::_pbi:
 inline constexpr Member::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     ::_pbi::ConstantInitialized) noexcept
-      : cluster_id_(
+      : galaxy_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
         id_(
@@ -639,7 +639,7 @@ const ::uint32_t
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationRequest, _impl_._has_bits_),
         11, // hasbit index offset
-        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationRequest, _impl_.cluster_id_),
+        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationRequest, _impl_.galaxy_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationRequest, _impl_.advertise_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationRequest, _impl_.role_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationRequest, _impl_.group_),
@@ -667,7 +667,7 @@ const ::uint32_t
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Member, _impl_._has_bits_),
         10, // hasbit index offset
-        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Member, _impl_.cluster_id_),
+        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Member, _impl_.galaxy_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Member, _impl_.id_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Member, _impl_.principal_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Member, _impl_.advertise_),
@@ -697,33 +697,33 @@ static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
 };
 const char descriptor_table_protodef_orbit_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
-    "\n\013orbit.proto\022\016proto.orbit.v1\"\230\002\n\023Regist"
-    "rationRequest\022\022\n\ncluster_id\030\001 \001(\t\022\021\n\tadv"
-    "ertise\030\003 \001(\t\022\"\n\004role\030\006 \001(\0162\024.proto.orbit"
-    ".v1.Role\022\r\n\005group\030\007 \001(\t\022\027\n\017candidate_rou"
-    "nd\030\010 \001(\r\022\020\n\010username\030\t \001(\t\022\020\n\010password\030\n"
-    " \001(\t\022\022\n\nrequest_id\030\r \001(\014J\004\010\002\020\003J\004\010\005\020\006J\004\010\013"
-    "\020\014J\004\010\014\020\rJ\004\010\004\020\005R\002idR\016expected_epochR\006tick"
-    "etR\020ticket_signatureR\npublic_key\"e\n\024Regi"
-    "strationResponse\022\'\n\007members\030\001 \003(\0132\026.prot"
-    "o.orbit.v1.Member\022\021\n\tadmission\030\002 \001(\014\022\021\n\t"
-    "signature\030\003 \001(\014\"\242\001\n\006Member\022\022\n\ncluster_id"
-    "\030\001 \001(\t\022\n\n\002id\030\002 \001(\t\022\021\n\tprincipal\030\003 \001(\t\022\021\n"
-    "\tadvertise\030\004 \001(\t\022\r\n\005epoch\030\005 \001(\004\022\"\n\004role\030"
-    "\007 \001(\0162\024.proto.orbit.v1.Role\022\r\n\005group\030\010 \001"
-    "(\tJ\004\010\006\020\007R\npublic_key*<\n\004Role\022\024\n\020ROLE_UNS"
-    "PECIFIED\020\000\022\r\n\tROLE_STAR\020\001\022\017\n\013ROLE_PLANET"
-    "\020\0022b\n\tAdmission\022U\n\010Register\022#.proto.orbi"
-    "t.v1.RegistrationRequest\032$.proto.orbit.v"
-    "1.RegistrationResponseBAZ\?github.com/eos"
-    "forge/verdandi/supervisor/internal/gener"
-    "ated;wireb\006proto3"
+    "\n\013orbit.proto\022\016proto.orbit.v1\"\224\002\n\023Regist"
+    "rationRequest\022\016\n\006galaxy\030\001 \001(\t\022\021\n\tadverti"
+    "se\030\003 \001(\t\022\"\n\004role\030\006 \001(\0162\024.proto.orbit.v1."
+    "Role\022\r\n\005group\030\007 \001(\t\022\027\n\017candidate_round\030\010"
+    " \001(\r\022\020\n\010username\030\t \001(\t\022\020\n\010password\030\n \001(\t"
+    "\022\022\n\nrequest_id\030\r \001(\014J\004\010\002\020\003J\004\010\005\020\006J\004\010\013\020\014J\004"
+    "\010\014\020\rJ\004\010\004\020\005R\002idR\016expected_epochR\006ticketR\020"
+    "ticket_signatureR\npublic_key\"e\n\024Registra"
+    "tionResponse\022\'\n\007members\030\001 \003(\0132\026.proto.or"
+    "bit.v1.Member\022\021\n\tadmission\030\002 \001(\014\022\021\n\tsign"
+    "ature\030\003 \001(\014\"\236\001\n\006Member\022\016\n\006galaxy\030\001 \001(\t\022\n"
+    "\n\002id\030\002 \001(\t\022\021\n\tprincipal\030\003 \001(\t\022\021\n\tadverti"
+    "se\030\004 \001(\t\022\r\n\005epoch\030\005 \001(\004\022\"\n\004role\030\007 \001(\0162\024."
+    "proto.orbit.v1.Role\022\r\n\005group\030\010 \001(\tJ\004\010\006\020\007"
+    "R\npublic_key*<\n\004Role\022\024\n\020ROLE_UNSPECIFIED"
+    "\020\000\022\r\n\tROLE_STAR\020\001\022\017\n\013ROLE_PLANET\020\0022b\n\tAd"
+    "mission\022U\n\010Register\022#.proto.orbit.v1.Reg"
+    "istrationRequest\032$.proto.orbit.v1.Regist"
+    "rationResponseBAZ\?github.com/eosforge/ve"
+    "rdandi/supervisor/internal/generated;wir"
+    "eb\006proto3"
 };
 static ::absl::once_flag descriptor_table_orbit_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_orbit_2eproto = {
     false,
     false,
-    817,
+    809,
     descriptor_table_protodef_orbit_2eproto,
     "orbit.proto",
     &descriptor_table_orbit_2eproto_once,
@@ -762,7 +762,7 @@ PROTOBUF_NDEBUG_INLINE RegistrationRequest::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
     [[maybe_unused]] const ::proto::orbit::v1::RegistrationRequest& from_msg)
       : _has_bits_{from._has_bits_},
-        cluster_id_(arena, from.cluster_id_),
+        galaxy_(arena, from.galaxy_),
         advertise_(arena, from.advertise_),
         group_(arena, from.group_),
         username_(arena, from.username_),
@@ -796,7 +796,7 @@ RegistrationRequest::RegistrationRequest(
 PROTOBUF_NDEBUG_INLINE RegistrationRequest::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
-      : cluster_id_(arena),
+      : galaxy_(arena),
         advertise_(arena),
         group_(arena),
         username_(arena),
@@ -823,7 +823,7 @@ inline void RegistrationRequest::SharedDtor(MessageLite& self) {
   }
   this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
   ABSL_DCHECK(this_.GetArena() == nullptr);
-  this_._impl_.cluster_id_.Destroy();
+  this_._impl_.galaxy_.Destroy();
   this_._impl_.advertise_.Destroy();
   this_._impl_.group_.Destroy();
   this_._impl_.username_.Destroy();
@@ -867,7 +867,7 @@ PROTOBUF_NOINLINE void RegistrationRequest::Clear() {
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      this_._impl_.cluster_id_.ClearNonDefaultToEmpty();
+      this_._impl_.galaxy_.ClearNonDefaultToEmpty();
     }
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       this_._impl_.advertise_.ClearNonDefaultToEmpty();
@@ -915,12 +915,12 @@ PROTOBUF_NOINLINE void RegistrationRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string cluster_id = 1;
+  // string galaxy = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-    if (!this_._internal_cluster_id().empty()) {
-      const ::std::string& _s = this_._internal_cluster_id();
+    if (!this_._internal_galaxy().empty()) {
+      const ::std::string& _s = this_._internal_galaxy();
       ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.orbit.v1.RegistrationRequest.cluster_id");
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.orbit.v1.RegistrationRequest.galaxy");
       target = stream->WriteStringMaybeAliased(1, _s, target);
     }
   }
@@ -1015,11 +1015,11 @@ PROTOBUF_NOINLINE void RegistrationRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x000000ffU)) {
-    // string cluster_id = 1;
+    // string galaxy = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      if (!this_._internal_cluster_id().empty()) {
+      if (!this_._internal_galaxy().empty()) {
         total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                        this_._internal_cluster_id());
+                                        this_._internal_galaxy());
       }
     }
     // string advertise = 3;
@@ -1091,11 +1091,11 @@ void RegistrationRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
   cached_has_bits = from._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x000000ffU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      if (!from._internal_cluster_id().empty()) {
-        _this->_internal_set_cluster_id(from._internal_cluster_id());
+      if (!from._internal_galaxy().empty()) {
+        _this->_internal_set_galaxy(from._internal_galaxy());
       } else {
-        if (_this->_impl_.cluster_id_.IsDefault()) {
-          _this->_internal_set_cluster_id("");
+        if (_this->_impl_.galaxy_.IsDefault()) {
+          _this->_internal_set_galaxy("");
         }
       }
     }
@@ -1174,7 +1174,7 @@ void RegistrationRequest::InternalSwap(RegistrationRequest* PROTOBUF_RESTRICT PR
   ABSL_DCHECK_EQ(arena, other->GetArena());
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.cluster_id_, &other->_impl_.cluster_id_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.galaxy_, &other->_impl_.galaxy_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.advertise_, &other->_impl_.advertise_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.group_, &other->_impl_.group_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.username_, &other->_impl_.username_, arena);
@@ -1491,7 +1491,7 @@ PROTOBUF_NDEBUG_INLINE Member::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
     [[maybe_unused]] const ::proto::orbit::v1::Member& from_msg)
       : _has_bits_{from._has_bits_},
-        cluster_id_(arena, from.cluster_id_),
+        galaxy_(arena, from.galaxy_),
         id_(arena, from.id_),
         principal_(arena, from.principal_),
         advertise_(arena, from.advertise_),
@@ -1524,7 +1524,7 @@ Member::Member(
 PROTOBUF_NDEBUG_INLINE Member::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
-      : cluster_id_(arena),
+      : galaxy_(arena),
         id_(arena),
         principal_(arena),
         advertise_(arena),
@@ -1550,7 +1550,7 @@ inline void Member::SharedDtor(MessageLite& self) {
   }
   this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
   ABSL_DCHECK(this_.GetArena() == nullptr);
-  this_._impl_.cluster_id_.Destroy();
+  this_._impl_.galaxy_.Destroy();
   this_._impl_.id_.Destroy();
   this_._impl_.principal_.Destroy();
   this_._impl_.advertise_.Destroy();
@@ -1593,7 +1593,7 @@ PROTOBUF_NOINLINE void Member::Clear() {
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000001fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      this_._impl_.cluster_id_.ClearNonDefaultToEmpty();
+      this_._impl_.galaxy_.ClearNonDefaultToEmpty();
     }
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       this_._impl_.id_.ClearNonDefaultToEmpty();
@@ -1638,12 +1638,12 @@ PROTOBUF_NOINLINE void Member::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string cluster_id = 1;
+  // string galaxy = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-    if (!this_._internal_cluster_id().empty()) {
-      const ::std::string& _s = this_._internal_cluster_id();
+    if (!this_._internal_galaxy().empty()) {
+      const ::std::string& _s = this_._internal_galaxy();
       ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.orbit.v1.Member.cluster_id");
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.orbit.v1.Member.galaxy");
       target = stream->WriteStringMaybeAliased(1, _s, target);
     }
   }
@@ -1730,11 +1730,11 @@ PROTOBUF_NOINLINE void Member::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
-    // string cluster_id = 1;
+    // string galaxy = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      if (!this_._internal_cluster_id().empty()) {
+      if (!this_._internal_galaxy().empty()) {
         total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
-                                        this_._internal_cluster_id());
+                                        this_._internal_galaxy());
       }
     }
     // string id = 2;
@@ -1799,11 +1799,11 @@ void Member::MergeImpl(::google::protobuf::MessageLite& to_msg,
   cached_has_bits = from._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      if (!from._internal_cluster_id().empty()) {
-        _this->_internal_set_cluster_id(from._internal_cluster_id());
+      if (!from._internal_galaxy().empty()) {
+        _this->_internal_set_galaxy(from._internal_galaxy());
       } else {
-        if (_this->_impl_.cluster_id_.IsDefault()) {
-          _this->_internal_set_cluster_id("");
+        if (_this->_impl_.galaxy_.IsDefault()) {
+          _this->_internal_set_galaxy("");
         }
       }
     }
@@ -1873,7 +1873,7 @@ void Member::InternalSwap(Member* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
   ABSL_DCHECK_EQ(arena, other->GetArena());
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.cluster_id_, &other->_impl_.cluster_id_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.galaxy_, &other->_impl_.galaxy_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.id_, &other->_impl_.id_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.principal_, &other->_impl_.principal_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.advertise_, &other->_impl_.advertise_, arena);

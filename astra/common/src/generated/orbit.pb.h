@@ -285,7 +285,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationRequest final : public 
 
   // accessors -------------------------------------------------------
   enum : int {
-    kClusterIdFieldNumber = 1,
+    kGalaxyFieldNumber = 1,
     kAdvertiseFieldNumber = 3,
     kGroupFieldNumber = 7,
     kUsernameFieldNumber = 9,
@@ -294,19 +294,19 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationRequest final : public 
     kRoleFieldNumber = 6,
     kCandidateRoundFieldNumber = 8,
   };
-  // string cluster_id = 1;
-  void clear_cluster_id() ;
-  [[nodiscard]] const ::std::string& cluster_id() const;
+  // string galaxy = 1;
+  void clear_galaxy() ;
+  [[nodiscard]] const ::std::string& galaxy() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
-  void set_cluster_id(Arg_&& arg, Args_... args);
-  ::std::string* PROTOBUF_NONNULL mutable_cluster_id();
-  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_cluster_id();
-  void set_allocated_cluster_id(::std::string* PROTOBUF_NULLABLE value);
+  void set_galaxy(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_galaxy();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_galaxy();
+  void set_allocated_galaxy(::std::string* PROTOBUF_NULLABLE value);
 
   private:
-  const ::std::string& _internal_cluster_id() const;
-  PROTOBUF_ALWAYS_INLINE void _internal_set_cluster_id(const ::std::string& value);
-  ::std::string* PROTOBUF_NONNULL _internal_mutable_cluster_id();
+  const ::std::string& _internal_galaxy() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_galaxy(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_galaxy();
 
   public:
   // string advertise = 3;
@@ -409,7 +409,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationRequest final : public 
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<4, 8,
-                          0, 91,
+                          0, 87,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -437,7 +437,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationRequest final : public 
         const RegistrationRequest& from_msg);
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     ::google::protobuf::internal::CachedSize _cached_size_;
-    ::google::protobuf::internal::ArenaStringPtr cluster_id_;
+    ::google::protobuf::internal::ArenaStringPtr galaxy_;
     ::google::protobuf::internal::ArenaStringPtr advertise_;
     ::google::protobuf::internal::ArenaStringPtr group_;
     ::google::protobuf::internal::ArenaStringPtr username_;
@@ -600,7 +600,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Member final : public ::google::pro
 
   // accessors -------------------------------------------------------
   enum : int {
-    kClusterIdFieldNumber = 1,
+    kGalaxyFieldNumber = 1,
     kIdFieldNumber = 2,
     kPrincipalFieldNumber = 3,
     kAdvertiseFieldNumber = 4,
@@ -608,19 +608,19 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Member final : public ::google::pro
     kEpochFieldNumber = 5,
     kRoleFieldNumber = 7,
   };
-  // string cluster_id = 1;
-  void clear_cluster_id() ;
-  [[nodiscard]] const ::std::string& cluster_id() const;
+  // string galaxy = 1;
+  void clear_galaxy() ;
+  [[nodiscard]] const ::std::string& galaxy() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
-  void set_cluster_id(Arg_&& arg, Args_... args);
-  ::std::string* PROTOBUF_NONNULL mutable_cluster_id();
-  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_cluster_id();
-  void set_allocated_cluster_id(::std::string* PROTOBUF_NULLABLE value);
+  void set_galaxy(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_galaxy();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_galaxy();
+  void set_allocated_galaxy(::std::string* PROTOBUF_NULLABLE value);
 
   private:
-  const ::std::string& _internal_cluster_id() const;
-  PROTOBUF_ALWAYS_INLINE void _internal_set_cluster_id(const ::std::string& value);
-  ::std::string* PROTOBUF_NONNULL _internal_mutable_cluster_id();
+  const ::std::string& _internal_galaxy() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_galaxy(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_galaxy();
 
   public:
   // string id = 2;
@@ -708,7 +708,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Member final : public ::google::pro
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 7,
-                          0, 65,
+                          0, 61,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -736,7 +736,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Member final : public ::google::pro
         const Member& from_msg);
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     ::google::protobuf::internal::CachedSize _cached_size_;
-    ::google::protobuf::internal::ArenaStringPtr cluster_id_;
+    ::google::protobuf::internal::ArenaStringPtr galaxy_;
     ::google::protobuf::internal::ArenaStringPtr id_;
     ::google::protobuf::internal::ArenaStringPtr principal_;
     ::google::protobuf::internal::ArenaStringPtr advertise_;
@@ -1010,68 +1010,68 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationResponse final : public
 
 // RegistrationRequest
 
-// string cluster_id = 1;
-inline void RegistrationRequest::clear_cluster_id() {
+// string galaxy = 1;
+inline void RegistrationRequest::clear_galaxy() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.cluster_id_.ClearToEmpty();
+  _impl_.galaxy_.ClearToEmpty();
   ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
 }
-inline const ::std::string& RegistrationRequest::cluster_id() const
+inline const ::std::string& RegistrationRequest::galaxy() const
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  // @@protoc_insertion_point(field_get:proto.orbit.v1.RegistrationRequest.cluster_id)
-  return _internal_cluster_id();
+  // @@protoc_insertion_point(field_get:proto.orbit.v1.RegistrationRequest.galaxy)
+  return _internal_galaxy();
 }
 template <typename Arg_, typename... Args_>
-PROTOBUF_ALWAYS_INLINE void RegistrationRequest::set_cluster_id(Arg_&& arg, Args_... args) {
+PROTOBUF_ALWAYS_INLINE void RegistrationRequest::set_galaxy(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.cluster_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
-  // @@protoc_insertion_point(field_set:proto.orbit.v1.RegistrationRequest.cluster_id)
+  _impl_.galaxy_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:proto.orbit.v1.RegistrationRequest.galaxy)
 }
-inline ::std::string* PROTOBUF_NONNULL RegistrationRequest::mutable_cluster_id()
+inline ::std::string* PROTOBUF_NONNULL RegistrationRequest::mutable_galaxy()
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  ::std::string* _s = _internal_mutable_cluster_id();
-  // @@protoc_insertion_point(field_mutable:proto.orbit.v1.RegistrationRequest.cluster_id)
+  ::std::string* _s = _internal_mutable_galaxy();
+  // @@protoc_insertion_point(field_mutable:proto.orbit.v1.RegistrationRequest.galaxy)
   return _s;
 }
-inline const ::std::string& RegistrationRequest::_internal_cluster_id() const {
+inline const ::std::string& RegistrationRequest::_internal_galaxy() const {
   ::google::protobuf::internal::TSanRead(&_impl_);
-  return _impl_.cluster_id_.Get();
+  return _impl_.galaxy_.Get();
 }
-inline void RegistrationRequest::_internal_set_cluster_id(const ::std::string& value) {
+inline void RegistrationRequest::_internal_set_galaxy(const ::std::string& value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.cluster_id_.Set(value, GetArena());
+  _impl_.galaxy_.Set(value, GetArena());
 }
-inline ::std::string* PROTOBUF_NONNULL RegistrationRequest::_internal_mutable_cluster_id() {
+inline ::std::string* PROTOBUF_NONNULL RegistrationRequest::_internal_mutable_galaxy() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  return _impl_.cluster_id_.Mutable( GetArena());
+  return _impl_.galaxy_.Mutable( GetArena());
 }
-inline ::std::string* PROTOBUF_NULLABLE RegistrationRequest::release_cluster_id() {
+inline ::std::string* PROTOBUF_NULLABLE RegistrationRequest::release_galaxy() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  // @@protoc_insertion_point(field_release:proto.orbit.v1.RegistrationRequest.cluster_id)
+  // @@protoc_insertion_point(field_release:proto.orbit.v1.RegistrationRequest.galaxy)
   if (!CheckHasBit(_impl_._has_bits_[0], 0x00000001U)) {
     return nullptr;
   }
   ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
-  auto* released = _impl_.cluster_id_.Release();
+  auto* released = _impl_.galaxy_.Release();
   if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
-    _impl_.cluster_id_.Set("", GetArena());
+    _impl_.galaxy_.Set("", GetArena());
   }
   return released;
 }
-inline void RegistrationRequest::set_allocated_cluster_id(::std::string* PROTOBUF_NULLABLE value) {
+inline void RegistrationRequest::set_allocated_galaxy(::std::string* PROTOBUF_NULLABLE value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   if (value != nullptr) {
     SetHasBit(_impl_._has_bits_[0], 0x00000001U);
   } else {
     ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
   }
-  _impl_.cluster_id_.SetAllocated(value, GetArena());
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.cluster_id_.IsDefault()) {
-    _impl_.cluster_id_.Set("", GetArena());
+  _impl_.galaxy_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.galaxy_.IsDefault()) {
+    _impl_.galaxy_.Set("", GetArena());
   }
-  // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.RegistrationRequest.cluster_id)
+  // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.RegistrationRequest.galaxy)
 }
 
 // string advertise = 3;
@@ -1633,68 +1633,68 @@ inline void RegistrationResponse::set_allocated_signature(::std::string* PROTOBU
 
 // Member
 
-// string cluster_id = 1;
-inline void Member::clear_cluster_id() {
+// string galaxy = 1;
+inline void Member::clear_galaxy() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.cluster_id_.ClearToEmpty();
+  _impl_.galaxy_.ClearToEmpty();
   ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
 }
-inline const ::std::string& Member::cluster_id() const
+inline const ::std::string& Member::galaxy() const
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  // @@protoc_insertion_point(field_get:proto.orbit.v1.Member.cluster_id)
-  return _internal_cluster_id();
+  // @@protoc_insertion_point(field_get:proto.orbit.v1.Member.galaxy)
+  return _internal_galaxy();
 }
 template <typename Arg_, typename... Args_>
-PROTOBUF_ALWAYS_INLINE void Member::set_cluster_id(Arg_&& arg, Args_... args) {
+PROTOBUF_ALWAYS_INLINE void Member::set_galaxy(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.cluster_id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
-  // @@protoc_insertion_point(field_set:proto.orbit.v1.Member.cluster_id)
+  _impl_.galaxy_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:proto.orbit.v1.Member.galaxy)
 }
-inline ::std::string* PROTOBUF_NONNULL Member::mutable_cluster_id()
+inline ::std::string* PROTOBUF_NONNULL Member::mutable_galaxy()
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  ::std::string* _s = _internal_mutable_cluster_id();
-  // @@protoc_insertion_point(field_mutable:proto.orbit.v1.Member.cluster_id)
+  ::std::string* _s = _internal_mutable_galaxy();
+  // @@protoc_insertion_point(field_mutable:proto.orbit.v1.Member.galaxy)
   return _s;
 }
-inline const ::std::string& Member::_internal_cluster_id() const {
+inline const ::std::string& Member::_internal_galaxy() const {
   ::google::protobuf::internal::TSanRead(&_impl_);
-  return _impl_.cluster_id_.Get();
+  return _impl_.galaxy_.Get();
 }
-inline void Member::_internal_set_cluster_id(const ::std::string& value) {
+inline void Member::_internal_set_galaxy(const ::std::string& value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  _impl_.cluster_id_.Set(value, GetArena());
+  _impl_.galaxy_.Set(value, GetArena());
 }
-inline ::std::string* PROTOBUF_NONNULL Member::_internal_mutable_cluster_id() {
+inline ::std::string* PROTOBUF_NONNULL Member::_internal_mutable_galaxy() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  return _impl_.cluster_id_.Mutable( GetArena());
+  return _impl_.galaxy_.Mutable( GetArena());
 }
-inline ::std::string* PROTOBUF_NULLABLE Member::release_cluster_id() {
+inline ::std::string* PROTOBUF_NULLABLE Member::release_galaxy() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
-  // @@protoc_insertion_point(field_release:proto.orbit.v1.Member.cluster_id)
+  // @@protoc_insertion_point(field_release:proto.orbit.v1.Member.galaxy)
   if (!CheckHasBit(_impl_._has_bits_[0], 0x00000001U)) {
     return nullptr;
   }
   ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
-  auto* released = _impl_.cluster_id_.Release();
+  auto* released = _impl_.galaxy_.Release();
   if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
-    _impl_.cluster_id_.Set("", GetArena());
+    _impl_.galaxy_.Set("", GetArena());
   }
   return released;
 }
-inline void Member::set_allocated_cluster_id(::std::string* PROTOBUF_NULLABLE value) {
+inline void Member::set_allocated_galaxy(::std::string* PROTOBUF_NULLABLE value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   if (value != nullptr) {
     SetHasBit(_impl_._has_bits_[0], 0x00000001U);
   } else {
     ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
   }
-  _impl_.cluster_id_.SetAllocated(value, GetArena());
-  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.cluster_id_.IsDefault()) {
-    _impl_.cluster_id_.Set("", GetArena());
+  _impl_.galaxy_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.galaxy_.IsDefault()) {
+    _impl_.galaxy_.Set("", GetArena());
   }
-  // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.Member.cluster_id)
+  // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.Member.galaxy)
 }
 
 // string id = 2;

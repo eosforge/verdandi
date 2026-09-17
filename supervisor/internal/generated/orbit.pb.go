@@ -78,8 +78,8 @@ func (Role) EnumDescriptor() ([]byte, []int) {
 
 // 账号通过 TLS 提交, Supervisor 从已验证账号和规范端点构建指纹.
 type RegistrationRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	ClusterId string                 `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Galaxy string                 `protobuf:"bytes,1,opt,name=galaxy,proto3" json:"galaxy,omitempty"`
 	// 规范的具体 IP:PORT. 节点启动和其他节点拨号均验证服务端 IP SAN.
 	Advertise string `protobuf:"bytes,3,opt,name=advertise,proto3" json:"advertise,omitempty"`
 	// 必须属于账号允许的角色, UNSPECIFIED 非法.
@@ -128,9 +128,9 @@ func (*RegistrationRequest) Descriptor() ([]byte, []int) {
 	return file_orbit_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *RegistrationRequest) GetClusterId() string {
+func (x *RegistrationRequest) GetGalaxy() string {
 	if x != nil {
-		return x.ClusterId
+		return x.Galaxy
 	}
 	return ""
 }
@@ -248,11 +248,11 @@ func (x *RegistrationResponse) GetSignature() []byte {
 }
 
 type Member struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	ClusterId string                 `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Galaxy string                 `protobuf:"bytes,1,opt,name=galaxy,proto3" json:"galaxy,omitempty"`
 	// Supervisor 签发的不透明 UTF-8 字符串, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
 	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	// SHA-256(username + NUL + cluster_id + NUL + advertise), 小写十六进制, 不替代本次启动的 id.
+	// SHA-256(username + NUL + galaxy + NUL + advertise), 小写十六进制, 不替代本次启动的 id.
 	Principal string `protobuf:"bytes,3,opt,name=principal,proto3" json:"principal,omitempty"`
 	Advertise string `protobuf:"bytes,4,opt,name=advertise,proto3" json:"advertise,omitempty"`
 	// 每部署身份的重启代次, 不用于 Catalog/Registry 的业务版本排序.
@@ -293,9 +293,9 @@ func (*Member) Descriptor() ([]byte, []int) {
 	return file_orbit_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Member) GetClusterId() string {
+func (x *Member) GetGalaxy() string {
 	if x != nil {
-		return x.ClusterId
+		return x.Galaxy
 	}
 	return ""
 }
@@ -346,10 +346,9 @@ var File_orbit_proto protoreflect.FileDescriptor
 
 const file_orbit_proto_rawDesc = "" +
 	"\n" +
-	"\vorbit.proto\x12\x0eproto.orbit.v1\"\xea\x02\n" +
-	"\x13RegistrationRequest\x12\x1d\n" +
-	"\n" +
-	"cluster_id\x18\x01 \x01(\tR\tclusterId\x12\x1c\n" +
+	"\vorbit.proto\x12\x0eproto.orbit.v1\"\xe3\x02\n" +
+	"\x13RegistrationRequest\x12\x16\n" +
+	"\x06galaxy\x18\x01 \x01(\tR\x06galaxy\x12\x1c\n" +
 	"\tadvertise\x18\x03 \x01(\tR\tadvertise\x12(\n" +
 	"\x04role\x18\x06 \x01(\x0e2\x14.proto.orbit.v1.RoleR\x04role\x12\x14\n" +
 	"\x05group\x18\a \x01(\tR\x05group\x12'\n" +
@@ -363,10 +362,9 @@ const file_orbit_proto_rawDesc = "" +
 	"\x14RegistrationResponse\x120\n" +
 	"\amembers\x18\x01 \x03(\v2\x16.proto.orbit.v1.MemberR\amembers\x12\x1c\n" +
 	"\tadmission\x18\x02 \x01(\fR\tadmission\x12\x1c\n" +
-	"\tsignature\x18\x03 \x01(\fR\tsignature\"\xdb\x01\n" +
-	"\x06Member\x12\x1d\n" +
-	"\n" +
-	"cluster_id\x18\x01 \x01(\tR\tclusterId\x12\x0e\n" +
+	"\tsignature\x18\x03 \x01(\fR\tsignature\"\xd4\x01\n" +
+	"\x06Member\x12\x16\n" +
+	"\x06galaxy\x18\x01 \x01(\tR\x06galaxy\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1c\n" +
 	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x1c\n" +
 	"\tadvertise\x18\x04 \x01(\tR\tadvertise\x12\x14\n" +

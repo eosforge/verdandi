@@ -33,6 +33,8 @@ void configuration() {
     CHECK(parsed->max_inbound == 128);
     CHECK(parsed->heartbeat_interval == Milliseconds(10000));
     CHECK(parsed->identity == "identity");
+    CHECK(parsed->galaxy == "alpha");
+    CHECK(parsed->max_admission_request_bytes == 4096 && parsed->max_admission_response_bytes == 2 * 1024 * 1024);
     CHECK(Config::help(Role::planet).contains("Usage: planet"));
     CHECK(Config::help(Role::star).contains("default=5000"));
     for (const auto bad : {"--max-members=0", "--max-members=4097", "--max-members=1x", "--max-members=18446744073709551616", "--max-members=-1",
@@ -42,7 +44,7 @@ void configuration() {
         CHECK(!Config::parse(values, Role::star));
     }
     const std::array<std::string_view, 8> separated{"--galaxy", "alpha",          "--listen",    "0.0.0.0:7443",
-                                                    "--super",   "localhost:7444", "--advertise", "127.0.0.1:7443"};
+                                                    "--super",  "localhost:7444", "--advertise", "127.0.0.1:7443"};
     CHECK(Config::parse(separated, Role::planet));
     CHECK(!Config::parse(std::span(separated).first<6>(), Role::planet));
     CHECK(!Config::parse({}, Role::star));
@@ -60,6 +62,22 @@ void configuration() {
     CHECK(!Member::valid_id(Id{}));
     CHECK(!Member::valid_name("alpha/beta"));
     CHECK(!Member::valid_name(std::string(65, 'a')));
+    // 新增容量选项的边界与赋值都需验证, 防止注解解析成功却未传入 gRPC 配置.
+    for (const auto invalid : {"--max-admission-request-bytes=0", "--max-admission-request-bytes=1048577", "--max-admission-response-bytes=1023",
+                               "--max-admission-response-bytes=268435457"}) {
+        std::vector<std::string_view> values(args.begin(), args.end());
+        values.push_back(invalid);
+        CHECK(!Config::parse(values, Role::star));
+    }
+    std::vector<std::string_view> limits(args.begin(), args.end());
+    limits.insert(limits.end(), {"--max-admission-request-bytes=1", "--max-admission-response-bytes=1024"});
+    const auto bounded = Config::parse(limits, Role::star);
+    CHECK(bounded && bounded->max_admission_request_bytes == 1 && bounded->max_admission_response_bytes == 1024);
+    // Supervisor 主机解析移动实现文件后仍保留端口与 DNS 标签验证.
+    CHECK(Config::format_supervisor("Supervisor.EXAMPLE:7444") == "Supervisor.EXAMPLE:7444");
+    for (const auto invalid : {"host:0", "host:65536", "host:1x", "-host:7444", "host..local:7444", "[::]:7444"}) {
+        CHECK(!Config::format_supervisor(invalid));
+    }
 }
 
 void stars() {

@@ -13,30 +13,30 @@ namespace astra::detail {
 struct Option {
     // 根据 C++ 的结构化绑定以及 constexpr 需求，注解类型必须是 structural type 结构类型。
     // 所以用内嵌定长字符数组直接原位保存文本数据, 绝不通过悬空指针去持有临时的 string_view 内存。
-    
+
     // name: 命令行 CLI 使用的长选项名字符串, 设计上不包含前导的双横杠 `--`;
     // 支持最大容纳 47 字节外加末尾隐式的 NUL 字符, 对象初始化采用零初始化来保证自动保留合规终止符。
     char name[48]{};
-    
+
     // description: 命令行输出展示的对应参数帮助说明信息。
     // 最多支持保存 159 字节长文本外加 NUL 结束符; 此处存放的内容必须是固化在代码中的公开帮助文本, 绝不能无意包含运行时的动态数据或身份敏感材料。
     char description[160]{};
-    
-    // minimum: 数值选项专属的包含式有效下界, 缺省值为 0; 
+
+    // minimum: 数值选项专属的包含式有效下界, 缺省值为 0;
     // 若当前处理的是字符串类型选项，则解析器不会使用此数值字段作为长度约束。
     std::uint64_t minimum = 0;
-    
+
     // maximum: 数值选项专属的包含式有效上界, 缺省值为 0;
     // 字符串类型的选项格式或长度必须由专门的业务层解析器在后续进行另行检查。
     std::uint64_t maximum = 0;
-    
+
     // required: 标记当前标志项是否必须在 CLI 命令行中通过手动显式出现输入, 默认是否（false）;
     // 当值为 true 时，不能仅仅依赖字段定义的初始默认值去糊弄通过强制必填的业务层检查。
     bool required = false;
-    
-    // 在编译期进行验证并直接复制 option_name 及 help 文本, 
+
+    // 在编译期进行验证并直接复制 option_name 及 help 文本,
     // 参数 lower 与 upper 明确定义了对包含式数值边界范围的划定, mandatory 参数用于控制是否开启选项强制必填的强约束检查。
-    // 如果输入的字面量文本过长超出了预设的内部数组空间时，将会立即触发 throw 致使常量求值失败，从而使得错误在编译阶段无处遁形; 
+    // 如果输入的字面量文本过长超出了预设的内部数组空间时，将会立即触发 throw 致使常量求值失败，从而使得错误在编译阶段无处遁形;
     // 内部完成字符拷贝操作后，原传入的 string_view 借用随之废弃解绑，无悬挂风险。
     consteval Option(std::string_view option_name, std::string_view help, std::uint64_t lower = 0, std::uint64_t upper = 0, bool mandatory = false)
         : minimum(lower), maximum(upper), required(mandatory) {
@@ -55,13 +55,13 @@ struct Option {
 struct Options {
     // 整个配置集每一个具体选项的名称定义, 有效数值范围, 物理单位以及说明文档文本，必须只在当前代码段中进行独家声明定义。
     // 各字段本身的 C++ 成员默认值将会依旧严格保留原先在字段初始化器中的自然语义。
-    // 因为目前的 clang-format 格式化工具版本尚未能完美识别 C++ 标准外的特殊反射注解语法标记, 
+    // 因为目前的 clang-format 格式化工具版本尚未能完美识别 C++ 标准外的特殊反射注解语法标记,
     // 为了防止破坏格式，特地在此保护这些特定的属性声明代码段, 但并没有粗暴地禁用整个文件的自动格式化。
     // clang-format off
     
-    // cluster: Galaxy 拓扑标识原文配置，强制必填项且设计上不留任何空默认值; 
+    // galaxy: Galaxy 拓扑标识原文配置，强制必填项且设计上不留任何空默认值;
     // 解析执行后系统会严格要求内容必须是 1..64 字节长度的安全 ASCII 字符。
-    [[=Option{"galaxy", "Galaxy identifier: 1..64 safe ASCII bytes", 0, 0, true}]] std::string cluster;
+    [[=Option{"galaxy", "Galaxy identifier: 1..64 safe ASCII bytes", 0, 0, true}]] std::string galaxy;
     
     // listen: 网络监听端点原文配置, 强制必填项; 
     // 在地址上允许输入数值型的通配 IP（如 0.0.0.0）和特殊的表示系统自动分配的端口 0, 但坚决不支持任何形式的 DNS 域名解析。
@@ -111,7 +111,7 @@ struct Options {
     // max_admission_response_bytes: 接收 Supervisor 准入响应时，最大允许接收的消息字节数上限。
     // 默认配置 2097152 (2MB)，允许范围从 1 KB 到 256 MB。足以容纳系统硬上限的拓扑名单回包而不触发内存 OOM。
     [[=Option{"max-admission-response-bytes", "Max admission response bytes", 1024, 256 * 1024 * 1024}]] std::uint64_t max_admission_response_bytes = 2 * 1024 * 1024;
-    
+
     // clang-format on
 };
 } // namespace astra::detail

@@ -20,6 +20,10 @@ enum class Scenario {
     cancellation,
     // 返回超过传输接收限制的响应, 检查消息容量边界.
     oversized_reply,
+    // 自定义更小的响应上限必须作用于实际 gRPC 通道.
+    reply_limit,
+    // 请求超出配置上限时不能到达服务端登记处理器.
+    request_limit,
     // 返回缺少有效身份字段的成员, 检查名单逐项校验.
     empty_member,
     // 阻塞登记直到截止, 检查单次 RPC 的超时收尾.
@@ -77,6 +81,8 @@ public:
         }
         if (scenario_ == Scenario::oversized_reply) {
             response->mutable_members(0)->set_group(std::string(2 * 1024 * 1024, 'x'));
+        } else if (scenario_ == Scenario::reply_limit) {
+            response->mutable_members(0)->set_group(std::string(2048, 'x'));
         } else if (scenario_ == Scenario::empty_member) {
             response->mutable_members(0)->Clear();
         }
@@ -119,6 +125,11 @@ struct Fixture {
         config.advertise = *Endpoint::parse("127.0.0.1:7443");
         config.supervisor = address + ":" + std::to_string(port);
         config.max_members = 4;
+        if (scenario == Scenario::reply_limit) {
+            config.max_admission_response_bytes = 1024;
+        } else if (scenario == Scenario::request_limit) {
+            config.max_admission_request_bytes = 1;
+        }
         if (scenario == Scenario::wrong_san || scenario == Scenario::untrusted_root || scenario == Scenario::expired_certificate) {
             config.connect_timeout = Milliseconds(300);
         }
@@ -182,13 +193,18 @@ int main() {
             CHECK(!changed && changed.error().code == Error::Code::identity);
             CHECK(!fixture.authority.request_changed);
         }
-        for (auto scenario : {Scenario::excessive_members, Scenario::wrong_identity, Scenario::oversized_reply, Scenario::empty_member}) {
+        for (auto scenario : {Scenario::excessive_members, Scenario::wrong_identity, Scenario::oversized_reply, Scenario::empty_member, Scenario::reply_limit,
+                              Scenario::request_limit}) {
             Fixture fixture(*identity, scenario);
             fixture.client->begin(0);
             auto result = fixture.result();
             CHECK(!result);
-            const bool capacity = scenario == Scenario::excessive_members || scenario == Scenario::oversized_reply;
+            const bool capacity = scenario == Scenario::excessive_members || scenario == Scenario::oversized_reply || scenario == Scenario::reply_limit ||
+                                  scenario == Scenario::request_limit;
             CHECK(result.error().code == (capacity ? Error::Code::capacity : Error::Code::identity));
+            if (scenario == Scenario::request_limit) {
+                CHECK(fixture.authority.registrations == 0);
+            }
         }
         for (auto scenario : {Scenario::registration_deadline}) {
             Fixture fixture(*identity, scenario);

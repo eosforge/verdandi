@@ -1,6 +1,7 @@
 // 功能: 实现身份诊断, 名称及端点规范化, 在成员进入角色状态前完成基础校验.
-// 详细说明: 这个实现文件处理 `Principal` 对象的解析和文本化、错误码转换以及 `Endpoint` 终端地址（IPv4 / IPv6 和端口号）的解析和验证，提供统一且规范的基础类型功能。
-#include <astra/types.hpp>
+// 详细说明: 这个实现文件处理 `Principal` 对象的解析和文本化、错误码转换以及 `Endpoint` 终端地址（IPv4 / IPv6
+// 和端口号）的解析和验证，提供统一且规范的基础类型功能。
+#include <astra/config.hpp>
 
 #include <algorithm>
 #include <arpa/inet.h>
@@ -40,7 +41,7 @@ std::string Principal::text() const {
     std::string result(bytes.size() * 2, '0');
     // 把每一个字节转回两个小写十六进制字符。
     for (std::size_t i = 0; i < bytes.size(); ++i) {
-        result[i * 2] = digits[bytes[i] >> 4]; // 高四位
+        result[i * 2] = digits[bytes[i] >> 4];     // 高四位
         result[i * 2 + 1] = digits[bytes[i] & 15]; // 低四位
     }
     return result;
@@ -108,7 +109,7 @@ Result<Endpoint> Endpoint::parse(std::string_view value, bool local) {
     if (!port) {
         return std::unexpected(port.error());
     }
-    
+
     // 取冒号前面的字符串作为主机部分。
     auto host = value.substr(0, separator);
     // 检查是否是被方括号包住的 IPv6 地址格式。
@@ -132,12 +133,12 @@ Result<Endpoint> Endpoint::parse(std::string_view value, bool local) {
     const bool multicast = ipv6 ? bytes[0] == 255 : (bytes[0] >= 224 && bytes[0] <= 239);
     // 判断是否为 IPv4 映射为 IPv6 的地址格式。
     const bool mapped = ipv6 && std::all_of(bytes.begin(), bytes.begin() + 10, [](auto b) { return b == 0; }) && bytes[10] == 255 && bytes[11] == 255;
-    
+
     // 我们不支持组播、不支持映射地址。如果不是本地监听用途，也不支持直接向通配符发起连接。
     if (multicast || mapped || (!local && wildcard)) {
         return Error::configuration("Endpoint is not a supported unicast address");
     }
-    
+
     // 将其重新序列化回标准的字符串格式，消除原来任何多余的前导零或其他小问题。
     std::array<char, INET6_ADDRSTRLEN> normalized{};
     if (!inet_ntop(family, bytes.data(), normalized.data(), static_cast<socklen_t>(normalized.size()))) {
@@ -193,4 +194,40 @@ Result<void> Member::validate() const {
     }
     return {};
 }
+// 返回值: 解析通过并进行标准化处理后的字符串，或者错误信息。
+Result<std::string> Config::format_supervisor(std::string_view value) {
+    // 尝试先按数字端点（IP:PORT）去解析
+    if (auto endpoint = Endpoint::parse(value)) {
+        return endpoint->text();
+    }
+
+    // 若不是 IP 格式，按 HOSTNAME:PORT 解析。
+    const auto separator = value.rfind(':');
+    if (separator == std::string_view::npos || !port_number(value.substr(separator + 1), false)) {
+        return Error::configuration("Supervisor requires HOST:PORT");
+    }
+    const auto host = value.substr(0, separator);
+    std::array<unsigned char, 4> numeric{};
+    // 为了防止部分 inet_pton 或域名解析 API 遇到伪装为非规范 IP 的边缘情况，再拦一道。
+    if (inet_pton(AF_INET, std::string(host).c_str(), numeric.data()) == 1) {
+        return Error::configuration("Invalid numeric Supervisor endpoint");
+    }
+
+    // DNS 名字整体长度限制。
+    if (host.empty() || host.size() > 253) {
+        return Error::configuration("Invalid supervisor hostname");
+    }
+
+    // 检查每一段 label 的合法性：不能超长，头尾不能是横杠，字符需符合规范。
+    for (auto label : host | std::views::split('.')) {
+        const std::string_view part(label.begin(), label.end());
+        if (part.empty() || part.size() > 63 || part.starts_with('-') || part.ends_with('-') || !std::ranges::all_of(part, [](unsigned char c) {
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-';
+            })) {
+            return Error::configuration("Invalid supervisor hostname");
+        }
+    }
+    return std::string(value);
+}
+
 } // namespace astra

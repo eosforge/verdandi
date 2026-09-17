@@ -40,9 +40,10 @@ func TestSharedCppGoAdmissionVectors(t *testing.T) {
 		IDs        []validation `json:"ids"`
 		Principals []struct {
 			Username string `json:"username"`
-			Galaxy  string `json:"galaxy"`
-			Address  string `json:"address"`
-			SHA256   string `json:"sha256"`
+			// 共享历史向量的字段仍叫 cluster, 与生成协议的 Galaxy 字段名无关.
+			Galaxy  string `json:"cluster"`
+			Address string `json:"address"`
+			SHA256  string `json:"sha256"`
 		} `json:"principals"`
 	}
 	data, err := os.ReadFile(filepath.Join(fixture(""), "admission-v1.json"))

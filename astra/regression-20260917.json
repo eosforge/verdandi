@@ -1,0 +1,176 @@
+{
+  "profiles": {
+    "debug": {
+      "ctest_entries": 14,
+      "rpc_cases": [
+        "tls13_only_and_h2_negotiation",
+        "partial_tls_handshake_deadline_and_fd_cleanup",
+        "channel_reuse_duplicate_fencing_and_protocol_rejection",
+        "tls_without_http2_request_idle_cleanup",
+        "rpc_fixture_graceful_stop_and_listener_release",
+        "empty_candidates_refresh_when_star_joins"
+      ],
+      "process_cases": [
+        "service_cli_help_version_and_invalid_options",
+        "concurrent_three_star_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_star_wait",
+        "persistent_supervisor_restart_and_waiting_star_join",
+        "graceful_and_forced_star_restart",
+        "invalid_identities_fail_closed",
+        "invalid_login_configuration_and_password_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "binary_sha256": {
+        "/home/ubuntu/verdandi/build/astra/debug/star": "3de2f514094c13ac6da9acb72bb529d0e73a7dda263e2b54d6ba598da2bd6f6b",
+        "/home/ubuntu/verdandi/build/astra/debug/planet": "5427556ea2775be41c4e0d353dd0b2f1ed47a8012c72fca54ace4d3f08924d86",
+        "/home/ubuntu/verdandi/build/astra/debug/star_rpc_probe": "a7a0f5ab696fb0765a2b8128ac95bd40c88997ae2f196fd4b0bd6cb6c41238a8",
+        "/home/ubuntu/verdandi/build/supervisor/supervisor": "257ebf645951c611aa9f0f780ed3e66d6b2e5b547ee8dfd596a1edc1eea60642"
+      },
+      "log_sha256": "3bf4e1be4810ae3551732c662fff50d75b19ae834681b8c747c2ac47cd3693cc",
+      "component_results": [
+        "PASS store atomicity under 168 write and 7 read allocation failures",
+        "Wheel boundary, lifetime, callback and 180000 model operations passed",
+        "Wheel: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes"
+      ]
+    },
+    "release": {
+      "ctest_entries": 14,
+      "rpc_cases": [
+        "tls13_only_and_h2_negotiation",
+        "partial_tls_handshake_deadline_and_fd_cleanup",
+        "channel_reuse_duplicate_fencing_and_protocol_rejection",
+        "tls_without_http2_request_idle_cleanup",
+        "rpc_fixture_graceful_stop_and_listener_release",
+        "empty_candidates_refresh_when_star_joins"
+      ],
+      "process_cases": [
+        "service_cli_help_version_and_invalid_options",
+        "concurrent_three_star_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_star_wait",
+        "persistent_supervisor_restart_and_waiting_star_join",
+        "graceful_and_forced_star_restart",
+        "invalid_identities_fail_closed",
+        "invalid_login_configuration_and_password_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "binary_sha256": {
+        "/home/ubuntu/verdandi/build/astra/release/star": "5d599b2179ce177c6707aa5f84e28eacddb08929fae97208bda92fe7305ee802",
+        "/home/ubuntu/verdandi/build/astra/release/planet": "3e30f2ea246968f5757ba37905ebca37a76d8d57232d6e3ae41e862a0668c5bb",
+        "/home/ubuntu/verdandi/build/astra/release/star_rpc_probe": "7407d406a0d2a1b568b80a77b64ac380af8c1b5cad27b72a39badc5ff1a181ec",
+        "/home/ubuntu/verdandi/build/supervisor/supervisor": "257ebf645951c611aa9f0f780ed3e66d6b2e5b547ee8dfd596a1edc1eea60642"
+      },
+      "log_sha256": "209aed6a5f54c91b82fd26fb2c7bbcf5f10ab77e60b6143e237d7b367fa0aad7",
+      "component_results": [
+        "PASS store atomicity under 168 write and 7 read allocation failures",
+        "Wheel boundary, lifetime, callback and 180000 model operations passed",
+        "Wheel: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes"
+      ]
+    },
+    "asan": {
+      "ctest_entries": 14,
+      "rpc_cases": [
+        "tls13_only_and_h2_negotiation",
+        "partial_tls_handshake_deadline_and_fd_cleanup",
+        "channel_reuse_duplicate_fencing_and_protocol_rejection",
+        "tls_without_http2_request_idle_cleanup",
+        "rpc_fixture_graceful_stop_and_listener_release",
+        "empty_candidates_refresh_when_star_joins"
+      ],
+      "process_cases": [
+        "service_cli_help_version_and_invalid_options",
+        "concurrent_three_star_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_star_wait",
+        "persistent_supervisor_restart_and_waiting_star_join",
+        "graceful_and_forced_star_restart",
+        "invalid_identities_fail_closed",
+        "invalid_login_configuration_and_password_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "binary_sha256": {
+        "/home/ubuntu/verdandi/build/astra/asan/star": "b45aab17a835aee187aca0ee2751920f798915b06528ba9ce264c6366ef29a6f",
+        "/home/ubuntu/verdandi/build/astra/asan/planet": "d9db43eb930f2df857da522e0bab7e7b42fdc44d205fb9d1997343a5f295ef67",
+        "/home/ubuntu/verdandi/build/astra/asan/star_rpc_probe": "b7fbff442157f22a849917c160825a5dae6d48050f502a5e3f743eb5befa16d4",
+        "/home/ubuntu/verdandi/build/supervisor/supervisor": "257ebf645951c611aa9f0f780ed3e66d6b2e5b547ee8dfd596a1edc1eea60642"
+      },
+      "log_sha256": "7ae4d5db4ea9443c2140d714e7f2b6102702d66d7b6b725ed3949fb2e87b8a6f",
+      "component_results": [
+        "PASS store atomicity under 168 write and 7 read allocation failures",
+        "Wheel boundary, lifetime, callback and 180000 model operations passed",
+        "Wheel: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes"
+      ]
+    },
+    "tsan": {
+      "ctest_entries": 14,
+      "rpc_cases": [
+        "tls13_only_and_h2_negotiation",
+        "partial_tls_handshake_deadline_and_fd_cleanup",
+        "channel_reuse_duplicate_fencing_and_protocol_rejection",
+        "tls_without_http2_request_idle_cleanup",
+        "rpc_fixture_graceful_stop_and_listener_release",
+        "empty_candidates_refresh_when_star_joins"
+      ],
+      "process_cases": [
+        "service_cli_help_version_and_invalid_options",
+        "concurrent_three_star_full_mesh",
+        "supervisor_offline_existing_mesh_and_new_star_wait",
+        "persistent_supervisor_restart_and_waiting_star_join",
+        "graceful_and_forced_star_restart",
+        "invalid_identities_fail_closed",
+        "invalid_login_configuration_and_password_fail_closed",
+        "star_planet_account_roles_fail_closed",
+        "planet_prefers_local_group_without_joining_star_mesh",
+        "planet_cross_group_failover_while_supervisor_offline",
+        "new_planet_waits_for_supervisor_and_healthy_upstream_stays",
+        "one_active_upstream_per_planet",
+        "signals_process_exit_and_port_reuse"
+      ],
+      "cleanup": "processes joined, ports reusable, owned temporary directories removed",
+      "binary_sha256": {
+        "/home/ubuntu/verdandi/build/astra/tsan/star": "caa0c173306bc6766813911e7879ef11bd01a0774a2543b82a40c807f95cb93d",
+        "/home/ubuntu/verdandi/build/astra/tsan/planet": "21d7bbe31380c79f52fc4048586baf40f9f0772f0257697052d3986cb93707ac",
+        "/home/ubuntu/verdandi/build/astra/tsan/star_rpc_probe": "2c42ae02d624f1daf4de43db916261def538f79ab6d11181827ed026a5e78d15",
+        "/home/ubuntu/verdandi/build/supervisor/supervisor": "257ebf645951c611aa9f0f780ed3e66d6b2e5b547ee8dfd596a1edc1eea60642"
+      },
+      "log_sha256": "61230c0a6b5dec6ce248fe110f989535d12f39c5c1f2e6a4e1c46c4957407f47",
+      "component_results": [
+        "PASS store atomicity under 168 write and 7 read allocation failures",
+        "Wheel boundary, lifetime, callback and 180000 model operations passed",
+        "Wheel: 0 allocations, 2048 callbacks, Node=24 bytes, Wheel=10264 bytes"
+      ]
+    }
+  },
+  "running_test_services": [],
+  "date": "2026-09-17",
+  "scope": "Astra C++ skeleton, local Store/Wheel and Go Supervisor interoperability",
+  "auxiliary_checks": {
+    "windows_supervisor_tests": "pass",
+    "windows_go_vet": "pass",
+    "linux_supervisor_tests": "pass",
+    "linux_go_race": "pass",
+    "linux_go_vet": "pass",
+    "protocol_generation": "pass on both hosts",
+    "linux_generator_tests": 4,
+    "windows_python_passed": 38,
+    "windows_build_entry_passed": 6,
+    "linux_python_passed": 37,
+    "linux_python_skipped": "1 Windows-only file replacement sharing test"
+  }
+}
