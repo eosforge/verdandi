@@ -3,6 +3,7 @@
 Astra 使用根目录 [MIT License](LICENSE). 当前服务骨架处于开发阶段, 欢迎通过可复现缺陷、测试和小范围改进参与.
 
 修改前阅读 [项目入口](README.md)、[编码规范](coding.md) 和 [服务基础规范](service-foundation.md).
+C++ 工作还须先阅读独立的 [C++ 编码规范](cpp-coding.md), 具体编码习惯以该文为准.
 Star / Supervisor 的已实现行为分别记录在各自 README; 设计文档中的未来能力不能当作当前 API 使用.
 
 1. 为改动选择真实职责边界, 避免无业务需求的分层、接口和新依赖.

@@ -31,12 +31,15 @@ static_assert(std::is_nothrow_destructible_v<Timer> && std::is_nothrow_destructi
 static_assert(noexcept(std::declval<Timer&>().schedule(std::declval<Timer::Node&>(), 1)));
 
 // 单个定时器严格在 delay 拍触发, 0 也只能在下一拍触发. initial 可使到期跨槽, 跨层或跨 uint64_t 回绕.
-template <typename W> void check_deadline(std::uint64_t initial, std::uint64_t delay) {
+template <typename W>
+void check_deadline(std::uint64_t initial, std::uint64_t delay) {
+
     // wheel 使用指定逻辑起点; node 的寿命短于 wheel, 退出时验证自动摘链不访问无效对象.
     W wheel(initial);
     typename W::Node node;
     // effective 是简单参考模型的剩余拍数; calls 检查到期恰好一次.
     const auto effective = std::max(delay, std::uint64_t{1});
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
     CHECK(wheel.schedule(node, delay));
     CHECK(node.scheduled());
@@ -54,6 +57,7 @@ template <typename W> void check_deadline(std::uint64_t initial, std::uint64_t d
 
 // 默认配置覆盖层边界; 小配置穷举所有起点和延迟, 包括最大允许延迟与最高层循环.
 void test_deadlines() {
+
     for (const auto delay : {0U, 1U, 2U, 255U, 256U, 257U, 65'535U, 65'536U, 65'537U}) {
         check_deadline<Timer>(0, delay);
         check_deadline<Timer>(253, delay);
@@ -82,16 +86,21 @@ void test_deadlines() {
 
 // 宽槽轮覆盖 1024 槽边界, 高层级联和整数回绕; 最大延迟只验证调度/取消, 不遍历整个跨度.
 void test_wide_deadlines() {
+
     for (const auto delay : {0U, 1U, 1023U, 1024U, 1025U}) {
         check_deadline<WideTimer>(0, delay);
         check_deadline<WideTimer>(UINT64_MAX - 1025, delay);
     }
+
     // 该节点实际从第三层下沉, 其余高位边界从附近起步以控制测试工作量.
     check_deadline<WideTimer>(0, (std::uint64_t{1} << 20) + 1);
     for (const auto boundary : {std::uint64_t{1} << 20, std::uint64_t{1} << 30, std::uint64_t{1} << 40}) {
         check_deadline<WideTimer>(boundary - 1025, 4096);
     }
+
+    // wheel 从 uint64_t 回绕附近起步, 验证最大允许延迟.
     WideTimer wheel(UINT64_MAX - 1024);
+    // node 是稳定栈钩子, 在宽槽轮存活期间验证改期和取消.
     WideTimer::Node node;
     CHECK(wheel.schedule(node, WideTimer::limit));
     CHECK(!wheel.schedule(node, WideTimer::limit + 1) && node.scheduled());
@@ -102,8 +111,12 @@ void test_wide_deadlines() {
 
 // 无效改期保留原计划; 有效改期移除旧计划, cancel 可重复调用且能处理桶头/中间/尾部.
 void test_schedule_and_cancel() {
+
+    // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
     Timer wheel;
+    // nodes 是同桶稳定钩子集合, 用来检查取消和回调处理次序.
     std::array<Timer::Node, 3> nodes;
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
     CHECK(wheel.schedule(nodes[0], 1));
     CHECK(!wheel.schedule(nodes[0], Timer::limit + 1));
@@ -135,8 +148,12 @@ void test_schedule_and_cancel() {
 
 // 回调取消另一个已到期节点必须立即生效, 不能沿提前保存的 next 再访问它.
 void test_callback_cancel() {
+
+    // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
     Timer wheel;
+    // nodes 是同桶稳定钩子集合, 用来检查取消和回调处理次序.
     std::array<Timer::Node, 2> nodes;
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
     for (auto& node : nodes) {
         CHECK(wheel.schedule(node, 1));
@@ -152,8 +169,12 @@ void test_callback_cancel() {
 
 // 当前节点自销毁并释放同批另一节点, 析构取消不得访问已释放前驱. Sanitizer 能直接检查这些路径.
 void test_callback_destroy() {
+
+    // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
     Timer wheel;
+    // nodes 分别独占堆钩子, 回调内销毁以暴露悬垂链指针.
     std::array<std::unique_ptr<Timer::Node>, 2> nodes{std::make_unique<Timer::Node>(), std::make_unique<Timer::Node>()};
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
     for (auto& node : nodes) {
         CHECK(wheel.schedule(*node, 1));
@@ -170,8 +191,12 @@ void test_callback_destroy() {
 
 // 当前节点和同批其他节点都可改到下一拍, 不应在本拍无限循环或丢掉未来调度.
 void test_callback_reschedule() {
+
+    // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
     Timer wheel;
+    // nodes 是同桶稳定钩子集合, 用来检查取消和回调处理次序.
     std::array<Timer::Node, 2> nodes;
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
     for (auto& node : nodes) {
         CHECK(wheel.schedule(node, 1));
@@ -189,10 +214,16 @@ void test_callback_reschedule() {
 
 // 回调异常不丢失剩余队列, 下次 tick 先恢复原拍再推进; 已抛异常的回调不自动重试.
 void test_callback_exception() {
+
+    // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
     Timer wheel;
+    // nodes 是同桶稳定钩子集合, 用来检查取消和回调处理次序.
     std::array<Timer::Node, 3> nodes;
+    // future 比当前批次晚一拍到期, 检查异常恢复不会提前推进.
     Timer::Node future;
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
+    // consumed 初始为空, 记录已触发并抛异常的那个节点.
     Timer::Node* consumed = nullptr;
     for (auto& node : nodes) {
         CHECK(wheel.schedule(node, 1));
@@ -245,9 +276,13 @@ void test_callback_exception() {
 
 // 同轮递归 tick 明确失败且不污染外层标记; 后续普通 tick 仍可使用.
 void test_reentrant_tick() {
+
+    // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
     Timer wheel;
+    // node 在本地稳定地址上调度, 不在挂链期间搬移.
     Timer::Node node;
     CHECK(wheel.schedule(node, 1));
+    // rejected 初始 false, 只有预期递归推进错误才置 true.
     bool rejected = false;
     wheel.tick([&](auto*) {
         try {
@@ -259,6 +294,7 @@ void test_reentrant_tick() {
         CHECK(wheel.schedule(node, 1));
     });
     CHECK(rejected);
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
     wheel.tick([&](auto*) { ++calls; });
     CHECK(calls == 1 && wheel.now() == 2);
@@ -266,11 +302,15 @@ void test_reentrant_tick() {
 
 // 节点先销毁自动摘链, Wheel 先销毁清空外部钩子, 同配置的两个 Wheel 可显式转移一个节点.
 void test_lifetime_and_transfer() {
+
+    // survivor 的寿命长于第一个轮, 验证轮先销毁会清空外部钩子.
     Timer::Node survivor;
     {
+        // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
         Timer wheel;
         CHECK(wheel.schedule(survivor, 256));
         {
+            // temporary 先于轮析构, 自动取消后不应再触发回调.
             Timer::Node temporary;
             CHECK(wheel.schedule(temporary, 1));
         }
@@ -279,11 +319,14 @@ void test_lifetime_and_transfer() {
     CHECK(!survivor.scheduled());
     Timer::cancel(survivor);
 
+    // first 从零起步, 转出 survivor 后应无到期节点.
     Timer first;
+    // second 从 100 起步, 接管同一钩子后只由它触发.
     Timer second(100);
     CHECK(first.schedule(survivor, 1));
     CHECK(second.schedule(survivor, 1));
     first.tick([](auto*) { CHECK(false); });
+    // calls 从零统计实际回调次数, 各阶段显式核对恰好一次语义.
     std::size_t calls = 0;
     // 仅可移动的回调能直接调用, 验证没有 std::function 包装和隐藏复制.
     second.tick([state = std::make_unique<int>(7), &calls](auto*) mutable {
@@ -295,6 +338,7 @@ void test_lifetime_and_transfer() {
     // Wheel 在异常后仍能安全析构 ready_ 中未触发的节点.
     std::array<Timer::Node, 3> pending;
     {
+        // wheel 为当前用例独占的零起点时间轮, 不读取墙钟.
         Timer wheel;
         for (auto& node : pending) {
             CHECK(wheel.schedule(node, 1));
@@ -309,37 +353,52 @@ void test_lifetime_and_transfer() {
 }
 
 // 使用与时间轮无关的逐拍倒计时模型, 对随机调度/取消/改期结果逐节点比较; seed 固定以便复现.
-template <typename W> void test_model(std::uint64_t initial, std::uint64_t seed) {
+template <typename W>
+void test_model(std::uint64_t initial, std::uint64_t seed) {
+
     // Item 的 id 是测试标识, 业务对象可用同样方式嵌入 Node, 不增加生产钩子的大小.
     struct Item : W::Node {
+        // id 为对应独立模型的数组下标, 初始化后保持不变.
         std::size_t id{};
     };
+
+    // wheel 从指定逻辑起点运行, 用于覆盖层级边界和整数回绕.
     W wheel(initial);
+    // items 在固定数组中拥有钩子, 每个 id 对应同位置模型状态.
     std::array<Item, 64> items;
     // remaining 是独立模型, nullopt 表示未调度. seen 标记本拍是否已回调, 用于发现重复触发.
     std::array<std::optional<std::uint64_t>, 64> remaining{};
+    // seen 每拍清零, 同一 id 第二次回调会被独立模型识别.
     std::array<bool, 64> seen{};
+    // random 使用固定 seed, 保证调度和取消序列可复现.
     std::mt19937_64 random(seed);
+    // limit 将随机延迟限制到轮容量或 1000 拍中的较小值.
     const auto limit = std::min(W::limit, std::uint64_t{1000});
+    // elapsed 从零记录模型推进拍数, 检查实际轮的当前坐标.
     std::uint64_t elapsed = 0;
+    // id 为逐项初始化或核对的模型下标, 不依赖回调顺序.
     for (std::size_t id = 0; id < items.size(); ++id) {
         items[id].id = id;
     }
+
     // advance 先推进倒计时模型, 再对实际回调及所有节点的挂链状态做独立检查.
     auto advance = [&] {
         seen.fill(false);
         ++elapsed;
+        // counter 借用独立模型的剩余拍数, 空表示未调度.
         for (auto& counter : remaining) {
             if (counter) {
                 --*counter;
             }
         }
         wheel.tick([&](auto* node) {
+            // id 从回调钩子恢复稳定测试下标, 对应 remaining 和 seen.
             const auto id = static_cast<Item*>(node)->id;
             CHECK(remaining[id] && *remaining[id] == 0 && !seen[id]);
             seen[id] = true;
         });
         CHECK(wheel.now() == initial + elapsed);
+        // id 为逐项初始化或核对的模型下标, 不依赖回调顺序.
         for (std::size_t id = 0; id < items.size(); ++id) {
             CHECK(seen[id] == (remaining[id] && *remaining[id] == 0));
             if (seen[id]) {
@@ -348,10 +407,14 @@ template <typename W> void test_model(std::uint64_t initial, std::uint64_t seed)
             CHECK(items[id].scheduled() == remaining[id].has_value());
         }
     };
+    // step 限定本配置 30000 次随机操作, 保证测试有界.
     for (std::size_t step = 0; step < 30'000; ++step) {
+        // id 是本轮随机选择的数组下标, 始终小于 items.size().
         const auto id = static_cast<std::size_t>(random() % items.size());
+        // operation 在 0..3 中选择, 0/1 调度, 2 取消, 3 推进.
         const auto operation = random() % 4;
         if (operation < 2) {
+            // delay 在 0..limit 中取值, 零按下一拍处理.
             const auto delay = random() % (limit + 1);
             CHECK(wheel.schedule(items[id], delay));
             remaining[id] = std::max(delay, std::uint64_t{1});
@@ -362,9 +425,13 @@ template <typename W> void test_model(std::uint64_t initial, std::uint64_t seed)
             advance();
         }
     }
+
+    // step 在随机操作后继续推进至全部剩余节点到期.
     for (std::uint64_t step = 0; step <= limit; ++step) {
         advance();
     }
+
+    // counter 检查排空后所有模型项均无待触发计划.
     for (const auto& counter : remaining) {
         CHECK(!counter);
     }
@@ -373,6 +440,7 @@ template <typename W> void test_model(std::uint64_t initial, std::uint64_t seed)
 
 // 独立进程入口, 所有断言在 Release 中仍生效. 测试只推进逻辑时钟, 不启动服务或休眠.
 int main() {
+
     try {
         test_deadlines();
         test_wide_deadlines();

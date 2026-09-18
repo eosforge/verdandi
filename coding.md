@@ -3,6 +3,10 @@
 Before running tests or test prerequisite builds, obtain explicit user approval for the current scope as required by [AGENTS.md](AGENTS.md).
 Implementation, static review and required source formatting do not authorize automatic testing.
 
+For handwritten C++, first read the dedicated [C++ coding standard](cpp-coding.md).
+It is authoritative for C++ naming, scope, performance and brevity tradeoffs, modern syntax, comments, and layout.
+The general quality and authorization requirements in this document continue to apply.
+
 ## 1. Scope and Source of Truth
 
 The C++26 Star/Planet replacement is specified in

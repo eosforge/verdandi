@@ -11,6 +11,7 @@ std::size_t allocations{};
 
 // 分配 size 字节, alignment 为 0 时采用普通对齐, 否则使用 POSIX 对齐分配; 保留 new_handler 语义.
 [[gnu::noinline]] void* allocate(std::size_t size, std::size_t alignment = 0) {
+
     for (;;) {
         // address 为本次申请结果, 零长度也需要可释放的独立地址.
         void* address = nullptr;
@@ -41,46 +42,67 @@ std::size_t allocations{};
 void* operator new(std::size_t size) {
     return allocate(size);
 }
+
 // 普通数组分配, 与标量共享计数.
 void* operator new[](std::size_t size) {
     return allocate(size);
 }
+
 // 过对齐标量分配, 不让隐藏的对齐 new 绕过测量.
 void* operator new(std::size_t size, std::align_val_t alignment) {
     return allocate(size, static_cast<std::size_t>(alignment));
 }
+
 // 过对齐数组分配, 与标量共享分配域.
 void* operator new[](std::size_t size, std::align_val_t alignment) {
     return allocate(size, static_cast<std::size_t>(alignment));
 }
+
 // 各 delete 变体使用同一分配域, 大小和对齐参数不改变 POSIX 内存的释放方式.
 void operator delete(void* address) noexcept {
     release(address);
 }
+
+// 全局替换回收入口, 空指针可安全释放; 大小和对齐参数不改变同一分配域的回收方式.
 void operator delete[](void* address) noexcept {
     release(address);
 }
+
+// 全局替换回收入口, 空指针可安全释放; 大小和对齐参数不改变同一分配域的回收方式.
 void operator delete(void* address, std::size_t) noexcept {
     release(address);
 }
+
+// 全局替换回收入口, 空指针可安全释放; 大小和对齐参数不改变同一分配域的回收方式.
 void operator delete[](void* address, std::size_t) noexcept {
     release(address);
 }
+
+// 全局替换回收入口, 空指针可安全释放; 大小和对齐参数不改变同一分配域的回收方式.
 void operator delete(void* address, std::align_val_t) noexcept {
     release(address);
 }
+
+// 全局替换回收入口, 空指针可安全释放; 大小和对齐参数不改变同一分配域的回收方式.
 void operator delete[](void* address, std::align_val_t) noexcept {
     release(address);
 }
+
+// 全局替换回收入口, 空指针可安全释放; 大小和对齐参数不改变同一分配域的回收方式.
 void operator delete(void* address, std::size_t, std::align_val_t) noexcept {
     release(address);
 }
+
+// 全局替换回收入口, 空指针可安全释放; 大小和对齐参数不改变同一分配域的回收方式.
 void operator delete[](void* address, std::size_t, std::align_val_t) noexcept {
     release(address);
 }
 
+namespace {
 // 先验证计数器确实捕获 new, 再在栈上运行调度/取消/到期/自改期; 非零退出直接使 CTest 失败.
-template <typename W> bool check_allocation(const char* name) {
+template <typename W>
+bool check_allocation(const char* name) {
+
     // baseline/control 用于校准计数器, 防止一个失效的测量器给出假零结果.
     const auto baseline = allocations;
     void* control = ::operator new(1);
@@ -88,20 +110,28 @@ template <typename W> bool check_allocation(const char* name) {
     if (allocations != baseline + 1) {
         return false;
     }
+
     // before 在轮和节点构造前取值, after 在它们析构后取值, 生命周期整体包含在测量范围内.
     const auto before = allocations;
+    // valid 累积每次调度结果, 初始 true, 不在被测区间生成异常诊断.
     bool valid = true;
+    // expired 从零统计回调总数, 每节点预期恰好两次.
     std::size_t expired = 0;
     {
+        // wheel 使用模板配置从零推进, 生命周期完整纳入分配测量.
         W wheel;
+        // nodes 在栈上拥有 1024 个稳定地址, 不通过容器扩容搬移.
         std::array<typename W::Node, 1024> nodes;
+        // id 为节点下标, 对应延迟 id + 1.
         for (std::size_t id = 0; id < nodes.size(); ++id) {
             valid &= wheel.schedule(nodes[id], id + 1);
             W::cancel(nodes[id]);
             valid &= wheel.schedule(nodes[id], id + 1);
         }
+
         // 第一次到期时为所有节点改期 1, 验证回调路径也不隐式分配.
         std::array<bool, 1024> rescheduled{};
+        // step 是推进拍数, 2048 足以覆盖首次到期及一次自改期.
         for (std::size_t step = 0; step < 2048; ++step) {
             wheel.tick([&](auto* node) noexcept {
                 ++expired;
@@ -114,19 +144,27 @@ template <typename W> bool check_allocation(const char* name) {
             });
         }
         valid &= expired == 2 * nodes.size();
+        // node 借用栈数组中的稳定钩子, 验证摘链后仍可重新调度.
         for (auto& node : nodes) {
             valid &= !node.scheduled();
             valid &= wheel.schedule(node, 65'536);
         }
     }
+
+    // after 在轮及节点析构后读取, 使释放路径也包含在统计窗口.
     const auto after = allocations;
     std::printf("%s: %zu allocations, %zu callbacks, Node=%zu bytes, Wheel=%zu bytes\n", name, after - before, expired, sizeof(typename W::Node), sizeof(W));
     return valid && after == before;
 }
 
+} // namespace
+
 // 两种配置都执行完整生命周期检查, 不把默认五层轮的分配结论直接套用到 Store 的宽槽轮.
 int main() {
+
+    // basic 检查默认五层 256 槽配置的完整生命周期.
     const bool basic = check_allocation<astra::Wheel<>>("Wheel<5,8>");
+    // store 检查 Store 使用的四层 1024 槽配置.
     const bool store = check_allocation<astra::Wheel<4, 10>>("Wheel<4,10>");
     return basic && store ? 0 : 1;
 }

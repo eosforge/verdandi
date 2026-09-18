@@ -1,13 +1,25 @@
 BasedOnStyle: LLVM
 AccessModifierOffset: -4
 AllowShortBlocksOnASingleLine: Empty
+AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Empty
 BreakBeforeBraces: Attach
-ColumnLimit: 160
+BreakAdjacentStringLiterals: false
+BreakAfterReturnType: None
+BreakFunctionDefinitionParameters: false
+BreakStringLiterals: false
+ColumnLimit: 0
 IndentWidth: 4
+KeepEmptyLines:
+  AtStartOfBlock: true
+  AtStartOfFile: false
+  AtEndOfFile: false
+MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 PointerAlignment: Left
 ReferenceAlignment: Left
+ReflowComments: Never
+SeparateDefinitionBlocks: Always
 SortIncludes: CaseSensitive
 Standard: Latest
 TabWidth: 4

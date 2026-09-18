@@ -8,18 +8,20 @@
 #include <mutex>
 
 namespace astra {
-class MembershipLedger {
+// Pulsar 的持久成员账本, 用追加日志恢复身份代次并发布不可变当前视图.
+class Ledger {
 public:
     // 同一个部署摘要只存在一个当前成员. 旧启动请求另存精简绑定, 不缓存整个应答.
     using Members = std::map<std::string, Member, std::less<>>;
     // 打开或创建专用日志并独占锁定. 截断末尾未完成记录, 完整记录损坏则拒绝启动.
     // galaxy 和 authority 绑定日志用途; maximum 为每角色上限, starts 为累计启动上限, 达限拒绝新登记.
-    MembershipLedger(const std::filesystem::path& path, std::string galaxy, std::string authority, std::size_t maximum, std::size_t starts);
+    Ledger(const std::filesystem::path& path, std::string galaxy, std::string authority, std::size_t maximum, std::size_t starts);
     // 关闭文件并释放进程锁, 所有服务 handler 必须已停止.
-    ~MembershipLedger();
+    ~Ledger();
     // 禁止复制文件和写入责任.
-    MembershipLedger(const MembershipLedger&) = delete;
-    MembershipLedger& operator=(const MembershipLedger&) = delete;
+    Ledger(const Ledger&) = delete;
+    // 禁止覆盖持有独占日志锁和当前视图的账本.
+    Ledger& operator=(const Ledger&) = delete;
     // 在写锁中校验重试或准备新成员, prepare 构造拥有数据的应答, 然后持久提交.
     // prepare 可以抛异常, 此时没有写盘或修改可见状态; 它不得重入本账本的登记方法.
     Result<void> register_member(Member candidate, std::string_view request_id, const std::function<void(const Member&, const Members&)>& prepare);
@@ -29,9 +31,12 @@ public:
 private:
     // 每个请求只记部署和当时的成员代次, 已被替换的请求永远不能重新取得准入.
     struct Start {
+        // 该启动请求对应的部署摘要文本, 独立拥有, 用于防止请求 ID 跨部署复用.
         std::string principal;
+        // 该启动请求已提交的成员代次, 有效记录非零, 与当前部署记录核对后才允许幂等重试.
         std::uint64_t epoch{};
     };
+
     // 只验证新记录与旧状态的关系; 启动恢复原地建表, 线上提交另行复制小型当前成员表.
     Result<void> validate(const Member& member, std::string_view request_id, const Members& view) const;
     // 追加长度 + 链式 SHA256 + Protobuf, fdatasync 成功才返回 true; 失败后禁止继续写入.

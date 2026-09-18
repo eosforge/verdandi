@@ -121,7 +121,7 @@ Result<void> PlanetUpstream::initialize(const Member& local, std::span<const Mem
 }
 
 // accept 实现: 接受一个远程节点的连接，只有在验证身份匹配后才会建立会话。
-Result<std::vector<SessionGeneration>> PlanetUpstream::accept(const Member& remote, Policy::Direction direction, SessionGeneration generation,
+Result<std::vector<Generation>> PlanetUpstream::accept(const Member& remote, Policy::Direction direction, Generation generation,
                                                               const std::optional<Member>& expected) {
     std::lock_guard lock(mutex_);
     // Planet 的安全和角色约束检查:
@@ -149,18 +149,18 @@ Result<std::vector<SessionGeneration>> PlanetUpstream::accept(const Member& remo
         // 接受连接，更新候选节点的状态。
         candidate.member = remote;
         candidate.pending = false;                         // 连接已完成，不再是 pending 状态。
-        candidate.connected = Clock::now();                // 记录成功连接的时间戳。
+        candidate.connected = Steady::now();                // 记录成功连接的时间戳。
         active_ = std::pair{remote.principal, generation}; // 设置为当前活跃上游，记录标识与代次。
 
         // 由于 Planet 采用单上游策略，且当前限制不允许并发活跃，所以不需要返回需要取消的旧会话，返回空列表。
-        return std::vector<SessionGeneration>{};
+        return std::vector<Generation>{};
     }
     // 未找到匹配的合法候选上游。
     return Status::identity("Candidate no longer authorized");
 }
 
 // record_failure 实现: 专门用于处理和记录失败的私有函数。
-void PlanetUpstream::record_failure(Candidate& candidate, Status::Code error, Clock::time_point now) {
+void PlanetUpstream::record_failure(Candidate& candidate, Status::Code error, Steady::time_point now) {
     // 结束在途状态，并标记本轮已尝试过。
     candidate.pending = false;
     candidate.attempted = true;
@@ -179,7 +179,7 @@ void PlanetUpstream::record_failure(Candidate& candidate, Status::Code error, Cl
 }
 
 // closed 实现: 响应连接断开事件。
-void PlanetUpstream::closed(SessionGeneration generation, std::optional<Status::Code> error, Clock::time_point now) {
+void PlanetUpstream::closed(Generation generation, std::optional<Status::Code> error, Steady::time_point now) {
     std::lock_guard lock(mutex_);
     // 如果当前并没有活跃的连接，或者当前活跃的代次与要关闭的代次不符，则说明可能是过期的关闭事件，直接忽略。
     if (!active_ || active_->second != generation) {
@@ -204,7 +204,7 @@ void PlanetUpstream::closed(SessionGeneration generation, std::optional<Status::
 }
 
 // due 实现: 定时调度触发器，用于挑选下一个要拨号的候选节点。
-std::optional<Member> PlanetUpstream::due(Clock::time_point now) {
+std::optional<Member> PlanetUpstream::due(Steady::time_point now) {
     std::lock_guard lock(mutex_);
     // 如果尚未初始化，或者已经存在活跃上游，或者已经有在途 (pending) 连接，就什么都不做，直接返回。
     if (!local_ || active_ || std::ranges::any_of(candidates_, [](const Candidate& c) { return c.pending; })) {
@@ -246,7 +246,7 @@ std::optional<Member> PlanetUpstream::due(Clock::time_point now) {
 }
 
 // failed 实现: 用于从外部接收到某个目标的拨号失败事件回调。
-void PlanetUpstream::failed(const Member& target, Status::Code error, Clock::time_point now) {
+void PlanetUpstream::failed(const Member& target, Status::Code error, Steady::time_point now) {
     std::lock_guard lock(mutex_);
     for (auto& candidate : candidates_) {
         // 如果找到了对应的目标节点实体，调用 record_failure 记录失败状态并退出。
@@ -258,7 +258,7 @@ void PlanetUpstream::failed(const Member& target, Status::Code error, Clock::tim
 }
 
 // needs_refresh 实现: 询问系统是否需要外部触发刷新操作。
-bool PlanetUpstream::needs_refresh(Clock::time_point now) {
+bool PlanetUpstream::needs_refresh(Steady::time_point now) {
     std::lock_guard lock(mutex_);
     // 如果尚未初始化，或者当前存在健康的活动上游，或者 due 中没有发出 refresh_ 请求，
     // 或者现在还没到下一次允许强制刷新的时间点 next_refresh_，则不执行刷新。
@@ -273,9 +273,9 @@ bool PlanetUpstream::needs_refresh(Clock::time_point now) {
 }
 
 // status 实现: 获取网络连接和候选情况的综合报告。
-Policy::NetworkStatus PlanetUpstream::status() const {
+Policy::State PlanetUpstream::status() const {
     std::lock_guard lock(mutex_);
-    Policy::NetworkStatus result;
+    Policy::State result;
     // 返回初始化状态和现有的候选节点总数。
     result.initialized = local_.has_value();
     result.candidates = candidates_.size();

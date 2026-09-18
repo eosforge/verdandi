@@ -7,16 +7,16 @@
 
 ## 1. 核心契约
 
-每个进程拥有一个 EpochClock. 数据、Store 和 Wheel 只认识它输出的纪元时间:
+每个进程拥有一个 Clock. 数据、Store 和 Wheel 只认识它输出的纪元时间:
 
 ```text
-本地经过时间 + 对时样本 -> EpochClock -> EpochClock::Time -> Store -> Wheel
+本地经过时间 + 对时样本 -> Clock -> Clock::Time -> Store -> Wheel
                               |
                               +-> 时钟质量与诊断
 ```
 
-- EpochClock::Time 的起点、单位和含义不随 Pulsar/Star 启动或连接变化而改变.
-- 对一个运行中的 EpochClock, 非重叠读取单调不减, 正常经过时间会推动它继续前进.
+- Clock::Time 的起点、单位和含义不随 Pulsar/Star 启动或连接变化而改变.
+- 对一个运行中的 Clock, 非重叠读取单调不减, 正常经过时间会推动它继续前进.
   时钟分辨率允许相邻读数相同, 不要求每次读取人为加 1 ns.
 - 初始化并公开时间后, 不直接替换时间值或原点. 正负校正通过限速调整吸收, 不回拨、不停走、不跳跃校时.
 - 数据项仅持有一个可选的纪元截止时间. 时钟校正、重新采样和参考源重启不改写已有截止.
@@ -32,10 +32,10 @@
 
 | 类型/字段 | 含义 |
 | --- | --- |
-| `EpochClock::Time` | 强类型的非负 int64 纳秒数, 同一固定 Unix 起点; 不隐式接受 steady_clock::time_point |
-| `optional<EpochClock::Time> deadline` | 唯一业务期限; 空表示无限期, 不以 0、负值或最大整数编码无限期 |
-| `EpochClock::Reading` | 成对返回当前时间、误差估计和是否可接受新有限期限; 不进入每条数据 |
-| EpochClock 内部状态 | 本地采样锚点、纪元值、待消化偏差、舍入余数、最后有效观测及质量信息 |
+| `Clock::Time` | 强类型的非负 int64 纳秒数, 同一固定 Unix 起点; 不隐式接受 steady_clock::time_point |
+| `optional<Clock::Time> deadline` | 唯一业务期限; 空表示无限期, 不以 0、负值或最大整数编码无限期 |
+| `Clock::Reading` | 成对返回当前时间、误差估计和是否可接受新有限期限; 不进入每条数据 |
+| Clock 内部状态 | 本地采样锚点、纪元值、待消化偏差、舍入余数、最后有效观测及质量信息 |
 | Store 推进位置 | 时间轮已经处理到的纪元拍边界; 这是处理水位, 不是第二种时间参考系 |
 | Wheel 节点 | 原有侵入式链接和到期拍索引; 不额外保存本地绝对截止 |
 
@@ -46,11 +46,11 @@ Snapshot 已同时保存 value/deadline, 业务持久化和网络恢复仍未实
 
 RPC 超时、重试退避、历史保留期和性能测量仍使用各自的本地经过时间.
 这些设施不改用可能有调速误差的业务时间, 也不把本地期限放回业务数据.
-现有 `Clock = steady_clock` 不全局替换, 避免改变准入、gRPC 关闭和旧夹具的语义.
+现有 `Steady = steady_clock` 不全局替换, 避免改变准入、gRPC 关闭和旧夹具的语义.
 
 ## 3. 底层计时和公共时间起点
 
-生产目标仍为 Linux. EpochClock 的经过时间使用 CLOCK_BOOTTIME,
+生产目标仍为 Linux. Clock 的经过时间使用 CLOCK_BOOTTIME,
 使内核计入系统 suspend 的时长; 本地采样锚点也使用同一来源.
 它不受墙钟 step 直接影响, 但仍依赖内核和虚拟化平台正确计时, 不是独立硬件计时器.
 相关边界见 [Linux clock_gettime](https://man7.org/linux/man-pages/man3/clock_gettime.3.html).
@@ -94,7 +94,7 @@ slew_ppm 必须小于 1_000_000, 保证向后修正也不会停止正常走时.
 不先引入无锁高水位、每 CPU 时钟或多套校正控制器. 这是进程级固定成本,
 Store 每轮/批读取一次, 不在到期循环中为每个 Key 重新采样时钟.
 
-限速调整参考 [RFC 5905 的 Clock-Adjust Process](https://www.rfc-editor.org/rfc/rfc5905.html#section-12),
+限速调整参考 [RFC 5905 的 Steady-Adjust Process](https://www.rfc-editor.org/rfc/rfc5905.html#section-12),
 但这里只实现项目需要的时间模型, 不声称实现完整 NTPv4 时钟驯服算法或修改宿主系统时间.
 
 ### 首版内部参数
@@ -116,7 +116,7 @@ Pulsar 仅调速一项的名义偏差约为 5 ms, Star 的 1000 ppm 对应约 10
 
 ## 5. 质量与失联
 
-EpochClock 初始化后, 时间值的可用性与“可以接受新有限期限”分开表示:
+Clock 初始化后, 时间值的可用性与“可以接受新有限期限”分开表示:
 
 | 情况 | 已有数据/时间轮 | 新有限期限 |
 | --- | --- | --- |
@@ -150,13 +150,13 @@ Linux 可通过只读的 adjtimex 查询检查未同步/错误状态与误差信
 但这些状态不是对实际物理准确度的证明; 可信系统对时仍是部署前提.
 接口边界见 [Linux adjtimex](https://man7.org/linux/man-pages/man2/adjtimex.2.html).
 
-Pulsar 的 EpochClock 也经本地经过时间推进, 墙钟变化经过同样的限速和质量处理.
+Pulsar 的 Clock 也经本地经过时间推进, 墙钟变化经过同样的限速和质量处理.
 Star 只向当前授权的 Pulsar 采样, 不用自己的 system_clock 绕过上游校准.
 外部时间源不可用时, 已运行实例继续 holdover; 没有锚点的冷启动不能凭空恢复断电时长.
 
 ### 6.2 Pulsar 重启与单调性的边界
 
-单调保证属于一个持续运行的 EpochClock. Pulsar 重启后从可信公共时间重新建立锚点,
+单调保证属于一个持续运行的 Clock. Pulsar 重启后从可信公共时间重新建立锚点,
 其新估计可能略早于停机前的旧估计; 运行中的 Star 将它作为校正输入, 不直接替换自己的时间.
 因此参考源重启不需要重置 Store/Wheel, 不需要给数据附加 era.
 
@@ -180,14 +180,14 @@ Star 新进程先校准公共时间, 再装载/开放有期限的业务状态. �
 
 ### 初始化
 
-首次取得有效 EpochClock::Time 时建立 Store 拍边界. 若存在恢复数据, 按当前时间安排期限,
+首次取得有效 Clock::Time 时建立 Store 拍边界. 若存在恢复数据, 按当前时间安排期限,
 不从 1970 年开始逐拍追赶. Wheel 可保持从零开始的内部拍索引, Store 只记录与其对应的纪元边界.
 Wheel 本身的侵入式链接、分层、取消和超长期限分段唤醒规则不改变.
 
 ### 正常一轮
 
 ```text
-EpochClock 补齐本地经过时间, 得到一个稳定的 EpochClock::Reading
+Clock 补齐本地经过时间, 得到一个稳定的 Clock::Reading
     -> Store.tick(epoch_now)
     -> 按拍触发、核对 deadline 并准备完整到期批次
     -> 提交数据、历史、快照索引和版本
@@ -230,10 +230,10 @@ Store 在锁内只使用本轮捕获的时间, 不在每个节点回调时重新
 | Pong.synchronized, tag 7 | 上游是否已初始化且质量达标; 缺省 false, 不把缺字段当作可信时间 |
 
 滤波继续根据 T0/T3 本地经过时间和 T1/T2 公共时间计算偏移及 delay,
-所得偏移只作为 EpochClock 的目标观测, 不直接覆盖对业务公开的时钟.
+所得偏移只作为 Clock 的目标观测, 不直接覆盖对业务公开的时钟.
 时间服务未就绪时, RPC 返回 UNAVAILABLE, 不发送看似有效的零时间.
 单批只使用本条 RPC 的有效响应. 单个采样线程串行处理完成, 停止后不发布迟到结果;
-更换连接可清空滤波样本, 不清空 EpochClock 已经建立的锚点.
+更换连接可清空滤波样本, 不清空 Clock 已经建立的锚点.
 
 本项目实现阶段不做旧语义兼容: 更新 proto、生成源码、Pulsar、Star 和测试须在同一迁移中完成.
 不能仅因字段类型仍为 uint64 就混用旧的进程/主机单调时间与新的公共纪元时间.
@@ -243,15 +243,15 @@ Store 在锁内只使用本轮捕获的时间, 不在每个节点回调时重新
 
 | 部分 | 处理 |
 | --- | --- |
-| common/clock | 将瞬时偏移发布改成连续 EpochClock, 增加独立质量输出和可注入经过时间/参考源 |
-| pulse_client / ClockFilter | 保留采样与过滤, 输出目标观测; 删除业务 era 和 reset 后丢失走时锚点的行为 |
-| Pulsar Pulse | 改为读取公共 EpochClock, 增加上游质量; 不再按启动生成业务时间纪元 |
+| common/clock | 将瞬时偏移发布改成连续 Clock, 增加独立质量输出和可注入经过时间/参考源 |
+| pulse_client / Filter | 保留采样与过滤, 输出目标观测; 删除业务 era 和 reset 后丢失走时锚点的行为 |
+| Pulsar Pulse | 改为读取公共 Clock, 增加上游质量; 不再按启动生成业务时间纪元 |
 | Pulsar 私有状态 | 不增加时钟持久日志或启动代次; 原有成员登记持久化保持其独立职责 |
 | Store | 合并为单一期限类型, 删除 global/local 双模式、双期限、lease_time 的换纪元扫描 |
-| LeaseClock | 职责移入进程级 EpochClock 后删除, 不改名保留第二层时间映射 |
-| SnapshotIndex / Wheel | 保留现有算法, 仅适配单一期限记录和时间类型, 不引入新持久化容器 |
+| LeaseClock | 职责移入进程级 Clock 后删除, 不改名保留第二层时间映射 |
+| Index / Wheel | 保留现有算法, 仅适配单一期限记录和时间类型, 不引入新持久化容器 |
 | Runtime | 获取时间并推进 Store, 记录质量变化; 不处理每 Key 的纪元迁移 |
-| Go Supervisor / 冻结 SDK | 不机械迁移, 没有同一套 Pulse 时钟; 后续 SDK 协议使用同一 EpochClock::Time 契约 |
+| Go Supervisor / 冻结 SDK | 不机械迁移, 没有同一套 Pulse 时钟; 后续 SDK 协议使用同一 Clock::Time 契约 |
 
 本轮实现时钟/协议/Store 迁移, 补齐测试并在用户授权后执行回归. 不实现多 Pulsar 选主、跨 Galaxy 时间桥接、SDK 业务协议或业务数据落盘.
 不下载工具/依赖, 不修改系统时钟或系统对时服务, 不触碰 README.
@@ -263,7 +263,7 @@ Store 在锁内只使用本轮捕获的时间, 不在每个节点回调时重新
 
 | 层级 | 必须覆盖的场景 |
 | --- | --- |
-| EpochClock 确定性测试 | 首次初始化、重复读取、正负校正、预算耗尽、频繁小步与一次大步等价、调速停止、整数极值 |
+| Clock 确定性测试 | 首次初始化、重复读取、正负校正、预算耗尽、频繁小步与一次大步等价、调速停止、整数极值 |
 | 连续性 | 同一时刻替换样本不跳时, 负偏差不冻结, 旧样本不覆盖新状态, 并发读/采样更新保持契约 |
 | 质量 | 新鲜包但残余偏差过大、上游未同步、样本过期、恢复收敛、holdover 误差增长、底层反序 |
 | 参考源切换 | Pulsar 重启/换连接后时间和 deadline 不改写, 不扫描重排业务数据, 旧 RPC 不发布结果 |
@@ -272,12 +272,12 @@ Store 在锁内只使用本轮捕获的时间, 不在每个节点回调时重新
 | 期限稳定性 | 续租只改一次绝对 deadline, 正负校正不重写 Entry/Delta, 过期不复活, 原版本/快照不被校正修改 |
 | 冷启动 | 缺少可信锚点保持未就绪, 新进程估计略早于旧源时由运行中的 Star 限速吸收 |
 | 恢复 | 运行中 Star 在 Pulsar 停机时继续到期; 冷启动不把旧期限续满; 缺可信时间时保持未就绪 |
-| 回归与资源 | Store 分配失败回滚、SnapshotIndex 并发与寿命、Pulse 取消/慢流、ASan/UBSan、TSan |
+| 回归与资源 | Store 分配失败回滚、Index 并发与寿命、Pulse 取消/慢流、ASan/UBSan、TSan |
 | 性能 | 按数据量/写入量比较每项内存、写入吞吐、TTL 与 Pulse 尾延迟, 单独报告正常对时和偏差收敛阶段 |
 
 旧的“换参考纪元并重写截止”用例已改为连续校正且期限不变的断言, 并通过本轮回归.
 休眠通过注入经过时间验证算法; 真实 VM suspend 与整机重启另获授权后执行,
 不在普通回归中自行挂起机器或改动系统时间.
 
-实施顺序: EpochClock 与确定性用例 -> Pulsar 锚点和协议 -> Star 采样 -> Store 简化 -> 格式化和逐行审查.
+实施顺序: Clock 与确定性用例 -> Pulsar 锚点和协议 -> Star 采样 -> Store 简化 -> 格式化和逐行审查.
 本轮已按 [AGENTS.md](../../AGENTS.md) 取得授权并运行构建、功能回归及相应 Sanitizer; 后续改动仍需另获当轮测试授权.

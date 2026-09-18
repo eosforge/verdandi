@@ -1,5 +1,7 @@
 # 维护 C++26 Star / Planet
 
+开始 C++ 工作前先阅读 [C++ 编码规范](../cpp-coding.md), 命名、作用域、性能取舍、注释和排版以该文为准.
+
 从仓库根目录操作. 项目约定见 [coding.md](../coding.md), 协议与范围见
 [骨架设计](../cluster/cpp26-skeleton-design.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
 原有 Supervisor 使用 Go, 新增 C++ Pulsar 提供独立登记与对时服务; 两者数据库不互换.
@@ -40,7 +42,7 @@
 Pulsar 采样使用 `proto::pulsar::v1`, 登记继续使用 `proto::orbit::v1`.
 不使用 `wire`、`orbit`、`probe` 等协议命名空间别名或 using namespace 隐藏归属和版本.
 
-`Id` 是不透明字符串, `Principal` 是固定部署摘要, `MemberEpoch` 与 `SessionGeneration` 分别表达远端实例和本地会话代次.
+`Id` 是不透明字符串, `Principal` 是固定部署摘要, `Member::Epoch` 与 `Generation` 分别表达远端实例和本地会话代次.
 不再提供 `HexId<N>` 或 `DialTarget` 包装. `Policy::due(now)` 返回一个可选的 `Member`,
 Runtime 统一控制拨号间隔和并发预算; 策略只标记目标归属. 单用途转换的实现放在 `.cpp`, 不预建通用模板.
 会话的首次关闭原因同时表示关闭阶段, 上游是否存在从 `active_member` 推导, 不维护两份可分歧状态.
@@ -49,8 +51,8 @@ Runtime 统一控制拨号间隔和并发预算; 策略只标记目标归属. �
 flowchart TD
     E[star / planet 入口] --> R[Runtime 生命周期]
     R --> A[Admission 登录与登记]
-    R --> S[RpcSession 逻辑流]
-    R --> P[StarTopology / PlanetUpstream]
+    R --> S[Session 逻辑流]
+    R --> P[Star / PlanetUpstream]
     R --> O[Signals / Wakeup / Logger]
     A --> I[Identity]
     S --> I
@@ -85,7 +87,7 @@ flowchart TD
 `Runtime` 的单控制循环拥有 `sessions_`, 推进准入和策略. 服务 handler 只在短锁内登记
 `incoming_`; 控制循环通过 `collect` 接管. gRPC 自己管理 I/O worker.
 
-`RpcSession` 的接收对象必须经历 `StartRead -> OnReadDone -> 控制循环消费 -> StartRead`.
+`Session` 的接收对象必须经历 `StartRead -> OnReadDone -> 控制循环消费 -> StartRead`.
 `read_inflight_` 和 `read_ready_` 分别表示 gRPC 与控制循环拥有缓冲区, 再提交读取时必须同时检查两者.
 写消息直到 `OnWriteDone` 才可复用. 不嵌套持有策略锁和会话锁, 不在回调里处理角色或签名校验.
 

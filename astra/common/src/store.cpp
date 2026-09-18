@@ -1,4 +1,4 @@
-// 本文件实现了 store.hpp 里的键值内存存储，以及基于增量和全量的同步提取。
+// 本文件实现了 store.hpp 里的键值内存存储, 以及基于增量和全量的同步提取.
 #include "store.hpp"
 
 #include <algorithm>
@@ -8,20 +8,23 @@
 
 namespace astra {
 
-// put 函数实现: 增加或覆盖一项键值数据，同时追加记录到变更历史。
-void Store::put(const std::string& key, Buffer value, std::optional<EpochClock::Time> deadline) {
+// put 函数实现: 增加或覆盖一项键值数据, 同时追加记录到变更历史.
+void Store::put(const std::string& key, Buffer value, std::optional<Clock::Time> deadline) {
+
     if (deadline && deadline->time_since_epoch().count() < 0) {
         throw std::invalid_argument("Store deadline must be nonnegative Unix time");
     }
-    // 在锁外接管缓冲并准备唯一记录, 将可提前完成的 Key 复制和容器分配移出临界区，提高并发度.
-    // value 直接由 std::vector 被接管，包裹在 const 权限的 shared_ptr 中进行后续分享.
+
+    // 在锁外接管缓冲并准备唯一记录, 将可提前完成的 Key 复制和容器分配移出临界区, 提高并发度.
+    // value 直接由 std::vector 被接管, 包裹在 const 权限的 shared_ptr 中进行后续分享.
     auto shared = std::make_shared<const Buffer>(std::move(value));
 
     // 提交序号尚未确定, 0 只存在于未发布的临时记录中.
     std::vector<Store::Delta> records;
-    // deleted 参数设为 false, version 暂设为 0。
+    // deleted 参数设为 false, version 暂设为 0.
     records.emplace_back(key, shared, false, 0, deadline);
 
+    // retired 接走旧缓存; 先于 lock 声明, 最后一个快照引用在解锁后释放.
     std::shared_ptr<const Snapshot> retired;
     // lock 从此处到函数退出串行化 Map, 历史和版本; 异常时自动释放以保证原子性.
     std::lock_guard lock(mutex_);
@@ -30,20 +33,22 @@ void Store::put(const std::string& key, Buffer value, std::optional<EpochClock::
         throw std::logic_error("Store requires an epoch anchor before finite deadlines");
     }
 
-    // 捕获统一的单调时间，避免在锁内多次调用底层时钟获取
-    const auto now = Clock::now();
+    // 捕获统一的单调时间, 避免在锁内多次调用底层时钟获取
+    // now 是本批历史的本地单调时间, 与业务 Unix 截止分开使用.
+    const auto now = Steady::now();
 
     // 只计算而不发布下一版本, 先拒绝耗尽以免产生回绕. 避免状态被污染.
     const auto version = advance();
     records.front().version = version;
 
-    // try_emplace 先尝试找到现有键或者新插入空的占位。
+    // try_emplace 先尝试找到现有键或者新插入空的占位.
     // it 指向新增或已有条目; inserted 仅用于撤销尚未完成的新键插入.
     auto [it, inserted] = entries_.try_emplace(key);
 
     // 临时插入仍被锁遮蔽. 记录或历史分配失败时只撤销本次新增项, 不改动原有条目.
     std::uint64_t snapshot_slot{};
-    SnapshotIndex::Key snapshot_key;
+    // snapshot_key 初始为空, 仅新占用槽位时拥有键副本; 覆盖原值继续复用原键.
+    Index::Key snapshot_key;
     try {
         // 可变 Entry 留在原 Map, 只读索引按路径准备私有页; 已有有效 Key 覆盖时复用共享字符串.
         snapshot_slot = it->second.value ? it->second.snapshot_slot : snapshot_index_.next();
@@ -54,7 +59,7 @@ void Store::put(const std::string& key, Buffer value, std::optional<EpochClock::
         // 尝试把此次操作追加至历史队列
         history_.push_back({version, now, std::move(records)});
     } catch (...) {
-        // 如果系统内存耗尽抛出异常，为了维持原先的状态需要将上面创建的新记录退回
+        // 如果系统内存耗尽抛出异常, 为了维持原先的状态需要将上面创建的新记录退回
         if (inserted) {
             entries_.erase(it);
         }
@@ -79,24 +84,27 @@ void Store::put(const std::string& key, Buffer value, std::optional<EpochClock::
     retired = std::move(cache_);
 }
 
-// remove 函数实现: 将指定的键置为删除状态，清理载荷但不立即删除 map 节点以备复用。
+// remove 函数实现: 将指定的键置为删除状态, 清理载荷但不立即删除 map 节点以备复用.
 void Store::remove(const std::string& key) {
+
+    // retired 接走旧缓存; 先于 lock 声明, 最后一个快照引用在解锁后释放.
     std::shared_ptr<const Snapshot> retired;
     // lock 同时保护存在性判断与删除提交, 不用先解锁再重复查找.
     std::lock_guard lock(mutex_);
-    const auto now = Clock::now();
+    // now 是本批历史的本地单调时间, 与业务 Unix 截止分开使用.
+    const auto now = Steady::now();
 
     // it 指向当前节点. 不存在或 value 已为空时均无操作, 不额外维护删除标志.
     auto it = entries_.find(key);
     if (it == entries_.end() || !it->second.value) {
-        return; // 若不存在，或者本来就已经是一个被置空的（已删除）节点，则不需要生成新版本历史。
+        return; // 若不存在, 或者本来就已经是一个被置空的(已删除)节点, 则不需要生成新版本历史.
     }
 
     // version 在历史成功追加之前不对外可见.
     const auto version = advance();
     // records 独立持有删除指令, 节点中的版本仅用于空节点缓存的回收匹配.
     std::vector<Store::Delta> records;
-    // 构建一条表示删除的记录，把 value 置空, deleted 置为 true.
+    // 构建一条表示删除的记录, 把 value 置空, deleted 置为 true.
     records.emplace_back(key, nullptr, true, version);
     snapshot_index_.prepare(it->second.snapshot_slot);
     history_.push_back({version, now, std::move(records)});
@@ -112,19 +120,25 @@ void Store::remove(const std::string& key) {
 }
 
 // 在同一临界区补拍并准备整批历史. 准备阶段只摘调度钩子, 不修改可观察的状态和版本.
-void Store::tick(EpochClock::Time now, Clock::time_point local) {
+void Store::tick(Clock::Time now, Steady::time_point local) {
+
     if (now.time_since_epoch().count() < 0) {
         throw std::invalid_argument("Store time must be nonnegative Unix time");
     }
+
+    // retired 接走旧缓存; 先于 lock 声明, 最后一个快照引用在解锁后释放.
     std::shared_ptr<const Snapshot> retired;
     // 仅接走彻底清空的大桶表. 先于 lock 声明, 析构在解锁后执行, 不把大块回收放进状态临界区.
     decltype(entries_) retired_entries;
     static_assert(noexcept(entries_.swap(retired_entries)), "Empty Store reclamation must not throw after commit");
+    // lock 保证条目, 版本和历史的同一状态视图; 当前操作不调用外部回调.
     std::lock_guard lock(mutex_);
     // 首次有效 Unix 时间直接建立拍锚点, 尚未允许有限租约, 无需扫描或从纪元零点追赶.
     if (!clock_) {
         clock_ = now;
     }
+
+    // pending 为应补齐的完整拍数, 非负; 不截断追赶, 余下不足一拍保留在锚点差中.
     const auto pending = now > *clock_ ? static_cast<std::uint64_t>((now - *clock_).count() / interval_.count()) : 0;
 
     // records 同时保存提交内容和失败时需重排的 Key. 空拍不预分配数组.
@@ -137,6 +151,7 @@ void Store::tick(EpochClock::Time now, Clock::time_point local) {
                 wheel_.tick([&](Timer::Node* node) {
                     // entry 在状态锁内地址稳定; 到期值仍以真实截止核对, 不把分段唤醒当成过期.
                     auto& entry = *static_cast<Entry*>(node);
+                    // boundary 对齐当前回调实际所属拍, 兼容上一轮异常留下的待处理节点.
                     const auto boundary = *clock_ + (wheel_.now() == before ? std::chrono::nanoseconds::zero() : interval_);
                     if (entry.deadline && *entry.deadline > boundary) {
                         schedule(entry, boundary);
@@ -149,6 +164,7 @@ void Store::tick(EpochClock::Time now, Clock::time_point local) {
                         schedule(entry, boundary);
                         throw;
                     }
+
                     // 页面分配属于准备阶段; 失败时该节点已在 records 中, 由外层统一重新调度.
                     snapshot_index_.prepare(entry.snapshot_slot);
                 });
@@ -180,8 +196,10 @@ void Store::tick(EpochClock::Time now, Clock::time_point local) {
     if (!records.empty()) {
         // 从此处开始均为不分配的提交操作. 整次补拍产生一个版本, 不逐 Key 或逐拍发布.
         history_.back().records.swap(records);
+        // version 为已经准备完成的整批删除序号, 所有过期项共用该提交边界.
         const auto version = history_.back().version;
         for (const auto& record : history_.back().records) {
+            // entry 仍由 Map 持有, 准备阶段未删除数据, 此处查找必定命中.
             auto& entry = entries_.find(record.key)->second;
             snapshot_index_.erase(entry.snapshot_slot);
             Timer::cancel(entry);
@@ -192,6 +210,7 @@ void Store::tick(EpochClock::Time now, Clock::time_point local) {
         version_ = version;
         retired = std::move(cache_);
     }
+
     // 空拍也淘汰历史墓碑. 只有 Map 真正无节点时才交还桶数组, 不依据有效值计数误删待复用节点.
     trim(local);
     // 小表保留容量避免频繁清空/重建时抖动. 4096 桶是内部回收阈值, 不是 Key 容量或协议限制.
@@ -202,45 +221,56 @@ void Store::tick(EpochClock::Time now, Clock::time_point local) {
 }
 
 // 仅在已经确认顺序后进行无符号差值, 覆盖最小至最大有限 time_point 的完整距离.
-std::uint64_t Store::distance(Clock::time_point later, Clock::time_point earlier) noexcept {
-    static_assert(std::numeric_limits<Clock::duration::rep>::digits <= 63);
+std::uint64_t Store::distance(Steady::time_point later, Steady::time_point earlier) noexcept {
+    static_assert(std::numeric_limits<Steady::duration::rep>::digits <= 63);
     return static_cast<std::uint64_t>(later.time_since_epoch().count()) - static_cast<std::uint64_t>(earlier.time_since_epoch().count());
 }
 
 // 保留有限绝对截止, 超出单轮范围时先安排一次分段唤醒; 回调再次检查截止并续排.
-void Store::schedule(Entry& entry, EpochClock::Time boundary) noexcept {
+void Store::schedule(Entry& entry, Clock::Time boundary) noexcept {
+
     if (!entry.deadline) {
         Timer::cancel(entry);
         return;
     }
+
     // delay 向上取整且不使用可能溢出的 distance + interval - 1 表达式.
     const auto remaining = *entry.deadline > boundary ? static_cast<std::uint64_t>((*entry.deadline - boundary).count()) : std::uint64_t{0};
+    // interval 从构造时验证过的正纳秒周期转换, 不可能为零.
     const auto interval = static_cast<std::uint64_t>(interval_.count());
+    // delay 为向上取整后的拍数, 零由时间轮安排在下一拍, 不同步触发回调.
     const auto delay = remaining / interval + static_cast<std::uint64_t>(remaining % interval != 0);
     // 裁剪后必定可调度. delay=0 由 Wheel 安排到下一拍, 永远不在 put 内执行回调.
     static_cast<void>(wheel_.schedule(entry, std::min(delay, Timer::limit)));
 }
 
-// version 函数实现: 获取当前安全的总递增操作序号。
+// version 函数实现: 获取当前安全的总递增操作序号.
 std::uint64_t Store::version() const {
+
     // lock 保证读到完整提交, 无需再引入与 Map 不同边界的 atomic 版本计数器.
     std::lock_guard lock(mutex_);
     return version_;
 }
 
-// snapshot 函数实现: 当需要向远端拉取一份全量拷贝时，取得当前的干净快照指针。
+// snapshot 函数实现: 当需要向远端拉取一份全量拷贝时, 取得当前的干净快照指针.
 std::shared_ptr<const Store::Snapshot> Store::snapshot() {
+
     {
+        // lock 保证条目, 版本和历史的同一状态视图; 当前操作不调用外部回调.
         std::lock_guard lock(mutex_);
         if (cache_) {
             return cache_;
         }
     }
+
     // 仅快照构建者互相等待. 写入与 TTL 从不持有此锁, 不会等待全表复制.
     std::lock_guard builder(snapshot_mutex_);
-    SnapshotIndex::View view;
+    // view 拥有捕获根的共享引用, 在完成读同步之后才释放页面.
+    Index::View view;
+    // version 与 view 在同一状态锁内捕获, 初始零仅作未捕获哨兵.
     std::uint64_t version{};
     {
+        // lock 保证条目, 版本和历史的同一状态视图; 当前操作不调用外部回调.
         std::lock_guard lock(mutex_);
         if (cache_) {
             return cache_;
@@ -248,6 +278,7 @@ std::shared_ptr<const Store::Snapshot> Store::snapshot() {
         view = snapshot_index_.capture();
         version = version_;
     }
+
     // O(N) 的容器分配/Key 复制和视图回收均在状态锁外. 捕获后写入只复制被共享的修改路径.
     std::shared_ptr<const Snapshot> result;
     try {
@@ -267,26 +298,28 @@ std::shared_ptr<const Store::Snapshot> Store::snapshot() {
     return result;
 }
 
-// dump 函数实现: 根据现有的有效数据集合真正创建并拷贝键的索引结构。
-std::shared_ptr<const Store::Snapshot> Store::dump(const SnapshotIndex::View& view, std::uint64_t version) {
+// dump 函数实现: 根据现有的有效数据集合真正创建并拷贝键的索引结构.
+std::shared_ptr<const Store::Snapshot> Store::dump(const Index::View& view, std::uint64_t version) {
+
     // snapshot 只在本函数内可写, 完成后转换为 shared_ptr<const Store::Snapshot> 返回.
     auto snapshot = std::make_shared<Store::Snapshot>();
     snapshot->version = version;
     // 只按有效条目预留, 历史墓碑和已经删除的槽号不扩大桶数组.
     snapshot->data.reserve(view.size());
-    view.each([&](const std::string& key, const SnapshotIndex::Record& record) { snapshot->data.emplace(key, record); });
+    view.each([&](const std::string& key, const Index::Record& record) { snapshot->data.emplace(key, record); });
     return snapshot;
 }
 
-// extract 函数实现: 服务于上级客户端按已有的游标版本尝试追平差异的需求。
+// extract 函数实现: 服务于上级客户端按已有的游标版本尝试追平差异的需求.
 Store::Extraction Store::extract(std::uint64_t since, std::size_t max_bytes) const {
+
     // lock 保证定位历史, 统计长度和复制记录时批次不会被并发淘汰.
     std::lock_guard lock(mutex_);
     // result 在临时返回值中累积, 分配失败不会改动 Store 或调用者已经拿到的结果.
-    // 检查调用方游标，如果游标过于超前（未提交过），或是本地的历史队列太短已经丢弃过了最老部分，则触发 stale 请求它做全量拉。
+    // 检查调用方游标, 如果游标过于超前(未提交过), 或是本地的历史队列太短已经丢弃过了最老部分, 则触发 stale 请求它做全量拉.
     Store::Extraction result{.stale = since > version_ || since < oldest_, .version = version_, .deltas = {}};
 
-    // 如果游标不匹配无法发送增量，或两者完全同步，则不再构建内容即返回。
+    // 如果游标不匹配无法发送增量, 或两者完全同步, 则不再构建内容即返回.
     if (result.stale || since == version_) {
         return result;
     }
@@ -316,6 +349,7 @@ Store::Extraction Store::extract(std::uint64_t since, std::size_t max_bytes) con
         }
         total_deltas += batch.records.size();
     }
+
     // 事先设定容量避免迭代时内存拷贝挪移
     result.deltas.reserve(total_deltas);
 
@@ -323,34 +357,36 @@ Store::Extraction Store::extract(std::uint64_t since, std::size_t max_bytes) con
     for (const auto& batch : batches) {
         result.deltas.insert(result.deltas.end(), batch.records.begin(), batch.records.end());
     }
+
     // version 是全部记录的提交屏障, 调用者应用完整结果前不能提前确认.
     return result;
 }
 
-// advance 函数实现: 返回下个递增的单调版本号。
+// advance 函数实现: 返回下个递增的单调版本号.
 std::uint64_t Store::advance() const {
+
     if (version_ == std::numeric_limits<std::uint64_t>::max()) {
         throw std::overflow_error("Store version exhausted");
     }
     return version_ + 1;
 }
 
-// trim 函数实现: 维持设定的队列长度控制缓存使用，同时执行真正的废弃节点清理。
-void Store::trim(Clock::time_point now) {
+// trim 函数实现: 维持设定的队列长度控制缓存使用, 同时执行真正的废弃节点清理.
+void Store::trim(Steady::time_point now) {
+
     // 删除指令的续传责任在历史中. 回收空节点时仍匹配版本, 避免反复删除/重建时提前释放节点.
-    while (!history_.empty() &&
-           (history_.size() > capacity_ || retention_ == Clock::duration::zero() ||
-            (now >= history_.front().timestamp && distance(now, history_.front().timestamp) >= static_cast<std::uint64_t>(retention_.count())))) {
+    while (!history_.empty() && (history_.size() > capacity_ || retention_ == Steady::duration::zero() || (now >= history_.front().timestamp && distance(now, history_.front().timestamp) >= static_cast<std::uint64_t>(retention_.count())))) {
         // record 借用待淘汰批次. 只处理删除指令, 避免对正常写入的每条记录再次查表.
         for (const auto& record : history_.front().records) {
             if (record.deleted) {
                 // entry 可能已经重建或再次删除; 只回收仍然对应当前淘汰记录的空节点.
                 const auto entry = entries_.find(record.key);
                 if (entry != entries_.end() && !entry->second.value && entry->second.version == record.version) {
-                    entries_.erase(entry); // 当从历史记录中踢出且确定对应的也是删空节点，才彻底移除。
+                    entries_.erase(entry); // 当从历史记录中踢出且确定对应的也是删空节点, 才彻底移除.
                 }
             }
         }
+
         // 更新丢弃线的版本号到该即将丢弃的头部
         oldest_ = history_.front().version;
         // 弹出已过时的最早批次

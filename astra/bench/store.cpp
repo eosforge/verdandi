@@ -21,12 +21,12 @@ void measure(std::string_view name, std::size_t iterations, auto&& operation) {
     // sample 是本轮耗时的写入位置, 各轮复用同一预置 Store.
     for (auto& sample : samples) {
         // started 使用单调时钟, 避免系统校时影响计时区间.
-        const auto started = Clock::now();
+        const auto started = Steady::now();
         // iteration 仅控制调用次数, 不改变被测接口的业务输入.
         for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
             checksum += operation();
         }
-        sample = std::chrono::duration<double, std::nano>(Clock::now() - started).count() / static_cast<double>(iterations);
+        sample = std::chrono::duration<double, std::nano>(Steady::now() - started).count() / static_cast<double>(iterations);
     }
     std::ranges::sort(samples);
     std::cout << "{\"case\":\"" << name << "\",\"median_ns\":" << samples[samples.size() / 2] << ",\"iterations\":" << iterations

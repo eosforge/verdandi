@@ -16,9 +16,9 @@ flowchart LR
     I --> A[只读账号 / Ed25519 签发]
     I --> L[持久成员日志]
     I -->|凭证 + 当前成员名单 + Pulse 地址| S
-    C[Star PulseClient] -->|TLS + 已签发凭证 / 8 次采样| P[Pulsar 独立对时端口]
+    C[Star Sampler] -->|TLS + 已签发凭证 / 8 次采样| P[Pulsar 独立对时端口]
     P -->|只读当前成员快照| L
-    C --> F[ClockFilter / EpochClock]
+    C --> F[Filter / Clock]
     F --> T[Store / Wheel]
 ```
 
@@ -67,7 +67,7 @@ BoringSSL 的兼容头文件仍叫 `<openssl/...>`. 这不表示引入了独立 
 服务签发独立的不透明 ID. 同部署的新启动推进成员代次; 同一次启动重试保留 ID 和代次,
 同时返回最新成员名单, 不缓存旧应答. 已被替换的启动请求不能重新取得成功凭证.
 
-`MembershipLedger` 将成员与启动幂等键写在同一条记录中:
+`Ledger` 将成员与启动幂等键写在同一条记录中:
 
 1. 在登记锁下检查角色、端点、容量和重试关系.
 2. 准备成员快照、历史索引节点和完整签名应答; 分配失败不写盘.
@@ -119,7 +119,7 @@ delay 钳到本地 rho, 并把 dispersion 带入最终误差. 仍保留项目的
 
 Star 在独立 jthread 内标定与收发, 不用 Runtime 的10 ms 轮询时刻充当采样边界.
 本机标定失败会撤销新租约资格并退避重试, 不通过构造异常终止 Star 控制循环; 停止令牌也可取消标定.
-Pulsar 在独立 PhysicalClock 线程标定并采样, 未就绪时 Pulse 返回 UNAVAILABLE, 登记仍可运行.
+Pulsar 在独立 Source 线程标定并采样, 未就绪时 Pulse 返回 UNAVAILABLE, 登记仍可运行.
 复用 TLS Channel, 每条采样流总截止2 秒, 批内间隔5 ms, 正常批间约1 秒且带抖动.
 失败退避100 ms 起, 上限5 秒再加抖动. 流内同时只有一个在途 Ping.
 批内5 ms 间隔与批间退避共用支持 stop_token 的条件变量等待, 不保留不可取消的硬休眠.
@@ -145,7 +145,7 @@ Star 的复用 Ping 同样在 Write 完成后、T0 采样前清空. 这为未来
 仅 Pulsar 进程重启不会重启系统时钟或对时服务; 整机断电时 RTC 只提供粗略起点,
 重新达到质量门槛后才能提供可信对时.
 
-PhysicalClock 每秒只读 adjtimex(modes=0) 和 CLOCK_REALTIME, 拒绝 TIME_ERROR、STA_UNSYNC、
+Source 每秒只读 adjtimex(modes=0) 和 CLOCK_REALTIME, 拒绝 TIME_ERROR、STA_UNSYNC、
 STA_CLOCKERR、非法时间、过长读取窗口和超过 500 ms 的误差估计.
 maxerror/esterror 固定为微秒, offset 依据 STA_NANO 换算, 再计入采样窗口和实测 rho.
 不安装/配置服务, 不修改系统时间, 不在每个 RPC 回调里查询系统校准状态.
@@ -157,7 +157,7 @@ waitsync 的剩余校正阈值不是完整 UTC 误差界限; 对时守护程序�
 参考 [chrony](https://chrony-project.org/doc/4.7/chrony.conf.html)
 和 [chronyc tracking](https://chrony-project.org/doc/4.7/chronyc.html#tracking).
 
-EpochClock 首次只接受质量达标的 Unix 锚点, 之后不跳时或停走.
+Clock 首次只接受质量达标的 Unix 锚点, 之后不跳时或停走.
 Pulsar 最大额外调速 500 ppm; Star 为 1000 ppm, 为跟踪上游调速预留余量.
 四时间戳使用 1500 ppm 相对频差预算, 观测年龄使用 2000 ppm 保守漂移预算.
 这些是待测的工程参数, 不是实际硬件精度. 总误差包括上游估计和本机未消化偏差.
@@ -171,15 +171,15 @@ BOOTTIME 计入内核支持的 suspend, 不保证虚拟机快照回滚后的历�
 
 ## Store 的单一期限
 
-Store 不拥有时钟或校正控制器. Runtime 获取一次 EpochClock::Reading, 调用 tick(reading.time),
+Store 不拥有时钟或校正控制器. Runtime 获取一次 Clock::Reading, 调用 tick(reading.time),
 再处理该批业务写入. 首次 tick 直接建立 Unix 拍边界, 不从 1970 年补拍.
 未初始化可存永久值, 不能先受理有限截止; 后续参考校正不扫描或重排全表.
 
-put(key, value, optional<EpochClock::Time>) 只保存非负绝对期限, 空表示永久.
-业务入口必须检查 EpochClock::Reading::deadline_after(ttl) 的 expected 结果再提交.
+put(key, value, optional<Clock::Time>) 只保存非负绝对期限, 空表示永久.
+业务入口必须检查 Clock::Reading::deadline_after(ttl) 的 expected 结果再提交.
 质量不足、负 TTL 和溢出返回独立错误, 不能隐式变成永久值.
 内部 Store 不代替业务层鉴权或时钟质量校验, put 也不隐式提交过期删除.
-Delta 和 SnapshotIndex::Record 均保存同一 deadline; 最大整数也是有限截止, 不作永久哨兵.
+Delta 和 Index::Record 均保存同一 deadline; 最大整数也是有限截止, 不作永久哨兵.
 
 失联时已有期限继续走时, 恢复不续满, 过期记录不复活.
 默认 10 ms 拍间隔, 追赶不截断, 亚拍余量保留; Wheel 只认识相对拍索引,
@@ -201,7 +201,7 @@ Value 继续共享, 该预算不是 RSS/编码硬上限, bad_alloc 仍须由未�
 返回值对应调用期间捕获的完整版本, 即使构建期间已有新写入也可以返回, 不无限重试追赶.
 只有捕获版本仍是当前版本时才缓存结果. 旧缓存失效后继续在状态锁外释放.
 
-内部 `SnapshotIndex` 仅承担稳定的只读视图, 不代替可变 Key 查找或时间轮:
+内部 `Index` 仅承担稳定的只读视图, 不代替可变 Key 查找或时间轮:
 
 - 可变 `unordered_map<string, Entry>` 保留时间轮节点的稳定地址, Entry 记录对应的视图槽号.
 - 叶页64 项, 分支页16 个链接. 每项共享不可变 Key/Value 并保留绝对 deadline, 页深度最多15.
@@ -220,10 +220,10 @@ Value 继续共享, 该预算不是 RSS/编码硬上限, bad_alloc 仍须由未�
 
 ### 内存布局与空表回收
 
-Delta 已删除重复本地期限和 era, 只保存 optional<EpochClock::Time>.
+Delta 已删除重复本地期限和 era, 只保存 optional<Clock::Time>.
 不采用非标准打包压缩标准库对象. 真实尺寸和分配成本未作专项测量.
 
-`SnapshotIndex` 保留统一的16 路 Branch. 第15 层根页的后12 个槽不可达;
+`Index` 保留统一的16 路 Branch. 第15 层根页的后12 个槽不可达;
 在16 字节 shared_ptr 的布局下占192 字节, 空 shared_ptr 不另行分配控制块.
 不为只在极端槽号出现的顶层页增加特殊节点类型或虚函数.
 

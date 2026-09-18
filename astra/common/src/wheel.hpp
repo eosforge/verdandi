@@ -18,7 +18,7 @@ namespace astra {
 template <std::size_t Levels = 5, std::size_t Bits = 8>
     requires(Levels > 0 && Bits > 0 && Bits <= 10 && Levels <= 64 / Bits)
 class Wheel {
-    // 每层至多 256 槽, 总索引位数至多 64. 这些约束同时排除无效移位和意外的巨型槽数组.
+    // 每层至多 1024 槽, 总索引位数至多 64. 这些约束同时排除无效移位和意外的巨型槽数组.
     static constexpr std::size_t slots = std::size_t{1} << Bits;
     // 槽索引掩码, 代替取模; slots 始终为二的幂.
     static constexpr std::uint64_t mask = slots - 1;
@@ -31,14 +31,19 @@ public:
     struct Node {
         // 创建未调度节点. 不分配资源, 到期值只在调度成功后有意义.
         Node() noexcept = default;
+
         // 无论节点还是 Wheel 先销毁, 都先解除连接; 回调也可以释放当前节点或尚未触发的节点.
         ~Node() {
             Wheel::cancel(*this);
         }
+
         // 链接包含其他对象的地址, 不能复制或搬移, 业务对象可通过稳定地址容器持有节点.
         Node(const Node&) = delete;
+        // 禁止复制链指针, 避免两个节点指向同一个前驱槽.
         Node& operator=(const Node&) = delete;
+        // 禁止移动已挂链节点的地址, 即使当前未调度也使用相同类型契约.
         Node(Node&&) = delete;
+        // 禁止移动赋值破坏原地址的链关系.
         Node& operator=(Node&&) = delete;
 
         // 是否仍挂在槽位或待回调队列中. 仅借用状态, 与其他操作一样要求串行访问.
@@ -58,8 +63,10 @@ public:
 
     // 创建空轮, initial_tick 指定逻辑时钟起点, 不要求与系统时钟或其他 Wheel 一致.
     explicit Wheel(std::uint64_t initial_tick = 0) noexcept : clock_(initial_tick) {}
+
     // 清除所有钩子但不调用回调或销毁节点. 禁止在本轮 tick 的回调中销毁本 Wheel.
     ~Wheel() {
+
         detach(ready_);
         for (auto& level : wheels_) {
             for (auto& head : level) {
@@ -67,14 +74,19 @@ public:
             }
         }
     }
+
     // 槽头及 ready_ 的地址被节点引用, 因而即使空轮也统一禁止复制与移动.
     Wheel(const Wheel&) = delete;
+    // 禁止复制槽头地址及其节点连接.
     Wheel& operator=(const Wheel&) = delete;
+    // 禁止移动时间轮, 节点可能借用当前槽头地址.
     Wheel(Wheel&&) = delete;
+    // 禁止覆盖或移动仍被节点引用的时间轮存储.
     Wheel& operator=(Wheel&&) = delete;
 
     // 超过 limit 返回 false 且原调度不变. 成功会取消原调度, 允许在串行保护下转移到另一个 Wheel.
     [[nodiscard]] bool schedule(Node& node, std::uint64_t delay) noexcept {
+
         if (delay > limit) {
             return false;
         }
@@ -86,6 +98,7 @@ public:
 
     // 取消任何 Wheel 上的 node, 未调度时为空操作. 无分配, 不调用用户代码, 不改变到期值.
     static void cancel(Node& node) noexcept {
+
         if (node.pprev_ == nullptr) {
             return;
         }
@@ -109,6 +122,7 @@ public:
     template <typename F>
         requires std::invocable<F&, Node*>
     void tick(F&& fire) {
+
         // guard 在正常返回及回调异常时都恢复重入标记; 此标记不是线程同步原语.
         Guard guard(busy_);
         drain(fire);
@@ -141,23 +155,29 @@ private:
     struct Guard {
         // flag 借用 Wheel 的重入标记, guard 的生命周期严格包含于 tick.
         bool& flag;
+
         // 已进入时抛出且保留原 true 状态, 由外层 guard 负责恢复.
         explicit Guard(bool& value) : flag(value) {
+
             if (std::exchange(flag, true)) {
                 throw std::logic_error("Wheel::tick cannot reenter the same wheel");
             }
         }
+
         // 异常展开也恢复标记, 不接触节点或回调.
         ~Guard() {
             flag = false;
         }
+
         // 防止两个 guard 重复恢复同一个借用标记.
         Guard(const Guard&) = delete;
+        // 禁止赋值覆盖正在负责恢复的重入标记.
         Guard& operator=(const Guard&) = delete;
     };
 
     // 将已摘链节点插入匹配槽, 仅用于通过 schedule 范围检查的节点和级联节点.
     void insert(Node& node) noexcept {
+
         // remaining 是模 2^64 的剩余拍数, 在 limit 范围内; 0 在本拍最低层到期.
         const auto remaining = node.deadline_ - clock_;
         // level 由最高有效位确定. 置位最低位使零值归入最低层, 不改变非零值的最高有效位.
@@ -173,7 +193,9 @@ private:
     }
 
     // 从成员队列每次只摘一个节点. 绝不跨回调保存 next, 因为回调可能取消或释放它.
-    template <typename F> void drain(F& fire) {
+    template <typename F>
+    void drain(F& fire) {
+
         while (ready_ != nullptr) {
             // node 的借用到调用回调为止, 调用后不再访问, 支持当前节点自销毁及重新调度.
             // 已知节点为队首, 直接弹出并修正后继链接, 在用户回调前恢复其余队列的完整链接.
@@ -190,6 +212,7 @@ private:
 
     // 摘下 head 的全部节点, 保留它们的对象寿命. 用于 Wheel 析构, 不分配也不抛异常.
     static void detach(Node*& head) noexcept {
+
         // node 接管整条链表. 清理期间无回调, 不必维护中间状态的反向链接, 只需清空各节点钩子.
         auto* node = std::exchange(head, nullptr);
         while (node != nullptr) {
