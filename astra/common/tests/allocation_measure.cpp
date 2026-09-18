@@ -1,4 +1,3 @@
-// 功能: 测量核心操作的内存分配, 为容器和热路径的资源开销提供验证数据.
 // 仅链接到显式测量构建. 统计全进程替换型 C++ new, 包含静态依赖, 不覆盖直接 malloc 或 placement new.
 #include <atomic>
 #include <cstdio>

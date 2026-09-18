@@ -1,4 +1,3 @@
-// 功能: 推进连接和单次登记阶段, 校验准入结果, 在统一截止内处理重试与取消.
 // 该文件实现了 Admission 类的具体逻辑，负责与 Supervisor 建立 gRPC 通道，发送注册请求，并验证响应。
 #include "admission.hpp"
 #include "rpc_status.hpp"
@@ -46,7 +45,7 @@ Admission::Admission(const Config& config, std::shared_ptr<Identity> identity, s
         .password(identity_->password())
         .galaxy(config_.galaxy)
         .advertise(config_.advertise.text())
-        .role(config_.role == Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET)
+        .role(config_.role == Member::Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET)
         .group(config_.group);
 }
 
@@ -54,7 +53,7 @@ Admission::Admission(const Config& config, std::shared_ptr<Identity> identity, s
 // 参数 candidate_round: 本次请求所属的轮次。
 void Admission::begin(std::uint32_t candidate_round) {
     // 如果当前不在 idle 状态或者已经被取消，则直接返回，忽略新的开始请求。
-    if (phase_ != Phase::idle || cancelled_) {
+    if (phase_ != Admission::Phase::idle || cancelled_) {
         return;
     }
     // 更新请求结构中的轮次
@@ -64,7 +63,7 @@ void Admission::begin(std::uint32_t candidate_round) {
     // 设定连接通道建立的截止时间，取整体超时与连接超时的较小值
     connect_deadline_ = std::min(deadline_, Clock::now() + config_.connect_timeout);
     // 状态变更为连接中
-    phase_ = Phase::connecting;
+    phase_ = Admission::Phase::connecting;
     // 触发 gRPC 通道进行连接尝试，true 表示如果空闲则尝试连接
     channel_->GetState(true);
 }
@@ -72,11 +71,11 @@ void Admission::begin(std::uint32_t candidate_round) {
 // start_registration: 实际发起异步 gRPC 注册调用的私有方法。
 void Admission::start_registration() {
     // 创建一个新的调用上下文块
-    registration_ = std::make_shared<RegistrationCall>();
+    registration_ = std::make_shared<Admission::RegistrationCall>();
     // 设定 RPC 的超时期限
     registration_->context.set_deadline(rpc_deadline(deadline_));
     // 切换到注册中状态
-    phase_ = Phase::registration;
+    phase_ = Admission::Phase::registration;
     // 异步调用 Register 接口
     stub_->async()->Register(&registration_->context, &request_, &registration_->response, [call = registration_, wake = wake_](grpc::Status status) {
         // 回调中保存返回的状态码
@@ -89,18 +88,18 @@ void Admission::start_registration() {
 }
 
 // poll: 主循环轮询状态机进展。
-std::optional<Result<Joined>> Admission::poll() {
+std::optional<Result<Admission::Joined>> Admission::poll() {
     // 如果是闲置状态，直接返回等待信号 (nullopt)
-    if (phase_ == Phase::idle) {
+    if (phase_ == Admission::Phase::idle) {
         return std::nullopt;
     }
     // 通道就绪后只发一次登记 RPC, 连接等待和登记共享同一次尝试的总期限.
-    if (phase_ == Phase::connecting) {
+    if (phase_ == Admission::Phase::connecting) {
         // 检查是否取消或超时
         if (cancelled_ || Clock::now() >= connect_deadline_) {
             // 退回空闲状态，并返回相应的错误
-            phase_ = Phase::idle;
-            return std::unexpected(Error{cancelled_ ? Error::Code::cancelled : Error::Code::timeout, "Supervisor connection did not become ready"});
+            phase_ = Admission::Phase::idle;
+            return std::unexpected(Status{cancelled_ ? Status::Code::cancelled : Status::Code::timeout, "Supervisor connection did not become ready"});
         }
         // 如果通道还未达到 READY 状态，则继续等待
         if (channel_->GetState(true) != GRPC_CHANNEL_READY) {
@@ -110,14 +109,14 @@ std::optional<Result<Joined>> Admission::poll() {
         start_registration();
     }
     // 检查注册阶段是否完成 (acquire 屏障保证读取回调写出的数据)
-    if (phase_ == Phase::registration && registration_->done.load(std::memory_order_acquire)) {
-        phase_ = Phase::idle;
+    if (phase_ == Admission::Phase::registration && registration_->done.load(std::memory_order_acquire)) {
+        phase_ = Admission::Phase::idle;
         // 成功和失败都消费当前调用. 回调仍持有自己的 shared_ptr, 发布完成后只执行独立唤醒.
         // 将 registration_ 指针交换为空，转移所有权
         auto completed = std::exchange(registration_, {});
         // 检查 RPC 调用是否成功或被整体取消
         if (!completed->status.ok() || cancelled_) {
-            return std::unexpected(cancelled_ ? Error{Error::Code::cancelled, "Admission cancelled"} : rpc_error(completed->status));
+            return std::unexpected(cancelled_ ? Status{Status::Code::cancelled, "Admission cancelled"} : rpc_error(completed->status));
         }
         // 调用成功，进行业务层面的有效性校验
         return validate(completed->response);
@@ -127,20 +126,20 @@ std::optional<Result<Joined>> Admission::poll() {
 
 // validate: 校验 Supervisor 发回的响应数据。
 // 参数 response: 从 gRPC 接收到的 RegistrationResponse 对象引用。
-Result<Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& response) {
+Result<Admission::Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& response) {
     // 对时端点来自同一受信 TLS 控制面, 单独校验格式后交给持有独立 TLS 通道的采样器.
     std::string pulse_endpoint;
     if (!response.pulse_endpoint().empty()) {
         auto endpoint = Config::format_supervisor(response.pulse_endpoint());
         if (!endpoint) {
-            return Error::identity("Invalid Pulse endpoint");
+            return Status::identity("Invalid Pulse endpoint");
         }
         pulse_endpoint = std::move(*endpoint);
     }
     const auto count = static_cast<std::size_t>(response.members_size());
     // 检查返回的节点成员数量是否超过硬限制，或者超过配置所允许的角色容量限制
-    if (count > 4096 || (config_.role == Role::planet && count > 8) || (config_.role == Role::star && count > config_.max_members)) {
-        return Error::capacity("Admission list exceeds role capacity");
+    if (count > 4096 || (config_.role == Member::Role::planet && count > 8) || (config_.role == Member::Role::star && count > config_.max_members)) {
+        return Status::capacity("Admission list exceeds role capacity");
     }
     // 对原始准入字节验签并核对部署. 首次接受 Supervisor 签发的身份, 后续刷新不得更换它.
     // 调用身份类的 verify 进行公钥验签和解析
@@ -150,7 +149,7 @@ Result<Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& respo
     // 确保验签通过，并且其内容与当前节点的配置预期一致；如果是刷新请求，还要保证与先前的身份不变
     if (!local || local->galaxy != config_.galaxy || local->group != config_.group || local->role != config_.role || local->address != config_.advertise ||
         local->principal != identity_->principal(config_.galaxy, config_.advertise.text()) || (local_ && *local != *local_)) {
-        return Error::identity("Admission credential does not match this process");
+        return Status::identity("Admission credential does not match this process");
     }
     // 名单转换为拥有的成员值, 生成消息只留在适配层; 完整角色关系由后续 Policy 初始化检查.
     std::vector<Member> members;
@@ -174,21 +173,21 @@ Result<Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& respo
         .admission(std::move(*response.mutable_admission()))
         .admission_signature(std::move(*response.mutable_signature()));
 
-    // 返回成功验证后的完整 Joined 对象
-    return Joined{std::move(pulse_endpoint), std::move(*local), std::move(members), std::move(hello)};
+    // 返回成功验证后的完整 Admission::Joined 对象
+    return Admission::Joined{std::move(pulse_endpoint), std::move(*local), std::move(members), std::move(hello)};
 }
 
 // cancel: 发出取消信号。
 void Admission::cancel() {
     cancelled_ = true; // 标志位设为真，阻止新的开始和继续
     // 如果有正在进行的注册 RPC 调用，则尝试通过 gRPC Context 取消
-    if (phase_ == Phase::registration) {
+    if (phase_ == Admission::Phase::registration) {
         registration_->context.TryCancel();
     }
 }
 
 // pending: 返回是否有操作正在处理中。
 bool Admission::pending() const {
-    return phase_ != Phase::idle;
+    return phase_ != Admission::Phase::idle;
 }
 } // namespace astra

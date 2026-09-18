@@ -1,4 +1,3 @@
-// 功能: 提供手写的 Protobuf 链式赋值适配, 直接借用消息, 不拥有消息生命周期.
 // 标量调用 set_, 子消息通过 mutable_ 赋值, repeated 字段整体替换; 实际分配遵循 Protobuf 的语义.
 #pragma once
 
@@ -60,7 +59,6 @@ template <> struct Mutator<::proto::astra::v1::Pong> {
     }
 };
 template <> struct Mutator<::proto::pulsar::v1::Ping> {
-    // 借用单个采样请求, 代理不能超过消息寿命.
     ::proto::pulsar::v1::Ping& msg;
     // 设置 Star 发送时的单调纳秒数, 不在代理内读取或转换时钟.
     template <typename V> auto t0(V&& val) {
@@ -69,7 +67,6 @@ template <> struct Mutator<::proto::pulsar::v1::Ping> {
     }
 };
 template <> struct Mutator<::proto::pulsar::v1::Pong> {
-    // 借用单个采样应答, 所有字段在发送前由调用方完成赋值.
     ::proto::pulsar::v1::Pong& msg;
     // 原样回显对应的 T0, 由 Star 匹配唯一在途请求.
     template <typename V> auto t0(V&& val) {

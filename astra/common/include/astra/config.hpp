@@ -1,4 +1,3 @@
-// 功能: 定义节点运行配置及 CLI 解析入口, 集中说明参数单位, 边界和内部资源预算.
 // 本文件描述了节点启动和运行时所需的完整配置集合，并提供对这些配置的解析校验能力。
 #pragma once
 
@@ -14,7 +13,7 @@ namespace astra {
 struct Config {
     // role: 本进程角色, 由 Star/Planet 入口指定, CLI 不接受 --role.
     // 值默认初始化为 star, 框架不会自动推断角色发现。
-    Role role{};
+    Member::Role role{};
 
     // galaxy: 所属 Galaxy 标识, --galaxy 命令行参数必填, 无可用空默认值;
     // 限制条件为 1..64 字节安全 ASCII, 必须与准入身份一致。
@@ -124,21 +123,18 @@ struct Config {
     // 任何存在参数缺失, 重复提供, 存在未知参数或超出允许范围的情况均返回 configuration 类别的错误。
     // 参数 arguments: 命令行参数视图数组。
     // 参数 role: 本进程的角色类型。
-    // 返回: 成功返回装载好的 Config，失败返回 Error。
-    static Result<Config> parse(std::span<const std::string_view> arguments, Role role);
+    static Result<Config> parse(std::span<const std::string_view> arguments, Member::Role role);
 
     // 生成帮助文档的纯文本字符串。
     // 帮助信息来自同一字段上的编译期注解和默认值，不依赖维护多个平行的选项硬编码列表; 输出内容绝不会包含任何账号密码等敏感材料。
     // role 角色参数决定了帮助说明中的程序调用名; 返回的是独立构造的文本对象，执行中不解析参数也不访问文件系统。
     // 参数 role: 进程的角色，决定程序名。
-    // 返回: 完整的帮助文档文本。
-    static std::string help(Role role);
+    static std::string help(Member::Role role);
 
     // 解析并格式化 Supervisor 服务的网络地址。
     // Supervisor 允许 DNS 主机, 只校验名称/端口格式, 返回规范拨号文本.
     // value 在调用期间借用, 非零端口及主机格式不合法返回 configuration; DNS 主机文本保留原大小写.
     // 参数 value: 待解析的地址字符串。
-    // 返回: 如果成功，返回标准化的可直接用于拨号的地址字符串，否则返回错误信息。
     static Result<std::string> format_supervisor(std::string_view value);
 };
 

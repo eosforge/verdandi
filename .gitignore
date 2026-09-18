@@ -3,6 +3,7 @@ target/
 
 # C++ build and fetched dependency output
 /sdk/cpp/build/
+/astra/build/
 
 # Unified cross-language build output and dependency caches
 /build/

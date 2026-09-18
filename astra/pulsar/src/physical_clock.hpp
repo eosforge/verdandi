@@ -1,4 +1,3 @@
-// 功能: 只读系统物理时间及校准质量, 在独立可取消线程中维护 Pulsar 公共时钟.
 #pragma once
 #include <astra/clock.hpp>
 #include <atomic>
@@ -9,19 +8,19 @@
 namespace astra {
 // 从系统对时服务管理的 CLOCK_REALTIME 获取观测. 只读 adjtimex, 不改钟或启动/安装守护程序.
 // 未同步, 内核错误, 误差过大或读取失败时返回空/抛异常, 调用方降低时钟质量.
-std::optional<ClockEstimate> system_time_sample();
+std::optional<EpochClock::Estimate> system_time_sample();
 
 class PhysicalClock {
 public:
     // provider 在唯一工作线程调用, 必须有界返回. 默认为只读内核采样, 测试可注入故障/重启观测.
-    using Provider = std::function<std::optional<ClockEstimate>()>;
+    using Provider = std::function<std::optional<EpochClock::Estimate>()>;
     explicit PhysicalClock(Provider provider = system_time_sample);
     // 停止并 join, 所有借用本对象的 RPC 必须先退出.
     ~PhysicalClock();
     PhysicalClock(const PhysicalClock&) = delete;
     PhysicalClock& operator=(const PhysicalClock&) = delete;
     // 返回连续时间与质量; 未初始化/计时失败返回空, 不执行系统对时查询.
-    std::optional<EpochReading> now() const;
+    std::optional<EpochClock::Reading> now() const;
     // 真实 BOOTTIME rho, 初始零表示尚未完成标定; acquire 与线程发布配对.
     std::uint64_t precision() const noexcept;
 

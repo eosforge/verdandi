@@ -1,4 +1,3 @@
-// 功能: 独立临时目录与公开身份夹具, 不访问部署秘密, 析构清理本例资源.
 #pragma once
 #include "check.hpp"
 #include "fixture.hpp"
@@ -24,7 +23,7 @@ struct Directory {
     Directory& operator=(const Directory&) = delete;
 };
 
-inline Member member(unsigned index, Role role = Role::star) {
+inline Member member(unsigned index, Member::Role role = Member::Role::star) {
     Principal principal;
     principal.bytes[0] = static_cast<std::uint8_t>(index);
     return Member{"alpha", "node-" + std::to_string(index), principal, *Endpoint::parse("127.0.0.1:" + std::to_string(7400 + index)), {}, role, "default"};

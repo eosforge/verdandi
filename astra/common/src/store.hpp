@@ -1,4 +1,3 @@
-// 功能: 在同一提交边界内维护当前状态, 有界增量历史和按版本复用的只读快照.
 // 此文件定义了一个支持在并发和锁保护下进行单写、多读、记录历史与快照的 KV 同步存储机制。
 #pragma once
 
@@ -44,7 +43,7 @@ public:
         std::uint64_t version{};
 
         // deadline: 唯一绝对 Unix 截止, 空表示无限期; 删除记录也为空.
-        std::optional<EpochTime> deadline{};
+        std::optional<EpochClock::Time> deadline{};
     };
 
     // Extraction 结构体: 封装向其他节点或上层同步变更时所产生的增量或全量标志。
@@ -73,7 +72,7 @@ public:
     // capacity 为历史批次容量, retention 使用本地单调时间, interval 为正纳秒精度.
     // initial 可供恢复/测试指定非负 Unix 起点. 默认等待首次 tick, 不从 1970 年补拍.
     explicit Store(std::size_t capacity = 1000, Clock::duration retention = std::chrono::minutes(10),
-                   std::chrono::nanoseconds interval = std::chrono::milliseconds(10), std::optional<EpochTime> initial = {})
+                   std::chrono::nanoseconds interval = std::chrono::milliseconds(10), std::optional<EpochClock::Time> initial = {})
         : capacity_(capacity), retention_(retention), interval_(interval), clock_(initial) {
         if (interval_ <= std::chrono::nanoseconds::zero() || retention_ < Clock::duration::zero() || (initial && initial->time_since_epoch().count() < 0)) {
             throw std::invalid_argument("Invalid Store timing configuration");
@@ -81,9 +80,9 @@ public:
     }
 
     // 接管 value 并原子提交值, 单一绝对 deadline 与历史. 空 deadline 表示无限期.
-    // 有限截止必须非负且 Store 已由 tick 初始化; 时钟质量由调用方 EpochReading::deadline_after 校验.
+    // 有限截止必须非负且 Store 已由 tick 初始化; 时钟质量由调用方 EpochClock::Reading::deadline_after 校验.
     // 分配失败/版本耗尽不提交部分数据; 不在 put 中隐式删除到期项或更新时钟.
-    void put(const std::string& key, Buffer value, std::optional<EpochTime> deadline = {});
+    void put(const std::string& key, Buffer value, std::optional<EpochClock::Time> deadline = {});
 
     // remove 函数: 删除 key, 无返回值. 不存在或已经删除时不推进版本; 当前值与单条删除历史同时提交.
     // 分配失败或版本耗尽向调用方抛异常, 当前状态和版本不变.
@@ -96,7 +95,7 @@ public:
     // 分配失败或版本耗尽向调用方传播; 数据, 历史和版本保持原状, 已摘节点在下一拍重试.
     // 时间轮逐拍推进, 大跨度补拍的工作量包含空拍; 同批处理不承诺 O(1) 或固定延迟上限.
     // 历史清理后若 Map 已空且超过 4096 桶, 换回空表并在状态锁外释放旧桶; 非空表不自动收缩.
-    void tick(EpochTime now, Clock::time_point local = Clock::now());
+    void tick(EpochClock::Time now, Clock::time_point local = Clock::now());
 
     // version 函数: 加锁返回本实例已完整提交的版本. 不分配内存, 不能据此推断其他实例的同步进度.
     // 返回值: 内部全局的递增版本号。
@@ -132,7 +131,7 @@ private:
         // version 标识最后写入/删除的提交, 防止旧历史回收重新使用的节点.
         std::uint64_t version{};
         // 唯一有限截止, 超长租约分段唤醒不改写此值.
-        std::optional<EpochTime> deadline{};
+        std::optional<EpochClock::Time> deadline{};
     };
 
     // Batch 结构体: 一次过期清理可有多个 Key, 必须整批保留和淘汰, 不允许截断批次内部记录.
@@ -148,7 +147,7 @@ private:
     // advance 函数: 调用方必须持有 mutex_. 返回下一提交序号而不改动状态; 耗尽时抛 overflow_error.
     std::uint64_t advance() const;
     // 调用方持有状态锁, 从已推进边界安排有限截止, 无分配且不抛异常.
-    void schedule(Entry& entry, EpochTime boundary) noexcept;
+    void schedule(Entry& entry, EpochClock::Time boundary) noexcept;
 
     // later >= earlier 时返回无符号时钟计数差, 避免跨有符号极值相减溢出; 调用方先比较顺序.
     static std::uint64_t distance(Clock::time_point later, Clock::time_point earlier) noexcept;
@@ -180,7 +179,7 @@ private:
     // 纳秒拍间隔, 唯一构造入口验证为正, 构造后不再改变.
     const std::chrono::nanoseconds interval_;
     // clock_ 与 wheel_.now() 同步, 异常后也不重复推进已完成的拍.
-    std::optional<EpochTime> clock_;
+    std::optional<EpochClock::Time> clock_;
     // wheel_ 先于 entries_ 析构并解除全部钩子; 成员节点析构仍可安全重复取消.
     Timer wheel_{};
 

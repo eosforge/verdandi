@@ -1,4 +1,3 @@
-// 功能: 独立注入物理参考源的失效/跳变, 不调整宿主墙钟或依赖外部 NTP 可用性.
 #include "check.hpp"
 #include "physical_clock.hpp"
 #include <atomic>
@@ -36,7 +35,7 @@ int main() {
             uncertain
         };
         std::atomic mode{Mode::missing};
-        const auto reference = [&]() -> std::optional<ClockEstimate> {
+        const auto reference = [&]() -> std::optional<EpochClock::Estimate> {
             const auto current = mode.load();
             if (current == Mode::missing) {
                 return std::nullopt;
@@ -44,11 +43,11 @@ int main() {
             if (current == Mode::failed) {
                 throw std::runtime_error("Injected reference failure");
             }
-            const auto local = ElapsedClock::now();
+            const auto local = EpochClock::Elapsed::now();
             const auto correction = current == Mode::jumped ? 10s : current == Mode::reversed ? -10s : 0s;
-            const auto time = EpochTime(1'800'000'000s) + local.time_since_epoch() + correction;
+            const auto time = EpochClock::Time(1'800'000'000s) + local.time_since_epoch() + correction;
             // 正常样本使用 400 ms 误差, 验证新门槛确实应用到物理参考层; 超限仅增加到 500 ms + 1 ns.
-            return ClockEstimate{time, local, current == Mode::uncertain ? 500'000'001U : 400'000'000U, 0};
+            return EpochClock::Estimate{time, local, current == Mode::uncertain ? 500'000'001U : 400'000'000U, 0};
         };
         {
             PhysicalClock source(reference);
@@ -60,7 +59,7 @@ int main() {
                 return value && value->ready;
             });
             const auto initial = *source.now();
-            CHECK(initial.time >= EpochTime(1'800'000'000s));
+            CHECK(initial.time >= EpochClock::Time(1'800'000'000s));
             mode.store(Mode::failed);
             wait_until([&] {
                 const auto value = source.now();
@@ -71,11 +70,11 @@ int main() {
             wait_until([&] { return source.now()->ready; });
             for (const auto jumped : {Mode::jumped, Mode::reversed}) {
                 const auto before = *source.now();
-                const auto started = ElapsedClock::now();
+                const auto started = EpochClock::Elapsed::now();
                 mode.store(jumped);
                 wait_until([&] { return !source.now()->ready; });
                 const auto after = *source.now();
-                const auto elapsed = ElapsedClock::now() - started;
+                const auto elapsed = EpochClock::Elapsed::now() - started;
                 CHECK(after.time >= before.time && after.uncertainty_ns >= 9'000'000'000ULL);
                 // 允许调度抖动, 但输出差必须接近本地经过时间, 不直接跨越十秒校正值.
                 CHECK(after.time - before.time < elapsed + 100ms);
@@ -97,16 +96,16 @@ int main() {
         CHECK(rejected);
         // 新 Pulsar 初始化依旧采用同一 Unix 基准, 不使用随机 era 或从进程零点重新编号.
         mode.store(Mode::valid);
-        const auto start = ElapsedClock::now();
+        const auto start = EpochClock::Elapsed::now();
         PhysicalClock restarted(reference);
         wait_until([&] {
             const auto value = restarted.now();
             return value && value->ready;
         });
         const auto now = *restarted.now();
-        const auto end = ElapsedClock::now();
-        CHECK(now.time >= EpochTime(1'800'000'000s) + start.time_since_epoch() - 20ms);
-        CHECK(now.time <= EpochTime(1'800'000'000s) + end.time_since_epoch() + 20ms);
+        const auto end = EpochClock::Elapsed::now();
+        CHECK(now.time >= EpochClock::Time(1'800'000'000s) + start.time_since_epoch() - 20ms);
+        CHECK(now.time <= EpochClock::Time(1'800'000'000s) + end.time_since_epoch() + 20ms);
         std::cout << "PASS physical reference readiness, fault recovery, slew and stable Unix restart\n";
         return 0;
     } catch (const std::exception& error) {

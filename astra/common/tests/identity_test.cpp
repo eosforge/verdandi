@@ -1,4 +1,3 @@
-// 功能: 验证本地身份材料, 准入验签与 TLS 凭证构造的成功和失败边界.
 #include "check.hpp"
 #include "fixture.hpp"
 

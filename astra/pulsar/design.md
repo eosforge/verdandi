@@ -171,12 +171,12 @@ BOOTTIME 计入内核支持的 suspend, 不保证虚拟机快照回滚后的历�
 
 ## Store 的单一期限
 
-Store 不拥有时钟或校正控制器. Runtime 获取一次 EpochReading, 调用 tick(reading.time),
+Store 不拥有时钟或校正控制器. Runtime 获取一次 EpochClock::Reading, 调用 tick(reading.time),
 再处理该批业务写入. 首次 tick 直接建立 Unix 拍边界, 不从 1970 年补拍.
 未初始化可存永久值, 不能先受理有限截止; 后续参考校正不扫描或重排全表.
 
-put(key, value, optional<EpochTime>) 只保存非负绝对期限, 空表示永久.
-业务入口必须检查 EpochReading::deadline_after(ttl) 的 expected 结果再提交.
+put(key, value, optional<EpochClock::Time>) 只保存非负绝对期限, 空表示永久.
+业务入口必须检查 EpochClock::Reading::deadline_after(ttl) 的 expected 结果再提交.
 质量不足、负 TTL 和溢出返回独立错误, 不能隐式变成永久值.
 内部 Store 不代替业务层鉴权或时钟质量校验, put 也不隐式提交过期删除.
 Delta 和 SnapshotIndex::Record 均保存同一 deadline; 最大整数也是有限截止, 不作永久哨兵.
@@ -220,7 +220,7 @@ Value 继续共享, 该预算不是 RSS/编码硬上限, bad_alloc 仍须由未�
 
 ### 内存布局与空表回收
 
-Delta 已删除重复本地期限和 era, 只保存 optional<EpochTime>.
+Delta 已删除重复本地期限和 era, 只保存 optional<EpochClock::Time>.
 不采用非标准打包压缩标准库对象. 真实尺寸和分配成本未作专项测量.
 
 `SnapshotIndex` 保留统一的16 路 Branch. 第15 层根页的后12 个槽不可达;

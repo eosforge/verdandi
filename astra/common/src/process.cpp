@@ -1,4 +1,3 @@
-// 功能: 实现 Linux 信号恢复, 无丢失通知的唤醒等待和不排队的结构化诊断输出.
 // 详细说明: 这个实现文件为 process.hpp 中的各个系统级和诊断工具类提供了具体的实现逻辑。
 // 主要涉及 Linux signal API 调用、条件变量配合原子的线程同步、以及底层 write I/O 系统调用。
 #include "process.hpp"
@@ -19,7 +18,6 @@ std::atomic_bool stop_requested{false};
 static_assert(std::atomic_bool::is_always_lock_free);
 
 // 信号可能送到任意 gRPC 线程. 编译期确认无锁的原子标志满足信号安全和跨线程可见性.
-// 参数:
 // - int: 收到的具体信号编号，函数内未使用，仅为满足 sigaction 签名的要求。
 // 详细说明: 该函数是注册到操作系统底层的信号回调。使用 memory_order_relaxed 是因为
 // 我们仅仅需要设置这个布尔值状态，且依赖其他机制（如轮询）来同步数据，不需要严格的内存屏障。
@@ -29,7 +27,6 @@ void stop_signal(int) {
 } // namespace
 
 // 将已验证 UTF-8 字符串编码为独立 JSON 字面量, 转义引号、反斜杠和控制字节, 不解释 ID 格式.
-// 参数:
 // - value (std::string_view): 待转义的原始字符串片段。
 // 返回值: 带有双引号且内部特殊字符已转义的 JSON 字符串。
 std::string json_string(std::string_view value) {
@@ -117,7 +114,6 @@ void Wakeup::notify() {
 }
 
 // wait 方法实现
-// 参数:
 // - observed (std::uint64_t): 期望的旧序列号。
 // 详细说明: 如果当前的 observe() 不等于 observed，说明期间有 notify 发生，立即返回不等待。
 // 否则最多阻塞 10 毫秒，超时或被唤醒且序列号改变后返回。
@@ -127,9 +123,8 @@ void Wakeup::wait(std::uint64_t observed) {
 }
 
 // Logger 构造函数实现
-// 参数:
-// - role (Role): 角色枚举，如果是 star 则 component 为 "star"，否则为 "planet"。
-Logger::Logger(Role role) : Logger(role == Role::star ? "star" : "planet") {}
+// - role (Member::Role): 角色枚举，如果是 star 则 component 为 "star"，否则为 "planet"。
+Logger::Logger(Member::Role role) : Logger(role == Member::Role::star ? "star" : "planet") {}
 
 Logger::Logger(std::string_view component) : component_(component) {
     struct stat status{};
@@ -153,7 +148,6 @@ Logger::~Logger() {
 }
 
 // write 方法实现
-// 参数:
 // - event (std::string_view): 事件名称。
 // - fields (std::string_view): 格式化的 JSON 字段内容。
 // 详细说明: 将诊断信息封装成标准化 JSON，并输出到标准输出 (STDOUT)。
@@ -174,10 +168,9 @@ void Logger::write(std::string_view event, std::string_view fields) const {
 }
 
 // status 方法实现
-// 参数:
-// - status (const NetworkStatus&): 包含了详细的网络运行指标的数据结构。
+// - status (const Policy::NetworkStatus&): 包含了详细的网络运行指标的数据结构。
 // - id (const Id&): 节点的唯一身份。
-void Logger::status(const NetworkStatus& status, const Id& id) const {
+void Logger::status(const Policy::NetworkStatus& status, const Id& id) const {
     // 格式化上游活跃成员（如果有的话）
     const auto upstream = status.active_member ? std::format(R"({{"id":{},"group":"{}","address":"{}"}})", json_string(status.active_member->id),
                                                              status.active_member->group, status.active_member->address.text())
@@ -190,11 +183,10 @@ void Logger::status(const NetworkStatus& status, const Id& id) const {
 }
 
 // failure 方法实现
-// 参数:
 // - event (std::string_view): 事件分类名。
-// - error (Error::Code): 枚举错误码。
-// 详细说明: 强制只输出由内部白名单决定的 `Error::name(error)` 的值作为 reason，隔绝来自远端的恶意或非规范错误字符串。
-void Logger::failure(std::string_view event, Error::Code error) const {
-    write(event, std::format(R"({{"reason":"{}"}})", Error::name(error)));
+// - error (Status::Code): 枚举错误码。
+// 详细说明: 强制只输出由内部白名单决定的 `Status::name(error)` 的值作为 reason，隔绝来自远端的恶意或非规范错误字符串。
+void Logger::failure(std::string_view event, Status::Code error) const {
+    write(event, std::format(R"({{"reason":"{}"}})", Status::name(error)));
 }
 } // namespace astra

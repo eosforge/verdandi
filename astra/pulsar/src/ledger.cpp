@@ -1,4 +1,3 @@
-// 功能: 用一条持久记录同时提交身份和幂等绑定, 恢复不依赖其他节点或 Go 进程.
 #include "ledger.hpp"
 #include "identity.hpp"
 #include "pulsar.pb.h"
@@ -76,7 +75,7 @@ void encode(const Member& member, proto::orbit::v1::Member& output) {
     output.set_principal(member.principal.text());
     output.set_advertise(member.address.text());
     output.set_epoch(member.epoch.value);
-    output.set_role(member.role == Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET);
+    output.set_role(member.role == Member::Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET);
     output.set_group(member.group);
 }
 } // namespace
@@ -125,20 +124,20 @@ MembershipLedger::~MembershipLedger() {
 
 Result<void> MembershipLedger::validate(const Member& member, std::string_view request_id, const Members& view) const {
     if (!member.validate() || member.galaxy != galaxy_ || request_id.size() != 32) {
-        return Error::configuration("Invalid registration record");
+        return Status::configuration("Invalid registration record");
     }
     if (starts_.contains(request_id)) {
-        return Error::conflict("Startup request already committed");
+        return Status::conflict("Startup request already committed");
     }
     if (starts_.size() >= maximum_starts_) {
-        return Error::capacity("Startup history capacity reached");
+        return Status::capacity("Startup history capacity reached");
     }
     const auto principal = member.principal.text();
     const auto old = view.find(principal);
     const auto previous = old == view.end() ? 0 : old->second.epoch.value;
     if (previous == std::numeric_limits<std::uint64_t>::max() || member.epoch.value != previous + 1 ||
         (old != view.end() && (old->second.role != member.role || old->second.address != member.address || old->second.id == member.id))) {
-        return Error::conflict("Invalid deployment replacement");
+        return Status::conflict("Invalid deployment replacement");
     }
     std::size_t role_count = 0;
     for (const auto& [key, current] : view) {
@@ -146,11 +145,11 @@ Result<void> MembershipLedger::validate(const Member& member, std::string_view r
             ++role_count;
         }
         if (key != principal && (current.id == member.id || current.address == member.address)) {
-            return Error::conflict("Member identity or endpoint already used");
+            return Status::conflict("Member identity or endpoint already used");
         }
     }
     if (old == view.end() && role_count >= maximum_) {
-        return Error::capacity("Member capacity reached");
+        return Status::capacity("Member capacity reached");
     }
     return {};
 }
@@ -159,10 +158,10 @@ Result<void> MembershipLedger::register_member(Member candidate, std::string_vie
                                                const std::function<void(const Member&, const Members&)>& prepare) {
     std::lock_guard lock(mutex_);
     if (!writable_) {
-        return Error::transport("Registration journal requires recovery");
+        return Status::transport("Registration journal requires recovery");
     }
     if (request_id.size() != 32 || candidate.epoch.value != 0 || candidate.galaxy != galaxy_) {
-        return Error::configuration("Invalid registration input");
+        return Status::configuration("Invalid registration input");
     }
     const auto principal = candidate.principal.text();
     const auto view = members_.load();
@@ -170,14 +169,14 @@ Result<void> MembershipLedger::register_member(Member candidate, std::string_vie
     if (const auto start = starts_.find(request_id); start != starts_.end()) {
         if (old == view->end() || start->second.principal != principal || start->second.epoch != old->second.epoch.value ||
             old->second.role != candidate.role || old->second.group != candidate.group || old->second.address != candidate.address) {
-            return Error::conflict("Startup request no longer matches current deployment");
+            return Status::conflict("Startup request no longer matches current deployment");
         }
         // 身份保持不变, 名单取当前快照, 不缓存旧 RegistrationResponse.
         prepare(old->second, *view);
         return {};
     }
     if (old != view->end() && old->second.epoch.value == std::numeric_limits<std::uint64_t>::max()) {
-        return Error::conflict("Member epoch exhausted");
+        return Status::conflict("Member epoch exhausted");
     }
     candidate.epoch.value = old == view->end() ? 1 : old->second.epoch.value + 1;
     if (auto valid = validate(candidate, request_id, *view); !valid) {
@@ -195,7 +194,7 @@ Result<void> MembershipLedger::register_member(Member candidate, std::string_vie
     const auto payload = record.SerializeAsString();
     prepare(candidate, *replacement);
     if (!append(payload)) {
-        return Error::transport("Registration durability is uncertain; restart required");
+        return Status::transport("Registration durability is uncertain; restart required");
     }
     starts_.insert(std::move(node));
     members_.store(std::move(replacement));

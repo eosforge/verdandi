@@ -1,4 +1,3 @@
-// 功能: 读取宿主系统对时的只读质量, 不自建 NTP 守护程序或持久化时钟日志.
 #include "physical_clock.hpp"
 #include <algorithm>
 #include <limits>
@@ -7,9 +6,9 @@
 #include <time.h>
 
 namespace astra {
-std::optional<ClockEstimate> system_time_sample() {
+std::optional<EpochClock::Estimate> system_time_sample() {
     // 夹住质量查询和墙钟采样, 将可能的调度延迟计入误差. BOOTTIME 暂停时间也参与年龄判断.
-    const auto before = ElapsedClock::now();
+    const auto before = EpochClock::Elapsed::now();
     timex state{};
     const auto status = ::adjtimex(&state);
     timespec wall{};
@@ -17,7 +16,7 @@ std::optional<ClockEstimate> system_time_sample() {
         ::clock_gettime(CLOCK_REALTIME, &wall) != 0) {
         return std::nullopt;
     }
-    const auto after = ElapsedClock::now();
+    const auto after = EpochClock::Elapsed::now();
     constexpr auto maximum = std::numeric_limits<std::int64_t>::max();
     if (after < before || after - before > std::chrono::milliseconds(20) || wall.tv_sec < 0 || wall.tv_nsec < 0 || wall.tv_nsec >= 1'000'000'000 ||
         wall.tv_sec > (maximum - wall.tv_nsec) / 1'000'000'000) {
@@ -36,7 +35,7 @@ std::optional<ClockEstimate> system_time_sample() {
         return std::nullopt;
     }
     // 采样墙钟位于 before..after; 全窗口已计入误差, 不假定系统调用在区间正中间完成.
-    return ClockEstimate{EpochTime(std::chrono::nanoseconds(wall.tv_sec * 1'000'000'000 + wall.tv_nsec)), after, uncertainty, 0};
+    return EpochClock::Estimate{EpochClock::Time(std::chrono::nanoseconds(wall.tv_sec * 1'000'000'000 + wall.tv_nsec)), after, uncertainty, 0};
 }
 
 PhysicalClock::PhysicalClock(Provider provider) : provider_(std::move(provider)) {
@@ -53,7 +52,7 @@ PhysicalClock::~PhysicalClock() {
     }
 }
 
-std::optional<EpochReading> PhysicalClock::now() const {
+std::optional<EpochClock::Reading> PhysicalClock::now() const {
     return clock_.now();
 }
 

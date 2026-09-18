@@ -1,4 +1,3 @@
-// 功能: 依据 C++26 字段反射解析 CLI, 校验参数并生成帮助和拥有数据的运行配置.
 // 详细说明: 这是一个前沿的 C++26 代码文件，利用新标准中的 `std::meta` 编译期反射机制，通过探测
 // `detail::Options` 内部成员与其上挂载的注解，实现一套无需在运行时使用繁杂的映射表/注册逻辑
 // 的零开销或极低开销的命令行参数（CLI）解析器。最终将各个参数合法化并汇聚成为统一且所有权清晰的 `Config` 配置。
@@ -13,7 +12,6 @@
 namespace astra {
 namespace {
 // 检查数值默认值是否落在 option 的包含式范围内, 供编译期元数据校验使用, 不修改输入.
-// 参数:
 // - value (std::uint64_t): 结构体定义中预设的默认数字值。
 // - option (const detail::Option&): 反射抓取到的属性配置。
 // 返回值: 默认值是否有效（即是否大于等于最小值，小于等于最大值）。
@@ -23,7 +21,6 @@ constexpr bool valid_default(std::uint64_t value, const detail::Option& option) 
 
 // 检查字符串默认值是否有效。
 // 只检查字符串默认值的通用 4096 字节上限; 必填和字段业务格式在实际 CLI 解析时校验.
-// 参数:
 // - value (const std::string&): 结构体定义中预设的默认文本。
 // - (const detail::Option&): 当前参数未用到注解内容。
 constexpr bool valid_default(const std::string& value, const detail::Option&) {
@@ -37,7 +34,6 @@ constexpr bool valid_default(const std::string& value, const detail::Option&) {
 constexpr auto fields = std::define_static_array(std::meta::nonstatic_data_members_of(^^detail::Options, std::meta::access_context::current()));
 
 // 提取 field 唯一的 Option 注解, 数量或类型不匹配会阻止常量求值通过, 不生成运行时注册项.
-// 参数:
 // - field (std::meta::info): 一个成员变量的元信息结构。
 // 返回值: 返回该字段上挂载的属于 detail::Option 的注解实例。
 consteval detail::Option descriptor(std::meta::info field) {
@@ -73,7 +69,6 @@ static_assert(valid_descriptors()); // 触发并在此确保所有的反射约�
 // clang-format on
 
 // 只接受完整十进制数字, 范围取自注解; 不使用会忽略尾部文本的转换函数.
-// 参数:
 // - output (std::uint64_t&): 转换成功后，结果回写的地址。
 // - text (std::string_view): 命令行输入提取到的值文本。
 // - option (const detail::Option&): 对应选项的定义配置。
@@ -83,14 +78,13 @@ Result<void> assign(std::uint64_t& output, std::string_view text, const detail::
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
     // 判断是否有转换错误，或者是还有余留未能转换完毕的字符，或是最终数字越界。
     if (error != std::errc{} || end != text.data() + text.size() || value < option.minimum || value > option.maximum) {
-        return Error::configuration("Invalid numeric option: --" + std::string(option.name));
+        return Status::configuration("Invalid numeric option: --" + std::string(option.name));
     }
     output = value;
     return {};
 }
 
 // 字符串先转为拥有的值, 地址/名称关系在解析完全部字段后检查.
-// 参数:
 // - output (std::string&): 存储提取到的字符串引用。
 // - text (std::string_view): 命令行提取的文本。
 Result<void> assign(std::string& output, std::string_view text, const detail::Option&) {
@@ -112,11 +106,10 @@ std::string default_help(std::uint64_t value, const detail::Option& option) {
 } // namespace
 
 // parse_options 函数实现
-// 参数:
 // - arguments (std::span<const std::string_view>): 操作系统的 argv 参数列表切片，丢弃了 arg[0]（自身程序名）。
-// - role (Role): 明确启动服务的类型。
+// - role (Member::Role): 明确启动服务的类型。
 // 返回值: 成功返回完整检查且赋值通过的配置 Config，失败返回 unexpected 和原因。
-Result<Config> Config::parse(std::span<const std::string_view> arguments, Role role) {
+Result<Config> Config::parse(std::span<const std::string_view> arguments, Member::Role role) {
     detail::Options options;
     std::bitset<fields.size()> seen; // 用于追踪每个字段是否在命令行出现过，避免重复赋。
 
@@ -124,7 +117,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
     for (std::size_t i = 0; i < arguments.size(); ++i) {
         const auto argument = arguments[i];
         if (!argument.starts_with("--")) {
-            return Error::configuration("Expected a named option");
+            return Status::configuration("Expected a named option");
         }
 
         // 尝试分离键和值
@@ -133,7 +126,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
         const auto name = argument.substr(2, separator == std::string_view::npos ? separator : separator - 2);
 
         if (name == "worker-threads") {
-            return Error::configuration("--worker-threads is unsupported: gRPC owns I/O workers");
+            return Status::configuration("--worker-threads is unsupported: gRPC owns I/O workers");
         }
 
         std::string_view value;
@@ -148,7 +141,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
 
         // 值为空、值似乎被错写为另外一个旗帜形参、值太长均报错。
         if (value.empty() || value.starts_with("--") || value.size() > 4096) {
-            return Error::configuration("Missing or oversized option value");
+            return Status::configuration("Missing or oversized option value");
         }
 
         bool found = false;
@@ -161,7 +154,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
             constexpr auto option = descriptor(field);
             if (name == option.name) {
                 // 如果发现某项参数在 bitset 中已激活过，说明其被传入了两次。
-                if (seen.test(index)) { return Error::configuration("Duplicate option"); }
+                if (seen.test(index)) { return Status::configuration("Duplicate option"); }
                 // 使用 `[:field:]` 访问 options 对象里的目标变量，调用之前的 assign 重载。
                 auto result = assign(options.[:field:], value, option);
                 if (!result) { return std::unexpected(result.error()); }
@@ -174,7 +167,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
 
         // 如果上面一大串展开的 if 没能匹配上任何注册的项，就报错未知的选项。
         if (!found) {
-            return Error::configuration("Unknown option");
+            return Status::configuration("Unknown option");
         }
     }
     std::size_t index = 0;
@@ -183,7 +176,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
     // 详细说明: 再次编译期展开所有字段，看一看带有 required: true 标记的字段对应的 seen 状态是不是没有激活。
     // clang-format off
     template for (constexpr auto field : fields) {
-        if (descriptor(field).required && !seen.test(index)) { return Error::configuration("Missing required option"); }
+        if (descriptor(field).required && !seen.test(index)) { return Status::configuration("Missing required option"); }
         ++index;
     }
     // clang-format on
@@ -193,14 +186,14 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
     auto listen = Endpoint::parse(options.listen, true);
     auto supervisor = Config::format_supervisor(options.supervisor);
     if (!listen || !supervisor || !Member::valid_name(options.galaxy) || !Member::valid_name(options.group) || options.identity.empty()) {
-        return Error::configuration("Invalid endpoint, name or identity path");
+        return Status::configuration("Invalid endpoint, name or identity path");
     }
 
     // 生成对外的宣告地址（如果不传则降级采用 listen 地址）。
     auto advertise = options.advertise.empty() ? listen : Endpoint::parse(options.advertise);
     // 对外宣告的端点绝对不可以含有 0.0.0.0 或者 :: 这样指向模糊的通配符。必须能被别人明确寻址。
     if (!advertise || (listen->wildcard && options.advertise.empty())) {
-        return Error::configuration("A concrete advertise endpoint is required");
+        return Status::configuration("A concrete advertise endpoint is required");
     }
 
     // 全部输入和跨字段约束通过后才形成运行配置, 派生入站预算并将 CLI 秒数统一转换为毫秒.
@@ -229,11 +222,11 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Role r
 }
 
 // option_help 函数实现
-// 参数:
-// - role (Role): 明确启动服务角色以便于在帮助输出的标头动态打印可执行程序的名称。
+// - role (Member::Role): 明确启动服务角色以便于在帮助输出的标头动态打印可执行程序的名称。
 // 返回值: 帮助文档文本。
-std::string Config::help(Role role) {
-    std::string result = "Usage: " + std::string(role == Role::star ? "star" : "planet") + " --listen=IP:PORT --super=HOST:PORT --galaxy=ID [options]\n";
+std::string Config::help(Member::Role role) {
+    std::string result =
+        "Usage: " + std::string(role == Member::Role::star ? "star" : "planet") + " --listen=IP:PORT --super=HOST:PORT --galaxy=ID [options]\n";
     const detail::Options defaults;
 
     // 默认值直接读取同一结构, 修改初始化器会同步改变实例和帮助.

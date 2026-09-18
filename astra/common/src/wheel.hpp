@@ -1,4 +1,3 @@
-// 功能: 用固定分层槽位管理到期节点, 调度与取消不分配内存, 节点数据由调用方拥有.
 #pragma once
 
 #include <algorithm>
@@ -74,7 +73,6 @@ public:
     Wheel(Wheel&&) = delete;
     Wheel& operator=(Wheel&&) = delete;
 
-    // 借用 node 并调度相对延迟; 0 等同于 1, 只在未来逻辑拍回调, 从不在此处执行回调.
     // 超过 limit 返回 false 且原调度不变. 成功会取消原调度, 允许在串行保护下转移到另一个 Wheel.
     [[nodiscard]] bool schedule(Node& node, std::uint64_t delay) noexcept {
         if (delay > limit) {

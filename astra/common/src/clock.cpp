@@ -1,4 +1,3 @@
-// 功能: 测量 BOOTTIME, 筛选四时间戳并平滑推进单一 Unix 时间轴.
 #include "clock_filter.hpp"
 #include "clock_precision.hpp"
 #include <algorithm>
@@ -24,7 +23,7 @@ constexpr auto maximum = std::numeric_limits<std::int64_t>::max();
 constexpr std::uint64_t freshness = 5'000'000'000;
 } // namespace
 
-ElapsedTime ElapsedClock::now() {
+ElapsedTime EpochClock::Elapsed::now() {
     timespec value{};
     if (::clock_gettime(CLOCK_BOOTTIME, &value) != 0 || value.tv_sec < 0 || value.tv_nsec < 0 || value.tv_nsec >= 1'000'000'000 ||
         value.tv_sec > (maximum - value.tv_nsec) / 1'000'000'000) {
@@ -59,7 +58,7 @@ std::uint64_t elapsed_precision_ns(std::stop_token stop) {
     if (::timerfd_settime(timer.descriptor, 0, &budget, nullptr) != 0) {
         throw std::runtime_error("Cannot arm clock precision budget");
     }
-    return measure_clock_precision([] { return elapsed_ns(ElapsedClock::now()); },
+    return measure_clock_precision([] { return elapsed_ns(EpochClock::Elapsed::now()); },
                                    [&] {
                                        if (stop.stop_requested()) {
                                            throw std::runtime_error("Clock precision cancelled");
@@ -108,26 +107,26 @@ bool ClockFilter::observe(std::uint64_t t0, std::uint64_t t1, std::uint64_t t2, 
     const auto rtt = std::max(elapsed > processing ? elapsed - processing : 0, local_precision_);
     const auto error = uncertainty + dispersion + (rtt + 1) / 2 + 1;
     if (!best_ || rtt <= best_->rtt_ns) {
-        best_ = ClockEstimate{EpochTime(std::chrono::nanoseconds(t3 + offset)), received, error, rtt};
+        best_ = EpochClock::Estimate{EpochClock::Time(std::chrono::nanoseconds(t3 + offset)), received, error, rtt};
     }
     count_ = std::min(count_ + 1, 8U);
     return true;
 }
 
-std::optional<ClockEstimate> ClockFilter::result() const {
+std::optional<EpochClock::Estimate> ClockFilter::result() const {
     return count_ >= 3 ? best_ : std::nullopt;
 }
 
-std::expected<EpochTime, DeadlineError> EpochReading::deadline_after(std::chrono::nanoseconds ttl) const noexcept {
+std::expected<EpochClock::Time, EpochClock::DeadlineError> EpochClock::Reading::deadline_after(std::chrono::nanoseconds ttl) const noexcept {
     const auto base = time.time_since_epoch().count();
     if (!ready) {
-        return std::unexpected(DeadlineError::clock_unready);
+        return std::unexpected(EpochClock::DeadlineError::clock_unready);
     }
     if (base < 0 || ttl.count() < 0) {
-        return std::unexpected(DeadlineError::invalid_time);
+        return std::unexpected(EpochClock::DeadlineError::invalid_time);
     }
     if (ttl.count() > maximum - base) {
-        return std::unexpected(DeadlineError::exhausted);
+        return std::unexpected(EpochClock::DeadlineError::exhausted);
     }
     return time + ttl;
 }
@@ -161,27 +160,28 @@ bool EpochClock::advance(ElapsedTime local) const {
     return true;
 }
 
-std::optional<EpochReading> EpochClock::read(ElapsedTime local) const {
+std::optional<EpochClock::Reading> EpochClock::read(ElapsedTime local) const {
     if (!estimate_ || !advance(local)) {
         return std::nullopt;
     }
     const auto age = static_cast<std::uint64_t>((local - estimate_->sampled).count());
     // 留出底层漂移及上游调速余量; 本机残余偏差单独计入, 新样本不能掩盖尚未追平的事实.
     const auto uncertainty = estimate_->uncertainty_ns + drift(age, 2000) + magnitude(debt_);
-    return EpochReading{epoch_, uncertainty, estimate_->rtt_ns, estimate_->sampled, trusted_ && age <= freshness && uncertainty <= clock_uncertainty_limit_ns};
+    return EpochClock::Reading{epoch_, uncertainty, estimate_->rtt_ns, estimate_->sampled,
+                               trusted_ && age <= freshness && uncertainty <= clock_uncertainty_limit_ns};
 }
 
-std::optional<EpochReading> EpochClock::now() const {
+std::optional<EpochClock::Reading> EpochClock::now() const {
     std::lock_guard lock(mutex_);
-    return read(ElapsedClock::now());
+    return read(EpochClock::Elapsed::now());
 }
 
-std::optional<EpochReading> EpochClock::now(ElapsedTime local) const {
+std::optional<EpochClock::Reading> EpochClock::now(ElapsedTime local) const {
     std::lock_guard lock(mutex_);
     return read(local);
 }
 
-bool EpochClock::observe(const ClockEstimate& estimate, ElapsedTime local) {
+bool EpochClock::observe(const EpochClock::Estimate& estimate, ElapsedTime local) {
     const auto target = estimate.time.time_since_epoch().count();
     if (failed_ || target < 0 || elapsed_ns(estimate.sampled) < 0 || local < estimate.sampled || estimate.uncertainty_ns > 1'000'000'000 ||
         estimate.rtt_ns > 200'000'000 || (estimate_ && estimate.sampled <= estimate_->sampled)) {
@@ -214,12 +214,12 @@ bool EpochClock::observe(const ClockEstimate& estimate, ElapsedTime local) {
     return true;
 }
 
-bool EpochClock::publish(const ClockEstimate& estimate) {
+bool EpochClock::publish(const EpochClock::Estimate& estimate) {
     std::lock_guard lock(mutex_);
-    return observe(estimate, ElapsedClock::now());
+    return observe(estimate, EpochClock::Elapsed::now());
 }
 
-bool EpochClock::publish(const ClockEstimate& estimate, ElapsedTime local) {
+bool EpochClock::publish(const EpochClock::Estimate& estimate, ElapsedTime local) {
     std::lock_guard lock(mutex_);
     return observe(estimate, local);
 }

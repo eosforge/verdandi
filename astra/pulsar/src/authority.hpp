@@ -1,4 +1,3 @@
-// 功能: 只读账号与签发密钥, 复用节点 TLS/验签适配, 不持有成员拓扑或后台线程.
 #pragma once
 #include "identity.hpp"
 #include <grpcpp/server_context.h>
@@ -16,7 +15,6 @@ public:
     grpc::Status authenticate(grpc::ServerContext& context, const proto::orbit::v1::RegistrationRequest& request) const;
     // 对已经校验的 Member 编码并签名; response 由本次调用独占, 异常由 RPC 边界转为固定错误.
     void sign(const proto::orbit::v1::Member& member, proto::orbit::v1::RegistrationResponse& response) const;
-    // 借用只读 TLS 与验签材料, 所有者必须覆盖使用者的生命周期.
     const Identity& identity() const;
     // 签发公钥摘要, 用于将持久账本绑定到同一权威, 不暴露签名秘密.
     std::string key_id() const;

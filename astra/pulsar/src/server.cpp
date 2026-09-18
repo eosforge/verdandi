@@ -1,4 +1,3 @@
-// 功能: 验证 Pulsar 启动配置, 隔离对时和登记的线程/内存预算, 持有服务直到退出.
 #include "server.hpp"
 #include <algorithm>
 #include <bitset>
@@ -8,7 +7,7 @@
 #include <stdexcept>
 
 namespace astra {
-std::string_view PulsarConfig::help() {
+std::string_view PulsarServer::Config::help() {
     return "Usage: pulsar --listen=IP:PORT --pulse-listen=IP:PORT --galaxy=ID [options]\n"
            "  --identity=DIR       TLS, admission.key/pub and accounts.json; default=identity\n"
            "  --state=FILE         Exclusive durable journal; default=state/pulsar.journal\n"
@@ -18,34 +17,34 @@ std::string_view PulsarConfig::help() {
            "Listeners require concrete IPs authorized by the TLS certificate. Stop with SIGINT or SIGTERM.\n";
 }
 
-Result<PulsarConfig> PulsarConfig::parse(std::span<const std::string_view> arguments) {
+Result<PulsarServer::Config> PulsarServer::Config::parse(std::span<const std::string_view> arguments) {
     constexpr std::array names{"listen", "pulse-listen", "galaxy", "identity", "state", "max-members", "max-starts"};
     std::bitset<names.size()> seen;
-    PulsarConfig result;
+    PulsarServer::Config result;
     for (std::size_t i = 0; i < arguments.size(); ++i) {
         const auto argument = arguments[i];
         if (!argument.starts_with("--")) {
-            return Error::configuration("Expected a named Pulsar option");
+            return Status::configuration("Expected a named Pulsar option");
         }
         const auto equal = argument.find('=');
         const auto name = argument.substr(2, equal == std::string_view::npos ? equal : equal - 2);
         const auto found = std::ranges::find(names, name);
         if (found == names.end()) {
-            return Error::configuration("Unknown Pulsar option");
+            return Status::configuration("Unknown Pulsar option");
         }
         const auto index = static_cast<std::size_t>(found - names.begin());
         if (seen.test(index)) {
-            return Error::configuration("Duplicate Pulsar option");
+            return Status::configuration("Duplicate Pulsar option");
         }
         seen.set(index);
         const auto value = equal != std::string_view::npos ? argument.substr(equal + 1) : i + 1 < arguments.size() ? arguments[++i] : std::string_view{};
         if (value.empty() || value.size() > 4096 || value.starts_with("--")) {
-            return Error::configuration("Missing or oversized Pulsar value");
+            return Status::configuration("Missing or oversized Pulsar value");
         }
         if (index <= 1) {
             const auto endpoint = Endpoint::parse(value, true);
             if (!endpoint || endpoint->wildcard) {
-                return Error::configuration("Pulsar requires a concrete numeric listener");
+                return Status::configuration("Pulsar requires a concrete numeric listener");
             }
             (index == 0 ? result.listen : result.pulse_listen) = *endpoint;
         } else if (index == 2) {
@@ -58,19 +57,19 @@ Result<PulsarConfig> PulsarConfig::parse(std::span<const std::string_view> argum
             std::size_t count{};
             const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), count);
             if (error != std::errc{} || end != value.data() + value.size() || count == 0 || count > (index == 5 ? 4096U : 1'000'000U)) {
-                return Error::configuration("Invalid Pulsar capacity");
+                return Status::configuration("Invalid Pulsar capacity");
             }
             (index == 5 ? result.maximum : result.starts) = count;
         }
     }
     if (!seen.test(0) || !seen.test(1) || !seen.test(2) || !Member::valid_name(result.galaxy) ||
         (result.listen.port != 0 && result.listen == result.pulse_listen)) {
-        return Error::configuration("Pulsar requires a Galaxy and two distinct listeners");
+        return Status::configuration("Pulsar requires a Galaxy and two distinct listeners");
     }
     return result;
 }
 
-PulsarServer::PulsarServer(PulsarConfig config, PhysicalClock::Provider provider) : config_(std::move(config)) {
+PulsarServer::PulsarServer(PulsarServer::Config config, PhysicalClock::Provider provider) : config_(std::move(config)) {
     auto authority = PulsarAuthority::load(config_.identity, config_.listen, config_.pulse_listen);
     if (!authority) {
         throw std::runtime_error("Cannot load Pulsar authority");
@@ -155,7 +154,7 @@ std::string PulsarServer::admission_endpoint() const {
 std::string PulsarServer::pulse_endpoint() const {
     return config_.pulse_listen.text();
 }
-std::optional<EpochReading> PulsarServer::time() const {
+std::optional<EpochClock::Reading> PulsarServer::time() const {
     return clock_->now();
 }
 } // namespace astra

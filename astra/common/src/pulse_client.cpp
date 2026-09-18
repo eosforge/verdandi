@@ -1,4 +1,3 @@
-// 功能: 四时间戳采样, 最小 RTT 筛选, 连续绝对时间, 质量检查与确定性停止.
 #include "pulse_client.hpp"
 #include "clock_filter.hpp"
 #include <algorithm>
@@ -53,7 +52,7 @@ grpc::Status PulseClient::sample(std::stop_token stop) {
         for (unsigned index = 0; index < 8 && !stop.stop_requested(); ++index) {
             // 同步 Write 已结束, 在 T0 采样前清空上一包, 保持未来可选请求字段的独立性.
             ping.Clear();
-            const auto t0 = elapsed_ns(ElapsedClock::now());
+            const auto t0 = elapsed_ns(EpochClock::Elapsed::now());
             if (t0 < 0) {
                 valid = false;
                 break;
@@ -62,7 +61,7 @@ grpc::Status PulseClient::sample(std::stop_token stop) {
             if (!stream->Write(ping) || !stream->Read(&pong)) {
                 break;
             }
-            const auto t3 = ElapsedClock::now();
+            const auto t3 = EpochClock::Elapsed::now();
             ++received;
             if (pong.t0() != ping.t0() || !pong.synchronized()) {
                 valid = false;

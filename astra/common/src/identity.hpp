@@ -1,4 +1,3 @@
-// 功能: 声明只读身份材料, TLS 凭证和准入验签接口, 将生成消息隔离在传输层.
 // 详细说明: 该头文件负责处理与身份验证相关的核心逻辑声明，包括证书加载、凭证生成以及基于 Ed25519 的消息验签。
 // 本文件引入的 protobuf 和 gRPC 类型被严格限制在适配层内，不污染上层业务逻辑。
 #pragma once
@@ -21,9 +20,8 @@ inline constexpr std::uint32_t protocol_major = 1;
 inline constexpr std::string_view admission_signature_domain = "proto.orbit.v1.admission";
 
 // 生成类型只在传输适配层使用, 名单状态转换后拥有独立的 Member 值.
-// 参数:
 // - value (const proto::orbit::v1::Member&): protobuf 消息，在调用期间被只读借用。
-// 返回值: 成功返回拥有数据且通过基础校验的成员结构，失败（无效编码等）返回包含 Error::Code::identity 错误的 unexpected。
+// 返回值: 成功返回拥有数据且通过基础校验的成员结构，失败（无效编码等）返回包含 Status::Code::identity 错误的 unexpected。
 // 详细说明: 负责将底层 Protobuf 类型转换为系统内部业务使用的强类型 Member。需要注意此函数不进行验签，只进行格式和边界校验。
 Result<Member> decode_member(const proto::orbit::v1::Member& value);
 
@@ -31,8 +29,6 @@ Result<Member> decode_member(const proto::orbit::v1::Member& value);
 // 详细说明: 封装了本地密钥、证书等安全材料，支持构造客户端和服务端的 gRPC TLS 凭证，并提供 Ed25519 的验签功能。
 class Identity {
 public:
-    // 功能: 从指定目录加载并初始化身份材料。
-    // 参数:
     // - directory (const std::filesystem::path&): 存放凭据文件的目录路径。
     // - advertise (const Endpoint&): 需要在 TLS 证书扩展 (SAN) 中进行匹配校验的 IP 端点。
     // 返回值: 成功返回一个在堆上分配且只读共享的 Identity 实例。
@@ -45,8 +41,6 @@ public:
     // directory 必须包含 ca.pem, cert.pem, key.pem 和 admission.pub; advertise 用于核对 IP SAN.
     static Result<std::shared_ptr<Identity>> load_server(const std::filesystem::path& directory, const Endpoint& advertise);
 
-    // 功能: 计算并生成访问摘要 (Principal)。
-    // 参数:
     // - cluster (std::string_view): 已验证的 Galaxy（星系）集群名称。
     // - endpoint (std::string_view): 规范化后的端点字符串形式。
     // 返回值: 返回一个拥有 SHA-256 数据的 Principal 实例，绝不缓存或者借用输入参数。
@@ -54,8 +48,6 @@ public:
     // 注意，密码仅作登录用，不作为身份或签名密钥的一部分。
     Principal principal(std::string_view cluster, std::string_view endpoint) const;
 
-    // 功能: 对原始准入信息 (admission) 字节流进行校验并解析。
-    // 参数:
     // - value (std::span<const std::uint8_t>): 待校验及解析的有效负载，上限为 1024 字节。
     // - signature (std::span<const std::uint8_t>): 64 字节的 Ed25519 签名。
     // 返回值: 成功返回独立持有的 Member 对象（不借用 value 的内存缓冲）。失败返回 identity 错误。
@@ -63,22 +55,18 @@ public:
     // 直接验原字节流，而不将其重新序列化来构造验签输入。
     Result<Member> verify(std::span<const std::uint8_t> value, std::span<const std::uint8_t> signature) const;
 
-    // 功能: 构造 gRPC Channel (客户端) 专用的 TLS 凭证。
     // 返回值: 共享的 ChannelCredentials 实例。
     // 详细说明: 构造共享 TLS 1.3 客户端凭证, 校验服务端证书以及目标主机，并且此凭证不会向对端(服务端)提供客户端自身的证书。
     std::shared_ptr<grpc::ChannelCredentials> channel_credentials() const;
 
-    // 功能: 构造 gRPC Server (服务端) 专用的 TLS 凭证。
     // 返回值: 共享的 ServerCredentials 实例。如果底层选项创建失败则返回 nullptr。
     // 详细说明: 构造共享 TLS 1.3 服务端凭证，且配置为不主动要求客户端出示客户端 TLS 证书；因为客户端身份由后续的准入 (admission) 协议另外验证。
     std::shared_ptr<grpc::ServerCredentials> server_credentials() const;
 
-    // 功能: 获取当前实例加载的登录用户名。
     // 返回值: 用户名字符串的只读引用。
     // 详细说明: 只允许准入模块读取账号材料；这些借用引用决不能逃出 Identity 的生命周期（不能存储为长期引用的指针），且不用于通用的诊断输出。
     const std::string& username() const;
 
-    // 功能: 获取当前实例加载的登录密码。
     // 返回值: 密码字符串的只读引用。
     // 详细说明: 仅用于生成准入请求时的鉴权字段，严禁记录在日志或以任何形式逃逸出 Identity 生命周期。
     const std::string& password() const;

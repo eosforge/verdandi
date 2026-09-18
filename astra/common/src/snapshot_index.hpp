@@ -1,4 +1,3 @@
-// 功能: 为 Store 提供固定页的写时复制视图, 捕获根不遍历数据, 时间轮节点不进入此索引.
 #pragma once
 #include <algorithm>
 #include <array>
@@ -27,7 +26,7 @@ public:
         // 共享不可变载荷, 与历史/Entry 使用相同所有权.
         Value value;
         // 固定 Unix 截止, 空表示永久; 不保留第二份本地期限.
-        std::optional<EpochTime> deadline{};
+        std::optional<EpochClock::Time> deadline{};
     };
 
 private:
@@ -41,9 +40,9 @@ private:
         Record record;
     };
     struct Leaf : Node {
-        std::array<Row, 64> rows;
         // 位图只用于 O(1) 定位页内空槽, 与 used 在无异常提交中同时更新.
         std::uint64_t occupied{};
+        std::array<Row, 64> rows;
     };
     // 上层每页 16 个子页. shared_ptr 保留实际派生类型的删除器, Node 不做多态访问.
     struct Branch : Node {

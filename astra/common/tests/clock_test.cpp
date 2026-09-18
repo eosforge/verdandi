@@ -1,4 +1,3 @@
-// 功能: 确定性校验四时间戳, 连续 Unix 走时和质量门槛, 不依赖真实调度精度.
 #include "check.hpp"
 #include "clock_filter.hpp"
 #include "clock_precision.hpp"
@@ -68,10 +67,10 @@ static void test_precision_probe() {
 static ElapsedTime local(std::chrono::nanoseconds value) {
     return ElapsedTime(value);
 }
-static EpochTime epoch(std::chrono::nanoseconds value) {
-    return EpochTime(value);
+static EpochClock::Time epoch(std::chrono::nanoseconds value) {
+    return EpochClock::Time(value);
 }
-static ClockEstimate observation(std::chrono::nanoseconds at, std::chrono::nanoseconds unix_time, std::uint64_t uncertainty = 0) {
+static EpochClock::Estimate observation(std::chrono::nanoseconds at, std::chrono::nanoseconds unix_time, std::uint64_t uncertainty = 0) {
     return {epoch(unix_time), local(at), uncertainty, 0};
 }
 
@@ -185,9 +184,9 @@ static void test_quality_and_limits() {
     CHECK(suspended.now(local(24h * 7))->time == epoch(100s + 24h * 7));
     CHECK(!suspended.now(local(24h * 7))->ready);
     EpochClock overflow;
-    CHECK(overflow.publish({EpochTime::max() - 1ns, local(0ns), 0, 0}, local(0ns)));
+    CHECK(overflow.publish({EpochClock::Time::max() - 1ns, local(0ns), 0, 0}, local(0ns)));
     CHECK(!overflow.now(local(0ns))->deadline_after(2ns));
-    CHECK(overflow.now(local(1ns))->time == EpochTime::max());
+    CHECK(overflow.now(local(1ns))->time == EpochClock::Time::max());
     CHECK(!overflow.now(local(2ns)));
     CHECK(!overflow.publish(observation(3ns, 100s), local(3ns)));
     EpochClock backwards;
@@ -206,17 +205,17 @@ static void test_quality_and_limits() {
 
 static void test_concurrent_reading() {
     EpochClock clock;
-    const auto origin = ElapsedClock::now();
+    const auto origin = EpochClock::Elapsed::now();
     CHECK(clock.publish({epoch(1'800'000'000s), origin, 0, 0}));
     std::atomic_bool finished{};
     std::jthread writer([&] {
         for (unsigned i = 0; i < 1000; ++i) {
-            const auto sample = ElapsedClock::now();
+            const auto sample = EpochClock::Elapsed::now();
             static_cast<void>(clock.publish({epoch(1'800'000'000s) + (sample - origin), sample, 0, 0}));
         }
         finished.store(true);
     });
-    auto previous = EpochTime{};
+    auto previous = EpochClock::Time{};
     do {
         const auto now = clock.now();
         CHECK(now && now->time >= previous);

@@ -1,4 +1,3 @@
-// 功能: 以既有账号和部署规则签发身份, 拓扑刷新不重复登记或冻结旧名单.
 #include "issuer.hpp"
 #include <algorithm>
 #include <openssl/rand.h>
@@ -15,7 +14,7 @@ proto::orbit::v1::Member encode(const Member& member) {
     result.set_principal(member.principal.text());
     result.set_advertise(member.address.text());
     result.set_epoch(member.epoch.value);
-    result.set_role(member.role == Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET);
+    result.set_role(member.role == Member::Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET);
     result.set_group(member.group);
     return result;
 }
@@ -25,12 +24,12 @@ std::vector<const Member*> candidates(const MembershipLedger::Members& members, 
     std::vector<const Member*> stars;
     for (const auto& [key, member] : members) {
         static_cast<void>(key);
-        if (member.role == Role::star) {
+        if (member.role == Member::Role::star) {
             stars.push_back(&member);
         }
     }
     std::ranges::sort(stars, {}, [](const Member* item) -> const Id& { return item->id; });
-    if (local.role == Role::star) {
+    if (local.role == Member::Role::star) {
         return stars;
     }
     std::vector<const Member*> nearby, remote;
@@ -65,16 +64,16 @@ std::vector<const Member*> candidates(const MembershipLedger::Members& members, 
 }
 
 // 内部错误映射为稳定的 gRPC 分类, 不把诊断正文发送给对端.
-grpc::Status rejected(const Error& error) {
+grpc::Status rejected(const Status& error) {
     auto code = grpc::StatusCode::UNAVAILABLE;
     switch (error.code) {
-    case Error::Code::configuration:
+    case Status::Code::configuration:
         code = grpc::StatusCode::INVALID_ARGUMENT;
         break;
-    case Error::Code::conflict:
+    case Status::Code::conflict:
         code = grpc::StatusCode::ABORTED;
         break;
-    case Error::Code::capacity:
+    case Status::Code::capacity:
         code = grpc::StatusCode::RESOURCE_EXHAUSTED;
         break;
     default:
@@ -108,9 +107,13 @@ grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::
         }
         const auto fingerprint = request->username() + '\0' + galaxy_ + '\0' + request->advertise();
         SHA256(reinterpret_cast<const std::uint8_t*>(fingerprint.data()), fingerprint.size(), principal.bytes.data());
-        Member candidate{
-            galaxy_,         "p_" + random.text(), principal, *address, {}, request->role() == proto::orbit::v1::ROLE_STAR ? Role::star : Role::planet,
-            request->group()};
+        Member candidate{galaxy_,
+                         "p_" + random.text(),
+                         principal,
+                         *address,
+                         {},
+                         request->role() == proto::orbit::v1::ROLE_STAR ? Member::Role::star : Member::Role::planet,
+                         request->group()};
         // 应答在持久提交之前完整准备. 提交后 Swap 不分配, 发送失败的客户端安全重试原请求.
         proto::orbit::v1::RegistrationResponse prepared;
         const auto committed = ledger_.register_member(std::move(candidate), request->request_id(), [&](const Member& local, const auto& members) {

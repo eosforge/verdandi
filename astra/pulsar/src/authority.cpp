@@ -1,4 +1,3 @@
-// 功能: 加载有界身份文件, 验证既有账号格式并执行域隔离签名.
 #include "authority.hpp"
 #include <algorithm>
 #include <bitset>
@@ -55,7 +54,7 @@ Result<std::unique_ptr<PulsarAuthority>> PulsarAuthority::load(const std::filesy
         auto identity = Identity::load_server(directory, admission);
         auto pulse_identity = Identity::load_server(directory, pulse);
         if (!identity || !pulse_identity) {
-            return Error::identity("Invalid Pulsar TLS identity");
+            return Status::identity("Invalid Pulsar TLS identity");
         }
         auto result = std::unique_ptr<PulsarAuthority>(new PulsarAuthority);
         result->identity_ = *identity;
@@ -66,7 +65,7 @@ Result<std::unique_ptr<PulsarAuthority>> PulsarAuthority::load(const std::filesy
         std::array<std::uint8_t, 32> seed{}, pub{};
         auto length = seed.size();
         if (!key || EVP_PKEY_id(key.get()) != EVP_PKEY_ED25519 || EVP_PKEY_get_raw_private_key(key.get(), seed.data(), &length) != 1 || length != seed.size()) {
-            return Error::identity("Invalid Ed25519 signing key");
+            return Status::identity("Invalid Ed25519 signing key");
         }
         ED25519_keypair_from_seed(pub.data(), result->private_key_.data(), seed.data());
         SHA256(pub.data(), pub.size(), result->key_id_.bytes.data());
@@ -74,20 +73,20 @@ Result<std::unique_ptr<PulsarAuthority>> PulsarAuthority::load(const std::filesy
         OPENSSL_cleanse(signing.data(), signing.size());
         const auto public_key = material(directory / "admission.pub");
         if (public_key.size() != pub.size() || CRYPTO_memcmp(pub.data(), public_key.data(), pub.size()) != 0) {
-            return Error::identity("Admission key pair does not match");
+            return Status::identity("Admission key pair does not match");
         }
         // 一次遍历拒绝重复字段和未知字段, 不允许模糊配置在不同语言中产生不同授权.
         auto bytes = material(directory / "accounts.json");
         std::unique_ptr<yyjson_doc, decltype(&yyjson_doc_free)> doc(yyjson_read(bytes.data(), bytes.size(), 0), yyjson_doc_free);
         auto* root = doc ? yyjson_doc_get_root(doc.get()) : nullptr;
         if (!yyjson_is_arr(root) || yyjson_arr_size(root) == 0 || yyjson_arr_size(root) > 64) {
-            return Error::identity("Invalid account collection");
+            return Status::identity("Invalid account collection");
         }
         std::size_t index{}, maximum{};
         yyjson_val* entry{};
         yyjson_arr_foreach(root, index, maximum, entry) {
             if (!yyjson_is_obj(entry) || yyjson_obj_size(entry) != 4) {
-                return Error::identity("Invalid account fields");
+                return Status::identity("Invalid account fields");
             }
             Account account;
             std::bitset<4> seen;
@@ -100,46 +99,46 @@ Result<std::unique_ptr<PulsarAuthority>> PulsarAuthority::load(const std::filesy
                     slot = 0;
                     account.username = text(value);
                     if (!Member::valid_name(account.username)) {
-                        return Error::identity("Invalid account name");
+                        return Status::identity("Invalid account name");
                     }
                 } else if (name == "salt") {
                     slot = 1;
                     if (!unhex(text(value), account.salt)) {
-                        return Error::identity("Invalid account salt");
+                        return Status::identity("Invalid account salt");
                     }
                 } else if (name == "hash") {
                     slot = 2;
                     if (!unhex(text(value), account.hash)) {
-                        return Error::identity("Invalid account hash");
+                        return Status::identity("Invalid account hash");
                     }
                 } else if (name == "roles") {
                     slot = 3;
                     if (!yyjson_is_arr(value) || yyjson_arr_size(value) == 0 || yyjson_arr_size(value) > 2) {
-                        return Error::identity("Invalid account roles");
+                        return Status::identity("Invalid account roles");
                     }
                     std::size_t role_index{}, role_maximum{};
                     yyjson_val* role{};
                     yyjson_arr_foreach(value, role_index, role_maximum, role) {
                         const auto bit = text(role) == "star" ? 1U : text(role) == "planet" ? 2U : 0U;
                         if (bit == 0 || (account.roles & bit) != 0) {
-                            return Error::identity("Invalid account role");
+                            return Status::identity("Invalid account role");
                         }
                         account.roles |= bit;
                     }
                 }
                 if (slot == 4 || seen.test(slot)) {
-                    return Error::identity("Unknown or duplicate account field");
+                    return Status::identity("Unknown or duplicate account field");
                 }
                 seen.set(slot);
             }
             if (!seen.all() || std::ranges::any_of(result->accounts_, [&](const auto& item) { return item.username == account.username; })) {
-                return Error::identity("Duplicate or incomplete account");
+                return Status::identity("Duplicate or incomplete account");
             }
             result->accounts_.push_back(std::move(account));
         }
         return result;
     } catch (...) {
-        return Error::identity("Cannot load Pulsar authority");
+        return Status::identity("Cannot load Pulsar authority");
     }
 }
 

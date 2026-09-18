@@ -1,4 +1,3 @@
-// 功能: 通过真实 TLS/gRPC 服务验证准入重试, 身份校验, 取消和截止边界.
 #include "admission.hpp"
 #include "check.hpp"
 #include "fixture.hpp"
@@ -157,7 +156,7 @@ struct Fixture {
             server->Wait();
         }
     }
-    Result<Joined> result() {
+    Result<Admission::Joined> result() {
         const auto deadline = Clock::now() + std::chrono::seconds(7);
         while (Clock::now() < deadline) {
             if (auto value = client->poll()) {
@@ -183,7 +182,7 @@ int main() {
             Fixture fixture(*identity, Scenario::lost_reply);
             fixture.client->begin(0);
             auto first = fixture.result();
-            CHECK(!first && first.error().code == Error::Code::transport);
+            CHECK(!first && first.error().code == Status::Code::transport);
             fixture.client->begin(0);
             const auto joined = fixture.result();
             CHECK(joined && joined->pulse_endpoint.empty());
@@ -195,7 +194,7 @@ int main() {
             CHECK(fixture.result());
             fixture.client->begin(1);
             auto changed = fixture.result();
-            CHECK(!changed && changed.error().code == Error::Code::identity);
+            CHECK(!changed && changed.error().code == Status::Code::identity);
             CHECK(!fixture.authority.request_changed);
         }
         for (auto scenario : {Scenario::excessive_members, Scenario::wrong_identity, Scenario::oversized_reply, Scenario::empty_member, Scenario::reply_limit,
@@ -206,7 +205,7 @@ int main() {
             CHECK(!result);
             const bool capacity = scenario == Scenario::excessive_members || scenario == Scenario::oversized_reply || scenario == Scenario::reply_limit ||
                                   scenario == Scenario::request_limit;
-            CHECK(result.error().code == (capacity ? Error::Code::capacity : Error::Code::identity));
+            CHECK(result.error().code == (capacity ? Status::Code::capacity : Status::Code::identity));
             if (scenario == Scenario::request_limit) {
                 CHECK(fixture.authority.registrations == 0);
             }
@@ -216,7 +215,7 @@ int main() {
             const auto start = Clock::now();
             fixture.client->begin(0);
             auto result = fixture.result();
-            CHECK(!result && result.error().code == Error::Code::timeout);
+            CHECK(!result && result.error().code == Status::Code::timeout);
             // 单次登记继续受总期限限制, 不能因通道已连上而无限等待.
             CHECK(Clock::now() - start < Milliseconds(6500));
             CHECK(fixture.authority.registrations == 1U);
@@ -232,7 +231,7 @@ int main() {
             CHECK(fixture.authority.registrations == 1);
             fixture.client->cancel();
             auto result = fixture.result();
-            CHECK(!result && result.error().code == Error::Code::cancelled);
+            CHECK(!result && result.error().code == Status::Code::cancelled);
         }
         std::cout << "PASS single RPC and retained startup request, reply limits, identity mismatch and in-flight cancellation\n";
         return 0;

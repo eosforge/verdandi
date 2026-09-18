@@ -1,4 +1,3 @@
-// 功能: 实现角色共用的成员代次替换判断和有界重连退避, 不持有网络资源.
 // 该文件提供与会话策略相关的独立纯函数计算，如判断一个成员节点的候选是否优于当前节点（处理重启代次），以及如何进行指数退避。
 #include <astra/policy.hpp>
 
@@ -8,14 +7,14 @@ namespace astra {
 // supersedes: 判断一个新候选成员状态是否能取代（覆盖）现有的成员状态。
 // 参数 candidate: 收到的新成员信息。
 // 参数 current: 系统当前记录的该成员信息。
-// 返回值: Result<bool>。如果候选完全合法并能替换则返回 true；如果是同一代次但不需要替换则返回 false；如果是冲突或非法旧代次则返回 Error。
+// 返回值: Result<bool>。如果候选完全合法并能替换则返回 true；如果是同一代次但不需要替换则返回 false；如果是冲突或非法旧代次则返回 Status。
 Result<bool> supersedes(const Member& candidate, const Member& current) {
     // 固定部署绑定不可变化, 同代次要求完整值一致; 只有严格升代才允许替换会话身份.
     // 确保主体的核心身份信息（主体标识，角色，监听地址，集群ID）没有发生改变。
     // 如果发生改变，或是新代次 (epoch) 小于当前代次，或者两者 epoch 相同但其他属性不同，均视为冲突。
     if (candidate.principal != current.principal || candidate.role != current.role || candidate.address != current.address ||
         candidate.galaxy != current.galaxy || candidate.epoch < current.epoch || (candidate.epoch == current.epoch && candidate != current)) {
-        return Error::conflict("Conflicting or stale member incarnation");
+        return Status::conflict("Conflicting or stale member incarnation");
     }
     // 只有在代次严格大于时才认定可以覆盖。
     return candidate.epoch > current.epoch;

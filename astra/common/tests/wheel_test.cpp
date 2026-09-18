@@ -1,4 +1,3 @@
-// 功能: 验证时间轮精确到期, 侵入式生命周期, 回调改期与异常恢复, 并与简单定时器模型逐拍对照.
 #include "check.hpp"
 #include "wheel.hpp"
 

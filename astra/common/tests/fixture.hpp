@@ -1,4 +1,3 @@
-// 功能: 提供公开测试身份与签名夹具, 供核心测试和真实 RPC 测试复用.
 #pragma once
 #include "identity.hpp"
 

@@ -1,4 +1,3 @@
-// 功能: 使用会话测试适配器验证 Hello, 心跳, 缓冲交接与取消生命周期.
 #include "check.hpp"
 #include "fixture.hpp"
 #include "grpc_session.hpp"
@@ -33,19 +32,19 @@ struct RecordingPolicy final : Policy {
     Result<void> initialize(const Member&, std::span<const Member>) override {
         return {};
     }
-    Result<std::vector<SessionGeneration>> accept(const Member&, Direction, SessionGeneration, const std::optional<Member>&) override {
+    Result<std::vector<SessionGeneration>> accept(const Member&, Policy::Direction, SessionGeneration, const std::optional<Member>&) override {
         ++installations;
         return std::vector<SessionGeneration>{};
     }
-    void closed(SessionGeneration, std::optional<Error::Code>, Clock::time_point) override {}
+    void closed(SessionGeneration, std::optional<Status::Code>, Clock::time_point) override {}
     std::optional<Member> due(Clock::time_point) override {
         return {};
     }
-    void failed(const Member&, Error::Code, Clock::time_point) override {}
+    void failed(const Member&, Status::Code, Clock::time_point) override {}
     bool needs_refresh(Clock::time_point) override {
         return false;
     }
-    NetworkStatus status() const override {
+    Policy::NetworkStatus status() const override {
         return {};
     }
 };
@@ -91,7 +90,7 @@ struct ControlledSession final : RpcSession {
     void request_cancel(bool force) override {
         forced += force;
     }
-    void finish_call(Error::Code) override {
+    void finish_call(Status::Code) override {
         ++finishes;
         if (finish_immediately) {
             complete();
@@ -114,7 +113,7 @@ proto::astra::v1::SessionPacket ping(std::uint64_t id, bool response = false) {
 class ConcurrentReadSession final : public RpcSession {
 public:
     ConcurrentReadSession(const Config& config, std::shared_ptr<const proto::astra::v1::Hello> greeting)
-        : RpcSession(config, Direction::inbound, {8}, greeting, std::nullopt, [] {}), worker_([this, greeting](std::stop_token stop) {
+        : RpcSession(config, Policy::Direction::inbound, {8}, greeting, std::nullopt, [] {}), worker_([this, greeting](std::stop_token stop) {
               while (!stop.stop_requested()) {
                   if (auto* packet = reading_.exchange(nullptr)) {
                       if (delivered_ == 0) {
@@ -148,7 +147,7 @@ private:
         CHECK(!writing_.exchange(true));
     }
     void request_cancel(bool) override {}
-    void finish_call(Error::Code) override {}
+    void finish_call(Status::Code) override {}
     std::atomic<proto::astra::v1::SessionPacket*> reading_{};
     std::atomic_bool writing_{};
     std::atomic_uint delivered_{};
@@ -179,17 +178,17 @@ int main() {
             session.acknowledge();
         };
         {
-            ControlledSession session(config, Direction::inbound, {1}, greeting, std::nullopt, [] {});
-            session.cancel(Error::Code::timeout);
-            session.cancel(Error::Code::identity);
-            CHECK(session.error() == Error::Code::timeout);
+            ControlledSession session(config, Policy::Direction::inbound, {1}, greeting, std::nullopt, [] {});
+            session.cancel(Status::Code::timeout);
+            session.cancel(Status::Code::identity);
+            CHECK(session.error() == Status::Code::timeout);
             session.pump(policy, **identity, now);
             CHECK(session.done() && session.calls == 0 && session.reads == 0 && session.writes == 0 && session.finishes == 1);
             session.cancel();
-            CHECK(session.error() == Error::Code::timeout);
+            CHECK(session.error() == Status::Code::timeout);
         }
         {
-            ControlledSession session(config, Direction::inbound, {2}, greeting, std::nullopt, [] {});
+            ControlledSession session(config, Policy::Direction::inbound, {2}, greeting, std::nullopt, [] {});
             start(session);
             session.pump(policy, **identity, now + Milliseconds(20));
             CHECK(session.last_write.has_ping());
@@ -201,29 +200,29 @@ int main() {
             // 正确 Pong 恰好落在原截止上仍超时, 不允许陈旧响应刷新期限.
             session.deliver(ping(id, true));
             session.pump(policy, **identity, now + Milliseconds(70));
-            CHECK(session.done() && session.error() == Error::Code::timeout);
+            CHECK(session.done() && session.error() == Status::Code::timeout);
         }
         {
-            ControlledSession session(config, Direction::inbound, {3}, greeting, std::nullopt, [] {});
+            ControlledSession session(config, Policy::Direction::inbound, {3}, greeting, std::nullopt, [] {});
             start(session);
             // 停滞写期间保留读取, 过载必须按明确错误结束, 不能靠停止读取遮蔽 Pong.
             for (std::uint64_t id = 1; id <= 6; ++id) {
                 session.deliver(ping(id));
                 session.pump(policy, **identity, now + Milliseconds(1));
             }
-            CHECK(session.error() == Error::Code::capacity && !session.done());
+            CHECK(session.error() == Status::Code::capacity && !session.done());
             const auto writes = session.writes;
             session.acknowledge();
             session.pump(policy, **identity, now + Milliseconds(2));
             CHECK(session.done() && session.writes == writes && session.finishes == 1);
         }
         {
-            ControlledSession session(config, Direction::inbound, {4}, greeting, std::nullopt, [] {});
+            ControlledSession session(config, Policy::Direction::inbound, {4}, greeting, std::nullopt, [] {});
             start(session);
             session.deliver(ping(1));
             session.pump(policy, **identity, now + Milliseconds(1));
             session.pump(policy, **identity, now + Milliseconds(51));
-            CHECK(session.error() == Error::Code::timeout);
+            CHECK(session.error() == Status::Code::timeout);
             session.pump(policy, **identity, Clock::now() + Milliseconds(300));
             CHECK(session.forced == 1);
             session.acknowledge();
@@ -232,7 +231,7 @@ int main() {
         }
         {
             // 响应头停滞时, 后入队的 Pong 仍按自己的较短截止到期, 不被 Hello 的期限遮盖.
-            ControlledSession session(config, Direction::inbound, {5}, greeting, std::nullopt, [] {});
+            ControlledSession session(config, Policy::Direction::inbound, {5}, greeting, std::nullopt, [] {});
             session.pump(policy, **identity, now);
             proto::astra::v1::SessionPacket packet;
             packet.mutable_hello()->CopyFrom(*greeting);
@@ -241,24 +240,24 @@ int main() {
             session.deliver(ping(1));
             session.pump(policy, **identity, now + Milliseconds(1));
             session.pump(policy, **identity, now + Milliseconds(51));
-            CHECK(session.error() == Error::Code::timeout && session.writes == 0);
+            CHECK(session.error() == Status::Code::timeout && session.writes == 0);
             session.acknowledge_metadata();
             session.pump(policy, **identity, now + Milliseconds(52));
             CHECK(session.done());
         }
         {
             // 拨号尚未完成时不投递 Hello. 到期后仍启动并排空已绑定的 client call.
-            ControlledSession session(config, Direction::outbound, {6}, greeting, std::nullopt, [] {});
+            ControlledSession session(config, Policy::Direction::outbound, {6}, greeting, std::nullopt, [] {});
             session.ready = false;
             session.pump(policy, **identity, now);
             CHECK(session.calls == 0 && session.writes == 0);
             session.pump(policy, **identity, Clock::now() + config.connect_timeout);
-            CHECK(session.done() && session.error() == Error::Code::timeout && session.calls == 1 && session.writes == 0);
+            CHECK(session.done() && session.error() == Status::Code::timeout && session.calls == 1 && session.writes == 0);
         }
         CHECK(policy.installations == 4);
         {
             // Finish 已投递也不等于 OnDone 已发生. 残留读取或最终状态停滞仍须有取消上限.
-            ControlledSession session(config, Direction::inbound, {7}, greeting, std::nullopt, [] {});
+            ControlledSession session(config, Policy::Direction::inbound, {7}, greeting, std::nullopt, [] {});
             session.finish_immediately = false;
             session.cancel();
             session.pump(policy, **identity, Clock::now());

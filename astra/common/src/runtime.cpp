@@ -1,4 +1,3 @@
-// 功能: 协调监听, 准入, 角色策略和会话资源, 通过单一控制循环推进连接并排空关闭回调.
 // 该文件实现了整个 Astra 节点的核心运行时环境，它包含监听外部会话的 gRPC 服务端处理、并管理所有主动拨出和被动接收的会话生命周期。
 #include <astra/runtime.hpp>
 
@@ -54,7 +53,7 @@ public:
             // 使用锁保护接收缓冲队列，因为该调用运行在 gRPC 的工作线程上。
             std::lock_guard lock(incoming_mutex_);
             // 如果不在接纳状态或当前节点根本不是 Star（如 Planet 角色不能接受连接），返回拒绝会话。
-            if (!accepting_ || config_.role != Role::star) {
+            if (!accepting_ || config_.role != Member::Role::star) {
                 return new RejectedSession(grpc::StatusCode::UNAVAILABLE);
             }
             // 超过最大并发入站连接限制，返回资源耗尽状态。
@@ -166,7 +165,7 @@ private:
                 return false;
             }
             const auto error = session->error();
-            const auto reason = error.value_or(Error::Code::transport);
+            const auto reason = error.value_or(Status::Code::transport);
             // 已经完成鉴权及身份绑定的会话断开
             if (session->installed()) {
                 policy_->closed(session->generation(), error, now);
@@ -177,7 +176,7 @@ private:
                 logger_.failure("connect_failed", reason);
             }
             // 释放入站容量计数槽位
-            if (session->direction() == Direction::inbound) {
+            if (session->direction() == Policy::Direction::inbound) {
                 std::lock_guard lock(incoming_mutex_);
                 --inbound_;
             }
@@ -234,7 +233,7 @@ private:
                 // 重置重试计数器
                 registration_failures_ = 0;
                 // Star 对时线程只在准入成功后启动, 复用本进程凭证. 旧 Go 控制面没有 Pulse 字段时显式保持未就绪.
-                if (config_.role == Role::star && joined.pulse_endpoint != pulse_endpoint_) {
+                if (config_.role == Member::Role::star && joined.pulse_endpoint != pulse_endpoint_) {
                     pulse_.reset();
                     pulse_endpoint_ = joined.pulse_endpoint;
                     if (!pulse_endpoint_.empty()) {
@@ -244,7 +243,7 @@ private:
             } else {
                 // 注册失败
                 const auto code = result->error().code;
-                const bool temporary = code == Error::Code::transport || code == Error::Code::timeout || code == Error::Code::capacity;
+                const bool temporary = code == Status::Code::transport || code == Status::Code::timeout || code == Status::Code::capacity;
                 // 对于非临时错误且尚未初始化的，认定为严重致命错误直接退出
                 if (!temporary && !hello_) {
                     fatal_ = true;
@@ -279,8 +278,9 @@ private:
     void dial(Clock::time_point now) {
         if (hello_ && now >= next_dial_) {
             // 计算当前尚未建立起稳定通信（即正在连接/握手中的）外呼会话的数量
-            const auto pending = std::count_if(sessions_.begin(), sessions_.end(),
-                                               [](const auto& session) { return session->direction() == Direction::outbound && !session->installed(); });
+            const auto pending = std::count_if(sessions_.begin(), sessions_.end(), [](const auto& session) {
+                return session->direction() == Policy::Direction::outbound && !session->installed();
+            });
             // 如果还未超出并行拨号的限制
             if (static_cast<std::size_t>(pending) < config_.max_dials) {
                 // 询问策略：当前是否有需要进行外呼的对端目标
@@ -306,18 +306,18 @@ private:
         dial(now); // 进行必要的外拨尝试
         // 业务时间只读取一次. 未初始化时不猜测有限截止, holdover 时仍驱动既有租约.
         const auto synchronized = synchronized_clock_.now();
-        if (config_.role == Role::star && synchronized) {
+        if (config_.role == Member::Role::star && synchronized) {
             store_.tick(synchronized->time, now);
         }
         const bool ready = synchronized && synchronized->ready;
-        if (config_.role == Role::star && ready != reported_ready_) {
+        if (config_.role == Member::Role::star && ready != reported_ready_) {
             reported_ready_ = ready;
             logger_.write(ready ? "clock_synchronized" : "clock_unavailable");
         }
         // 按配置的时间间隔定期打印健康状态
         if (config_.status_interval.count() != 0 && now >= next_status_) {
             logger_.status(policy_->status(), id_);
-            if (config_.role == Role::star) {
+            if (config_.role == Member::Role::star) {
                 logger_.write("clock_status", synchronized ? std::string("{\"ready\":") + (synchronized->ready ? "true" : "false") +
                                                                  ",\"nanoseconds\":" + std::to_string(synchronized->time.time_since_epoch().count()) +
                                                                  ",\"uncertainty_ns\":" + std::to_string(synchronized->uncertainty_ns) +
@@ -413,7 +413,7 @@ private:
 // 参数 role: 当前要运行为哪个角色（Star/Planet 等）。
 // 参数 factory: 产生用于管理会话关系逻辑 Policy 的工厂方法。
 // 返回值: 系统的返回错误码 (0 为正常，其他为错误)。
-int run_node(int argc, char** argv, Role role, PolicyFactory factory) {
+int run_node(int argc, char** argv, Member::Role role, PolicyFactory factory) {
     try {
         // 帮助与版本查询不加载身份文件也不启动网络, 参数输入的 string_view 只借用 argv 本次调用.
         if (argc == 2 && (std::string_view(argv[1]) == "--help" || std::string_view(argv[1]) == "-h")) {
@@ -422,7 +422,7 @@ int run_node(int argc, char** argv, Role role, PolicyFactory factory) {
         }
         if (argc == 2 && std::string_view(argv[1]) == "--version") {
             // 简单区分输出版本信息
-            std::cout << (role == Role::star ? "star" : "planet") << " 0.1.0 (C++26, gRPC v1)\n";
+            std::cout << (role == Member::Role::star ? "star" : "planet") << " 0.1.0 (C++26, gRPC v1)\n";
             return 0;
         }
         // 将 C 风格参数转换为 std::string_view 列表便于处理

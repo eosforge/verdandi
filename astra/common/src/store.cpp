@@ -1,4 +1,3 @@
-// 功能: 先准备所有可能失败的分配, 再提交状态和历史, 保证失败不暴露部分修改.
 // 本文件实现了 store.hpp 里的键值内存存储，以及基于增量和全量的同步提取。
 #include "store.hpp"
 
@@ -10,7 +9,7 @@
 namespace astra {
 
 // put 函数实现: 增加或覆盖一项键值数据，同时追加记录到变更历史。
-void Store::put(const std::string& key, Buffer value, std::optional<EpochTime> deadline) {
+void Store::put(const std::string& key, Buffer value, std::optional<EpochClock::Time> deadline) {
     if (deadline && deadline->time_since_epoch().count() < 0) {
         throw std::invalid_argument("Store deadline must be nonnegative Unix time");
     }
@@ -113,7 +112,7 @@ void Store::remove(const std::string& key) {
 }
 
 // 在同一临界区补拍并准备整批历史. 准备阶段只摘调度钩子, 不修改可观察的状态和版本.
-void Store::tick(EpochTime now, Clock::time_point local) {
+void Store::tick(EpochClock::Time now, Clock::time_point local) {
     if (now.time_since_epoch().count() < 0) {
         throw std::invalid_argument("Store time must be nonnegative Unix time");
     }
@@ -209,7 +208,7 @@ std::uint64_t Store::distance(Clock::time_point later, Clock::time_point earlier
 }
 
 // 保留有限绝对截止, 超出单轮范围时先安排一次分段唤醒; 回调再次检查截止并续排.
-void Store::schedule(Entry& entry, EpochTime boundary) noexcept {
+void Store::schedule(Entry& entry, EpochClock::Time boundary) noexcept {
     if (!entry.deadline) {
         Timer::cancel(entry);
         return;

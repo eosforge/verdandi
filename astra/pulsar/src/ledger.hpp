@@ -1,4 +1,3 @@
-// 功能: Pulsar 单写者持久登记账本, 原子发布只读成员快照, 不阻塞 Pulse 读取.
 #pragma once
 #include <astra/types.hpp>
 #include <atomic>

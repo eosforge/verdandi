@@ -1,4 +1,3 @@
-// 功能: 验证唯一 Unix 截止, 时钟校正/重连不改写数据, 全量与增量期限一致.
 #include "check.hpp"
 #include "store.hpp"
 #include <iostream>
@@ -9,8 +8,8 @@ using namespace std::chrono_literals;
 static ElapsedTime local(std::chrono::nanoseconds time) {
     return ElapsedTime(time);
 }
-static EpochTime epoch(std::chrono::nanoseconds time) {
-    return EpochTime(time);
+static EpochClock::Time epoch(std::chrono::nanoseconds time) {
+    return EpochClock::Time(time);
 }
 static void calibrate(EpochClock& clock, std::chrono::nanoseconds at, std::chrono::nanoseconds time) {
     CHECK(clock.publish({epoch(time), local(at), 0, 0}, local(at)));

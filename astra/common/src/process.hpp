@@ -1,4 +1,3 @@
-// 功能: 声明进程信号, 跨线程唤醒和有界诊断适配器, 明确资源恢复与持有边界.
 // 详细说明: 本头文件提供了系统级别的抽象封装，用于处理进程终止信号、跨线程的同步唤醒机制，
 // 以及一个非阻塞的有界结构化（JSON）日志记录器。目的是为了在服务端应用中安全、高效地进行资源生命周期管理与可观测性输出。
 #pragma once
@@ -11,10 +10,8 @@
 #include <mutex>
 
 namespace astra {
-// 功能: 将已验证的 UTF-8 字符串编码为独立的 JSON 字符串字面量。
 // 详细说明: 遍历输入的字符串，并对其中的控制字符、双引号（"）和反斜杠（\）等特殊字符进行转义，
 // 生成符合 JSON 标准的字符串表达形式。此函数不对业务上的 ID 格式进行额外校验，只负责编码。
-// 参数:
 // - value (std::string_view): 待编码的只读字符串片段，默认不提供值。必须是合法的 UTF-8 字符串。
 // 返回值: 编码并转义后的 JSON 字符串（包含头尾的双引号）。
 std::string json_string(std::string_view value);
@@ -39,7 +36,6 @@ public:
     // 禁止赋值操作符: 禁止赋值转移处理器快照, 确保恢复目标始终严格对应本次初始安装的快照。
     Signals& operator=(const Signals&) = delete;
 
-    // 功能: 跨线程读取是否收到了系统的停止信号。
     // 详细说明: 不阻塞线程，不清除已触发的信号标志，且不在此函数中执行实际的关闭逻辑。
     // 仅用于让其他线程（如控制循环）轮询检查是否需要退出。
     // 返回值: true 表示已经收到终止信号，false 表示未收到。
@@ -58,19 +54,15 @@ private:
 // 采用序列号 (sequence) 的方式，完美覆盖了在处理期间可能瞬间到达的多个并发通知，避免丢失唤醒事件。
 class Wakeup {
 public:
-    // 功能: 取得当前通知序号，供控制循环在本轮处理开始前记录。
     // 详细说明: 调用方需要记录这个值，并在后续调用 wait() 时传入同一值。
     // 返回值: 当前的通知序列号。
     std::uint64_t observe() const noexcept;
 
-    // 功能: 允许 gRPC などの回调调用的非阻塞唤醒接口。
     // 详细说明: 增加内部通知序号并唤醒正在等待的线程。该函数设计为纯同步/唤醒操作，
     // 绝不直接访问 Runtime 或者执行任何具体的网络协议操作。
     void notify();
 
-    // 功能: 阻塞等待下一次唤醒通知或超时。
     // 详细说明: 最多等待 10 毫秒，避免永久阻塞。结合超时机制，调用方可以同时轮询退出标志和 Channel 连接状态。
-    // 参数:
     // - observed (std::uint64_t): 期望的通知序号，必须是在本轮步进（step）之前通过 observe() 取得的值。
     void wait(std::uint64_t observed);
 
@@ -89,10 +81,9 @@ private:
 class Logger {
 public:
     // 构造函数: 确定角色并初始化非阻塞的诊断输出。
-    // 参数:
-    // - role (Role): 枚举类型，决定固定的组件名（如 star 或是 planet）。
+    // - role (Member::Role): 枚举类型，决定固定的组件名（如 star 或是 planet）。
     // 详细说明: 当发现标准输出 (stdout) 是管道或 socket 时，尽力开启 O_NONBLOCK 非阻塞写标志，并保存原有的文件状态标志。
-    explicit Logger(Role role);
+    explicit Logger(Member::Role role);
     // 服务进程入口使用固定组件名, 例如 pulsar; 不接受未经校验的远端文本.
     explicit Logger(std::string_view component);
 
@@ -106,29 +97,23 @@ public:
     // 禁止赋值操作: 禁止赋值替换唯一日志所有者及其保存的原始 stdout 标志。
     Logger& operator=(const Logger&) = delete;
 
-    // 功能: 写入一条包含基本信息的诊断日志。
-    // 参数:
     // - event (std::string_view): 必须是固定且安全的事件名，例如 "status"。
     // - fields (std::string_view): 必须是经过校验的字段所构成的 JSON 对象文本 (默认值: "{}")。本函数不会对输入再做转义。
     // 详细说明: 仅尝试向底层写入不超过 4096 字节（PIPE_BUF）的单条诊断记录，写入失败时静默忽略，不建立重试或缓冲队列。
     void write(std::string_view event, std::string_view fields = "{}") const;
 
-    // 功能: 打印当前网络状态和标识信息的诊断日志。
-    // 参数:
-    // - status (const NetworkStatus&): 当前的网络连接快照，包含成员信息、连接数等。
+    // - status (const Policy::NetworkStatus&): 当前的网络连接快照，包含成员信息、连接数等。
     // - id (const Id&): 本地节点的唯一标识。
     // 详细说明: 将上述信息编码为公开可见的 JSON 诊断日志。该函数不负责读取任何敏感身份材料，也不会修改现有的策略。
-    void status(const NetworkStatus& status, const Id& id) const;
+    void status(const Policy::NetworkStatus& status, const Id& id) const;
 
-    // 功能: 输出错误相关的诊断事件。
-    // 参数:
     // - event (std::string_view): 发生错误时的关联事件名称。
-    // - error (Error::Code): 错误代码枚举值。
+    // - error (Status::Code): 错误代码枚举值。
     // 详细说明: error 只会通过内置的白名单映射函数输出对应的字符串 reason (例如 "timeout")，坚决不接收/打印不受信任的远端错误正文内容。
-    void failure(std::string_view event, Error::Code error) const;
+    void failure(std::string_view event, Status::Code error) const;
 
 private:
-    // 固定的组件名称 (通常由 Role 决定，如 "star" 或 "planet")。
+    // 固定的组件名称 (通常由 Member::Role 决定，如 "star" 或 "planet")。
     std::string component_;
     // 存储标准输出 (stdout) 在修改前的文件状态描述符标志，用于析构时恢复 (默认值: -1，代表尚未获取或不是 pipe/socket)。
     int flags_ = -1;

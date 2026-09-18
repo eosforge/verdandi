@@ -1,4 +1,3 @@
-// 功能: 验证快照隔离, 完整批次历史, 过期边界和并发读取的版本一致性.
 #include "check.hpp"
 #include "store.hpp"
 
@@ -46,7 +45,7 @@ void test_put_and_remove() {
 // 相等的单调截止必须到期, Catalog 的 max 截止不随普通租约清理.
 void test_evict_expired() {
     // store 同时持有有限租约和永不过期数据, 验证两者使用同一个清理入口.
-    const auto now = EpochTime{};
+    const auto now = EpochClock::Time{};
     Store store(1000, 10min, 1s, now);
 
     store.put("key1", {1}, now + 10s);
@@ -69,14 +68,14 @@ void test_evict_expired() {
 
     // 极值 now 仍不能删除 max 哨兵, 而真实的最大有限截止应当到期.
     // 只推进极值附近的两拍, 不用从普通时刻补数十亿空拍来覆盖相同边界.
-    Store edge(1000, 10min, Clock::duration{1}, EpochTime::max() - Clock::duration{2});
+    Store edge(1000, 10min, Clock::duration{1}, EpochClock::Time::max() - Clock::duration{2});
     edge.put("permanent", {2});
-    edge.put("last_finite", {3}, EpochTime::max() - Clock::duration{1});
-    edge.tick(EpochTime::max());
+    edge.put("last_finite", {3}, EpochClock::Time::max() - Clock::duration{1});
+    edge.tick(EpochClock::Time::max());
     CHECK(edge.version() == 3);
     CHECK(edge.snapshot()->data.size() == 1);
     CHECK(edge.snapshot()->data.contains("permanent"));
-    edge.tick(EpochTime::max());
+    edge.tick(EpochClock::Time::max());
     CHECK(edge.version() == 3);
 }
 
@@ -114,10 +113,10 @@ void test_extract_since_and_history_trim() {
 // 同次过期删除不能因缓存容量被截成部分批次, 重新写入的 Key 不受旧删除记录淘汰影响.
 void test_batches_and_recreation() {
     // store 的容量是批次数而非记录数, 一批两个删除都必须保留.
-    Store store(1, 10min, 1ms, EpochTime{});
-    store.put("a", {1}, EpochTime{});
-    store.put("b", {2}, EpochTime{});
-    store.tick(EpochTime{} + 1ms);
+    Store store(1, 10min, 1ms, EpochClock::Time{});
+    store.put("a", {1}, EpochClock::Time{});
+    store.put("b", {2}, EpochClock::Time{});
+    store.tick(EpochClock::Time{} + 1ms);
     // expired 持有历史批次副本, 后续淘汰不影响这个结果的生命周期.
     const auto expired = store.extract(2);
     CHECK(!expired.stale && expired.version == 3 && expired.deltas.size() == 2);
@@ -220,10 +219,10 @@ void test_extract_budget() {
     CHECK(suffix.deltas.size() == 1 && suffix.deltas.front().version == 2 && suffix.deltas.front().value->front() == 8);
 
     // 一个 TTL 提交含多个删除, 不能因预算仅够第一条就确认整个提交版本.
-    Store expiring(100, 10min, 1ms, EpochTime{});
-    expiring.put("a", {1}, EpochTime{} + 1ms);
-    expiring.put("b", {2}, EpochTime{} + 1ms);
-    expiring.tick(EpochTime{} + 1ms);
+    Store expiring(100, 10min, 1ms, EpochClock::Time{});
+    expiring.put("a", {1}, EpochClock::Time{} + 1ms);
+    expiring.put("b", {2}, EpochClock::Time{} + 1ms);
+    expiring.tick(EpochClock::Time{} + 1ms);
     const auto batch_bytes = 2 * (sizeof(Store::Delta) + 2);
     bool rejected = false;
     try {
@@ -293,7 +292,7 @@ void test_concurrent_snapshots() {
 }
 
 void test_retention_and_idle_maintenance() {
-    const auto start = EpochTime(1h);
+    const auto start = EpochClock::Time(1h);
     Store store(100, 1h, 1h, start);
     store.put("live", {1});
     store.put("removed", {2});
@@ -329,8 +328,8 @@ void test_retention_and_idle_maintenance() {
 
 void test_invalidated_snapshot_release() {
     for (unsigned operation = 0; operation < 3; ++operation) {
-        Store store(0, 10min, 1ms, EpochTime{});
-        store.put("payload", Store::Buffer(4096, 7), EpochTime{} + 1ms);
+        Store store(0, 10min, 1ms, EpochClock::Time{});
+        store.put("payload", Store::Buffer(4096, 7), EpochClock::Time{} + 1ms);
         auto snapshot = store.snapshot();
         std::weak_ptr<const Store::Snapshot> old_snapshot = snapshot;
         std::weak_ptr<const Store::Buffer> old_payload = snapshot->data.at("payload").value;
@@ -341,7 +340,7 @@ void test_invalidated_snapshot_release() {
         } else if (operation == 1) {
             store.remove("payload");
         } else {
-            store.tick(EpochTime{} + 1ms);
+            store.tick(EpochClock::Time{} + 1ms);
         }
         CHECK(store.version() == 2 && old_snapshot.expired() && old_payload.expired());
     }
@@ -454,8 +453,9 @@ void test_snapshot_index_prepared_paths() {
     index.erase(0);
     CHECK(index.next() == 0);
     index.prepare(1024);
-    index.set(1024, {}, {value, EpochTime{} + 1s});
-    index.capture().each([&](const std::string& key, const SnapshotIndex::Record& record) { CHECK(key == "pending" && record.deadline == EpochTime{} + 1s); });
+    index.set(1024, {}, {value, EpochClock::Time{} + 1s});
+    index.capture().each(
+        [&](const std::string& key, const SnapshotIndex::Record& record) { CHECK(key == "pending" && record.deadline == EpochClock::Time{} + 1s); });
 
     // Store 的批量过期先准备全部路径再删除. 中途收缩不得使剩余的提交需要重新 prepare.
     index.prepare(0);

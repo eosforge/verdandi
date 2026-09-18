@@ -1,4 +1,3 @@
-// 功能: 验证真正的登记持久提交, 重试/替换, 容量, 排他打开和损坏恢复边界.
 #include "ledger.hpp"
 #include "pulsar_test.hpp"
 #include <csignal>
@@ -143,9 +142,9 @@ int main() {
             CHECK(committed.id == "replacement" && committed.epoch.value == 2 && count == 2);
             CHECK(!restored.register_member(test::member(1), first, prepare));
             CHECK(std::filesystem::file_size(path) == size);
-            auto planet = test::member(3, Role::planet);
+            auto planet = test::member(3, Member::Role::planet);
             CHECK(restored.register_member(planet, std::string(32, 'd'), prepare));
-            planet = test::member(4, Role::planet);
+            planet = test::member(4, Member::Role::planet);
             CHECK(!restored.register_member(planet, std::string(32, 'e'), prepare));
         }
         // 完整记录的损坏不能按掉电尾巴丢弃, 也不能把别的 Galaxy/签发公钥套在现有账本上.

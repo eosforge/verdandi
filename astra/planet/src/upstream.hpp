@@ -25,7 +25,7 @@ public:
     // 参数:
     // - local: 本地节点的身份和地址信息。
     // - members: 传入的候选上游节点列表。
-    // 返回值: Result<void>，成功返回空值，失败返回相应的 Error 错误信息。
+    // 返回值: Result<void>，成功返回空值，失败返回相应的 Status 错误信息。
     Result<void> initialize(const Member& local, std::span<const Member> members) override;
 
     // 接受连接请求: 仅接纳参数 expected 所对应的处于 pending 状态的出站（outbound）Star 节点连接。
@@ -37,7 +37,7 @@ public:
     // - generation: 此次连接会话的唯一代次标识。
     // - expected: 预期的目标节点身份（如果存在）。
     // 返回值: 返回一个需要被取消的旧会话 generation 列表。成功则返回空列表，未授权或重复上游则返回 identity 错误，代次冲突则沿用 supersedes 检查的错误。
-    Result<std::vector<SessionGeneration>> accept(const Member& remote, Direction direction, SessionGeneration generation,
+    Result<std::vector<SessionGeneration>> accept(const Member& remote, Policy::Direction direction, SessionGeneration generation,
                                                   const std::optional<Member>& expected) override;
 
     // 处理会话关闭事件: 仅处理当前处于活动状态的 generation。
@@ -47,7 +47,7 @@ public:
     // - generation: 关闭的会话代次标识。
     // - error: 可选的错误码，用于指示断开的具体原因。
     // - now: 触发关闭时的当前系统时钟时间。
-    void closed(SessionGeneration generation, std::optional<Error::Code> error, Clock::time_point now) override;
+    void closed(SessionGeneration generation, std::optional<Status::Code> error, Clock::time_point now) override;
 
     // 调度拨号尝试: 当没有活动上游，也没有在途上游连接时，根据当前时间 now、同组偏好以及稳定散列顺序，
     // 选择至多一个最优的候选上游，并将其标记为 pending（在途）状态。
@@ -62,7 +62,7 @@ public:
     // - target: 发生连接失败的目标节点信息。
     // - error: 导致失败的错误码。
     // - now: 失败发生时的系统当前时间。
-    void failed(const Member& target, Error::Code error, Clock::time_point now) override;
+    void failed(const Member& target, Status::Code error, Clock::time_point now) override;
 
     // 判断是否需要刷新: 当当前没有活动上游，且所有候选节点的轮询尝试均已耗尽，
     // 并且当前时间 now 已经达到或超过下一次刷新的到期时间时，消费掉刷新请求（返回 true），
@@ -74,19 +74,19 @@ public:
 
     // 获取当前网络状态: 在互斥锁保护下，返回候选节点的总数以及活动上游的独立状态快照。
     // 被隔离的候选节点依然会被计入候选总数中。
-    // 返回值: 包含初始化状态、候选数量、活动节点等信息的 NetworkStatus 结构体。
-    NetworkStatus status() const override;
+    // 返回值: 包含初始化状态、候选数量、活动节点等信息的 Policy::NetworkStatus 结构体。
+    Policy::NetworkStatus status() const override;
 
 private:
     // Candidate 结构体用于记录和追踪每个候选上游节点的实时状态。
     struct Candidate {
-        Member member;                       // 候选节点的身份和地址等核心信息。
-        bool pending{};                      // 默认值为 false。表示当前是否已经对该候选节点发起了拨号（在途连接）。
-        bool attempted{};                    // 默认值为 false。表示在当前的一轮遍历中，是否已经尝试连接过该候选。
-        bool quarantined{};                  // 默认值为 false。表示该节点是否由于严重错误（如身份验证失败）被完全隔离，不再重试。
-        std::uint32_t failures{};            // 默认值为 0。记录连续连接失败的次数，用于指数退避算法。
-        Clock::time_point next{};            // 默认值为纪元 0。下一次允许发起拨号连接的最早时间点（受退避延迟影响）。
-        Clock::time_point connected{};       // 默认值为纪元 0。记录该候选节点成功建立连接的时间点，用于判断连接是否稳定。
+        Member member;                 // 候选节点的身份和地址等核心信息。
+        bool pending{};                // 默认值为 false。表示当前是否已经对该候选节点发起了拨号（在途连接）。
+        bool attempted{};              // 默认值为 false。表示在当前的一轮遍历中，是否已经尝试连接过该候选。
+        bool quarantined{};            // 默认值为 false。表示该节点是否由于严重错误（如身份验证失败）被完全隔离，不再重试。
+        std::uint32_t failures{};      // 默认值为 0。记录连续连接失败的次数，用于指数退避算法。
+        Clock::time_point next{};      // 默认值为纪元 0。下一次允许发起拨号连接的最早时间点（受退避延迟影响）。
+        Clock::time_point connected{}; // 默认值为纪元 0。记录该候选节点成功建立连接的时间点，用于判断连接是否稳定。
     };
 
     // 记录连接失败状态，更新退避。调用此函数时必须已经持有 mutex_ 互斥锁。
@@ -97,15 +97,15 @@ private:
     // - candidate: 要更新状态的候选节点引用。
     // - error: 发生的具体错误码。
     // - now: 当前时钟时间，用于计算 next（下次重试时间）。
-    void record_failure(Candidate& candidate, Error::Code error, Clock::time_point now);
+    void record_failure(Candidate& candidate, Status::Code error, Clock::time_point now);
 
-    Config config_;                                                  // 保存节点的运行时网络配置参数。
-    mutable std::mutex mutex_;                                       // 用于保护内部状态（并发安全）的互斥锁，声明为 mutable 以便在 const 方法中加锁。
-    std::optional<Member> local_;                                    // 存储初始化时传入的本地节点身份信息。
-    std::inplace_vector<Candidate, 8> candidates_;                   // 预分配最大容量为 8 的连续数组，用于保存候选上游节点的状态。
-    std::optional<std::pair<Principal, SessionGeneration>> active_;  // 记录当前成功建立且处于活动状态的上游。保存目标的主体标识 (Principal) 以及对应的会话代次。
-    bool refresh_{};                                                 // 默认 false。一个标志位，用于标识是否触发了强制刷新请求。
-    Clock::time_point next_refresh_{};                               // 记录下一次允许执行名单刷新的最早时间点。
+    Config config_;                                                 // 保存节点的运行时网络配置参数。
+    mutable std::mutex mutex_;                                      // 用于保护内部状态（并发安全）的互斥锁，声明为 mutable 以便在 const 方法中加锁。
+    std::optional<Member> local_;                                   // 存储初始化时传入的本地节点身份信息。
+    std::inplace_vector<Candidate, 8> candidates_;                  // 预分配最大容量为 8 的连续数组，用于保存候选上游节点的状态。
+    std::optional<std::pair<Principal, SessionGeneration>> active_; // 记录当前成功建立且处于活动状态的上游。保存目标的主体标识 (Principal) 以及对应的会话代次。
+    bool refresh_{};                                                // 默认 false。一个标志位，用于标识是否触发了强制刷新请求。
+    Clock::time_point next_refresh_{};                              // 记录下一次允许执行名单刷新的最早时间点。
 };
 
 // 工厂函数: 根据已经校验通过的配置 config，创建一个未初始化的 Planet 连接策略。

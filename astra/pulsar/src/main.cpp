@@ -1,4 +1,3 @@
-// 功能: Pulsar 进程入口, 加载明确配置并托管签发/对时服务, 由 SIGINT/SIGTERM 停止.
 #include "process.hpp"
 #include "server.hpp"
 #include <iostream>
@@ -6,7 +5,7 @@
 int main(int argc, char** argv) {
     try {
         if (argc == 2 && (std::string_view(argv[1]) == "--help" || std::string_view(argv[1]) == "-h")) {
-            std::cout << astra::PulsarConfig::help();
+            std::cout << astra::PulsarServer::Config::help();
             return 0;
         }
         if (argc == 2 && std::string_view(argv[1]) == "--version") {
@@ -17,7 +16,7 @@ int main(int argc, char** argv) {
         for (int i = 1; i < argc; ++i) {
             arguments.emplace_back(argv[i]);
         }
-        auto config = astra::PulsarConfig::parse(arguments);
+        auto config = astra::PulsarServer::Config::parse(arguments);
         if (!config) {
             std::cerr << config.error().message << '\n';
             return 2;

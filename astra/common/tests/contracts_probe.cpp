@@ -1,4 +1,3 @@
-// 功能: 提供 C++26 契约行为探针, 验证编译配置中的契约处理方式.
 #include <string_view>
 #include <vector>
 

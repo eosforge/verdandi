@@ -1,4 +1,3 @@
-// 功能: 用可控单调时间验证 TTL 精度, 补拍, 续租, 取消, 节点稳定性与极值距离.
 #include "check.hpp"
 #include "store.hpp"
 
@@ -17,7 +16,7 @@ using namespace std::chrono_literals;
 
 namespace {
 // origin 是本测试的单调时钟起点, 所有时间均显式构造, 不读取墙钟或休眠.
-constexpr auto origin = EpochTime(1s);
+constexpr auto origin = EpochClock::Time(1s);
 
 // 零与负间隔必须在进入调度前拒绝, 防止除零和永不前进的补拍循环.
 void test_interval() {
@@ -104,12 +103,12 @@ void test_rehash_and_recreation() {
 // 跨有符号极值的距离不允许溢出; 大间隔把完整边界测试压缩为两拍.
 void test_extreme_clock() {
     const auto interval = std::chrono::nanoseconds::max();
-    Store store(1000, 10min, interval, EpochTime{});
-    store.put("last", {1}, EpochTime::max());
+    Store store(1000, 10min, interval, EpochClock::Time{});
+    store.put("last", {1}, EpochClock::Time::max());
     store.put("permanent", {2});
-    store.tick(EpochTime::max() - 1ns);
+    store.tick(EpochClock::Time::max() - 1ns);
     CHECK(store.version() == 2);
-    store.tick(EpochTime::max());
+    store.tick(EpochClock::Time::max());
     CHECK(store.version() == 3 && store.snapshot()->data.size() == 1);
     CHECK(store.snapshot()->data.contains("permanent"));
     // 最大整数是合法有限截止, 不再充当无限期哨兵.
@@ -234,7 +233,7 @@ void test_store_model() {
             case 0: {
                 const Store::Buffer value{static_cast<std::uint8_t>(random() % 256)};
                 const auto expiry = random() % 4 == 0 ? UINT64_MAX : observed + random() % 24;
-                const std::optional<EpochTime> deadline = expiry == UINT64_MAX ? std::nullopt : std::optional{at(expiry)};
+                const std::optional<EpochClock::Time> deadline = expiry == UINT64_MAX ? std::nullopt : std::optional{at(expiry)};
                 store.put(key, value, deadline);
                 state.insert_or_assign(key, std::pair{value, expiry});
                 log.emplace_back(key, std::make_shared<const Store::Buffer>(value), false, ++version, deadline);

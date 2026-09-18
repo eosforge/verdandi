@@ -1,4 +1,3 @@
-// 功能: 提供测试断言辅助接口, 在断言失败时报告位置并终止测试.
 #pragma once
 
 #include <source_location>

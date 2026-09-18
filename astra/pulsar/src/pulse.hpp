@@ -1,4 +1,3 @@
-// 功能: 提供独立资源池中的有界对时采样, 不执行 KDF 或登记写锁操作.
 #pragma once
 #include "authority.hpp"
 #include "ledger.hpp"
@@ -9,7 +8,6 @@
 namespace astra {
 class Pulse final : public proto::pulsar::v1::Pulse::CallbackService {
 public:
-    // 借用验签, 成员表和物理参考时钟, 三者均由进程持有至 RPC 全部退出.
     Pulse(const PulsarAuthority& authority, const MembershipLedger& ledger, const PhysicalClock& clock);
     // 返回由 OnDone 回收的 Reactor, 网络等待不占用线程. 服务端自行限制三秒单调寿命.
     grpc::ServerBidiReactor<proto::pulsar::v1::Ping, proto::pulsar::v1::Pong>* Bounce(grpc::CallbackServerContext* context) override;

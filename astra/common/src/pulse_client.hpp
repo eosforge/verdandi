@@ -1,4 +1,3 @@
-// 功能: Star 独占一个可取消的对时线程, 复用 TLS Channel 执行有界采样批次.
 #pragma once
 #include "identity.hpp"
 #include "pulsar.grpc.pb.h"

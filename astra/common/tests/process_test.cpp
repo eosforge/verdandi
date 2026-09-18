@@ -1,4 +1,3 @@
-// 功能: 验证进程信号恢复, 跨线程唤醒和诊断输出的边界行为.
 #include "check.hpp"
 #include "process.hpp"
 
@@ -70,9 +69,9 @@ void bounded_log() {
     const auto flags = fcntl(STDOUT_FILENO, F_GETFL);
     CHECK((flags & O_NONBLOCK) == 0);
     {
-        Logger logger(Role::planet);
+        Logger logger(Member::Role::planet);
         CHECK((fcntl(STDOUT_FILENO, F_GETFL) & O_NONBLOCK) != 0);
-        logger.failure("connect_failed", Error::Code::identity);
+        logger.failure("connect_failed", Status::Code::identity);
         const auto record = output.read();
         CHECK(record.ends_with("}\n"));
         CHECK(record.contains("\"component\":\"planet\""));

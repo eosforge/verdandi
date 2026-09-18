@@ -1,4 +1,3 @@
-// 功能: 通过真实连接测试拨号状态, TLS 身份和会话失败分类.
 #include "admission.hpp"
 #include "check.hpp"
 
@@ -55,7 +54,7 @@ void blocked(const std::shared_ptr<Identity>& identity, std::string address, boo
             client.cancel();
         }
         if (auto result = client.poll()) {
-            CHECK(!*result && result->error().code == (cancel ? Error::Code::cancelled : Error::Code::timeout));
+            CHECK(!*result && result->error().code == (cancel ? Status::Code::cancelled : Status::Code::timeout));
             CHECK(!client.pending());
             return;
         }

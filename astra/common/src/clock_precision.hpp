@@ -1,4 +1,3 @@
-// 功能: 有界寻找实际读钟跳变, 避免仅依赖系统报告值或在停滞时钟上无限自旋.
 #pragma once
 #include <algorithm>
 #include <cstdint>

@@ -1,4 +1,3 @@
-// 功能: 非阻塞对时 Reactor, 独立单调截止和有界流占用, 不在网络等待期间持有工作线程.
 #include "pulse.hpp"
 #include <algorithm>
 #include <astra/clock.hpp>
@@ -41,7 +40,7 @@ public:
             const auto signature = metadata.find("astra-signature-bin");
             const auto value = authority.identity().verify({reinterpret_cast<const std::uint8_t*>(admission->second.data()), admission->second.size()},
                                                            {reinterpret_cast<const std::uint8_t*>(signature->second.data()), signature->second.size()});
-            if (!value || value->role != Role::star || !ledger.current(*value)) {
+            if (!value || value->role != Member::Role::star || !ledger.current(*value)) {
                 Finish(grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Pulse credential rejected"));
                 return;
             }

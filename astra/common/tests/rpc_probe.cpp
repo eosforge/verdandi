@@ -1,8 +1,7 @@
-#include <openssl/rand.h>
-// 功能: 提供真实 RPC 连接探针, 用于进程回归中的控制协议与故障验证.
 #include "admission.hpp"
 #include "astra.grpc.pb.h"
 #include "check.hpp"
+#include <openssl/rand.h>
 
 #include <algorithm>
 #include <grpcpp/create_channel.h>

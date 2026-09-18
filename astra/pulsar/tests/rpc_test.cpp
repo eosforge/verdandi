@@ -1,4 +1,3 @@
-// 功能: 通过真实 TLS/gRPC 验证 Pulsar 登记, Star 对时, 断线与服务重启恢复.
 #include "pulsar_test.hpp"
 #include "pulse_client.hpp"
 #include "server.hpp"
@@ -39,7 +38,7 @@ struct IdlePulse {
     void ping() {
         proto::pulsar::v1::Ping ping;
         proto::pulsar::v1::Pong pong;
-        ping.set_t0(static_cast<std::uint64_t>(elapsed_ns(ElapsedClock::now())));
+        ping.set_t0(static_cast<std::uint64_t>(elapsed_ns(EpochClock::Elapsed::now())));
         CHECK(stream->Write(ping) && stream->Read(&pong));
         CHECK(pong.t0() == ping.t0() && pong.precision_ns() >= 1 && pong.precision_ns() <= 20'000'000);
         CHECK(pong.synchronized() && pong.t2() >= pong.t1() && pong.t1() >= 1'800'000'000'000'000'000ULL);
@@ -80,7 +79,7 @@ struct Client {
     }
 };
 
-static EpochReading wait_clock(const EpochClock& clock, ElapsedTime after = {}) {
+static EpochClock::Reading wait_clock(const EpochClock& clock, ElapsedTime after = {}) {
     const auto deadline = Clock::now() + 15s;
     while (Clock::now() < deadline) {
         if (auto value = clock.now(); value && value->ready && value->sampled > after) {
@@ -94,7 +93,7 @@ static EpochReading wait_clock(const EpochClock& clock, ElapsedTime after = {}) 
 int main() {
     try {
         test::Directory directory;
-        PulsarConfig config;
+        PulsarServer::Config config;
         config.listen = *Endpoint::parse("127.0.0.1:0", true);
         config.pulse_listen = *Endpoint::parse("127.0.0.1:0", true);
         config.galaxy = "alpha";
@@ -102,12 +101,12 @@ int main() {
         config.state = directory.path / "membership.journal";
         // RPC 测试注入独立参考源, 不要求测试主机联网对时, 也不更改系统墙钟或生产配置.
         std::atomic_bool source_available{false};
-        const auto provider = [&]() -> std::optional<ClockEstimate> {
+        const auto provider = [&]() -> std::optional<EpochClock::Estimate> {
             if (!source_available.load()) {
                 return std::nullopt;
             }
-            const auto local = ElapsedClock::now();
-            return ClockEstimate{EpochTime(1'800'000'000s) + local.time_since_epoch(), local, 1000, 0};
+            const auto local = EpochClock::Elapsed::now();
+            return EpochClock::Estimate{EpochClock::Time(1'800'000'000s) + local.time_since_epoch(), local, 1000, 0};
         };
         auto server = std::make_unique<PulsarServer>(config, provider);
         server->start();
@@ -116,7 +115,7 @@ int main() {
         CHECK(config.listen != config.pulse_listen);
         {
             // 配置错误直接拒绝; 同端口第二个服务即使用另一日志也不能启动.
-            const auto parse = [](std::initializer_list<std::string_view> args) { return PulsarConfig::parse({args.begin(), args.size()}); };
+            const auto parse = [](std::initializer_list<std::string_view> args) { return PulsarServer::Config::parse({args.begin(), args.size()}); };
             CHECK(parse({"--listen=127.0.0.1:0", "--pulse-listen=127.0.0.1:0", "--galaxy=alpha"}));
             CHECK(!parse({"--listen=127.0.0.1:1", "--pulse-listen=127.0.0.1:1", "--galaxy=alpha"}));
             CHECK(!parse({"--listen=0.0.0.0:0", "--pulse-listen=127.0.0.1:0", "--galaxy=alpha"}));
@@ -207,7 +206,7 @@ int main() {
             context.AddMetadata("astra-signature-bin", hello->admission_signature());
             auto stream = pulse_stub->Bounce(&context);
             proto::pulsar::v1::Ping ping;
-            ping.set_t0(static_cast<std::uint64_t>(elapsed_ns(ElapsedClock::now())));
+            ping.set_t0(static_cast<std::uint64_t>(elapsed_ns(EpochClock::Elapsed::now())));
             proto::pulsar::v1::Pong pong;
             CHECK(stream->Write(ping));
             CHECK(!stream->Read(&pong));
@@ -273,7 +272,7 @@ int main() {
         {
             PulseClient synchronizer(server->pulse_endpoint(), client.identity, hello, clock);
             const auto before = wait_clock(clock);
-            CHECK(before.rtt_ns <= 200'000'000 && before.time >= EpochTime(1'800'000'000s));
+            CHECK(before.rtt_ns <= 200'000'000 && before.time >= EpochClock::Time(1'800'000'000s));
             // 真实网络对时产生一次期限, 后续 Pulsar 停机不应冻结清理或为数据重新续满 TTL.
             Store store;
             store.tick(before.time);

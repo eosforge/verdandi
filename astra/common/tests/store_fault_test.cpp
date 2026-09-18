@@ -1,4 +1,3 @@
-// 功能: 在独立进程逐个注入分配失败, 验证状态, 历史, 快照和版本没有部分提交.
 // 此目标仅链接存储模块, 替换型 new 不进入服务或其他测试进程.
 #include "check.hpp"
 #include "store.hpp"
@@ -170,9 +169,9 @@ std::size_t sweep(Operation operation, unsigned prefix) {
     // point 表示本次测试要失败的第几次分配, 上限只是测试防死循环预算.
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
         // store 只保留两批历史, 成功提交同时覆盖历史淘汰路径.
-        Store store(2, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochTime{});
-        store.put(first, {1}, EpochTime{});
-        store.put(second, {1}, EpochTime{});
+        Store store(2, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochClock::Time{});
+        store.put(first, {1}, EpochClock::Time{});
+        store.put(second, {1}, EpochClock::Time{});
         // i 仅推进预置提交位置, 不进入注入范围.
         for (unsigned i = 0; i < prefix; ++i) {
             store.put("seed", {1});
@@ -196,7 +195,7 @@ std::size_t sweep(Operation operation, unsigned prefix) {
                     store.remove(first);
                     break;
                 case Operation::expire:
-                    store.tick(EpochTime{} + std::chrono::milliseconds(1));
+                    store.tick(EpochClock::Time{} + std::chrono::milliseconds(1));
                     break;
                 }
             } catch (const std::bad_alloc&) {
@@ -233,7 +232,7 @@ std::size_t sweep(Operation operation, unsigned prefix) {
         const auto delta = store.extract(before->version);
         CHECK(!delta.stale && delta.deltas.size() == 1 && delta.deltas.front().key == "probe");
         // 失败不能取消原有租约. 下一次补拍必须同时删除原来的两个有限条目, probe 保持存活.
-        store.tick(EpochTime{} + std::chrono::milliseconds(3));
+        store.tick(EpochClock::Time{} + std::chrono::milliseconds(3));
         CHECK(store.version() == before->version + 2);
         CHECK(store.snapshot()->data.size() == before->data.size() - 1 && store.snapshot()->data.contains("probe"));
         CHECK(!store.snapshot()->data.contains(first) && !store.snapshot()->data.contains(second));
@@ -289,15 +288,15 @@ std::size_t sweep_read(bool snapshot) {
 std::size_t sweep_large_expiry() {
     std::size_t failures = 0;
     for (std::ptrdiff_t point = 0; point < 512; ++point) {
-        Store store(200, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochTime{});
+        Store store(200, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochClock::Time{});
         for (unsigned index = 0; index < 96; ++index) {
-            store.put(std::string(80, 'k') + std::to_string(index), {1}, EpochTime{});
+            store.put(std::string(80, 'k') + std::to_string(index), {1}, EpochClock::Time{});
         }
         bool failed = false;
         {
             FailureScope failure(point);
             try {
-                store.tick(EpochTime{} + std::chrono::milliseconds(1));
+                store.tick(EpochClock::Time{} + std::chrono::milliseconds(1));
             } catch (const std::bad_alloc&) {
                 failed = true;
             }
@@ -312,7 +311,7 @@ std::size_t sweep_large_expiry() {
         const auto renewed = std::string(80, 'k') + "0";
         store.put(renewed, {2});
         store.remove(std::string(80, 'k') + "1");
-        store.tick(EpochTime{} + std::chrono::milliseconds(4));
+        store.tick(EpochClock::Time{} + std::chrono::milliseconds(4));
         CHECK(store.version() == 99 && store.snapshot()->data.size() == 1);
         CHECK(store.snapshot()->data.at(renewed).value->front() == 2);
         const auto changes = store.extract(98);
@@ -324,7 +323,7 @@ std::size_t sweep_large_expiry() {
 // 跨多个到期拍的一次补齐仍只提交一个批次, 任意分配失败后都能完整恢复.
 std::size_t sweep_catchup_expiry() {
     std::size_t failures = 0;
-    const auto origin = EpochTime{};
+    const auto origin = EpochClock::Time{};
     const auto target = origin + std::chrono::milliseconds(3000);
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
         Store store(20, std::chrono::minutes(10), std::chrono::milliseconds(1), origin);
@@ -371,12 +370,12 @@ std::size_t sweep_catchup_expiry() {
 
 // 没有到期条目的补拍不分配数组, 即使禁止下一次 new 也能完成.
 void test_empty_tick_allocation() {
-    Store store(1000, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochTime{});
+    Store store(1000, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochClock::Time{});
     store.put("permanent", {1});
     {
         FailureScope failure(0);
-        store.tick(EpochTime{} + std::chrono::seconds(3));
-        store.tick(EpochTime{} + std::chrono::seconds(3));
+        store.tick(EpochClock::Time{} + std::chrono::seconds(3));
+        store.tick(EpochClock::Time{} + std::chrono::seconds(3));
         CHECK(!injected);
     }
     CHECK(store.version() == 1);
@@ -432,10 +431,10 @@ void test_snapshot_page_failures() {
 // 旧实现持锁 dump 时会明确失败而非死锁挂住; 两种退出路径都不能污染状态或挂住下次快照.
 void test_snapshot_writer_progress(bool fail) {
     using namespace std::chrono_literals;
-    Store store(100, 10min, 1ms, EpochTime{});
+    Store store(100, 10min, 1ms, EpochClock::Time{});
     store.put("keep", {1});
     store.put("remove", {2});
-    store.put("expire", {3}, EpochTime{} + 1ms);
+    store.put("expire", {3}, EpochClock::Time{} + 1ms);
     AllocationPause pause;
     std::shared_ptr<const Store::Snapshot> captured;
     std::exception_ptr reader_error, writer_error;
@@ -462,7 +461,7 @@ void test_snapshot_writer_progress(bool fail) {
         try {
             store.put("keep", {4});
             store.remove("remove");
-            store.tick(EpochTime{} + 1ms);
+            store.tick(EpochClock::Time{} + 1ms);
             store.put("added", {5});
         } catch (...) {
             writer_error = std::current_exception();
@@ -504,17 +503,17 @@ void test_empty_bucket_reclamation() {
     for (const std::size_t count : {1024U, 8192U}) {
         for (const bool leave_live : {false, true}) {
             // 零历史模式下删除即回收墓碑, 使桶释放与历史保存策略分开验证.
-            Store store(0, 10min, 1ms, EpochTime{});
+            Store store(0, 10min, 1ms, EpochClock::Time{});
             AllocationWatch watch;
             for (std::size_t key = 0; key < count; ++key) {
-                store.put(std::to_string(key), {1}, leave_live && key == 0 ? std::optional<EpochTime>{} : std::optional{EpochTime{} + 1ms});
+                store.put(std::to_string(key), {1}, leave_live && key == 0 ? std::optional<EpochClock::Time>{} : std::optional{EpochClock::Time{} + 1ms});
             }
             watch.collecting = false;
             // 固定短 Key/单值/零历史使大表的最大分配为桶数组, 页、节点和单条记录远小于此尺寸.
             const bool large = count == 8192;
             CHECK(watch.largest && !watch.released && watch.size > 4096);
             CHECK(!large || watch.size > 4096 * sizeof(void*));
-            store.tick(EpochTime{} + 1ms);
+            store.tick(EpochClock::Time{} + 1ms);
             CHECK(watch.released == (large && !leave_live));
             if (leave_live) {
                 CHECK(store.snapshot()->data.at("0").value->front() == 1);
@@ -526,21 +525,21 @@ void test_empty_bucket_reclamation() {
             const auto empty = store.snapshot();
             {
                 FailureScope failure(0);
-                store.tick(EpochTime{} + 2ms);
+                store.tick(EpochClock::Time{} + 2ms);
                 CHECK(!injected);
             }
             CHECK(watch.released == large && store.version() == version && store.snapshot() == empty && empty->data.empty());
             CHECK(store.extract(version).deltas.empty() && store.extract(version - 1).stale);
             // 换表之后再次注册并到期, 验证查找、分页槽复用和时间轮依然连贯.
-            store.put("reborn", {2}, EpochTime{} + 3ms);
+            store.put("reborn", {2}, EpochClock::Time{} + 3ms);
             CHECK(store.snapshot()->data.at("reborn").value->front() == 2);
-            store.tick(EpochTime{} + 3ms);
+            store.tick(EpochClock::Time{} + 3ms);
             CHECK(store.version() == version + 2 && store.snapshot()->data.empty() && empty->data.empty());
         }
     }
 
     // 有效值为空不等于节点全空: 删除批次仍保留时, 不提前回收墓碑或改变续传下界.
-    const auto origin = EpochTime{};
+    const auto origin = EpochClock::Time{};
     Store retained(1, 10min, 1s, origin);
     AllocationWatch watch;
     for (std::size_t key = 0; key < 8192; ++key) {

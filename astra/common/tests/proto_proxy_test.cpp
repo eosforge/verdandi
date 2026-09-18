@@ -1,4 +1,3 @@
-// 功能: 独立包含代理头, 实例化全部消息适配, 验证标量, oneof, repeated 与 Arena 所有权.
 #include "check.hpp"
 #include <astra/proto_proxy.hpp>
 

@@ -10,12 +10,12 @@
 每个进程拥有一个 EpochClock. 数据、Store 和 Wheel 只认识它输出的纪元时间:
 
 ```text
-本地经过时间 + 对时样本 -> EpochClock -> EpochTime -> Store -> Wheel
+本地经过时间 + 对时样本 -> EpochClock -> EpochClock::Time -> Store -> Wheel
                               |
                               +-> 时钟质量与诊断
 ```
 
-- EpochTime 的起点、单位和含义不随 Pulsar/Star 启动或连接变化而改变.
+- EpochClock::Time 的起点、单位和含义不随 Pulsar/Star 启动或连接变化而改变.
 - 对一个运行中的 EpochClock, 非重叠读取单调不减, 正常经过时间会推动它继续前进.
   时钟分辨率允许相邻读数相同, 不要求每次读取人为加 1 ns.
 - 初始化并公开时间后, 不直接替换时间值或原点. 正负校正通过限速调整吸收, 不回拨、不停走、不跳跃校时.
@@ -32,9 +32,9 @@
 
 | 类型/字段 | 含义 |
 | --- | --- |
-| `EpochTime` | 强类型的非负 int64 纳秒数, 同一固定 Unix 起点; 不隐式接受 steady_clock::time_point |
-| `optional<EpochTime> deadline` | 唯一业务期限; 空表示无限期, 不以 0、负值或最大整数编码无限期 |
-| `EpochReading` | 成对返回当前时间、误差估计和是否可接受新有限期限; 不进入每条数据 |
+| `EpochClock::Time` | 强类型的非负 int64 纳秒数, 同一固定 Unix 起点; 不隐式接受 steady_clock::time_point |
+| `optional<EpochClock::Time> deadline` | 唯一业务期限; 空表示无限期, 不以 0、负值或最大整数编码无限期 |
+| `EpochClock::Reading` | 成对返回当前时间、误差估计和是否可接受新有限期限; 不进入每条数据 |
 | EpochClock 内部状态 | 本地采样锚点、纪元值、待消化偏差、舍入余数、最后有效观测及质量信息 |
 | Store 推进位置 | 时间轮已经处理到的纪元拍边界; 这是处理水位, 不是第二种时间参考系 |
 | Wheel 节点 | 原有侵入式链接和到期拍索引; 不额外保存本地绝对截止 |
@@ -180,14 +180,14 @@ Star 新进程先校准公共时间, 再装载/开放有期限的业务状态. �
 
 ### 初始化
 
-首次取得有效 EpochTime 时建立 Store 拍边界. 若存在恢复数据, 按当前时间安排期限,
+首次取得有效 EpochClock::Time 时建立 Store 拍边界. 若存在恢复数据, 按当前时间安排期限,
 不从 1970 年开始逐拍追赶. Wheel 可保持从零开始的内部拍索引, Store 只记录与其对应的纪元边界.
 Wheel 本身的侵入式链接、分层、取消和超长期限分段唤醒规则不改变.
 
 ### 正常一轮
 
 ```text
-EpochClock 补齐本地经过时间, 得到一个稳定的 EpochReading
+EpochClock 补齐本地经过时间, 得到一个稳定的 EpochClock::Reading
     -> Store.tick(epoch_now)
     -> 按拍触发、核对 deadline 并准备完整到期批次
     -> 提交数据、历史、快照索引和版本
@@ -251,7 +251,7 @@ Store 在锁内只使用本轮捕获的时间, 不在每个节点回调时重新
 | LeaseClock | 职责移入进程级 EpochClock 后删除, 不改名保留第二层时间映射 |
 | SnapshotIndex / Wheel | 保留现有算法, 仅适配单一期限记录和时间类型, 不引入新持久化容器 |
 | Runtime | 获取时间并推进 Store, 记录质量变化; 不处理每 Key 的纪元迁移 |
-| Go Supervisor / 冻结 SDK | 不机械迁移, 没有同一套 Pulse 时钟; 后续 SDK 协议使用同一 EpochTime 契约 |
+| Go Supervisor / 冻结 SDK | 不机械迁移, 没有同一套 Pulse 时钟; 后续 SDK 协议使用同一 EpochClock::Time 契约 |
 
 本轮实现时钟/协议/Store 迁移, 补齐测试并在用户授权后执行回归. 不实现多 Pulsar 选主、跨 Galaxy 时间桥接、SDK 业务协议或业务数据落盘.
 不下载工具/依赖, 不修改系统时钟或系统对时服务, 不触碰 README.
