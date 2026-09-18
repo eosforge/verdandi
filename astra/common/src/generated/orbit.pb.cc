@@ -469,11 +469,11 @@ constexpr RegistrationResponse::ParseTableT_ RegistrationResponse::InternalGener
     {
       PROTOBUF_FIELD_OFFSET(RegistrationResponse, _impl_._has_bits_),
       0, // no _extensions_
-      3, 24,  // max_field_number, fast_idx_mask
+      4, 24,  // max_field_number, fast_idx_mask
       offsetof(ParseTableT_, field_lookup_table),
-      4294967288,  // skipmap
+      4294967280,  // skipmap
       offsetof(ParseTableT_, field_entries),
-      3,  // num_field_entries
+      4,  // num_field_entries
       1,  // num_aux_entries
       offsetof(ParseTableT_, aux_entries),
       class_data,
@@ -483,7 +483,10 @@ constexpr RegistrationResponse::ParseTableT_ RegistrationResponse::InternalGener
       ::_pbi::TcParser::GetTable<::proto::orbit::v1::RegistrationResponse>(),  // to_prefetch
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
-      {::_pbi::TcParser::MiniParse, {}},
+      // string pulse_endpoint = 4;
+      {::_pbi::TcParser::FastUS1,
+       {34, 3, 0,
+        PROTOBUF_FIELD_OFFSET(RegistrationResponse, _impl_.pulse_endpoint_)}},
       // repeated .proto.orbit.v1.Member members = 1;
       {::_pbi::TcParser::FastMtR1,
        {10, 0, 0,
@@ -505,6 +508,8 @@ constexpr RegistrationResponse::ParseTableT_ RegistrationResponse::InternalGener
       {PROTOBUF_FIELD_OFFSET(RegistrationResponse, _impl_.admission_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // bytes signature = 3;
       {PROTOBUF_FIELD_OFFSET(RegistrationResponse, _impl_.signature_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
+      // string pulse_endpoint = 4;
+      {PROTOBUF_FIELD_OFFSET(RegistrationResponse, _impl_.pulse_endpoint_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
     }},
     {{
         #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -514,6 +519,9 @@ constexpr RegistrationResponse::ParseTableT_ RegistrationResponse::InternalGener
         #endif
     }},
     {{
+      "\43\0\0\0\16\0\0\0"
+      "proto.orbit.v1.RegistrationResponse"
+      "pulse_endpoint"
     }},
   };
 }
@@ -531,6 +539,9 @@ inline constexpr RegistrationResponse::Impl_::Impl_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
         signature_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()),
+        pulse_endpoint_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()) {}
 
@@ -657,13 +668,15 @@ const ::uint32_t
         5,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationResponse, _impl_._has_bits_),
-        6, // hasbit index offset
+        7, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationResponse, _impl_.members_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationResponse, _impl_.admission_),
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationResponse, _impl_.signature_),
+        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationResponse, _impl_.pulse_endpoint_),
         0,
         1,
         2,
+        3,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Member, _impl_._has_bits_),
         10, // hasbit index offset
@@ -687,7 +700,7 @@ static const ::_pbi::MigrationSchema
     schemas[] ABSL_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
         {0, sizeof(::proto::orbit::v1::RegistrationRequest)},
         {19, sizeof(::proto::orbit::v1::RegistrationResponse)},
-        {28, sizeof(::proto::orbit::v1::Member)},
+        {30, sizeof(::proto::orbit::v1::Member)},
 };
 static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
     file_message_globals[] = {
@@ -704,26 +717,26 @@ const char descriptor_table_protodef_orbit_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     " \001(\r\022\020\n\010username\030\t \001(\t\022\020\n\010password\030\n \001(\t"
     "\022\022\n\nrequest_id\030\r \001(\014J\004\010\002\020\003J\004\010\005\020\006J\004\010\013\020\014J\004"
     "\010\014\020\rJ\004\010\004\020\005R\002idR\016expected_epochR\006ticketR\020"
-    "ticket_signatureR\npublic_key\"e\n\024Registra"
+    "ticket_signatureR\npublic_key\"}\n\024Registra"
     "tionResponse\022\'\n\007members\030\001 \003(\0132\026.proto.or"
     "bit.v1.Member\022\021\n\tadmission\030\002 \001(\014\022\021\n\tsign"
-    "ature\030\003 \001(\014\"\236\001\n\006Member\022\016\n\006galaxy\030\001 \001(\t\022\n"
-    "\n\002id\030\002 \001(\t\022\021\n\tprincipal\030\003 \001(\t\022\021\n\tadverti"
-    "se\030\004 \001(\t\022\r\n\005epoch\030\005 \001(\004\022\"\n\004role\030\007 \001(\0162\024."
-    "proto.orbit.v1.Role\022\r\n\005group\030\010 \001(\tJ\004\010\006\020\007"
-    "R\npublic_key*<\n\004Role\022\024\n\020ROLE_UNSPECIFIED"
-    "\020\000\022\r\n\tROLE_STAR\020\001\022\017\n\013ROLE_PLANET\020\0022b\n\tAd"
-    "mission\022U\n\010Register\022#.proto.orbit.v1.Reg"
-    "istrationRequest\032$.proto.orbit.v1.Regist"
-    "rationResponseBAZ\?github.com/eosforge/ve"
-    "rdandi/supervisor/internal/generated;wir"
-    "eb\006proto3"
+    "ature\030\003 \001(\014\022\026\n\016pulse_endpoint\030\004 \001(\t\"\236\001\n\006"
+    "Member\022\016\n\006galaxy\030\001 \001(\t\022\n\n\002id\030\002 \001(\t\022\021\n\tpr"
+    "incipal\030\003 \001(\t\022\021\n\tadvertise\030\004 \001(\t\022\r\n\005epoc"
+    "h\030\005 \001(\004\022\"\n\004role\030\007 \001(\0162\024.proto.orbit.v1.R"
+    "ole\022\r\n\005group\030\010 \001(\tJ\004\010\006\020\007R\npublic_key*<\n\004"
+    "Role\022\024\n\020ROLE_UNSPECIFIED\020\000\022\r\n\tROLE_STAR\020"
+    "\001\022\017\n\013ROLE_PLANET\020\0022b\n\tAdmission\022U\n\010Regis"
+    "ter\022#.proto.orbit.v1.RegistrationRequest"
+    "\032$.proto.orbit.v1.RegistrationResponseBA"
+    "Z\?github.com/eosforge/verdandi/superviso"
+    "r/internal/generated;wireb\006proto3"
 };
 static ::absl::once_flag descriptor_table_orbit_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_orbit_2eproto = {
     false,
     false,
-    809,
+    833,
     descriptor_table_protodef_orbit_2eproto,
     "orbit.proto",
     &descriptor_table_orbit_2eproto_once,
@@ -1215,7 +1228,8 @@ PROTOBUF_NDEBUG_INLINE RegistrationResponse::Impl_::Impl_(
         }
         ,
         admission_(arena, from.admission_),
-        signature_(arena, from.signature_) {}
+        signature_(arena, from.signature_),
+        pulse_endpoint_(arena, from.pulse_endpoint_) {}
 
 RegistrationResponse::RegistrationResponse(
     ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
@@ -1243,7 +1257,8 @@ PROTOBUF_NDEBUG_INLINE RegistrationResponse::Impl_::Impl_(
          }
         ,
         admission_(arena),
-        signature_(arena) {}
+        signature_(arena),
+        pulse_endpoint_(arena) {}
 
 inline void RegistrationResponse::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
@@ -1261,6 +1276,7 @@ inline void RegistrationResponse::SharedDtor(MessageLite& self) {
   ABSL_DCHECK(this_.GetArena() == nullptr);
   this_._impl_.admission_.Destroy();
   this_._impl_.signature_.Destroy();
+  this_._impl_.pulse_endpoint_.Destroy();
   this_._impl_.~Impl_();
 }
 
@@ -1297,7 +1313,7 @@ PROTOBUF_NOINLINE void RegistrationResponse::Clear() {
   ::uint32_t cached_has_bits [[maybe_unused]] = 0;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       _impl_.members_.Clear();
     }
@@ -1306,6 +1322,9 @@ PROTOBUF_NOINLINE void RegistrationResponse::Clear() {
     }
     if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       this_._impl_.signature_.ClearNonDefaultToEmpty();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      this_._impl_.pulse_endpoint_.ClearNonDefaultToEmpty();
     }
   }
   _impl_._has_bits_.Clear();
@@ -1359,6 +1378,16 @@ PROTOBUF_NOINLINE void RegistrationResponse::Clear() {
     }
   }
 
+  // string pulse_endpoint = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+    if (!this_._internal_pulse_endpoint().empty()) {
+      const ::std::string& _s = this_._internal_pulse_endpoint();
+      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.orbit.v1.RegistrationResponse.pulse_endpoint");
+      target = stream->WriteStringMaybeAliased(4, _s, target);
+    }
+  }
+
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -1382,7 +1411,7 @@ PROTOBUF_NOINLINE void RegistrationResponse::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
     // repeated .proto.orbit.v1.Member members = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       total_size += 1UL * this_._internal_members_size();
@@ -1404,6 +1433,13 @@ PROTOBUF_NOINLINE void RegistrationResponse::Clear() {
                                         this_._internal_signature());
       }
     }
+    // string pulse_endpoint = 4;
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (!this_._internal_pulse_endpoint().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+                                        this_._internal_pulse_endpoint());
+      }
+    }
   }
   return this_.MaybeComputeUnknownFieldsSize(total_size,
                                              &this_._impl_._cached_size_);
@@ -1423,7 +1459,7 @@ void RegistrationResponse::MergeImpl(::google::protobuf::MessageLite& to_msg,
   (void)cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       _this->_internal_mutable_members()->InternalMergeFromWithArena(
           ::google::protobuf::MessageLite::internal_visibility(), arena,
@@ -1444,6 +1480,15 @@ void RegistrationResponse::MergeImpl(::google::protobuf::MessageLite& to_msg,
       } else {
         if (_this->_impl_.signature_.IsDefault()) {
           _this->_internal_set_signature("");
+        }
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (!from._internal_pulse_endpoint().empty()) {
+        _this->_internal_set_pulse_endpoint(from._internal_pulse_endpoint());
+      } else {
+        if (_this->_impl_.pulse_endpoint_.IsDefault()) {
+          _this->_internal_set_pulse_endpoint("");
         }
       }
     }
@@ -1470,6 +1515,7 @@ void RegistrationResponse::InternalSwap(RegistrationResponse* PROTOBUF_RESTRICT 
   _impl_.members_.InternalSwap(&other->_impl_.members_);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.admission_, &other->_impl_.admission_, arena);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.signature_, &other->_impl_.signature_, arena);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.pulse_endpoint_, &other->_impl_.pulse_endpoint_, arena);
 }
 
 ::google::protobuf::Metadata RegistrationResponse::GetMetadata() const {

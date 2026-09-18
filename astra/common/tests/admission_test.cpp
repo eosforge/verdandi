@@ -26,6 +26,8 @@ enum class Scenario {
     request_limit,
     // 返回缺少有效身份字段的成员, 检查名单逐项校验.
     empty_member,
+    // 非空对时端点必须通过格式验证, 防止将无效地址交给后台采样线程.
+    invalid_pulse,
     // 阻塞登记直到截止, 检查单次 RPC 的超时收尾.
     registration_deadline,
     // 首次成功后返回另一实例, 检查刷新不能替换本地身份.
@@ -85,6 +87,8 @@ public:
             response->mutable_members(0)->set_group(std::string(2048, 'x'));
         } else if (scenario_ == Scenario::empty_member) {
             response->mutable_members(0)->Clear();
+        } else if (scenario_ == Scenario::invalid_pulse) {
+            response->set_pulse_endpoint("not-an-endpoint");
         }
         return grpc::Status::OK;
     }
@@ -181,7 +185,8 @@ int main() {
             auto first = fixture.result();
             CHECK(!first && first.error().code == Error::Code::transport);
             fixture.client->begin(0);
-            CHECK(fixture.result());
+            const auto joined = fixture.result();
+            CHECK(joined && joined->pulse_endpoint.empty());
             CHECK(fixture.authority.registrations == 2 && !fixture.authority.request_changed);
         }
         {
@@ -194,7 +199,7 @@ int main() {
             CHECK(!fixture.authority.request_changed);
         }
         for (auto scenario : {Scenario::excessive_members, Scenario::wrong_identity, Scenario::oversized_reply, Scenario::empty_member, Scenario::reply_limit,
-                              Scenario::request_limit}) {
+                              Scenario::request_limit, Scenario::invalid_pulse}) {
             Fixture fixture(*identity, scenario);
             fixture.client->begin(0);
             auto result = fixture.result();

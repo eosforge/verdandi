@@ -51,12 +51,12 @@ Result<void> validate_certificate(const std::string& ca, const std::string& cert
     bssl::UniquePtr<BIO> certificates(BIO_new_mem_buf(cert.data(), static_cast<int>(cert.size())));
     bssl::UniquePtr<BIO> private_bytes(BIO_new_mem_buf(key.data(), static_cast<int>(key.size())));
     bssl::UniquePtr<X509_STORE> store(X509_STORE_new()); // 创建 X509 信任存储区
-    
+
     // 如果内存分配或初始化失败
     if (!roots || !certificates || !private_bytes || !store) {
         return Error::internal("Cannot allocate certificate validation context");
     }
-    
+
     // 解析证书链：遍历 certificates 缓冲并依次加入 chain
     std::vector<bssl::UniquePtr<X509>> chain;
     while (auto* item = PEM_read_bio_X509(certificates.get(), nullptr, nullptr, nullptr)) {
@@ -64,7 +64,7 @@ Result<void> validate_certificate(const std::string& ca, const std::string& cert
     }
     // 解析私钥
     bssl::UniquePtr<EVP_PKEY> private_key(PEM_read_bio_PrivateKey(private_bytes.get(), nullptr, nullptr, nullptr));
-    
+
     std::size_t root_count = 0;
     // 将解析出的 CA 根证书加入到可信 store 中
     while (auto* item = PEM_read_bio_X509(roots.get(), nullptr, nullptr, nullptr)) {
@@ -74,18 +74,18 @@ Result<void> validate_certificate(const std::string& ca, const std::string& cert
         }
         ++root_count;
     }
-    
+
     // 校验：必须至少有一个证书，至少一个根，私钥必须成功解析，且首个证书（叶子证书）和私钥必须匹配。
     if (chain.empty() || root_count == 0 || !private_key || X509_check_private_key(chain[0].get(), private_key.get()) != 1) {
         return Error::identity("Invalid certificate or matching private key");
     }
-    
+
     // stack 通过 up_ref 保留自己的证书引用; 验证 context 在其后声明, 保证析构顺序正确.
     bssl::UniquePtr<STACK_OF(X509)> intermediates(sk_X509_new_null());
     if (!intermediates) {
         return Error::internal("Cannot allocate certificate chain");
     }
-    
+
     // 组装中间证书链 (忽略 chain[0] 因为它是叶子证书)
     for (std::size_t i = 1; i < chain.size(); ++i) {
         X509_up_ref(chain[i].get()); // 增加引用计数
@@ -94,14 +94,13 @@ Result<void> validate_certificate(const std::string& ca, const std::string& cert
             return Error::internal("Cannot retain certificate chain");
         }
     }
-    
+
     // 建立证书验证上下文
     bssl::UniquePtr<X509_STORE_CTX> context(X509_STORE_CTX_new());
-    if (!context || 
-        X509_STORE_CTX_init(context.get(), store.get(), chain[0].get(), intermediates.get()) != 1 || // 挂载待验证叶子、store 和中间链
-        X509_STORE_CTX_set_purpose(context.get(), X509_PURPOSE_SSL_SERVER) != 1 || // 限制用途：必须能作为 SSL Server
-        X509_VERIFY_PARAM_set1_ip_asc(X509_STORE_CTX_get0_param(context.get()), endpoint.host.c_str()) != 1 || // 配置期望的 IP，用于校验 SAN
-        X509_verify_cert(context.get()) != 1) { // 执行校验逻辑
+    if (!context || X509_STORE_CTX_init(context.get(), store.get(), chain[0].get(), intermediates.get()) != 1 || // 挂载待验证叶子、store 和中间链
+        X509_STORE_CTX_set_purpose(context.get(), X509_PURPOSE_SSL_SERVER) != 1 ||                               // 限制用途：必须能作为 SSL Server
+        X509_VERIFY_PARAM_set1_ip_asc(X509_STORE_CTX_get0_param(context.get()), endpoint.host.c_str()) != 1 ||   // 配置期望的 IP，用于校验 SAN
+        X509_verify_cert(context.get()) != 1) {                                                                  // 执行校验逻辑
         return Error::identity("Local certificate does not authorize the advertised endpoint");
     }
     // 清理借用关系后才允许临时链销毁.
@@ -116,18 +115,17 @@ Result<Member> decode_member(const proto::orbit::v1::Member& value) {
     const auto& id = value.id();
     auto principal = Principal::parse(value.principal());
     auto address = Endpoint::parse(value.advertise());
-    
+
     // 各种边界与合法性检查
     if (!Member::valid_id(id) || !principal || !address || address->text() != value.advertise() ||
         (value.role() != proto::orbit::v1::ROLE_STAR && value.role() != proto::orbit::v1::ROLE_PLANET)) {
         return Error::identity("Invalid encoded member");
     }
-    
+
     // 初始化 Member 数据结构
-    Member result{
-        value.galaxy(), id, *principal, *address, MemberEpoch{value.epoch()}, value.role() == proto::orbit::v1::ROLE_STAR ? Role::star : Role::planet,
-        value.group()};
-    
+    Member result{value.galaxy(), id, *principal, *address, MemberEpoch{value.epoch()}, value.role() == proto::orbit::v1::ROLE_STAR ? Role::star : Role::planet,
+                  value.group()};
+
     // 再次调用验证函数校验结构整体的合理性
     if (auto valid = result.validate(); !valid) {
         return std::unexpected(valid.error());
@@ -138,22 +136,15 @@ Result<Member> decode_member(const proto::orbit::v1::Member& value) {
 // Identity::load 方法实现
 // 详细说明: 读取磁盘特定目录下的几个固定文件，进行验证，并封装返回。
 Result<std::shared_ptr<Identity>> Identity::load(const std::filesystem::path& directory, const Endpoint& advertise) {
-    // 先读取固定文件集并验证本地 TLS 身份, 任一材料无效都不发布半初始化的 Identity.
-    auto ca = read_identity(directory / "ca.pem");
-    auto cert = read_identity(directory / "cert.pem");
-    auto key = read_identity(directory / "key.pem");
-    auto authority = read_identity(directory / "admission.pub");
+    auto loaded = load_server(directory, advertise);
+    if (!loaded) {
+        return std::unexpected(loaded.error());
+    }
+    auto result = *loaded;
     auto login = read_identity(directory / "login.json");
-    
-    // 文件是否存在、是否正确读取完毕，并且准入公钥长度是否满足要求的 32 字节。
-    if (!ca || !cert || !key || !authority || !login || authority->size() != 32) {
-        return Error::identity("Missing or invalid identity materials");
+    if (!login) {
+        return std::unexpected(login.error());
     }
-    // 执行严格的 OpenSSL 证书链验证
-    if (auto valid = validate_certificate(*ca, *cert, *key, advertise); !valid) {
-        return std::unexpected(valid.error());
-    }
-    
     // 登录 JSON 只接受两个唯一字符串字段, 不把未知内容, 密码或解析输入带入错误文本.
     // 使用 yyjson 库安全且快速地解析 JSON 内容。
     std::unique_ptr<yyjson_doc, decltype(&yyjson_doc_free)> document(yyjson_read(login->data(), login->size(), 0), yyjson_doc_free);
@@ -161,8 +152,7 @@ Result<std::shared_ptr<Identity>> Identity::load(const std::filesystem::path& di
     if (!yyjson_is_obj(object) || yyjson_obj_size(object) != 2) {
         return Error::identity("login.json requires username and password");
     }
-    
-    auto result = std::make_shared<Identity>();
+
     bool seen_user = false, seen_password = false;
     yyjson_obj_iter iterator = yyjson_obj_iter_with(object);
     while (auto* field = yyjson_obj_iter_next(&iterator)) {
@@ -176,7 +166,7 @@ Result<std::shared_ptr<Identity>> Identity::load(const std::filesystem::path& di
         if (name == "username" && !seen_user) {
             result->username_.assign(yyjson_get_str(value), yyjson_get_len(value));
             seen_user = true;
-        } 
+        }
         // 解析和匹配 password 字段
         else if (name == "password" && !seen_password) {
             result->password_.assign(yyjson_get_str(value), yyjson_get_len(value));
@@ -185,14 +175,34 @@ Result<std::shared_ptr<Identity>> Identity::load(const std::filesystem::path& di
             return Error::identity("Unknown or duplicate login field");
         }
     }
-    
+
     // 对读取到的密码和账号名进行有效性以及长度过滤
     if (!Member::valid_name(result->username_) || result->password_.empty() || result->password_.size() > 1024) {
         return Error::identity("Invalid login field bounds");
     }
+    return result;
+}
+
+Result<std::shared_ptr<Identity>> Identity::load_server(const std::filesystem::path& directory, const Endpoint& advertise) {
+    // 先读取固定文件集并验证本地 TLS 身份, 任一材料无效都不发布半初始化的 Identity.
+    auto ca = read_identity(directory / "ca.pem");
+    auto cert = read_identity(directory / "cert.pem");
+    auto key = read_identity(directory / "key.pem");
+    auto authority = read_identity(directory / "admission.pub");
+
+    // 文件是否存在、是否正确读取完毕，并且准入公钥长度是否满足要求的 32 字节。
+    if (!ca || !cert || !key || !authority || authority->size() != 32) {
+        return Error::identity("Missing or invalid identity materials");
+    }
+    // 执行严格的 OpenSSL 证书链验证
+    if (auto valid = validate_certificate(*ca, *cert, *key, advertise); !valid) {
+        return std::unexpected(valid.error());
+    }
+
+    auto result = std::make_shared<Identity>();
     // 把读取到的准入公钥 copy 到固定数组里
     std::copy(authority->begin(), authority->end(), result->authority_.begin());
-    
+
     // 配置 gRPC 内置的 TLS 证书 Provider
     result->provider_ = std::make_shared<grpc::experimental::InMemoryCertificateProvider>();
     std::vector<grpc::experimental::IdentityKeyOrSignerCertPair> pair{{*key, *cert}};
@@ -200,7 +210,7 @@ Result<std::shared_ptr<Identity>> Identity::load(const std::filesystem::path& di
         !result->provider_->ValidateCredentials().ok()) {
         return Error::identity("Cannot prepare TLS certificate provider");
     }
-    
+
     return result;
 }
 
@@ -226,23 +236,23 @@ Result<Member> Identity::verify(std::span<const std::uint8_t> value, std::span<c
     if (value.size() > 1024 || signature.size() != 64) {
         return Error::identity("Invalid admission credential bounds");
     }
-    
+
     // 签名输入包含协议域及末尾 NUL 再拼接原始 value, 与签发方保持字节级一致.
     std::string input(admission_signature_domain);
     input += '\0';
     input.append(reinterpret_cast<const char*>(value.data()), value.size());
-    
+
     // 调用 OpenSSL 提供的 ED25519_verify 函数，参数为(消息、消息长度、待验签名、验签公钥)。返回值 1 即为成功。
     if (ED25519_verify(reinterpret_cast<const std::uint8_t*>(input.data()), input.size(), signature.data(), authority_.data()) != 1) {
         return Error::identity("Invalid admission signature");
     }
-    
+
     // 验签通过后，尝试将 value 字节反序列化到 protobuf 消息里。
     proto::orbit::v1::Member member;
     if (!member.ParseFromArray(value.data(), static_cast<int>(value.size()))) {
         return Error::identity("Invalid signed member encoding");
     }
-    
+
     // 转交给 decode_member 执行数据边界与逻辑检查。
     return decode_member(member);
 }
@@ -252,10 +262,10 @@ Result<Member> Identity::verify(std::span<const std::uint8_t> value, std::span<c
 std::shared_ptr<grpc::ChannelCredentials> Identity::channel_credentials() const {
     grpc::experimental::TlsChannelCredentialsOptions options;
     options.set_root_certificate_provider(provider_); // 提供内存中的根 CA
-    options.set_verify_server_certs(true); // 开启服务端证书校验
-    options.set_check_call_host(true); // 校验目标的主机名
-    options.set_min_tls_version(TLS1_3); // 限定最小 TLS 版本 1.3
-    options.set_max_tls_version(TLS1_3); // 限定最大 TLS 版本 1.3
+    options.set_verify_server_certs(true);            // 开启服务端证书校验
+    options.set_check_call_host(true);                // 校验目标的主机名
+    options.set_min_tls_version(TLS1_3);              // 限定最小 TLS 版本 1.3
+    options.set_max_tls_version(TLS1_3);              // 限定最大 TLS 版本 1.3
     return grpc::experimental::TlsCredentials(options);
 }
 

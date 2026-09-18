@@ -7,17 +7,16 @@
 #include <algorithm>
 #include <utility>
 
+#include <grpc/support/time.h>
 #include <grpcpp/create_channel.h>
 #include <openssl/rand.h>
 
 namespace astra {
 namespace {
-// rpc_deadline: 计算相对当前的截止时间，gRPC 接受 system_clock 截止, 剩余预算始终从单调时钟计算, 不在每次 RPC 重置总期限.
-// 参数 deadline: 基于单调时钟 (steady_clock) 的绝对截止时间。
-// 返回值: 转换到 system_clock 的等效时间点。
+// 将本地剩余预算映射到 gRPC 单调时钟, 不经过可能被 NTP 调整的墙钟, 不重置总期限.
 auto rpc_deadline(Clock::time_point deadline) {
-    // std::max 防止时间倒流导致负的持续时间
-    return std::chrono::system_clock::now() + std::max(deadline - Clock::now(), Clock::duration::zero());
+    const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(deadline - Clock::now(), Clock::duration::zero())).count();
+    return gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN));
 }
 } // namespace
 
@@ -129,6 +128,15 @@ std::optional<Result<Joined>> Admission::poll() {
 // validate: 校验 Supervisor 发回的响应数据。
 // 参数 response: 从 gRPC 接收到的 RegistrationResponse 对象引用。
 Result<Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& response) {
+    // 对时端点来自同一受信 TLS 控制面, 单独校验格式后交给持有独立 TLS 通道的采样器.
+    std::string pulse_endpoint;
+    if (!response.pulse_endpoint().empty()) {
+        auto endpoint = Config::format_supervisor(response.pulse_endpoint());
+        if (!endpoint) {
+            return Error::identity("Invalid Pulse endpoint");
+        }
+        pulse_endpoint = std::move(*endpoint);
+    }
     const auto count = static_cast<std::size_t>(response.members_size());
     // 检查返回的节点成员数量是否超过硬限制，或者超过配置所允许的角色容量限制
     if (count > 4096 || (config_.role == Role::planet && count > 8) || (config_.role == Role::star && count > config_.max_members)) {
@@ -167,7 +175,7 @@ Result<Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& respo
         .admission_signature(std::move(*response.mutable_signature()));
 
     // 返回成功验证后的完整 Joined 对象
-    return Joined{std::move(*local), std::move(members), std::move(hello)};
+    return Joined{std::move(pulse_endpoint), std::move(*local), std::move(members), std::move(hello)};
 }
 
 // cancel: 发出取消信号。

@@ -93,6 +93,8 @@ public:
     // - role (Role): 枚举类型，决定固定的组件名（如 star 或是 planet）。
     // 详细说明: 当发现标准输出 (stdout) 是管道或 socket 时，尽力开启 O_NONBLOCK 非阻塞写标志，并保存原有的文件状态标志。
     explicit Logger(Role role);
+    // 服务进程入口使用固定组件名, 例如 pulsar; 不接受未经校验的远端文本.
+    explicit Logger(std::string_view component);
 
     // 析构函数: 恢复 stdout 的原始配置。
     // 详细说明: 若构造时成功读取并修改了 stdout 的标志，则在此处恢复。这不会直接关闭进程持有的标准输出描述符，仅仅是恢复标志。

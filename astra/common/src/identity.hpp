@@ -41,6 +41,10 @@ public:
     // 不输出文件正文, 不发起网络连接。
     static Result<std::shared_ptr<Identity>> load(const std::filesystem::path& directory, const Endpoint& advertise);
 
+    // Pulsar 服务端复用相同 TLS 和公钥校验, 不读取节点专用的 login.json.
+    // directory 必须包含 ca.pem, cert.pem, key.pem 和 admission.pub; advertise 用于核对 IP SAN.
+    static Result<std::shared_ptr<Identity>> load_server(const std::filesystem::path& directory, const Endpoint& advertise);
+
     // 功能: 计算并生成访问摘要 (Principal)。
     // 参数:
     // - cluster (std::string_view): 已验证的 Galaxy（星系）集群名称。

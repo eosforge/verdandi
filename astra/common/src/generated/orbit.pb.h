@@ -901,6 +901,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationResponse final : public
     kMembersFieldNumber = 1,
     kAdmissionFieldNumber = 2,
     kSignatureFieldNumber = 3,
+    kPulseEndpointFieldNumber = 4,
   };
   // repeated .proto.orbit.v1.Member members = 1;
   [[nodiscard]] int members_size() const;
@@ -952,12 +953,27 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationResponse final : public
   ::std::string* PROTOBUF_NONNULL _internal_mutable_signature();
 
   public:
+  // string pulse_endpoint = 4;
+  void clear_pulse_endpoint() ;
+  [[nodiscard]] const ::std::string& pulse_endpoint() const;
+  template <typename Arg_ = const ::std::string&, typename... Args_>
+  void set_pulse_endpoint(Arg_&& arg, Args_... args);
+  ::std::string* PROTOBUF_NONNULL mutable_pulse_endpoint();
+  [[nodiscard]] ::std::string* PROTOBUF_NULLABLE release_pulse_endpoint();
+  void set_allocated_pulse_endpoint(::std::string* PROTOBUF_NULLABLE value);
+
+  private:
+  const ::std::string& _internal_pulse_endpoint() const;
+  PROTOBUF_ALWAYS_INLINE void _internal_set_pulse_endpoint(const ::std::string& value);
+  ::std::string* PROTOBUF_NONNULL _internal_mutable_pulse_endpoint();
+
+  public:
   // @@protoc_insertion_point(class_scope:proto.orbit.v1.RegistrationResponse)
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<2, 3,
-                          1, 0,
+      ::google::protobuf::internal::TcParseTable<2, 4,
+                          1, 58,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -988,6 +1004,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RegistrationResponse final : public
     ::google::protobuf::RepeatedPtrField< ::proto::orbit::v1::Member > members_;
     ::google::protobuf::internal::ArenaStringPtr admission_;
     ::google::protobuf::internal::ArenaStringPtr signature_;
+    ::google::protobuf::internal::ArenaStringPtr pulse_endpoint_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -1627,6 +1644,70 @@ inline void RegistrationResponse::set_allocated_signature(::std::string* PROTOBU
     _impl_.signature_.Set("", GetArena());
   }
   // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.RegistrationResponse.signature)
+}
+
+// string pulse_endpoint = 4;
+inline void RegistrationResponse::clear_pulse_endpoint() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.pulse_endpoint_.ClearToEmpty();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+}
+inline const ::std::string& RegistrationResponse::pulse_endpoint() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:proto.orbit.v1.RegistrationResponse.pulse_endpoint)
+  return _internal_pulse_endpoint();
+}
+template <typename Arg_, typename... Args_>
+PROTOBUF_ALWAYS_INLINE void RegistrationResponse::set_pulse_endpoint(Arg_&& arg, Args_... args) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  _impl_.pulse_endpoint_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  // @@protoc_insertion_point(field_set:proto.orbit.v1.RegistrationResponse.pulse_endpoint)
+}
+inline ::std::string* PROTOBUF_NONNULL RegistrationResponse::mutable_pulse_endpoint()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  ::std::string* _s = _internal_mutable_pulse_endpoint();
+  // @@protoc_insertion_point(field_mutable:proto.orbit.v1.RegistrationResponse.pulse_endpoint)
+  return _s;
+}
+inline const ::std::string& RegistrationResponse::_internal_pulse_endpoint() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.pulse_endpoint_.Get();
+}
+inline void RegistrationResponse::_internal_set_pulse_endpoint(const ::std::string& value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.pulse_endpoint_.Set(value, GetArena());
+}
+inline ::std::string* PROTOBUF_NONNULL RegistrationResponse::_internal_mutable_pulse_endpoint() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _impl_.pulse_endpoint_.Mutable( GetArena());
+}
+inline ::std::string* PROTOBUF_NULLABLE RegistrationResponse::release_pulse_endpoint() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:proto.orbit.v1.RegistrationResponse.pulse_endpoint)
+  if (!CheckHasBit(_impl_._has_bits_[0], 0x00000008U)) {
+    return nullptr;
+  }
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+  auto* released = _impl_.pulse_endpoint_.Release();
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString()) {
+    _impl_.pulse_endpoint_.Set("", GetArena());
+  }
+  return released;
+}
+inline void RegistrationResponse::set_allocated_pulse_endpoint(::std::string* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+  }
+  _impl_.pulse_endpoint_.SetAllocated(value, GetArena());
+  if (::google::protobuf::internal::DebugHardenForceCopyDefaultString() && _impl_.pulse_endpoint_.IsDefault()) {
+    _impl_.pulse_endpoint_.Set("", GetArena());
+  }
+  // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.RegistrationResponse.pulse_endpoint)
 }
 
 // -------------------------------------------------------------------

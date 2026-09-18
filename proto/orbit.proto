@@ -39,6 +39,9 @@ message RegistrationResponse {
     // 本次登记的 Member 原始编码及其签名, 与完整名单放在同一个应答中.
     bytes admission = 2;
     bytes signature = 3;
+    // Pulsar 独立对时监听的 HOST:PORT. 空表示当前控制面未提供 Pulse, 不能假装对时已就绪.
+    // 客户端仍校验该端点的 TLS 证书, 此字段不改变节点之间的拓扑端点.
+    string pulse_endpoint = 4;
 }
 
 message Member {

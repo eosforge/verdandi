@@ -62,7 +62,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<io::Result<Vec<_>>>()?
         .into_iter()
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "proto"))
+        // Pulsar 是 C++ 服务私有协议, 与 proto.astra.v1 具有同名 Ping/Pong.
+        // 它由 astra/build.py 生成, 不混入 Go 的单一 wire 包或旧 MessageID 注册表.
+        .filter(|path| path.extension().is_some_and(|extension| extension == "proto") && path.file_name().is_none_or(|name| name != "pulsar.proto"))
         .collect();
     schemas.sort();
     if schemas.is_empty() {

@@ -47,6 +47,20 @@ void test_fields_and_oneof() {
     astra::mutate(snapshot).subscribe_prefix("catalog/");
     astra::mutate(chunk).snapshot_version(std::uint64_t{12}).chunk_data("data").is_last_chunk(true);
     CHECK(snapshot.subscribe_prefix() == "catalog/" && chunk.is_last_chunk() && chunk.snapshot_version() == 12);
+    proto::pulsar::v1::Ping pulse_ping;
+    proto::pulsar::v1::Pong pulse_pong;
+    astra::mutate(pulse_ping).t0(std::uint64_t{10});
+    astra::mutate(pulse_pong)
+        .t0(std::uint64_t{10})
+        .t1(std::uint64_t{20})
+        .t2(std::uint64_t{21})
+        .uncertainty_ns(std::uint64_t{2000})
+        .synchronized(true)
+        .precision_ns(std::uint64_t{1000});
+    proto::pulsar::v1::Pong decoded_pulse;
+    CHECK(decoded_pulse.ParseFromString(pulse_pong.SerializeAsString()));
+    CHECK(decoded_pulse.t0() == pulse_ping.t0() && decoded_pulse.precision_ns() == 1000 && decoded_pulse.uncertainty_ns() == 2000 &&
+          decoded_pulse.synchronized());
 }
 
 // 跨 Arena 复制后销毁源消息, 目标仍拥有独立内容; 代理不使用 set_allocated 夺取调用方指针.

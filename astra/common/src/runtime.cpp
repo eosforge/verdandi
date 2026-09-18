@@ -5,9 +5,12 @@
 #include "admission.hpp"
 #include "grpc_session.hpp"
 #include "process.hpp"
+#include "pulse_client.hpp"
+#include "store.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
+#include <grpc/support/time.h>
 #include <grpcpp/server_builder.h>
 #include <iostream>
 #include <iterator>
@@ -85,6 +88,8 @@ public:
         builder.SetMaxReceiveMessageSize(4096);
         builder.SetMaxSendMessageSize(4096);
         builder.AddChannelArgument("grpc.server_handshake_timeout_ms", static_cast<int>(config_.handshake_timeout.count()));
+        // 同一部署端点必须唯一, 不允许独立进程以 SO_REUSEPORT 分摊成不同身份.
+        builder.AddChannelArgument("grpc.so_reuseport", 0);
         builder.AddChannelArgument("grpc.max_connection_idle_ms", 60000);
         grpc::ResourceQuota quota;
         quota.Resize(32 * 1024 * 1024);
@@ -228,6 +233,14 @@ private:
                 }
                 // 重置重试计数器
                 registration_failures_ = 0;
+                // Star 对时线程只在准入成功后启动, 复用本进程凭证. 旧 Go 控制面没有 Pulse 字段时显式保持未就绪.
+                if (config_.role == Role::star && joined.pulse_endpoint != pulse_endpoint_) {
+                    pulse_.reset();
+                    pulse_endpoint_ = joined.pulse_endpoint;
+                    if (!pulse_endpoint_.empty()) {
+                        pulse_ = std::make_unique<PulseClient>(pulse_endpoint_, identity_, hello_, synchronized_clock_);
+                    }
+                }
             } else {
                 // 注册失败
                 const auto code = result->error().code;
@@ -290,10 +303,27 @@ private:
         if (fatal_) {
             return;
         }
-        dial(now);              // 进行必要的外拨尝试
+        dial(now); // 进行必要的外拨尝试
+        // 业务时间只读取一次. 未初始化时不猜测有限截止, holdover 时仍驱动既有租约.
+        const auto synchronized = synchronized_clock_.now();
+        if (config_.role == Role::star && synchronized) {
+            store_.tick(synchronized->time, now);
+        }
+        const bool ready = synchronized && synchronized->ready;
+        if (config_.role == Role::star && ready != reported_ready_) {
+            reported_ready_ = ready;
+            logger_.write(ready ? "clock_synchronized" : "clock_unavailable");
+        }
         // 按配置的时间间隔定期打印健康状态
         if (config_.status_interval.count() != 0 && now >= next_status_) {
             logger_.status(policy_->status(), id_);
+            if (config_.role == Role::star) {
+                logger_.write("clock_status", synchronized ? std::string("{\"ready\":") + (synchronized->ready ? "true" : "false") +
+                                                                 ",\"nanoseconds\":" + std::to_string(synchronized->time.time_since_epoch().count()) +
+                                                                 ",\"uncertainty_ns\":" + std::to_string(synchronized->uncertainty_ns) +
+                                                                 ",\"rtt_ns\":" + std::to_string(synchronized->rtt_ns) + "}"
+                                                           : "{\"ready\":false}");
+            }
             next_status_ = now + config_.status_interval;
         }
     }
@@ -302,6 +332,9 @@ private:
     // 截止耗尽仍无法排空会话时记录固定事件并 _Exit(1), 不强行析构仍被 gRPC 借用的对象.
     void shutdown() {
         const auto deadline = Clock::now() + config_.shutdown_timeout;
+        if (pulse_) {
+            pulse_->stop();
+        }
         {
             std::lock_guard lock(incoming_mutex_);
             accepting_ = false; // 标记关闭，不再接纳新的 RPC 会话
@@ -330,38 +363,48 @@ private:
             wake_->wait(observed);
         }
         // 平缓关闭 gRPC 服务端监听，在设定的截止时间内
-        server_->Shutdown(std::chrono::system_clock::now() + std::max(deadline - Clock::now(), Clock::duration::zero()));
+        const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(deadline - Clock::now(), Clock::duration::zero())).count();
+        server_->Shutdown(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)));
         server_->Wait();
         server_.reset();
         admission_.reset();
+        pulse_.reset();
         logger_.write("stopped");
     }
 
-    Config config_;                               // 全局配置实例。
-    std::shared_ptr<Identity> identity_;          // 节点证书和凭证管理者。
-    Id id_;                                       // 节点自身的 ID，首次向 Supervisor 注册后确定。
-    std::unique_ptr<Policy> policy_;              // 动态角色策略协调器。
-    Logger logger_;                               // 日志器实例，打印格式化日志输出。
+    Config config_;                                             // 全局配置实例。
+    std::shared_ptr<Identity> identity_;                        // 节点证书和凭证管理者。
+    Id id_;                                                     // 节点自身的 ID，首次向 Supervisor 注册后确定。
+    std::unique_ptr<Policy> policy_;                            // 动态角色策略协调器。
+    Logger logger_;                                             // 日志器实例，打印格式化日志输出。
     std::shared_ptr<Wakeup> wake_ = std::make_shared<Wakeup>(); // 同步机制，当有异步网络事件时触发。
-    
+
     // handler 只写 incoming_/inbound_, collect 之后的 sessions_ 只归控制循环. hello_ 安装后不再修改.
-    std::mutex incoming_mutex_;                   // 互斥锁，用于跨线程保护 incoming_ 和 accepting_。
-    bool accepting_{};                            // 服务端是否还愿意接收新的入站连接，初始值为 false。
-    std::size_t inbound_{};                       // 当前处理中以及被接纳的入站连接总数计数器。
-    std::vector<std::shared_ptr<RpcSession>> incoming_; // 缓冲层，由 gRPC 工作线程推入新连接。
-    std::vector<std::shared_ptr<RpcSession>> sessions_; // 主工作层，仅由控制循环进行管理和状态推进。
+    std::mutex incoming_mutex_;                            // 互斥锁，用于跨线程保护 incoming_ 和 accepting_。
+    bool accepting_{};                                     // 服务端是否还愿意接收新的入站连接，初始值为 false。
+    std::size_t inbound_{};                                // 当前处理中以及被接纳的入站连接总数计数器。
+    std::vector<std::shared_ptr<RpcSession>> incoming_;    // 缓冲层，由 gRPC 工作线程推入新连接。
+    std::vector<std::shared_ptr<RpcSession>> sessions_;    // 主工作层，仅由控制循环进行管理和状态推进。
     std::shared_ptr<const proto::astra::v1::Hello> hello_; // 握手用的 Hello 封包数据缓存。
-    std::atomic_uint64_t next_generation_{1};     // 原子变量，用于生成全进程唯一且递增的会话识别世代号。
-    std::unique_ptr<Admission> admission_;        // Supervisor 交互管理器实例指针。
-    
+    std::atomic_uint64_t next_generation_{1};              // 原子变量，用于生成全进程唯一且递增的会话识别世代号。
+    std::unique_ptr<Admission> admission_;                 // Supervisor 交互管理器实例指针。
+    // 先声明输出再声明线程所有者, 关闭时先 join 再销毁输出.
+    EpochClock synchronized_clock_;
+    // 业务层后续复用此存储, 当前由公共绝对时间推进, Store 不拥有第二层对时映射.
+    Store store_;
+    std::unique_ptr<PulseClient> pulse_;
+    // 当前采样端点和已经报告的质量状态, 只由 Runtime 控制线程访问.
+    std::string pulse_endpoint_;
+    bool reported_ready_{};
+
     // shutdown 完成所有 OnDone 后才释放 server 和 Admission, 不依赖成员析构顺序来取消 RPC.
-    std::unique_ptr<grpc::Server> server_;        // gRPC 服务监听器句柄。
-    bool fatal_{};                                // 指示是否遇到了导致程序崩溃退出级别的严重错误。
-    std::uint32_t candidate_round_{};             // 当前节点重新竞选和刷新角色的逻辑轮次。
-    std::uint32_t registration_failures_{};       // 与 Supervisor 通讯时连续发生错误的次数记录，用于计算退避。
-    Clock::time_point next_registration_{};       // 下一次能够请求 Supervisor 进行验证的时钟点。
-    Clock::time_point next_dial_{};               // 流量控制：允许发起下一次外呼请求的时间点。
-    Clock::time_point next_status_{};             // 下一次定期打印节点状态的时钟点。
+    std::unique_ptr<grpc::Server> server_;  // gRPC 服务监听器句柄。
+    bool fatal_{};                          // 指示是否遇到了导致程序崩溃退出级别的严重错误。
+    std::uint32_t candidate_round_{};       // 当前节点重新竞选和刷新角色的逻辑轮次。
+    std::uint32_t registration_failures_{}; // 与 Supervisor 通讯时连续发生错误的次数记录，用于计算退避。
+    Clock::time_point next_registration_{}; // 下一次能够请求 Supervisor 进行验证的时钟点。
+    Clock::time_point next_dial_{};         // 流量控制：允许发起下一次外呼请求的时间点。
+    Clock::time_point next_status_{};       // 下一次定期打印节点状态的时钟点。
 };
 } // namespace
 

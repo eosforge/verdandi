@@ -3,20 +3,64 @@
 #include "check.hpp"
 #include "store.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <new>
+#include <semaphore>
+#include <thread>
+#include <utility>
 
 namespace {
 // 当前线程在下一次失败前还允许的分配次数; -1 表示关闭注入, 不干扰其他线程.
 thread_local std::ptrdiff_t remaining = -1;
 // 记录是否真实触发过注入, 区分受控失败与被测代码自身的其他异常.
 thread_local bool injected = false;
+// 仅测试线程下一次分配暂停, 用于证明快照构建期间写入和 TTL 无需等待状态锁.
+struct AllocationPause {
+    std::binary_semaphore entered{0}, released{0};
+    bool resumed{};
+    void resume() noexcept {
+        if (!std::exchange(resumed, true)) {
+            released.release();
+        }
+    }
+};
+thread_local AllocationPause* pause_next{};
+
+struct AllocationWatch;
+// 只追踪当前测试线程的分配, 不将其他线程或服务的内存误计入桶回收检查.
+thread_local AllocationWatch* allocation_watch{};
+
+// 记录作用域内最大的成功分配及其释放, 避免以进程 RSS 或分配器是否归还 OS 来判断容器行为.
+struct AllocationWatch {
+    // 安装观测器; 此夹具只允许单层作用域, 不在作用域外保留地址或访问对象内容.
+    AllocationWatch() {
+        allocation_watch = this;
+    }
+    // 测试退出先移除钩子, 随后 Store 析构不再访问本对象.
+    ~AllocationWatch() {
+        allocation_watch = nullptr;
+    }
+    // 观测器不可复制, 避免多个对象争夺同一线程钩子.
+    AllocationWatch(const AllocationWatch&) = delete;
+    AllocationWatch& operator=(const AllocationWatch&) = delete;
+    // 只在预置数据阶段选择最大分配; 关闭后继续观察这个地址的释放.
+    bool collecting{true};
+    // largest 仅作分配身份比较, 不读取或释放其内容; released 表示已收到对应 delete.
+    void* largest{};
+    std::size_t size{};
+    bool released{};
+};
 
 // 分配 size 字节并返回普通对齐的非空地址, 由 release 回收; 失败抛 bad_alloc.
 // 普通模式保留 new_handler 行为. 注入是一次性的, 之后允许异常处理和诊断分配内存.
 [[gnu::noinline]] void* allocate(std::size_t size) {
+    if (auto* pause = std::exchange(pause_next, nullptr)) {
+        pause->entered.release();
+        pause->released.acquire();
+    }
     if (remaining == 0) {
         remaining = -1;
         injected = true;
@@ -28,6 +72,11 @@ thread_local bool injected = false;
     for (;;) {
         // value 是 malloc 的结果; 零长度 new 仍返回可释放的非空地址.
         if (void* value = std::malloc(size ? size : 1)) {
+            if (allocation_watch && allocation_watch->collecting && size > allocation_watch->size) {
+                allocation_watch->largest = value;
+                allocation_watch->size = size;
+                allocation_watch->released = false;
+            }
             return value;
         }
         // handler 是调用方设置的标准分配失败处理器, 只在真实 malloc 失败时调用.
@@ -42,6 +91,10 @@ thread_local bool injected = false;
 // 回收 allocate 返回的 value, 空指针也合法; 无返回值且不抛异常.
 // 独立调用避免优化器跨 new/free 包装误判测试的分配类型.
 [[gnu::noinline]] void release(void* value) noexcept {
+    if (value && allocation_watch && value == allocation_watch->largest) {
+        allocation_watch->released = true;
+        allocation_watch->largest = nullptr;
+    }
     std::free(value);
 }
 
@@ -117,9 +170,9 @@ std::size_t sweep(Operation operation, unsigned prefix) {
     // point 表示本次测试要失败的第几次分配, 上限只是测试防死循环预算.
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
         // store 只保留两批历史, 成功提交同时覆盖历史淘汰路径.
-        Store store(2, std::chrono::minutes(10), std::chrono::milliseconds(1), Clock::time_point{});
-        store.put(first, {1}, Clock::time_point{});
-        store.put(second, {1}, Clock::time_point{});
+        Store store(2, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochTime{});
+        store.put(first, {1}, EpochTime{});
+        store.put(second, {1}, EpochTime{});
         // i 仅推进预置提交位置, 不进入注入范围.
         for (unsigned i = 0; i < prefix; ++i) {
             store.put("seed", {1});
@@ -143,7 +196,7 @@ std::size_t sweep(Operation operation, unsigned prefix) {
                     store.remove(first);
                     break;
                 case Operation::expire:
-                    store.tick(Clock::time_point{} + std::chrono::milliseconds(1));
+                    store.tick(EpochTime{} + std::chrono::milliseconds(1));
                     break;
                 }
             } catch (const std::bad_alloc&) {
@@ -173,13 +226,14 @@ std::size_t sweep(Operation operation, unsigned prefix) {
         // key/value 借用旧快照, 所有原值必须在失败后的新快照中保持一致.
         for (const auto& [key, value] : before->data) {
             CHECK(after->data.contains(key));
-            CHECK(*after->data.at(key) == *value);
+            CHECK(*after->data.at(key).value == *value.value);
+            CHECK(after->data.at(key).deadline == value.deadline);
         }
         // delta 只能包含主动写入的 probe 标记, 不得出现失败操作的任何记录.
         const auto delta = store.extract(before->version);
         CHECK(!delta.stale && delta.deltas.size() == 1 && delta.deltas.front().key == "probe");
         // 失败不能取消原有租约. 下一次补拍必须同时删除原来的两个有限条目, probe 保持存活.
-        store.tick(Clock::time_point{} + std::chrono::milliseconds(3));
+        store.tick(EpochTime{} + std::chrono::milliseconds(3));
         CHECK(store.version() == before->version + 2);
         CHECK(store.snapshot()->data.size() == before->data.size() - 1 && store.snapshot()->data.contains("probe"));
         CHECK(!store.snapshot()->data.contains(first) && !store.snapshot()->data.contains(second));
@@ -209,7 +263,7 @@ std::size_t sweep_read(bool snapshot) {
             FailureScope failure(point);
             try {
                 if (snapshot) {
-                    CHECK(store.snapshot()->data.at(key)->front() == 2);
+                    CHECK(store.snapshot()->data.at(key).value->front() == 2);
                 } else {
                     CHECK(store.extract(0).deltas.size() == 2);
                 }
@@ -218,8 +272,8 @@ std::size_t sweep_read(bool snapshot) {
             }
         }
         CHECK(store.version() == 2);
-        CHECK(previous->version == 1 && previous->data.at(key)->front() == 1);
-        CHECK(store.snapshot()->data.at(key)->front() == 2);
+        CHECK(previous->version == 1 && previous->data.at(key).value->front() == 1);
+        CHECK(store.snapshot()->data.at(key).value->front() == 2);
         CHECK(store.extract(0).deltas.size() == 2);
         if (!failed) {
             CHECK(!injected && failures != 0);
@@ -235,15 +289,15 @@ std::size_t sweep_read(bool snapshot) {
 std::size_t sweep_large_expiry() {
     std::size_t failures = 0;
     for (std::ptrdiff_t point = 0; point < 512; ++point) {
-        Store store(200, std::chrono::minutes(10), std::chrono::milliseconds(1), Clock::time_point{});
+        Store store(200, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochTime{});
         for (unsigned index = 0; index < 96; ++index) {
-            store.put(std::string(80, 'k') + std::to_string(index), {1}, Clock::time_point{});
+            store.put(std::string(80, 'k') + std::to_string(index), {1}, EpochTime{});
         }
         bool failed = false;
         {
             FailureScope failure(point);
             try {
-                store.tick(Clock::time_point{} + std::chrono::milliseconds(1));
+                store.tick(EpochTime{} + std::chrono::milliseconds(1));
             } catch (const std::bad_alloc&) {
                 failed = true;
             }
@@ -258,9 +312,9 @@ std::size_t sweep_large_expiry() {
         const auto renewed = std::string(80, 'k') + "0";
         store.put(renewed, {2});
         store.remove(std::string(80, 'k') + "1");
-        store.tick(Clock::time_point{} + std::chrono::milliseconds(4));
+        store.tick(EpochTime{} + std::chrono::milliseconds(4));
         CHECK(store.version() == 99 && store.snapshot()->data.size() == 1);
-        CHECK(store.snapshot()->data.at(renewed)->front() == 2);
+        CHECK(store.snapshot()->data.at(renewed).value->front() == 2);
         const auto changes = store.extract(98);
         CHECK(changes.deltas.size() == 94);
     }
@@ -270,7 +324,7 @@ std::size_t sweep_large_expiry() {
 // 跨多个到期拍的一次补齐仍只提交一个批次, 任意分配失败后都能完整恢复.
 std::size_t sweep_catchup_expiry() {
     std::size_t failures = 0;
-    const auto origin = Clock::time_point{};
+    const auto origin = EpochTime{};
     const auto target = origin + std::chrono::milliseconds(3000);
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
         Store store(20, std::chrono::minutes(10), std::chrono::milliseconds(1), origin);
@@ -317,15 +371,233 @@ std::size_t sweep_catchup_expiry() {
 
 // 没有到期条目的补拍不分配数组, 即使禁止下一次 new 也能完成.
 void test_empty_tick_allocation() {
-    Store store(1000, std::chrono::minutes(10), std::chrono::milliseconds(1), Clock::time_point{});
+    Store store(1000, std::chrono::minutes(10), std::chrono::milliseconds(1), EpochTime{});
     store.put("permanent", {1});
     {
         FailureScope failure(0);
-        store.tick(Clock::time_point{} + std::chrono::seconds(3));
-        store.tick(Clock::time_point{} + std::chrono::seconds(3));
+        store.tick(EpochTime{} + std::chrono::seconds(3));
+        store.tick(EpochTime{} + std::chrono::seconds(3));
         CHECK(!injected);
     }
     CHECK(store.version() == 1);
+}
+
+// 保留读者时逐点破坏写时复制分配, 部分私有路径不能污染当前或旧视图.
+void test_snapshot_page_failures() {
+    for (const bool erase : {false, true}) {
+        bool completed = false;
+        std::size_t failures = 0;
+        for (std::ptrdiff_t point = 0; point < 32; ++point) {
+            SnapshotIndex index;
+            const auto original = std::make_shared<const Store::Buffer>(Store::Buffer{1});
+            const auto changed = std::make_shared<const Store::Buffer>(Store::Buffer{2});
+            for (std::uint64_t slot = 0; slot < 65; ++slot) {
+                index.prepare(slot);
+                index.set(slot, std::make_shared<const std::string>(std::to_string(slot)), {original, {}});
+            }
+            const auto previous = index.capture();
+            bool failed = false;
+            {
+                FailureScope failure(point);
+                try {
+                    index.prepare(64);
+                    if (erase) {
+                        index.erase(64);
+                    } else {
+                        index.set(64, {}, {changed, {}});
+                    }
+                } catch (const std::bad_alloc&) {
+                    failed = true;
+                }
+            }
+            previous.each([&](const std::string&, const SnapshotIndex::Record& record) { CHECK(record.value == original); });
+            CHECK(previous.size() == 65);
+            const auto current = index.capture();
+            CHECK(current.size() == (failed || !erase ? 65U : 64U));
+            current.each(
+                [&](const std::string& key, const SnapshotIndex::Record& record) { CHECK(record.value == (!failed && key == "64" ? changed : original)); });
+            if (!failed) {
+                CHECK(!injected && failures != 0);
+                completed = true;
+                break;
+            }
+            CHECK(injected);
+            ++failures;
+        }
+        CHECK(completed);
+    }
+}
+
+// 将构建者停在首次分配处, 在另一线程完成覆盖、删除和 TTL. fail 追加一次快照读取中的分配失败.
+// 旧实现持锁 dump 时会明确失败而非死锁挂住; 两种退出路径都不能污染状态或挂住下次快照.
+void test_snapshot_writer_progress(bool fail) {
+    using namespace std::chrono_literals;
+    Store store(100, 10min, 1ms, EpochTime{});
+    store.put("keep", {1});
+    store.put("remove", {2});
+    store.put("expire", {3}, EpochTime{} + 1ms);
+    AllocationPause pause;
+    std::shared_ptr<const Store::Snapshot> captured;
+    std::exception_ptr reader_error, writer_error;
+    std::jthread reader([&] {
+        try {
+            pause_next = &pause;
+            FailureScope failure(fail ? 2 : -1);
+            captured = store.snapshot();
+        } catch (...) {
+            reader_error = std::current_exception();
+        }
+        pause_next = nullptr;
+    });
+    // 任何断言/线程创建失败都先解除暂停, 再由 jthread 析构等待, 不留下测试自造的永久阻塞.
+    struct Unblock {
+        AllocationPause& pause;
+        ~Unblock() {
+            pause.resume();
+        }
+    } unblock{pause};
+    CHECK(pause.entered.try_acquire_for(5s));
+    std::binary_semaphore written{0};
+    std::jthread writer([&] {
+        try {
+            store.put("keep", {4});
+            store.remove("remove");
+            store.tick(EpochTime{} + 1ms);
+            store.put("added", {5});
+        } catch (...) {
+            writer_error = std::current_exception();
+        }
+        written.release();
+    });
+    const bool progressed = written.try_acquire_for(5s);
+    pause.resume();
+    writer.join();
+    reader.join();
+    if (writer_error) {
+        std::rethrow_exception(writer_error);
+    }
+    CHECK(progressed);
+    if (fail) {
+        CHECK(reader_error && !captured);
+        try {
+            std::rethrow_exception(reader_error);
+        } catch (const std::bad_alloc&) {
+            // 只接受预期的资源错误, 其他异常继续传播给测试入口.
+        }
+    } else {
+        if (reader_error) {
+            std::rethrow_exception(reader_error);
+        }
+        CHECK(captured && captured->version == 3 && captured->data.size() == 3);
+        CHECK(captured->data.at("keep").value->front() == 1 && captured->data.contains("remove") && captured->data.contains("expire"));
+    }
+    const auto current = store.snapshot();
+    CHECK(current != captured && current->version == 7 && current->data.size() == 2);
+    CHECK(current->data.at("keep").value->front() == 4 && current->data.at("added").value->front() == 5);
+    CHECK(store.snapshot() == current);
+}
+
+// 大表清空后应交还桶分配, 留有一个有效项时不得收缩. 小表不反复重建, 回收不改变历史/快照语义.
+void test_empty_bucket_reclamation() {
+    using namespace std::chrono_literals;
+    // count 区分小表与超过回收阈值的大表; leave_live 保留一个永不过期值用于排除非空表收缩.
+    for (const std::size_t count : {1024U, 8192U}) {
+        for (const bool leave_live : {false, true}) {
+            // 零历史模式下删除即回收墓碑, 使桶释放与历史保存策略分开验证.
+            Store store(0, 10min, 1ms, EpochTime{});
+            AllocationWatch watch;
+            for (std::size_t key = 0; key < count; ++key) {
+                store.put(std::to_string(key), {1}, leave_live && key == 0 ? std::optional<EpochTime>{} : std::optional{EpochTime{} + 1ms});
+            }
+            watch.collecting = false;
+            // 固定短 Key/单值/零历史使大表的最大分配为桶数组, 页、节点和单条记录远小于此尺寸.
+            const bool large = count == 8192;
+            CHECK(watch.largest && !watch.released && watch.size > 4096);
+            CHECK(!large || watch.size > 4096 * sizeof(void*));
+            store.tick(EpochTime{} + 1ms);
+            CHECK(watch.released == (large && !leave_live));
+            if (leave_live) {
+                CHECK(store.snapshot()->data.at("0").value->front() == 1);
+                store.remove("0");
+                CHECK(!watch.released);
+            }
+            // 空表的回收检查不再分配; 没有到期数据的维护不推进版本或使已有空快照失效.
+            const auto version = store.version();
+            const auto empty = store.snapshot();
+            {
+                FailureScope failure(0);
+                store.tick(EpochTime{} + 2ms);
+                CHECK(!injected);
+            }
+            CHECK(watch.released == large && store.version() == version && store.snapshot() == empty && empty->data.empty());
+            CHECK(store.extract(version).deltas.empty() && store.extract(version - 1).stale);
+            // 换表之后再次注册并到期, 验证查找、分页槽复用和时间轮依然连贯.
+            store.put("reborn", {2}, EpochTime{} + 3ms);
+            CHECK(store.snapshot()->data.at("reborn").value->front() == 2);
+            store.tick(EpochTime{} + 3ms);
+            CHECK(store.version() == version + 2 && store.snapshot()->data.empty() && empty->data.empty());
+        }
+    }
+
+    // 有效值为空不等于节点全空: 删除批次仍保留时, 不提前回收墓碑或改变续传下界.
+    const auto origin = EpochTime{};
+    Store retained(1, 10min, 1s, origin);
+    AllocationWatch watch;
+    for (std::size_t key = 0; key < 8192; ++key) {
+        retained.put(std::to_string(key), {1}, origin + 1s);
+    }
+    watch.collecting = false;
+    CHECK(watch.largest && !watch.released && watch.size > 4096 * sizeof(void*));
+    retained.tick(origin + 1s);
+    CHECK(retained.snapshot()->data.empty() && !watch.released);
+    const auto deletion = retained.extract(8192);
+    CHECK(!deletion.stale && deletion.deltas.size() == 8192 && deletion.version == 8193);
+    // 只推进约 660 个整秒拍, 历史超过保留期后才允许桶回收; 外部持有的删除结果继续有效.
+    {
+        FailureScope failure(0);
+        retained.tick(origin + 11min, Clock::now() + 11min);
+        CHECK(!injected);
+    }
+    CHECK(watch.released && retained.version() == 8193 && retained.extract(8192).stale && deletion.deltas.size() == 8192);
+}
+
+// 高槽删除后恢复低槽更新的叶页复制预算, 不暴露生产树高或依靠计时判断优化是否生效.
+void test_snapshot_root_contraction() {
+    const auto original = std::make_shared<const Store::Buffer>(Store::Buffer{1});
+    const auto changed = std::make_shared<const Store::Buffer>(Store::Buffer{2});
+    const auto low_key = std::make_shared<const std::string>("low");
+    const auto high_key = std::make_shared<const std::string>("high");
+    // 分别跨越叶页、二层根和最大树高; UINT64_MAX 保留为槽耗尽标志, 不作为有效分配结果.
+    for (const auto high : std::array<std::uint64_t, 4>{64, 1024, std::uint64_t{1} << 62, UINT64_MAX - 1}) {
+        SnapshotIndex index;
+        index.prepare(0);
+        index.set(0, low_key, {original, {}});
+        index.prepare(high);
+        index.set(high, high_key, {original, {}});
+        const auto before = index.capture();
+        index.prepare(high);
+        {
+            FailureScope failure(0);
+            index.erase(high);
+            CHECK(!injected);
+        }
+        const auto contracted = index.capture();
+        CHECK(before.size() == 2 && contracted.size() == 1 && index.next() == 1);
+        {
+            // 当前目标标准库的 make_shared 仅需一次叶页分配. 多余根链会耗尽此预算并使测试失败.
+            FailureScope failure(1);
+            index.prepare(0);
+            index.set(0, {}, {changed, {}});
+            CHECK(!injected);
+        }
+        before.each([&](const std::string& key, const SnapshotIndex::Record& record) { CHECK((key == "low" || key == "high") && record.value == original); });
+        contracted.each([&](const std::string& key, const SnapshotIndex::Record& record) { CHECK(key == "low" && record.value == original); });
+        index.capture().each([&](const std::string& key, const SnapshotIndex::Record& record) { CHECK(key == "low" && record.value == changed); });
+        // 收缩后仍允许再次扩展, 已捕获的低树视图不随新根变化.
+        index.prepare(high);
+        index.set(high, high_key, {changed, {}});
+        CHECK(index.capture().size() == 2 && contracted.size() == 1 && index.next() == 1);
+    }
 }
 
 // 返回非零表示不变量或注入覆盖失败, 不把未触发分配失败的空测试记作成功.
@@ -344,6 +616,11 @@ int main() {
         failures += sweep_large_expiry();
         failures += sweep_catchup_expiry();
         test_empty_tick_allocation();
+        test_snapshot_page_failures();
+        test_snapshot_writer_progress(false);
+        test_snapshot_writer_progress(true);
+        test_empty_bucket_reclamation();
+        test_snapshot_root_contraction();
         std::cout << "PASS store atomicity under " << failures << " write and " << read_failures << " read allocation failures\n";
         return 0;
     } catch (const std::exception& error) {

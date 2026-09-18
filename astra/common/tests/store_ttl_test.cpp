@@ -17,7 +17,7 @@ using namespace std::chrono_literals;
 
 namespace {
 // origin 是本测试的单调时钟起点, 所有时间均显式构造, 不读取墙钟或休眠.
-constexpr auto origin = Clock::time_point{};
+constexpr auto origin = EpochTime(1s);
 
 // 零与负间隔必须在进入调度前拒绝, 防止除零和永不前进的补拍循环.
 void test_interval() {
@@ -65,12 +65,12 @@ void test_renewal_and_catchup() {
     store.tick(origin + 3ms);
     CHECK(!store.snapshot()->data.contains("early"));
     store.tick(origin + 5ms);
-    CHECK(store.snapshot()->data.at("renew")->front() == 4);
-    CHECK(store.snapshot()->data.at("cancel")->front() == 6);
+    CHECK(store.snapshot()->data.at("renew").value->front() == 4);
+    CHECK(store.snapshot()->data.at("cancel").value->front() == 6);
     // delta 截止只属于本时钟域, 保留有限值和 max 哨兵以支持本地检查.
     const auto changes = store.extract(3);
-    CHECK(changes.deltas[0].expire == origin + 10ms);
-    CHECK(changes.deltas[2].expire == Clock::time_point::max());
+    CHECK(changes.deltas[0].deadline == origin + 10ms);
+    CHECK(!changes.deltas[2].deadline);
     store.put("overdue", {7}, origin + 1ms);
     store.put("later", {8}, origin + 40ms);
     const auto before = store.version();
@@ -79,7 +79,7 @@ void test_renewal_and_catchup() {
     const auto expired = store.extract(before);
     CHECK(expired.deltas.size() == 3);
     for (const auto& delta : expired.deltas) {
-        CHECK(delta.deleted && delta.version == before + 1 && delta.expire == Clock::time_point::max());
+        CHECK(delta.deleted && delta.version == before + 1 && !delta.deadline);
     }
     CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.contains("cancel"));
 }
@@ -93,7 +93,7 @@ void test_rehash_and_recreation() {
     store.remove("ttl/0");
     store.put("ttl/0", {2}, origin + 10ms);
     store.tick(origin + 5ms);
-    CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.at("ttl/0")->front() == 2);
+    CHECK(store.snapshot()->data.size() == 1 && store.snapshot()->data.at("ttl/0").value->front() == 2);
     store.tick(origin + 10ms);
     CHECK(store.snapshot()->data.empty());
     store.put("ttl/0", {3}, origin + 11ms);
@@ -103,25 +103,18 @@ void test_rehash_and_recreation() {
 
 // 跨有符号极值的距离不允许溢出; 大间隔把完整边界测试压缩为两拍.
 void test_extreme_clock() {
-    const auto interval = Clock::duration::max();
-    Store store(1000, 10min, interval, Clock::time_point::min());
-    store.put("last", {1}, Clock::time_point::max() - Clock::duration{1});
+    const auto interval = std::chrono::nanoseconds::max();
+    Store store(1000, 10min, interval, EpochTime{});
+    store.put("last", {1}, EpochTime::max());
     store.put("permanent", {2});
-    store.tick(Clock::time_point{});
+    store.tick(EpochTime::max() - 1ns);
     CHECK(store.version() == 2);
-    store.tick(Clock::time_point::max());
+    store.tick(EpochTime::max());
     CHECK(store.version() == 3 && store.snapshot()->data.size() == 1);
     CHECK(store.snapshot()->data.contains("permanent"));
-    // direct 在一次调用中跨越整个有符号时钟域, 仍仅补两拍, 避免遍历 UINT64_MAX 拍.
-    Store direct(1000, 10min, interval, Clock::time_point::min());
-    direct.put("last", {1}, Clock::time_point::max() - Clock::duration{1});
-    direct.put("permanent", {2});
-    direct.tick(Clock::time_point::max());
-    CHECK(direct.version() == 3 && direct.snapshot()->data.size() == 1);
-    CHECK(direct.snapshot()->data.contains("permanent"));
-    // 远超单轮上限的有限截止只可分段唤醒, 不应被裁剪成近期过期或转换为无限租约.
+    // 最大整数是合法有限截止, 不再充当无限期哨兵.
     Store distant(1000, 10min, 1ns, origin);
-    distant.put("distant", {1}, origin + Clock::duration{static_cast<Clock::duration::rep>(Store::Timer::limit + 1)});
+    distant.put("distant", {1}, origin + std::chrono::nanoseconds(static_cast<std::int64_t>(Store::Timer::limit + 1)));
     distant.tick(origin + 5ns);
     CHECK(distant.version() == 1 && distant.snapshot()->data.contains("distant"));
 }
@@ -155,7 +148,7 @@ void test_concurrent_ttl() {
     do {
         const auto snapshot = store.snapshot();
         for (const auto& [key, value] : snapshot->data) {
-            CHECK(value && value->size() == 1 && value->front() == (key == "live" ? 2 : 1));
+            CHECK(value.value && value.value->size() == 1 && value.value->front() == (key == "live" ? 2 : 1));
         }
     } while (!finished.load());
     writer.join();
@@ -232,7 +225,7 @@ void test_store_model() {
         const auto check_snapshot = [&](const auto& snapshot) {
             CHECK(snapshot->version == version && snapshot->data.size() == state.size());
             for (const auto& [key, item] : state) {
-                CHECK(snapshot->data.contains(key) && *snapshot->data.at(key) == item.first);
+                CHECK(snapshot->data.contains(key) && *snapshot->data.at(key).value == item.first);
             }
         };
         for (unsigned step = 0; step < 2000; ++step) {
@@ -241,7 +234,7 @@ void test_store_model() {
             case 0: {
                 const Store::Buffer value{static_cast<std::uint8_t>(random() % 256)};
                 const auto expiry = random() % 4 == 0 ? UINT64_MAX : observed + random() % 24;
-                const auto deadline = expiry == UINT64_MAX ? Clock::time_point::max() : at(expiry);
+                const std::optional<EpochTime> deadline = expiry == UINT64_MAX ? std::nullopt : std::optional{at(expiry)};
                 store.put(key, value, deadline);
                 state.insert_or_assign(key, std::pair{value, expiry});
                 log.emplace_back(key, std::make_shared<const Store::Buffer>(value), false, ++version, deadline);
@@ -250,7 +243,7 @@ void test_store_model() {
             case 1:
                 store.remove(key);
                 if (state.erase(key) != 0) {
-                    log.emplace_back(key, nullptr, true, ++version, Clock::time_point::max());
+                    log.emplace_back(key, nullptr, true, ++version);
                 }
                 break;
             case 2: {
@@ -265,7 +258,7 @@ void test_store_model() {
                                 ++version;
                                 changed = true;
                             }
-                            log.emplace_back(entry->first, nullptr, true, version, Clock::time_point::max());
+                            log.emplace_back(entry->first, nullptr, true, version);
                             entry = state.erase(entry);
                         } else {
                             ++entry;
@@ -303,7 +296,7 @@ void test_store_model() {
                 CHECK(delta.version >= previous && remaining.erase({delta.version, delta.key}) == 1);
                 previous = delta.version;
                 const auto expected = std::ranges::find_if(log, [&](const auto& item) { return item.version == delta.version && item.key == delta.key; });
-                CHECK(expected != log.end() && delta.deleted == expected->deleted && delta.expire == expected->expire);
+                CHECK(expected != log.end() && delta.deleted == expected->deleted && delta.deadline == expected->deadline);
                 CHECK(static_cast<bool>(delta.value) == static_cast<bool>(expected->value));
                 if (delta.value) {
                     CHECK(*delta.value == *expected->value);

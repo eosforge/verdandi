@@ -13,7 +13,6 @@
 
 namespace astra {
 
-
 // 稳定诊断词只由这个白名单生成, 不输出远端错误正文.
 // code 映射为静态存储的诊断词, 未识别枚举值回退 internal; 返回视图不依赖调用对象的生命周期.
 // 参数 code: 需要被转换为字符串表示的 Error::Code 错误码。
@@ -22,49 +21,67 @@ namespace astra {
 struct Error {
     // 错误代码的枚举定义，已完全收敛到 Error 作用域内
     enum class Code {
-    // configuration: 本地参数缺失, 格式错误或超出允许范围, 应修正配置后再启动.
-    // 代表配置项存在逻辑或语法错误。
-    configuration,
-    // identity: 身份材料, TLS 身份或准入凭证未通过验证, 不应按普通网络故障盲目重试.
-    // 涉及到安全认证和授权失败的错误。
-    identity,
-    // protocol: 协议版本, 报文类型或字段组合不符合约定, Planet 会隔离对应候选.
-    // 通信过程中协议不匹配或数据包结构错误。
-    protocol,
-    // conflict: 成员代次, 身份绑定或同方向会话发生冲突, 不能覆盖当前有效状态.
-    // 状态机冲突，如并发会话试图覆写同一槽位。
-    conflict,
-    // capacity: 成员, 消息或队列达到容量边界; 是否重试由调用阶段和角色策略决定.
-    // 系统资源或队列达到设计上限。
-    capacity,
-    // timeout: 连接, 握手或心跳超过单调时钟截止, 关闭本次尝试并进入相应退避.
-    // 各种基于超时的失败，需要退避后重试。
-    timeout,
-    // transport: 传输断开或暂时不可达, 未表明身份或协议本身无效.
-    // 底层网络或传输层发生错误。
-    transport,
-    // cancelled: 操作被本地或远端取消, 仍须等待异步完成才能释放 RPC 资源.
-    // 用户或系统主动取消了某个正在进行的操作。
-    cancelled,
-    // internal: 本地内部资源或运行条件异常, 使用固定诊断文本报告失败.
-    // 其他未分类的内部逻辑异常或系统错误。
-    internal
-};
+        // configuration: 本地参数缺失, 格式错误或超出允许范围, 应修正配置后再启动.
+        // 代表配置项存在逻辑或语法错误。
+        configuration,
+        // identity: 身份材料, TLS 身份或准入凭证未通过验证, 不应按普通网络故障盲目重试.
+        // 涉及到安全认证和授权失败的错误。
+        identity,
+        // protocol: 协议版本, 报文类型或字段组合不符合约定, Planet 会隔离对应候选.
+        // 通信过程中协议不匹配或数据包结构错误。
+        protocol,
+        // conflict: 成员代次, 身份绑定或同方向会话发生冲突, 不能覆盖当前有效状态.
+        // 状态机冲突，如并发会话试图覆写同一槽位。
+        conflict,
+        // capacity: 成员, 消息或队列达到容量边界; 是否重试由调用阶段和角色策略决定.
+        // 系统资源或队列达到设计上限。
+        capacity,
+        // timeout: 连接, 握手或心跳超过单调时钟截止, 关闭本次尝试并进入相应退避.
+        // 各种基于超时的失败，需要退避后重试。
+        timeout,
+        // transport: 传输断开或暂时不可达, 未表明身份或协议本身无效.
+        // 底层网络或传输层发生错误。
+        transport,
+        // cancelled: 操作被本地或远端取消, 仍须等待异步完成才能释放 RPC 资源.
+        // 用户或系统主动取消了某个正在进行的操作。
+        cancelled,
+        // internal: 本地内部资源或运行条件异常, 使用固定诊断文本报告失败.
+        // 其他未分类的内部逻辑异常或系统错误。
+        internal
+    };
 
     // 发生什么类别的错误
     Code code;
     // 错误的详细描述信息，必须是本地生成的安全文本
     std::string message;
 
-    static auto configuration(std::string msg) { return std::unexpected(Error{Code::configuration, std::move(msg)}); }
-    static auto identity(std::string msg) { return std::unexpected(Error{Code::identity, std::move(msg)}); }
-    static auto protocol(std::string msg) { return std::unexpected(Error{Code::protocol, std::move(msg)}); }
-    static auto conflict(std::string msg) { return std::unexpected(Error{Code::conflict, std::move(msg)}); }
-    static auto capacity(std::string msg) { return std::unexpected(Error{Code::capacity, std::move(msg)}); }
-    static auto timeout(std::string msg) { return std::unexpected(Error{Code::timeout, std::move(msg)}); }
-    static auto transport(std::string msg) { return std::unexpected(Error{Code::transport, std::move(msg)}); }
-    static auto cancelled(std::string msg) { return std::unexpected(Error{Code::cancelled, std::move(msg)}); }
-    static auto internal(std::string msg) { return std::unexpected(Error{Code::internal, std::move(msg)}); }
+    static auto configuration(std::string msg) {
+        return std::unexpected(Error{Code::configuration, std::move(msg)});
+    }
+    static auto identity(std::string msg) {
+        return std::unexpected(Error{Code::identity, std::move(msg)});
+    }
+    static auto protocol(std::string msg) {
+        return std::unexpected(Error{Code::protocol, std::move(msg)});
+    }
+    static auto conflict(std::string msg) {
+        return std::unexpected(Error{Code::conflict, std::move(msg)});
+    }
+    static auto capacity(std::string msg) {
+        return std::unexpected(Error{Code::capacity, std::move(msg)});
+    }
+    static auto timeout(std::string msg) {
+        return std::unexpected(Error{Code::timeout, std::move(msg)});
+    }
+    static auto transport(std::string msg) {
+        return std::unexpected(Error{Code::transport, std::move(msg)});
+    }
+    static auto cancelled(std::string msg) {
+        return std::unexpected(Error{Code::cancelled, std::move(msg)});
+    }
+    static auto internal(std::string msg) {
+        return std::unexpected(Error{Code::internal, std::move(msg)});
+    }
 
     static std::string_view name(Code code);
 };
@@ -94,8 +111,7 @@ enum class Direction {
     inbound
 };
 
-// 定义稳定的时间类型
-// Clock: 使用单调时钟以保证时间的单向递增，不受系统时间修改影响。
+// 会话, 退避与历史保留使用本地单调时间. 业务绝对期限见 clock.hpp 的 EpochClock.
 using Clock = std::chrono::steady_clock;
 // Milliseconds: 毫秒级别的时间间隔，广泛用于超时配置。
 using Milliseconds = std::chrono::milliseconds;
@@ -109,16 +125,16 @@ using Id = std::string;
 struct Principal {
     // bytes: 存放 SHA-256 哈希结果的字节数组，默认初始化为全零。
     std::array<std::uint8_t, 32> bytes{};
-    
+
     // 按拥有的摘要字节比较, 不执行身份授权.
     // 自动生成的比较运算符，用于比较两个 Principal 是否完全相同。
     auto operator<=>(const Principal&) const = default;
-    
+
     // 解析字符串形式的凭证，转化为内部表示。
     // 借用 64 字符小写十六进制文本, 成功返回独立摘要; 长度或字符非法返回 identity 错误。
     // 参数 value: 64字符十六进制文本视图。
     static Result<Principal> parse(std::string_view value);
-    
+
     // 格式化为字符串输出。
     // 返回拥有的 64 字符编码, 不借用原始 Protobuf 或解析缓冲.
     // 返回: 64位十六进制字符串。
@@ -130,7 +146,7 @@ struct Principal {
 struct MemberEpoch {
     // value: 代表代次的 64 位无符号整数，默认值为 0。
     std::uint64_t value{};
-    
+
     // 只比较 Supervisor 签发的成员代次, 不与本地会话编号混用.
     // 自动生成的比较运算符。
     auto operator<=>(const MemberEpoch&) const = default;
@@ -140,7 +156,7 @@ struct MemberEpoch {
 struct SessionGeneration {
     // value: 代表会话唯一编号的 64 位无符号整数，默认值为 0。
     std::uint64_t value{};
-    
+
     // 只比较本进程分配的会话编号, 用于精确关联关闭回调.
     // 自动生成的比较运算符。
     auto operator<=>(const SessionGeneration&) const = default;
@@ -157,7 +173,7 @@ struct Endpoint {
     bool ipv6{};
     // wildcard: 布尔标志位，标示这是否是一个通配符地址（如 0.0.0.0 或 ::），默认为 false。
     bool wildcard{};
-    
+
     // 按规范字段比较端点, 调用方须先 parse, 本操作不消除地址别名.
     // 自动生成的比较运算符。
     auto operator<=>(const Endpoint&) const = default;
@@ -168,7 +184,7 @@ struct Endpoint {
     // 参数 value: 要解析的地址字符串（如 "127.0.0.1:8080"）。
     // 参数 local: 是否视为本地监听地址进行放宽检查，默认 false。
     static Result<Endpoint> parse(std::string_view value, bool local = false);
-    
+
     // 序列化回规范的文本格式。
     // 返回独立 IP:PORT 文本, IPv6 自动补方括号; 不重新校验手工构造的字段.
     // 返回: 诸如 "127.0.0.1:8080" 或 "[::1]:80" 的标准地址字符串。
@@ -192,7 +208,7 @@ struct Member {
     Role role{};
     // group: 成员所在的连接偏好分组名称，用于 Planet 选择上游。
     std::string group;
-    
+
     // 逐字段比较完整成员值; 相等用于同代次一致性判断, 不替代凭证验签.
     // 自动生成的比较运算符，用于检测两个成员对象是否在所有字段上一致。
     auto operator<=>(const Member&) const = default;

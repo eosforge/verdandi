@@ -190,8 +190,11 @@ type RegistrationResponse struct {
 	// Star 按 id 严格排序并包含自身. Planet 本组优先, 每组内按 id 排序, 不含自身.
 	Members []*Member `protobuf:"bytes,1,rep,name=members,proto3" json:"members,omitempty"`
 	// 本次登记的 Member 原始编码及其签名, 与完整名单放在同一个应答中.
-	Admission     []byte `protobuf:"bytes,2,opt,name=admission,proto3" json:"admission,omitempty"`
-	Signature     []byte `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	Admission []byte `protobuf:"bytes,2,opt,name=admission,proto3" json:"admission,omitempty"`
+	Signature []byte `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	// Pulsar 独立对时监听的 HOST:PORT. 空表示当前控制面未提供 Pulse, 不能假装对时已就绪.
+	// 客户端仍校验该端点的 TLS 证书, 此字段不改变节点之间的拓扑端点.
+	PulseEndpoint string `protobuf:"bytes,4,opt,name=pulse_endpoint,json=pulseEndpoint,proto3" json:"pulse_endpoint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -245,6 +248,13 @@ func (x *RegistrationResponse) GetSignature() []byte {
 		return x.Signature
 	}
 	return nil
+}
+
+func (x *RegistrationResponse) GetPulseEndpoint() string {
+	if x != nil {
+		return x.PulseEndpoint
+	}
+	return ""
 }
 
 type Member struct {
@@ -358,11 +368,12 @@ const file_orbit_proto_rawDesc = "" +
 	" \x01(\tR\bpassword\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\r \x01(\fR\trequestIdJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x04\x10\x05R\x02idR\x0eexpected_epochR\x06ticketR\x10ticket_signatureR\n" +
-	"public_key\"\x84\x01\n" +
+	"public_key\"\xab\x01\n" +
 	"\x14RegistrationResponse\x120\n" +
 	"\amembers\x18\x01 \x03(\v2\x16.proto.orbit.v1.MemberR\amembers\x12\x1c\n" +
 	"\tadmission\x18\x02 \x01(\fR\tadmission\x12\x1c\n" +
-	"\tsignature\x18\x03 \x01(\fR\tsignature\"\xd4\x01\n" +
+	"\tsignature\x18\x03 \x01(\fR\tsignature\x12%\n" +
+	"\x0epulse_endpoint\x18\x04 \x01(\tR\rpulseEndpoint\"\xd4\x01\n" +
 	"\x06Member\x12\x16\n" +
 	"\x06galaxy\x18\x01 \x01(\tR\x06galaxy\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1c\n" +

@@ -6,6 +6,7 @@
 
 #include "astra.pb.h"
 #include "orbit.pb.h"
+#include "pulsar.pb.h"
 
 namespace astra {
 
@@ -55,6 +56,49 @@ template <> struct Mutator<::proto::astra::v1::Pong> {
     // 设置 request_id 并返回当前代理; 转发参数的复制或移动由对应 Protobuf 字段类型决定.
     template <typename V> auto request_id(V&& val) {
         msg.set_request_id(std::forward<V>(val));
+        return *this;
+    }
+};
+template <> struct Mutator<::proto::pulsar::v1::Ping> {
+    // 借用单个采样请求, 代理不能超过消息寿命.
+    ::proto::pulsar::v1::Ping& msg;
+    // 设置 Star 发送时的单调纳秒数, 不在代理内读取或转换时钟.
+    template <typename V> auto t0(V&& val) {
+        msg.set_t0(std::forward<V>(val));
+        return *this;
+    }
+};
+template <> struct Mutator<::proto::pulsar::v1::Pong> {
+    // 借用单个采样应答, 所有字段在发送前由调用方完成赋值.
+    ::proto::pulsar::v1::Pong& msg;
+    // 原样回显对应的 T0, 由 Star 匹配唯一在途请求.
+    template <typename V> auto t0(V&& val) {
+        msg.set_t0(std::forward<V>(val));
+        return *this;
+    }
+    // 设置 Pulsar 接收后的 Unix 纳秒估计.
+    template <typename V> auto t1(V&& val) {
+        msg.set_t1(std::forward<V>(val));
+        return *this;
+    }
+    // 设置 Pulsar 提交发送前的 Unix 纳秒估计.
+    template <typename V> auto t2(V&& val) {
+        msg.set_t2(std::forward<V>(val));
+        return *this;
+    }
+    // 设置包含上游误差与残余校正的纳秒误差估计.
+    template <typename V> auto uncertainty_ns(V&& val) {
+        msg.set_uncertainty_ns(std::forward<V>(val));
+        return *this;
+    }
+    // 来源已校准且质量达标, 未设置时保持 false.
+    template <typename V> auto synchronized(V&& val) {
+        msg.set_synchronized(std::forward<V>(val));
+        return *this;
+    }
+    // 报告 Pulsar 单调时钟 rho, 用于 Star 的精度容差和误差估计.
+    template <typename V> auto precision_ns(V&& val) {
+        msg.set_precision_ns(std::forward<V>(val));
         return *this;
     }
 };

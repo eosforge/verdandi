@@ -52,7 +52,7 @@ def generated(check, env):
     for schemas, names, destination in (
         (
             ROOT / "proto",
-            ["astra.proto", "orbit.proto", "comet.proto"],
+            ["astra.proto", "orbit.proto", "comet.proto", "pulsar.proto"],
             SOURCE / "common/src/generated",
         ),
         (SOURCE / "bench/proto", ["probe.proto"], SOURCE / "bench/generated"),

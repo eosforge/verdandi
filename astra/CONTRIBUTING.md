@@ -2,7 +2,11 @@
 
 从仓库根目录操作. 项目约定见 [coding.md](../coding.md), 协议与范围见
 [骨架设计](../cluster/cpp26-skeleton-design.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
-Supervisor 使用 Go, 旧 Rust Star 已废弃; 当前准入见[身份契约](../cluster/identity-contract.md).
+原有 Supervisor 使用 Go, 新增 C++ Pulsar 提供独立登记与对时服务; 两者数据库不互换.
+旧 Rust Star 已废弃; 当前准入见[身份契约](../cluster/identity-contract.md),
+新实现及尚未验证的范围见 [Pulsar 与 Star 对时](pulsar/design.md).
+时间模型已按 [连续纪元时钟设计](pulsar/epoch-clock-design.md) 迁移源码, 当前构建与测试结果见 [500 ms 回归记录](pulsar/regression-20260918-500ms.md).
+物理时间质量由宿主对时服务提供, 程序只读校验, 不自动安装/配置服务.
 
 ## 代码归属
 
@@ -17,17 +21,23 @@ Supervisor 使用 Go, 旧 Rust Star 已废弃; 当前准入见[身份契约](../
 | `common/src/process.*` | 信号、唤醒和 JSON 日志 | 私有进程设施, 有明确所有者和恢复路径 |
 | `common/src/runtime.cpp` | 生命周期协调 | 按会话、准入、拨号、诊断的次序推进, 退出时等待完成 |
 | `common/src/store.*` | 内部状态、批次历史、只读快照和 TTL 驱动 | 先准备分配再提交, 在同一把状态锁内补拍和处理续租 |
+| `common/src/snapshot_index.hpp` | Store 私有的固定页写时复制视图 | 锁内捕获根与版本, 锁外构建 Map; 读完成与页复用通过状态锁同步, 时间轮节点不复制 |
+| `common/src/clock.*`, `pulse_client.*` | 连续 Unix 时间、四时间戳和质量 | BOOTTIME 外推, 失联继续走时; Store 只存一个 deadline |
+| `pulsar/src` | 独立登记服务、持久成员表与 Pulse | 对时和登记使用独立资源预算, 不引入业务数据存储 |
+| `pulsar/tests` | 日志故障和真实 TLS/RPC 用例 | 临时状态由本例独占, 本轮修改后的用例需授权后执行 |
 | `common/src/wheel.hpp` | 无动态分配的侵入式分层时间轮 | 不管理线程或读取时钟, Store 负责时间换算、批次提交和失败重排 |
 | `star/src`, `planet/src` | 两个具体角色策略和各自入口 | 只维护内存索引, 不直接联网或在锁中取消 RPC |
 | `common/tests` | 单元与真实 RPC 夹具 | `check.hpp` 的断言在 Release 也生效, `fixture.hpp` 只读取公开测试身份 |
 | `bench` | 隔离的推流对照与存储微基准 | 不链接进服务, 不用实验消息扩充生产协议 |
 | `build.py`, `test_*.py` | 离线构建及分层验证 | shell 仅选择已有 Python, 共享进程清理由 `testkit` 持有 |
 
-保持当前三个角色目录. 通用代码只因两个真实使用者共享行为而抽取, 不为未来数据层预建类层次.
+保持角色与服务的目录边界. `astrolabe` 仍是显式返回未实现的占位入口.
+通用代码只因两个真实使用者共享行为而抽取, 不为未来数据层预建类层次.
 测试夹具不进入生产 include 目录; 生成源码不手工编辑.
 
 手写 C++ 直接使用完整协议名称: `proto::astra::v1::Hello`、`proto::orbit::v1::Member`.
 未来 SDK 类型使用 `proto::comet::v1`; 隔离探针使用 `proto::astra::bench::v1`.
+Pulsar 采样使用 `proto::pulsar::v1`, 登记继续使用 `proto::orbit::v1`.
 不使用 `wire`、`orbit`、`probe` 等协议命名空间别名或 using namespace 隐藏归属和版本.
 
 `Id` 是不透明字符串, `Principal` 是固定部署摘要, `MemberEpoch` 与 `SessionGeneration` 分别表达远端实例和本地会话代次.
@@ -92,7 +102,8 @@ flowchart TD
 
 ## 修改后的验证
 
-先完成整理与格式化, 再按实际改动选择验证. 不以删除注释、错误分支或测试来减少行数.
+先完成整理与格式化, 再按实际改动选择验证. 下列构建/测试命令须先取得本轮明确授权,
+遵循根目录 [AGENTS.md](../AGENTS.md). 不以删除注释、错误分支或测试来减少行数.
 
 ```bash
 # 已安装工具, 不下载依赖.
@@ -129,6 +140,7 @@ bash astra/build.sh regression --profile debug
 依赖准备需要针对具体项目的授权, 不因缺少包而自动运行 fetch/install.
 子进程工具路径和缓存留在项目下, 不修改用户或系统配置.
 
-安装目标复制 `star`, `planet`, 根许可证和第三方授权文本. 开发构建的 GCC RPATH 不进入安装树.
+安装目标复制 `star`, `planet`, `pulsar`, `astrolabe` 占位入口, 根许可证和第三方授权文本.
+开发构建的 GCC RPATH 不进入安装树.
 交付时仍需提供匹配的 libstdc++ 与其他实际动态依赖, 并在目标发行版验收. 本连接骨架的源码组织
 和测试门槛不等同于数据层或生产部署已经完成.

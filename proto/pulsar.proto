@@ -1,0 +1,49 @@
+// Pulsar v1 对时通道. 准入复用 proto.orbit.v1.Admission, 不重复声明登记 RPC.
+
+syntax = "proto3";
+package proto.pulsar.v1;
+
+import "orbit.proto";
+
+// TLS 上的有界采样流. metadata 携带 astra-admission-bin 和 astra-signature-bin.
+// 服务端每条流验一次当前 Star 准入凭证; 单条流最多 8 个采样, 不负责修改客户端时钟.
+service Pulse {
+    rpc Bounce(stream Ping) returns (stream Pong);
+}
+
+message Ping {
+    // Star BOOTTIME 纳秒数, 范围 0..INT64_MAX, 原样返回以匹配唯一在途采样, 不是业务时间.
+    uint64 t0 = 1;
+}
+
+message Pong {
+    // 对应 Ping 的 t0, 单位纳秒.
+    uint64 t0 = 1;
+
+    // Pulsar 收到 Ping 后的 Unix 绝对时间估计, 纳秒, 范围 0..INT64_MAX.
+    uint64 t1 = 2;
+
+    // Pulsar 提交 Write 前的 Unix 绝对时间估计, 纳秒, 必须不早于 t1.
+    uint64 t2 = 3;
+
+    // 固定 Unix 坐标不再使用进程纪元. 保留旧编号/名称, 禁止以另一种含义复用.
+    reserved 4;
+    reserved "era";
+
+    // Pulsar BOOTTIME 精度 rho, 分辨率和读钟成本的较大值, 纳秒, 1..20000000.
+    uint64 precision_ns = 5;
+
+    // 两个时间戳的物理时间误差估计上界, 纳秒; 含参考源误差和未消化校正, 不等于实际精度保证.
+    uint64 uncertainty_ns = 6;
+
+    // 来源已校准且质量达标. 缺省 false, 旧语义的 Pong 不能被误认为公共纪元时间.
+    bool synchronized = 7;
+}
+
+// Pulsar 私有持久登记日志的记录体, 不作为 RPC 请求或响应.
+// 一个记录同时提交当前成员与启动请求; 不包含账号密码或私钥.
+message RegistrationRecord {
+    proto.orbit.v1.Member member = 1;
+    // 本次启动的 32 字节随机幂等键. 历史记录保留以拒绝已被替换的进程请求.
+    bytes request_id = 2;
+}

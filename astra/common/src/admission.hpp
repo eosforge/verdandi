@@ -10,6 +10,8 @@
 namespace astra {
 // Joined 结构体用于存储成功注册后的准入结果信息。
 struct Joined {
+    // 可选的独立 Pulse 端点. 旧控制面为空, 不暗示具有可用对时功能.
+    std::string pulse_endpoint;
     // local: 当前节点成功注册后从 Supervisor 获得的本地身份成员信息。
     Member local;
     // members: 准入响应中返回的当前集群/组内其他成员节点的列表。
@@ -28,33 +30,33 @@ public:
     // 参数 identity: 提供 TLS 凭证及签名的身份对象指针，无默认值。
     // 参数 wake: 异步回调完成时用于唤醒主控制循环的回调函数，无默认值。
     Admission(const Config& config, std::shared_ptr<Identity> identity, std::function<void()> wake);
-    
+
     // gRPC 借用成员中的请求地址, Admission 从构造到排空回调都不能搬移.
     // 禁用拷贝构造函数以保证内存地址的稳定性。
     Admission(const Admission&) = delete;
-    
+
     // 禁止复制赋值, 防止替换仍被 gRPC 借用的请求和上下文.
     Admission& operator=(const Admission&) = delete;
-    
+
     // 禁止移动构造, 保持已提交请求的地址不变.
     Admission(Admission&&) = delete;
-    
+
     // 禁止移动赋值, 防止在途 RPC 指向旧对象存储.
     Admission& operator=(Admission&&) = delete;
-    
+
     // begin: 没有在途 RPC 时开始一次尝试, candidate_round 只影响 Planet 候选, 不改变启动请求.
     // 参数 candidate_round: 当前进行到第几轮候选更新，默认影响向 Supervisor 提交的请求内容。无默认值。
     void begin(std::uint32_t candidate_round);
-    
+
     // poll: 返回完成的一次结果; nullopt 表示等待. 响应对象在完成回调结束前始终由共享状态持有.
     // 该方法由主控制循环定期调用以检查并推进异步注册的进度。
     // 返回值: 如果注册成功，返回包含 Joined 数据的结果；若出错则返回 Error；若仍在等待中则返回 std::nullopt。
     std::optional<Result<Joined>> poll();
-    
+
     // cancel: 由控制循环永久取消此 Admission, 对在途 RPC 发出 TryCancel; 仍须 poll 到 pending 为 false 后销毁.
     // 取消所有正在进行的异步操作。
     void cancel();
-    
+
     // pending: 由控制循环查询是否仍有未消费的尝试, 包括连接等待阶段; true 不表示已经提交 Register.
     // 返回值: bool 类型，true 表示状态机不处于 idle，有任务正在进行或等待中。
     bool pending() const;
@@ -71,7 +73,7 @@ private:
         // done: 原子布尔变量，标记异步 RPC 回调是否已经执行完毕。默认值为 false。
         std::atomic_bool done{false};
     };
-    
+
     // Phase 枚举: 只由控制循环切换; 回调仅发布登记调用的完成状态.
     enum class Phase {
         // idle: 当前尝试未启动或结果已消费; 若未取消, begin 可以启动下一次尝试.
@@ -81,16 +83,16 @@ private:
         // registration: Register RPC 在途, 申请准入或刷新 Planet 候选.
         registration
     };
-    
+
     // start_registration: 仅在通道就绪且无登记 RPC 在途时调用, 使用剩余总预算提交 Register 并发布回调完成标志.
     void start_registration();
-    
+
     // validate: 在 Register 完成后核对容量, 本地部署和已安装身份, 返回独立名单与共享 Hello.
     // response 的准入字节会移入 Hello; 失败返回 capacity 或 identity, 名单角色策略由 initialize 继续校验.
     // 参数 response: RPC 成功返回的响应报文，包含准入签名和对端成员列表。
     // 返回值: 校验成功返回 Joined，失败返回错误。
     Result<Joined> validate(proto::orbit::v1::RegistrationResponse& response);
-    
+
     // config_: 存储传入的全局配置。
     Config config_;
     // identity_: 指向身份对象的共享指针。

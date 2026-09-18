@@ -61,7 +61,7 @@ Signals::Signals() {
     struct sigaction action{};
     action.sa_handler = stop_signal;
     sigemptyset(&action.sa_mask); // 清空信号掩码
-    
+
     // 安装 SIGINT 处理器（通常是 Ctrl+C），如果失败则直接抛异常。
     if (sigaction(SIGINT, &action, &interrupt_)) {
         throw std::runtime_error("Cannot install exit signal handlers");
@@ -72,11 +72,11 @@ Signals::Signals() {
         sigaction(SIGINT, &interrupt_, nullptr); // 回滚恢复 SIGINT
         throw std::runtime_error("Cannot install exit signal handlers");
     }
-    
+
     // 安装 SIGPIPE 处理器为忽略 (SIG_IGN)，避免往断开的连接写数据导致进程崩溃。
     action.sa_handler = SIG_IGN;
     if (sigaction(SIGPIPE, &action, &pipe_)) {
-        sigaction(SIGINT, &interrupt_, nullptr); // 回滚恢复 SIGINT
+        sigaction(SIGINT, &interrupt_, nullptr);  // 回滚恢复 SIGINT
         sigaction(SIGTERM, &terminate_, nullptr); // 回滚恢复 SIGTERM
         throw std::runtime_error("Cannot install pipe signal handler");
     }
@@ -129,7 +129,9 @@ void Wakeup::wait(std::uint64_t observed) {
 // Logger 构造函数实现
 // 参数:
 // - role (Role): 角色枚举，如果是 star 则 component 为 "star"，否则为 "planet"。
-Logger::Logger(Role role) : component_(role == Role::star ? "star" : "planet") {
+Logger::Logger(Role role) : Logger(role == Role::star ? "star" : "planet") {}
+
+Logger::Logger(std::string_view component) : component_(component) {
     struct stat status{};
     // 获取标准输出的文件状态
     if (fstat(STDOUT_FILENO, &status) == 0 && (S_ISFIFO(status.st_mode) || S_ISSOCK(status.st_mode))) {
