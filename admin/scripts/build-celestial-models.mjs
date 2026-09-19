@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import * as THREE from "three";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
-import { blackHoleOptics } from "../src/features/galaxy/runtime/materials/blackHoleOptics.ts";
+import { blackHoleOptics } from "../src/features/galaxy/runtime/blackHole/config.ts";
 
 // 仅适配导出器读取本地 Blob 的接口; 不访问网络或加载外部贴图.
 class ExportFileReader {

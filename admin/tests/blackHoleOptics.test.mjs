@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DataUtils } from "three";
-import {
-  blackHoleOptics,
-  columnAtImpact,
-  impactAtColumn,
-  createBendingTexture,
-  createImageBoundsTexture,
-  createObserverTexture,
-  traceLightOrbit,
-} from "../src/features/galaxy/runtime/materials/blackHoleOptics.ts";
+import { blackHoleOptics } from "../src/features/galaxy/runtime/blackHole/config.ts";
+import { columnAtImpact, impactAtColumn, traceLightOrbit } from "../src/features/galaxy/runtime/blackHole/optics.ts";
+import { createBendingTexture, createImageBoundsTexture, createObserverTexture } from "../src/features/galaxy/runtime/blackHole/lookupTextures.ts";
 
 test("zero gravity reproduces a straight ray and exits after half an orbit", () => {
   const impact = 7;

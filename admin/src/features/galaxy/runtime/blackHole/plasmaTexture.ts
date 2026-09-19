@@ -1,5 +1,6 @@
+// 初始化生成周期流纹密度贴图; 无外部图片与逐帧纹理更新.
 import * as THREE from "three";
-import { blackHoleOptics } from "./blackHoleOptics.ts";
+import { blackHoleOptics } from "./config.ts";
 
 // 二维密度在角向严格周期, 在径向连续; 相同输入得到相同纹理, 不依赖全局随机源.
 function noise(angle: number, radius: number, periods: number, seed: number): number {
@@ -21,7 +22,7 @@ function noise(angle: number, radius: number, periods: number, seed: number): nu
   return first * (1 - blendY) + second * blendY;
 }
 
-// 每场景烘焙一次连续的径向流纹, 角向首尾相接; mipmap 随真实投影压缩过滤细节, 纹理归调用者所有.
+// RGBA 分别保存细丝、密度团、中尺度流带和稀薄丝雾, 角向周期; mipmap 过滤投影后的亚像素细节.
 export function createPlasmaTexture(): THREE.DataTexture {
   const width = 256;
   const height = 1024;
@@ -29,25 +30,29 @@ export function createPlasmaTexture(): THREE.DataTexture {
   for (let row = 0; row < height; row++) {
     const radial = (row + 0.5) / height;
     const radius = blackHoleOptics.discInner + radial * (blackHoleOptics.discOuter - blackHoleOptics.discInner);
+    // 内侧细丝间隔更紧, 向外连续展开, 不靠统一模糊模拟发散.
+    const fiberRadius = (1 - Math.exp(-radial * 2.4)) / (1 - Math.exp(-2.4));
+    const fan = radial * radial;
     for (let column = 0; column < width; column++) {
       const angle = (column + 0.5) / width;
-      const shear = Math.log(radius / blackHoleOptics.discInner) * 0.55;
-      const cloud = noise(angle - shear * 0.22, radial * 5, 6, 11);
-      const warp = noise(angle - shear * 0.4, radial * 12, 9, 21);
-      // 各层角向长度与径向厚度不同, 形成被剪切的局部流带; 最细层仍低于纹理采样频率.
-      const strands = noise(angle - shear, radial * 60 + (warp - 0.5) * 12, 18, 37);
-      const fine = noise(angle - shear * 0.85, radial * 160 + (warp - 0.5) * 9, 48, 71);
-      const density = Math.min(1, (0.008 + cloud ** 2.4 * (0.25 + strands ** 2 * 0.7) + fine ** 4 * 0.22) * 1.7);
-      // 中尺度流团在角向分段, 叠加更细的撕裂结构; 高亮在烘焙时筛选, 不把远景压成连续光滑的带子.
-      const streamField = noise(angle - shear * 0.5, radial * 22 + (warp - 0.5) * 4, 24, 113);
-      const breaks = noise(angle - shear * 0.8, radial * 40 + cloud * 5, 36, 157);
-      const streamPeak = Math.max(0, (streamField - 0.3) / 0.7);
-      const sparseStreams = Math.min(1, streamPeak * streamPeak * 3.5) * (0.2 + breaks * 0.8);
+      const shear = Math.log(radius / blackHoleOptics.discInner) * 0.18;
+      const cloud = noise(angle - shear, radial * 11, 7, 11);
+      const warp = noise(angle - shear * 0.4, radial * 8, 5, 21);
+      // 径向扰动限制在一个细丝宽度附近, 不把长丝卷成大块大理石花纹.
+      const strands = noise(angle - shear, fiberRadius * 115 + (warp - 0.5) * (1.2 + fan * 3), 17, 37);
+      const fine = noise(angle - shear * 0.85, fiberRadius * 230 + (warp - 0.5) * (1 + fan * 3.5), 29, 71);
+      const breaks = noise(angle - shear, radial * 31, 37, 157);
+      // 窄峰和更短的角向连续段让纹理成为流丝, 避免高亮纹理连成整圈粗亮线.
+      const density = Math.min(1, (strands ** 7 * 2.2 + fine ** 7 * 1.5) * (0.15 + cloud * 0.85) * (0.15 + breaks * 0.85));
+      // 远景保留少量可分辨流带, 不以宽而均匀的发光底色替代细丝.
+      const streamField = noise(angle - shear * 0.7, fiberRadius * 61 + (warp - 0.5) * (0.8 + fan * 2), 19, 113);
+      const sparseStreams = Math.min(1, streamField ** 5 * 1.4) * (0.1 + breaks * 0.9);
+      const wisps = noise(angle + shear * 0.3 + fan * 0.13, fiberRadius * 78 + (cloud - 0.5) * (1.5 + fan * 5), 6, 191);
       const offset = (row * width + column) * 4;
       data[offset] = Math.round(density * 255);
       data[offset + 1] = Math.round(cloud * 255);
       data[offset + 2] = Math.round(sparseStreams * 255);
-      data[offset + 3] = 255;
+      data[offset + 3] = Math.round(Math.min(1, wisps ** 3 * 1.6) * 255);
     }
   }
   const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.UnsignedByteType);

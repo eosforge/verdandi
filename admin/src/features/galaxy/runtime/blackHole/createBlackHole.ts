@@ -1,5 +1,7 @@
+// 黑洞模型实例与动画时钟; 共享材质的逐实例参数在绘制前绑定.
 import * as THREE from "three";
-import { blackHoleOptics } from "./materials/blackHoleOptics.ts";
+import { blackHoleOptics } from "./config.ts";
+import { blackHoleFlow, advanceFlowKnot } from "./flow.ts";
 
 // 克隆已校验的 GLB 层级, 共享场景拥有的 GPU 资源; 每个节点独占时钟与姿态.
 export function createBlackHole(model: THREE.Group) {
@@ -43,8 +45,8 @@ export function createBlackHole(model: THREE.Group) {
     localCameraPosition.copy(cameraPosition).applyMatrix4(inverseWorld);
     localEye.value = localCameraPosition;
     // 整个流场时间提高三倍, 同步加速平流与亮结, 保持每个周期内的最大剪切量一致.
-    const flowSeconds = elapsedSeconds * 3;
-    flowTime.value = flowSeconds % 48;
+    const flowSeconds = elapsedSeconds * blackHoleFlow.timeScale;
+    flowTime.value = flowSeconds % blackHoleFlow.cycleSeconds;
     detailLevel.value = detail;
     // 远景保留较宽的亮结作为运动线索, 只有小于数个像素时才淡出, 避免变成闪烁亮点.
     const motionVisibility = THREE.MathUtils.smoothstep(pixels, 2, 8);
@@ -55,15 +57,16 @@ export function createBlackHole(model: THREE.Group) {
       const age = life - generation;
       const seed = Math.sin(generation * 127.1 + index * 311.7 + 17) * 43758.5453;
       const random = seed - Math.floor(seed);
-      const radius = blackHoleOptics.discInner * 1.08 + random * (blackHoleOptics.discOuter - blackHoleOptics.discInner) * 0.45;
-      const speed = 0.036 + 0.21 * (4.5 / radius) ** 1.5;
-      const angle = (random * Math.PI * 2 + age * duration * speed) % (Math.PI * 2);
+      const startRadius = blackHoleOptics.discInner * 1.08 + random * (blackHoleOptics.discOuter - blackHoleOptics.discInner) * 0.45;
+      const trajectory = advanceFlowKnot(startRadius, age * duration, blackHoleOptics.discInner);
+      const angle = (random * Math.PI * 2 + trajectory.angle) % (Math.PI * 2);
+      const innerFade = THREE.MathUtils.smoothstep(trajectory.radius, blackHoleOptics.discInner, blackHoleOptics.discInner * 1.12);
       const width = THREE.MathUtils.lerp(0.4 + age * 0.35, 0.09 + age * 0.2, detail);
-      knot.set(angle, radius, Math.sin(Math.PI * age) ** 2 * (0.6 + detail * 0.4) * motionVisibility, width);
+      knot.set(angle, trajectory.radius, Math.sin(Math.PI * age) ** 2 * (0.6 + detail * 0.4) * motionVisibility * innerFade, width);
     });
     brightKnots.value = knots;
     material.uniformsNeedUpdate = true;
   };
 
-  return { group, core, update };
+  return { group, core, horizon, update };
 }

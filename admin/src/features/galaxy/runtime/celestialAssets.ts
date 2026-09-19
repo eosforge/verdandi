@@ -1,8 +1,7 @@
+// 同源模型加载、结构校验和资源登记; 具体星体的光学装配委托所属模块.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { createHorizonMaterial } from "./materials/blackHole.ts";
-import { createBendingTexture, createImageBoundsTexture, createObserverTexture } from "./materials/blackHoleOptics.ts";
-import { createPlasmaTexture } from "./materials/blackHoleTexture.ts";
+import { prepareBlackHoleModel } from "./blackHole/prepareModel.ts";
 import type { ResourceScope } from "./resourceScope.ts";
 import type { GalaxyData } from "../model/types.ts";
 
@@ -26,23 +25,7 @@ export async function parseCelestialModel(bytes: ArrayBuffer, kind: CelestialMod
   for (const name of required) {
     if (!(scene.getObjectByName(name) instanceof THREE.Mesh)) throw new Error(`Invalid ${kind} model: ${name}`);
   }
-  if (kind === "blackHole") {
-    const horizon = scene.getObjectByName("Horizon");
-    const accretion = scene.getObjectByName("Accretion");
-    if (!accretion) throw new Error("Invalid black-hole accretion group");
-    const discNormal = new THREE.Vector3(0, 1, 0).applyQuaternion(accretion.quaternion);
-    const discBasis = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(accretion.quaternion).invert());
-    const bending = scope.own(createBendingTexture());
-    const imageBounds = scope.own(createImageBoundsTexture(bending));
-    const observerTable = scope.own(createObserverTexture());
-    const plasma = scope.own(createPlasmaTexture());
-    if (horizon instanceof THREE.Mesh) horizon.material = scope.own(createHorizonMaterial(discNormal, discBasis, bending, imageBounds, observerTable, plasma));
-    // 原始盘体保留建模契约, 核心保留射线拾取; 光学体积统一成像, 避免普通几何产生半球和双盘.
-    for (const name of ["Core", "Disc", "Glow"]) {
-      const mesh = scene.getObjectByName(name);
-      if (mesh) mesh.visible = false;
-    }
-  }
+  if (kind === "blackHole") prepareBlackHoleModel(scene, scope);
   return scene;
 }
 

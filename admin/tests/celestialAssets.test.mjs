@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PerspectiveCamera, Raycaster, Vector3 } from "three";
-import { createBlackHole } from "../src/features/galaxy/runtime/createBlackHole.ts";
-import { blackHoleOptics } from "../src/features/galaxy/runtime/materials/blackHoleOptics.ts";
+import { createBlackHole } from "../src/features/galaxy/runtime/blackHole/createBlackHole.ts";
+import { blackHoleOptics } from "../src/features/galaxy/runtime/blackHole/config.ts";
 import { loadCelestialModels } from "../src/features/galaxy/runtime/celestialAssets.ts";
 import { createGalaxyScene } from "../src/features/galaxy/runtime/createGalaxyScene.ts";
 import { demoGalaxy } from "../src/features/galaxy/data/demo.ts";

@@ -1,4 +1,5 @@
-import { blackHoleOptics } from "./blackHoleOptics.ts";
+// 近侧盘缘的有限厚度着色器函数, 补充薄盘在掠射方向的覆盖.
+import { blackHoleOptics } from "../config.ts";
 
 // 有限厚度只补充掠射时的近侧盘缘, 弯曲盘像仍由光轨道表负责.
 export const blackHoleVolume = `

@@ -1,11 +1,14 @@
+// 静态检查源码导入边界与运行时循环依赖, 不执行应用代码或访问网络.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { allowedDependency, findImportCycles } from "./architecture-rules.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sourceRoot = resolve(root, "src");
 const failures = [];
+const graph = new Map();
 let importsChecked = 0;
 
 // 只遍历项目源码, 不执行模块或访问网络.
@@ -30,11 +33,21 @@ function readImports(path) {
   // 记录依赖是否动态加载, 防止 UI 入口意外静态引入 WebGL 运行时.
   function visit(node) {
     if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-      imports.push({ value: node.moduleSpecifier.text, dynamic: false });
+      const clause = ts.isImportDeclaration(node) ? node.importClause : undefined;
+      const bindings = clause?.namedBindings;
+      const allNamedTypes = bindings && ts.isNamedImports(bindings) && bindings.elements.length > 0 && bindings.elements.every((entry) => entry.isTypeOnly);
+      const typeOnly = ts.isExportDeclaration(node)
+        ? node.isTypeOnly ||
+          (node.exportClause &&
+            ts.isNamedExports(node.exportClause) &&
+            node.exportClause.elements.length > 0 &&
+            node.exportClause.elements.every((entry) => entry.isTypeOnly))
+        : !!clause && (clause.isTypeOnly || (!clause.name && !!allNamedTypes));
+      imports.push({ value: node.moduleSpecifier.text, dynamic: false, typeOnly: !!typeOnly });
     }
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const argument = node.arguments[0];
-      if (argument && ts.isStringLiteral(argument)) imports.push({ value: argument.text, dynamic: true });
+      if (argument && ts.isStringLiteral(argument)) imports.push({ value: argument.text, dynamic: true, typeOnly: false });
       else failures.push(`${sourcePath(path)}: dynamic imports must use a literal path`);
     }
     ts.forEachChild(node, visit);
@@ -43,39 +56,21 @@ function readImports(path) {
   return imports;
 }
 
-// 每层只依赖本层或明确允许的下层; app 是唯一装配入口.
-function allowed(from, to, dependency) {
-  if (from === "main.ts") return to ? to.startsWith("app/") : dependency.value === "vue";
-  if (from.startsWith("app/")) return !to || to.startsWith("app/") || /^features\/[^/]+\/(index\.ts|data\/demo\.ts)$/.test(to);
-  const match = /^features\/([^/]+)\/(.+)$/.exec(from);
-  if (!match) return false;
-  const [, feature, file] = match;
-  const prefix = `features/${feature}/`;
-  if (to && !to.startsWith(prefix)) return false;
-  const destination = to?.slice(prefix.length);
-  if (file === "index.ts") return !!destination && /^(ui|model)\//.test(destination);
-  if (file.startsWith("model/")) return destination?.startsWith("model/");
-  if (file.startsWith("data/")) return !!destination && /^(data|model)\//.test(destination);
-  if (file.startsWith("runtime/")) return to ? /^(runtime|model)\//.test(destination) : /^three(?:\/|$)/.test(dependency.value);
-  if (file.startsWith("composables/")) {
-    return to
-      ? /^(model|composables)\//.test(destination) || (destination === "runtime/createGalaxyScene.ts" && dependency.dynamic)
-      : dependency.value === "vue";
-  }
-  if (file.startsWith("ui/")) return to ? /^(ui|model|composables)\//.test(destination) : ["vue", "naive-ui"].includes(dependency.value);
-  return false;
-}
-
 for (const file of sourceFiles(sourceRoot)) {
   const from = sourcePath(file);
+  const edges = [];
+  graph.set(from, edges);
   for (const dependency of readImports(file)) {
     importsChecked++;
     const path = dependency.value.startsWith(".") ? resolve(dirname(file), dependency.value) : null;
     const to = path ? sourcePath(path) : null;
     if (path && !existsSync(path)) failures.push(`${from}: unresolved import ${dependency.value}`);
-    if (!allowed(from, to, dependency)) failures.push(`${from}: forbidden dependency ${dependency.value}`);
+    if (to && !dependency.typeOnly) edges.push(to);
+    if (!allowedDependency(from, to, dependency)) failures.push(`${from}: forbidden dependency ${dependency.value}`);
   }
 }
+
+for (const cycle of findImportCycles(graph)) failures.push(`Runtime import cycle: ${cycle.join(" -> ")}`);
 
 if (failures.length) {
   console.error(failures.join("\n"));

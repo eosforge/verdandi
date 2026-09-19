@@ -1,40 +1,19 @@
-import * as THREE from "three";
-import { blackHolePlasma } from "./blackHolePlasma.ts";
-import { blackHoleOptics } from "./blackHoleOptics.ts";
-import { blackHoleVolume } from "./blackHoleVolume.ts";
+// 光学体积的着色器装配; 盘发射、厚度和背景透镜各自维护独立函数块.
+import { blackHoleOptics as optics } from "../config.ts";
+import { blackHolePlasma } from "./plasma.ts";
+import { blackHoleVolume } from "./volume.ts";
+import { blackHoleLensing } from "./lensing.ts";
 
-// 封闭三维网格内统一计算盘像与捕获阴影; 场景拥有共享纹理, 实例在绘制前绑定自己的动画参数.
-export function createHorizonMaterial(
-  discNormal: THREE.Vector3,
-  discBasis: THREE.Matrix3,
-  bending: THREE.Texture,
-  imageBounds: THREE.Texture,
-  observerTable: THREE.Texture,
-  plasmaMap: THREE.Texture,
-): THREE.ShaderMaterial {
-  const optics = blackHoleOptics;
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      discNormal: { value: discNormal.clone().normalize() },
-      discBasis: { value: discBasis.clone() },
-      bending: { value: bending },
-      imageBounds: { value: imageBounds },
-      observerTable: { value: observerTable },
-      plasmaMap: { value: plasmaMap },
-      flowTime: { value: 0 },
-      detailLevel: { value: 1 },
-      brightKnots: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
-      localEye: { value: new THREE.Vector3() },
-    },
-    vertexShader: `
+export const horizonVertexShader = `
       varying vec3 localPosition;
       // 球壳只包围光学体积, 不作为发光表面, 也不朝向相机旋转.
       void main() {
         localPosition = position;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
-    `,
-    fragmentShader: `
+    `;
+
+export const horizonFragmentShader = `
       uniform mat4 projectionMatrix;
       uniform mat4 modelViewMatrix;
       uniform vec3 discNormal;
@@ -53,6 +32,7 @@ export function createHorizonMaterial(
       uniform vec3 localEye;
       ${blackHolePlasma}
       ${blackHoleVolume}
+      ${blackHoleLensing}
       // 临界值两侧使用相同的非线性采样, 避免把捕获区当作普通黑球的投影.
       float impactColumn(float impact) {
         float offset = impact < shadowRadius
@@ -61,13 +41,16 @@ export function createHorizonMaterial(
         return (offset + 1.0) * 0.5;
       }
       // 真实盘面交点的温度、纹理与旋转速度保持一致, 不为上下盘像分别画光弧.
-      vec4 discImage(float column, float phase, float cameraPhase, vec3 observer, vec3 tangent, float angularMomentum, float observerLapse) {
+      vec4 discImage(float column, float phase, float cameraPhase, vec3 observer, vec3 tangent, float angularMomentum, float observerLapse, float lod) {
         vec2 uv = (vec2(column, (phase + cameraPhase) / maxAngle) * (tableSize - 1.0) + 0.5) / tableSize;
         float inverseRadius = texture2D(bending, uv).r;
         float radius = 1.0 / max(inverseRadius, 0.0001);
         vec3 direction = observer * cos(phase) + tangent * sin(phase);
         vec3 source = discBasis * direction * radius;
-        vec4 emission = plasmaEmission(source.xz, angularMomentum, observerLapse, -1.0);
+        vec4 emission = plasmaEmission(source.xz, angularMomentum, observerLapse, lod);
+        // 用局部直线倾角近似盘层光程, 掠射更致密, 俯视可见稀疏外盘; 非完整体积转移.
+        float pathCosine = abs(dot(discNormal, normalize(direction * radius - localEye)));
+        emission.a = 1.0 - pow(max(0.0, 1.0 - emission.a), 1.0 / max(0.18, pathCosine));
         emission.a *= step(phase + cameraPhase, maxAngle);
         return emission;
       }
@@ -84,7 +67,9 @@ export function createHorizonMaterial(
         float coverage = overlap / (2.0 * footprint) * step(phase + cameraPhase, maxAngle);
         vec3 source = discBasis * (observer * cos(phase) + tangent * sin(phase)) * max(bounds.z, ${optics.discInner.toFixed(8)});
         vec4 emission = plasmaEmission(source.xz, angularMomentum, observerLapse, 5.0);
-        return vec4(emission.rgb * bounds.w, coverage);
+        float pathCosine = abs(normalize(source - discBasis * localEye).y);
+        float opacity = 1.0 - pow(max(0.0, 1.0 - emission.a), 1.0 / max(0.18, pathCosine));
+        return vec4(emission.rgb * bounds.w, coverage * opacity);
       }
       // 按沿光路的先后顺序遮挡, 先遇到的不透明盘面会挡住后续盘像和阴影.
       void accumulate(vec4 sampleValue, inout vec3 radiance, inout float transmission) {
@@ -132,10 +117,10 @@ export function createHorizonMaterial(
         float inclination = dot(discNormal, observer);
         if (abs(inclination) < 0.000001) inclination = 0.0;
         float phase = mod(atan(-inclination, dot(discNormal, tangent)) + 3.14159265, 3.14159265);
-        vec4 primary = discImage(column, phase, cameraPhase, observer, tangent, angularMomentum, observerLapse);
+        vec4 primary = discImage(column, phase, cameraPhase, observer, tangent, angularMomentum, observerLapse, -1.0);
         float filterWeight;
         vec4 filtered = filteredImage(impact, phase + 3.14159265, cameraPhase, footprint, observer, tangent, angularMomentum, observerLapse, filterWeight);
-        vec4 secondary = discImage(column, phase + 3.14159265, cameraPhase, observer, tangent, angularMomentum, observerLapse);
+        vec4 secondary = discImage(column, phase + 3.14159265, cameraPhase, observer, tangent, angularMomentum, observerLapse, -1.0);
         // 以覆盖率加权颜色, 防止透明盘缘混入近似像的白热颜色而形成硬边.
         secondary = mix(vec4(secondary.rgb * secondary.a, secondary.a), vec4(filtered.rgb * filtered.a, filtered.a), filterWeight);
         secondary.rgb /= max(secondary.a, 0.001);
@@ -154,20 +139,33 @@ export function createHorizonMaterial(
         // 核心暗部在盘像之后合成, 前景流纹和盘缘仍按透射率遮住核心, 不添加独立实体表面.
         if (shadow > 0.0 && transmission > 0.005) radiance += transmission * shadow * coreRelief(ray, impact, observerLapse);
         float opacity = 1.0 - transmission * (1.0 - shadow);
-        if (opacity < 0.002) discard;
-        gl_FragColor = vec4(exposePlasma(radiance / max(opacity, 0.001)), opacity);
+        // 内侧散射收紧, 外侧逐渐展开; 只从真实盘像取得能量, 显式粗 mip 避免细纹闪烁.
+        vec3 glow = vec3(0.0);
+        float outerScatter = smoothstep(shadowRadius * 1.5, ${optics.discOuter.toFixed(8)}, impact);
+        float spread = max(0.24 + outerScatter * outerScatter * 1.5, footprint * 1.5);
+        for (int index = 0; index < 2; index++) {
+          float offsetImpact = clamp(impact + (float(index) * 2.0 - 1.0) * spread, minImpact, maxImpact);
+          float glowColumn = impactColumn(offsetImpact);
+          vec4 nearGlow = discImage(glowColumn, phase, cameraPhase, observer, tangent, angularMomentum, observerLapse, 5.0);
+          vec4 farGlow = discImage(glowColumn, phase + 3.14159265, cameraPhase, observer, tangent, angularMomentum, observerLapse, 5.0);
+          glow += exposePlasma(nearGlow.rgb) * nearGlow.a + exposePlasma(farGlow.rgb) * farGlow.a * (1.0 - nearGlow.a);
+        }
+        glow *= mix(0.055, 0.045, outerScatter) * (1.0 - shadow) * (1.0 - smoothstep(maxImpact - 1.0, maxImpact, impact));
+
         // 使用光学节点附近的虚拟深度, 不把包围球前表面当成实体遮挡邻近星体.
         vec3 hit = localEye + ray * max(0.1, -dot(localEye, ray));
         vec4 clip = projectionMatrix * modelViewMatrix * vec4(hit, 1.0);
         gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
+        if (backgroundEnabled > 0.5) {
+          vec3 background = lensBackground(observer, tangent, angles.g - cameraPhase, impact, gl_FragDepth);
+          // 背景保持原曝光, 只有盘面压缩高光; 已合成背景的片元输出不透明颜色, 避免重复叠加.
+          gl_FragColor = vec4(exposePlasma(radiance) + glow + background * (1.0 - opacity), 1.0);
+        } else {
+          opacity = max(opacity, max(glow.r, max(glow.g, glow.b)));
+          if (opacity < 0.002) discard;
+          gl_FragColor = vec4((exposePlasma(radiance) + glow) / max(opacity, 0.001), opacity);
+        }
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }
-    `,
-    transparent: true,
-    blending: THREE.NormalBlending,
-    depthWrite: true,
-    side: THREE.DoubleSide,
-    forceSinglePass: true,
-  });
-}
+    `;
