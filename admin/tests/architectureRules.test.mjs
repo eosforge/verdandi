@@ -32,7 +32,19 @@ test("object construction can borrow asset types but cannot load assets or assem
   assert.equal(allowedDependency(from, prefix + "runtime/celestialAssets.ts", { ...dependency, typeOnly: true }), true);
   assert.equal(allowedDependency(from, prefix + "runtime/createGalaxyScene.ts", dependency), false);
   assert.equal(allowedDependency(from, prefix + "runtime/blackHole/createBlackHole.ts", dependency), true);
+  assert.equal(allowedDependency(from, prefix + "runtime/pulsar/createPulsar.ts", dependency), true);
   assert.equal(allowedDependency(from, prefix + "data/demo.ts", dependency), false);
+});
+
+test("pulsar configuration and shaders stay independent of GPU resources and scene assembly", () => {
+  for (const file of ["config.ts", "shaders.ts"]) {
+    const from = prefix + "runtime/pulsar/" + file;
+    assert.equal(allowedDependency(from, null, { ...dependency, value: "three" }), false);
+    assert.equal(allowedDependency(from, prefix + "runtime/createGalaxyScene.ts", dependency), false);
+  }
+  const factory = prefix + "runtime/pulsar/createPulsar.ts";
+  assert.equal(allowedDependency(factory, prefix + "runtime/resourceScope.ts", dependency), true);
+  assert.equal(allowedDependency(factory, prefix + "runtime/createGalaxyScene.ts", dependency), false);
 });
 
 test("dependency traversal accepts diamonds and reports cycles including self imports", () => {
@@ -46,4 +58,15 @@ test("dependency traversal accepts diamonds and reports cycles including self im
   graph.set("d", ["a"]);
   assert.deepEqual(findImportCycles(graph), [["a", "b", "d", "a"]]);
   assert.deepEqual(findImportCycles(new Map([["a", ["a"]]])), [["a", "a"]]);
+});
+
+test("background shaders and rendering utilities cannot reach scene assembly", () => {
+  for (const file of ["background/shaders.ts", "background/distantStarShaders.ts", "rendering/layers.ts"]) {
+    const from = prefix + "runtime/" + file;
+    assert.equal(allowedDependency(from, null, { ...dependency, value: "three" }), false);
+    assert.equal(allowedDependency(from, prefix + "runtime/createGalaxyScene.ts", dependency), false);
+  }
+  const from = prefix + "runtime/background/createCosmicBackground.ts";
+  assert.equal(allowedDependency(from, prefix + "runtime/rendering/fullscreenTriangle.ts", dependency), true);
+  assert.equal(allowedDependency(from, prefix + "runtime/createGalaxyObjects.ts", dependency), false);
 });

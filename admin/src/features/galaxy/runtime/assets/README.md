@@ -2,12 +2,13 @@
 
 这些模型由仓库内的 `admin/scripts/build-celestial-models.mjs` 原创生成, 沿用仓库 MIT 许可证.
 三份 GLB 均为真实三角形网格, 没有图片平面、外部 URI、纹理下载、压缩解码器或第三方资产依赖.
+独立脉冲星不新增 GLB 文件, 由 `../pulsar/createPulsar.ts` 生成球面核心、封闭光束体积和磁场管线; 同样使用真实三维网格和场景资源作用域.
 
 | 文件           | 内容                                                                      | 运行时用途                       |
 | -------------- | ------------------------------------------------------------------------- | -------------------------------- |
 | star.glb       | Surface 起伏球面、Corona 球形日冕壳                                       | 所有可用 Star 共享几何, 单独着色 |
-| planet.glb     | Surface 简化岩质球面                                                      | 九批实例共享几何与材质           |
-| black-hole.glb | Core 阴影代理、Horizon 光学球壳、Accretion 下的 Disc 连续盘体与 Glow 椭球 | 不可用 Star 的独立模型           |
+| planet.glb     | Surface 简化岩质球面                                                      | 行星实例批次共享几何与材质       |
+| black-hole.glb | Core 阴影代理、Horizon 光学球壳、Accretion 下的 Disc 连续盘体与 Glow 椭球 | black-hole 状态恒星的模型        |
 
 在 `admin/` 使用已有 Node.js 和 Three.js 复现:
 

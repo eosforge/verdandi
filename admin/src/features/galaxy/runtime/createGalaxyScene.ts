@@ -1,4 +1,5 @@
 // 场景异步入口与生命周期装配; Vue 仅通过此文件动态加载运行时.
+import { Vector3 } from "three";
 import type { GalaxyCallbacks, GalaxyController, GalaxyData } from "../model/types.ts";
 import { validateGalaxyData } from "../model/validate.ts";
 import { CameraMotion } from "./cameraMotion.ts";
@@ -29,10 +30,11 @@ export async function createGalaxyScene(host: HTMLElement, data: GalaxyData, cal
 
 // 组合画布、选择控制、对象、输入和唯一帧循环; 此处只拥有场景生命周期.
 function initializeScene(host: HTMLElement, data: GalaxyData, callbacks: GalaxyCallbacks, scope: ResourceScope, models: CelestialModels): GalaxyController {
-  const { scene, camera, renderer, canvas, controls, resize: resizeView } = createSceneView(host, data, scope);
+  const { scene, camera, renderer, canvas, controls, framing, frameBounds, refreshFraming, resize: resizeView } = createSceneView(host, data, scope);
   const objects = createGalaxyObjects(scene, data, scope, models);
-  const drawScene = createLensingRenderer(renderer, scene, camera, objects.horizons, objects.selectionRing, scope);
-  const motion = new CameraMotion(camera.position, controls.target);
+  frameBounds(objects.bounds);
+  const drawScene = createLensingRenderer(renderer, scene, camera, objects.horizons, objects.overlays, scope);
+  const motion = new CameraMotion(camera.position, controls.target, framing);
   let disposed = false;
   let failed = false;
   let renderedFrames = 0;
@@ -41,19 +43,48 @@ function initializeScene(host: HTMLElement, data: GalaxyData, callbacks: GalaxyC
     camera,
     controls,
     motion,
+    framing,
     objects,
     isActive: () => !disposed && !failed,
-    onSelect: (value) => callbacks.select(value),
+    onSelect: (value) => {
+      // 恒星视图锁定星体中心, 保留旋转与缩放; 总览和行星详情恢复平移.
+      controls.enablePan = !value || !!value.planet;
+      callbacks.select(value);
+    },
   });
-  const { selectStar, setStarRotationSpeed, selectPlanet, focusPlanet, overview } = interaction;
+  const { selectStar, setStarRotationSpeed, selectPlanet, focusPlanet } = interaction;
+  // 返回总览刷新边界, 使用统一的固定相机坐标和星图中心.
+  function overview(): void {
+    if (disposed || failed) return;
+    refreshFraming();
+    interaction.overview();
+  }
+  const followedCenter = new Vector3();
+  const followDelta = new Vector3();
+  const reportedCameraPosition = new Vector3(NaN, NaN, NaN);
+  let cameraReportElapsed = 0.1;
 
-  // 唯一绘制入口, Vue 只接收每秒 FPS 和离散选择事件.
+  // 唯一绘制入口, Vue 只接收限频读数和离散选择事件.
   function render(deltaSeconds: number): void {
-    objects.update(deltaSeconds, interaction.selection);
+    const selection = interaction.selection;
+    const followed = selection ? objects.systemsById.get(selection.star.id) : undefined;
+    if (followed) followedCenter.fromArray(followed.center);
+    objects.update(deltaSeconds, selection);
+    if (followed) motion.translateFrame(followDelta.fromArray(followed.center).sub(followedCenter));
     motion.update(deltaSeconds);
     controls.updateFrame(deltaSeconds);
+    if (followed && !selection?.planet) motion.keepCentered(followedCenter.fromArray(followed.center));
     objects.faceCamera(camera.quaternion);
     drawScene();
+    // 读数与绘制使用同一相机, 限频且静止时不触发 Vue 更新.
+    cameraReportElapsed += deltaSeconds;
+    if (cameraReportElapsed >= 0.1) {
+      cameraReportElapsed = 0;
+      if (!reportedCameraPosition.equals(camera.position)) {
+        reportedCameraPosition.copy(camera.position);
+        callbacks.cameraPosition?.([camera.position.x, camera.position.y, camera.position.z]);
+      }
+    }
     if (import.meta.env.DEV) canvas.dataset.renderCount = String(++renderedFrames);
   }
 

@@ -4,11 +4,14 @@ import type { GalaxySelection, GalaxyCallbacks } from "../../model/types.ts";
 import type { GalaxyObjects } from "../createGalaxyObjects.ts";
 import type { CameraMotion } from "../cameraMotion.ts";
 import { sceneConfig } from "../config.ts";
+import type { SceneFraming } from "./sceneFraming.ts";
 
 interface SelectionOptions {
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: { readonly target: THREE.Vector3; clearMomentum(): void };
   readonly motion: Pick<CameraMotion, "moveTo">;
+  /** 与画布共同维护的总览目标和缩放边界, 随星图范围与窗口比例更新. */
+  readonly framing: SceneFraming;
   readonly objects: Pick<GalaxyObjects, "systemsById" | "findPlanet" | "worldPosition" | "showSelection" | "setStarRotationSpeed">;
   /** 场景失败或开始释放即返回 false, 禁止后续命令修改对象. */
   readonly isActive: () => boolean;
@@ -16,10 +19,8 @@ interface SelectionOptions {
 }
 
 // 接近目标只启动已有的平滑相机运动, 不直接修改相机位置.
-export function createSelectionController({ camera, controls, motion, objects, isActive, onSelect }: SelectionOptions) {
+export function createSelectionController({ camera, controls, motion, framing, objects, isActive, onSelect }: SelectionOptions) {
   const config = sceneConfig.camera;
-  const overviewPosition = new THREE.Vector3(...config.overviewPosition);
-  const overviewTarget = new THREE.Vector3(...config.overviewTarget);
   let selection: GalaxySelection = null;
   // 聚焦取得相机控制权前清空旧拖动惯性, 避免动画与残余旋转同时写入相机.
   function moveCamera(position: THREE.Vector3, target: THREE.Vector3): void {
@@ -39,10 +40,10 @@ export function createSelectionController({ camera, controls, motion, objects, i
     if (!isActive()) return false;
     const system = objects.systemsById.get(starId);
     if (!system) return false;
-    const center = new THREE.Vector3(...system.star.position);
+    const center = new THREE.Vector3(...system.center);
     const halfFov = Math.atan(Math.tan(THREE.MathUtils.degToRad(config.fieldOfView) * 0.5) * Math.min(1, camera.aspect));
     const distance = Math.max(config.starDistance, (system.orbitExtent / Math.sin(halfFov)) * 1.05);
-    const approach = camera.position.clone().sub(controls.target).normalize().multiplyScalar(Math.min(config.maxDistance, distance));
+    const approach = camera.position.clone().sub(controls.target).normalize().multiplyScalar(Math.min(framing.maxDistance, distance));
     moveCamera(center.clone().add(approach), center);
     publishSelection({ star: system.star, planet: null });
     return true;
@@ -62,11 +63,11 @@ export function createSelectionController({ camera, controls, motion, objects, i
     return true;
   }
 
-  // 返回固定全景并清空详情, 已在全景时不重启动画.
+  // 即使未选节点也强制恢复全景构图, 支持平移/缩放后复位及被手势中断后的重试.
   function overview(): void {
-    if (!isActive() || !selection) return;
-    moveCamera(overviewPosition, overviewTarget);
-    publishSelection(null);
+    if (!isActive()) return;
+    moveCamera(framing.position, framing.target);
+    if (selection) publishSelection(null);
   }
 
   // 从当前公转位置的球壳外侧接近, 避免目标被恒星遮挡.
@@ -74,10 +75,12 @@ export function createSelectionController({ camera, controls, motion, objects, i
     if (!selectPlanet(starId, planetId)) return false;
     const location = objects.findPlanet(starId, planetId);
     if (!location) return false;
+    const system = objects.systemsById.get(starId);
+    if (!system) return false;
     const target = objects.worldPosition(location);
     const approach = target
       .clone()
-      .sub(new THREE.Vector3(...location.star.position))
+      .sub(new THREE.Vector3(...system.center))
       .normalize()
       .multiplyScalar(config.planetDistance)
       .add(new THREE.Vector3(0, 5, 0));

@@ -20,7 +20,7 @@ const emit = defineEmits<{ close: []; focus: []; select: [planetId: string] }>()
         <span>{{ star.id }}</span>
       </div>
     </div>
-    <p class="panel-description">恒星代表 Star, 各类实体沿不同倾角的椭圆轨道公转。查看行星详情时暂停公转。</p>
+    <p class="panel-description">恒星代表 Star, 各类实体沿接近共同轨道面的椭圆轨道公转。查看行星详情时暂停公转。</p>
     <div class="star-facts">
       <div>
         <span>关联行星</span><strong>{{ star.planets.length }}</strong>

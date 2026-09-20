@@ -2,7 +2,14 @@
 
 // 运行时按资源所有权分组; 底层组件不能反向依赖场景装配或 Vue 适配层.
 function allowedRuntime(file, destination, dependency) {
-  if (!destination) return /^three(?:\/|$)/.test(dependency.value) && !/^runtime\/blackHole\/(shaders\/|config\.ts|flow\.ts|optics\.ts)/.test(file);
+  if (!destination)
+    return (
+      /^three(?:\/|$)/.test(dependency.value) &&
+      !/^runtime\/blackHole\/(shaders\/|config\.ts|flow\.ts|optics\.ts)/.test(file) &&
+      !/^runtime\/background\/(shaders|distantStarShaders)\.ts$/.test(file) &&
+      file !== "runtime/rendering/layers.ts" &&
+      !/^runtime\/pulsar\/(config|shaders)\.ts$/.test(file)
+    );
   if (file.startsWith("runtime/blackHole/")) {
     if (/^runtime\/blackHole\/(config|flow)\.ts$/.test(file)) return false;
     if (file === "runtime/blackHole/optics.ts") return destination === "runtime/blackHole/config.ts";
@@ -10,9 +17,19 @@ function allowedRuntime(file, destination, dependency) {
     return destination.startsWith("runtime/blackHole/") || destination === "runtime/resourceScope.ts";
   }
   if (file.startsWith("runtime/materials/")) return destination.startsWith("runtime/materials/");
+  if (file.startsWith("runtime/background/")) {
+    if (/\/(shaders|distantStarShaders)\.ts$/.test(file)) return false;
+    return /^(runtime\/(background\/|rendering\/|config\.ts|resourceScope\.ts))/.test(destination);
+  }
+  if (file.startsWith("runtime/rendering/"))
+    return file !== "runtime/rendering/layers.ts" && (destination.startsWith("runtime/rendering/") || destination === "runtime/resourceScope.ts");
+  if (file.startsWith("runtime/pulsar/")) {
+    if (/^runtime\/pulsar\/(config|shaders)\.ts$/.test(file)) return false;
+    return destination.startsWith("runtime/pulsar/") || destination === "runtime/resourceScope.ts";
+  }
   if (file.startsWith("runtime/objects/"))
     return (
-      /^(model\/|runtime\/(objects\/|blackHole\/|materials\/|config\.ts|resourceScope\.ts))/.test(destination) ||
+      /^(model\/|runtime\/(objects\/|blackHole\/|pulsar\/|materials\/|config\.ts|resourceScope\.ts))/.test(destination) ||
       (destination === "runtime/celestialAssets.ts" && dependency.typeOnly)
     );
   return /^(runtime|model)\//.test(destination);

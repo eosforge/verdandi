@@ -44,13 +44,13 @@ async function loadModel(url: URL, kind: CelestialModelKind, scope: ResourceScop
 export async function loadCelestialModels(data: GalaxyData, scope: ResourceScope, signal?: AbortSignal): Promise<CelestialModels> {
   const models: CelestialModels = {};
   const requests: Promise<void>[] = [];
-  if (data.stars.some((star) => star.status === "unavailable"))
+  if (data.stars.some((star) => star.status === "black-hole"))
     requests.push(
       loadModel(new URL("./assets/black-hole.glb", import.meta.url), "blackHole", scope, signal).then((model) => {
         models.blackHole = model;
       }),
     );
-  if (data.stars.some((star) => star.status === "available"))
+  if (data.stars.some((star) => star.status === "available" && star.appearance !== "pulsar"))
     requests.push(
       loadModel(new URL("./assets/star.glb", import.meta.url), "star", scope, signal).then((model) => {
         models.star = model;

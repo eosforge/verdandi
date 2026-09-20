@@ -1,10 +1,11 @@
 import { computed, ref, shallowRef, watch, type Ref } from "vue";
-import type { GalaxyController, GalaxyData, GalaxySelection } from "../model/types.ts";
+import type { GalaxyController, GalaxyData, GalaxySelection, Position3 } from "../model/types.ts";
 
 // Vue 生命周期适配器; 快照替换、重试和卸载都先释放旧场景, 过期异步加载不会挂载.
 export function useGalaxyScene(host: Ref<HTMLElement | undefined>, getData: () => GalaxyData) {
   const selection = shallowRef<GalaxySelection>(null);
   const fps = ref<number | null>(null);
+  const cameraPosition = shallowRef<Position3 | null>(null);
   const error = ref("");
   const attempt = ref(0);
   let controller: GalaxyController | undefined;
@@ -23,6 +24,7 @@ export function useGalaxyScene(host: Ref<HTMLElement | undefined>, getData: () =
       });
       selection.value = null;
       fps.value = null;
+      cameraPosition.value = null;
       error.value = "";
       if (!element) return;
       try {
@@ -37,6 +39,9 @@ export function useGalaxyScene(host: Ref<HTMLElement | undefined>, getData: () =
             },
             fps(value) {
               if (!cancelled) fps.value = value;
+            },
+            cameraPosition(value) {
+              if (!cancelled) cameraPosition.value = value;
             },
             error(message) {
               if (!cancelled) {
@@ -86,6 +91,7 @@ export function useGalaxyScene(host: Ref<HTMLElement | undefined>, getData: () =
     selectedStar: computed(() => selection.value?.star ?? null),
     selectedPlanet: computed(() => selection.value?.planet ?? null),
     fps,
+    cameraPosition,
     error,
     retry,
     overview,

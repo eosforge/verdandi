@@ -3,6 +3,64 @@ import test from "node:test";
 import { Vector3 } from "three";
 import { CameraMotion } from "../src/features/galaxy/runtime/cameraMotion.ts";
 
+test("center lock preserves smooth approach and keeps a moving star centered during off-axis zoom", () => {
+  const position = new Vector3(0, 0, 100);
+  const target = new Vector3();
+  const center = new Vector3(40, 10, 0);
+  const motion = new CameraMotion(position, target);
+  motion.moveTo(center.clone().add(new Vector3(0, 0, 60)), center);
+  motion.update(0.2);
+  const transitioning = target.clone();
+  motion.keepCentered(center);
+  assert.deepEqual(target, transitioning, "initial approach is not snapped to the star");
+  motion.update(1);
+  motion.keepCentered(center);
+  const viewingDirection = position.clone().sub(target).normalize();
+  motion.zoomBy(-120, center.clone().add(new Vector3(15, 5, 0)));
+  const velocity = new Vector3(0.2, -0.1, 0.05);
+  for (let frame = 0; frame < 60; frame++) {
+    center.add(velocity);
+    motion.translateFrame(velocity);
+    motion.update(1 / 60);
+    motion.keepCentered(center);
+    assert.deepEqual(target, center);
+    assert.ok(position.clone().sub(target).normalize().distanceTo(viewingDirection) < 1e-10);
+  }
+  assert.ok(position.distanceTo(target) < 60);
+});
+
+test("following an orbit preserves relative camera motion through focus, zoom and manual pan", () => {
+  const position = new Vector3(0, 0, 100),
+    target = new Vector3();
+  const referencePosition = position.clone(),
+    referenceTarget = target.clone();
+  const motion = new CameraMotion(position, target);
+  const reference = new CameraMotion(referencePosition, referenceTarget);
+  const displacement = new Vector3(12, -3, 25);
+  for (const item of [motion, reference]) item.moveTo(new Vector3(30, 20, 80), new Vector3(30, 0, 0));
+  motion.update(0.4);
+  reference.update(0.4);
+  motion.translateFrame(displacement);
+  motion.update(0.8);
+  reference.update(0.8);
+  assert.ok(position.clone().sub(displacement).distanceTo(referencePosition) < 1e-10);
+  assert.ok(target.clone().sub(displacement).distanceTo(referenceTarget) < 1e-10);
+  motion.zoomBy(-120, target);
+  reference.zoomBy(-120, referenceTarget);
+  motion.translateFrame(displacement);
+  motion.update(0.2);
+  reference.update(0.2);
+  assert.ok(position.clone().addScaledVector(displacement, -2).distanceTo(referencePosition) < 1e-10);
+  assert.ok(target.clone().addScaledVector(displacement, -2).distanceTo(referenceTarget) < 1e-10);
+  motion.cancel();
+  const offset = new Vector3(7, 2, -3);
+  position.add(offset);
+  target.add(offset);
+  const before = position.clone().sub(target);
+  motion.translateFrame(displacement);
+  assert.ok(position.clone().sub(target).distanceTo(before) < 1e-10);
+});
+
 test("star focus starts at the current pose, eases, and ends at a copied destination", () => {
   const position = new Vector3(0, 0, 100);
   const target = new Vector3();

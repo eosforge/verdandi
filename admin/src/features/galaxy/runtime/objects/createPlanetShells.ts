@@ -15,7 +15,7 @@ export function createPlanetShells(
   planetRadius: number,
   scope: ResourceScope,
 ): OrbitShell[] {
-  return (star.status === "unavailable" ? [] : planetKinds).flatMap((kind): OrbitShell[] => {
+  return (star.status === "black-hole" ? [] : planetKinds).flatMap((kind): OrbitShell[] => {
     const planets = star.planets.filter((planet) => planet.kind === kind);
     if (!planets.length) return [];
     if (!planetGeometry) throw new Error("Planet model must be loaded before creating entities");

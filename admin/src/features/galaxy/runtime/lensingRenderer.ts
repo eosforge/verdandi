@@ -1,6 +1,8 @@
 // 场景颜色与深度只捕获一次, 黑洞共享只读背景; 不递归折射其它黑洞或 UI 装饰.
 import * as THREE from "three";
 import type { ResourceScope } from "./resourceScope.ts";
+import { renderLayers } from "./rendering/layers.ts";
+import { createFullscreenTriangle } from "./rendering/fullscreenTriangle.ts";
 
 // 返回与主循环共用的绘制入口; 没有黑洞时保持原始单次绘制路径.
 export function createLensingRenderer(
@@ -8,7 +10,7 @@ export function createLensingRenderer(
   scene: THREE.Scene,
   camera: THREE.PerspectiveCamera,
   horizons: readonly THREE.Mesh[],
-  overlay: THREE.Object3D,
+  overlays: readonly THREE.Object3D[],
   scope: ResourceScope,
 ): () => void {
   if (!horizons.length) return () => renderer.render(scene, camera);
@@ -19,12 +21,15 @@ export function createLensingRenderer(
   for (const horizon of horizons) {
     const mask = horizon.layers.mask;
     scope.defer(() => (horizon.layers.mask = mask));
-    horizon.layers.set(1);
+    horizon.layers.set(renderLayers.optics);
     if (horizon.material instanceof THREE.ShaderMaterial) materials.add(horizon.material);
   }
-  const overlayMask = overlay.layers.mask;
-  scope.defer(() => (overlay.layers.mask = overlayMask));
-  overlay.layers.set(2);
+  // 轨道线和选中环是辅助标记, 在透镜之后合成, 不进入可被折射的背景纹理.
+  for (const overlay of overlays) {
+    const mask = overlay.layers.mask;
+    scope.defer(() => (overlay.layers.mask = mask));
+    overlay.layers.set(renderLayers.overlay);
+  }
   for (const material of materials) {
     Object.assign(material.uniforms, {
       backgroundColor: { value: target.texture },
@@ -64,8 +69,7 @@ export function createLensingRenderer(
     }),
   );
   // 全屏三角形复制颜色和深度, 保持前景星体对黑洞的正常遮挡.
-  const geometry = scope.own(new THREE.BufferGeometry());
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+  const geometry = createFullscreenTriangle(scope);
   const copyScene = new THREE.Scene();
   copyScene.add(new THREE.Mesh(geometry, copyMaterial));
   scope.defer(() => copyScene.clear());
@@ -74,22 +78,27 @@ export function createLensingRenderer(
   // 尺寸随实际绘图缓冲改变; finally 恢复调用方状态, 出错仍可由统一清理路径回收.
   return () => {
     renderer.getDrawingBufferSize(size);
+    // 总览构图会扩大远裁剪距离, 背景深度重建必须使用本帧相机范围.
+    for (const material of materials) {
+      const range = material.uniforms.cameraRange?.value;
+      if (range instanceof THREE.Vector2) range.set(camera.near, camera.far);
+    }
     if (target.width !== size.x || target.height !== size.y) target.setSize(size.x, size.y);
     const previousTarget = renderer.getRenderTarget();
     const previousLayers = camera.layers.mask;
     const previousClear = renderer.autoClear;
     try {
       renderer.autoClear = true;
-      camera.layers.set(0);
+      camera.layers.set(renderLayers.scene);
       renderer.setRenderTarget(target);
       renderer.render(scene, camera);
       renderer.setRenderTarget(previousTarget);
       renderer.render(copyScene, copyCamera);
       renderer.autoClear = false;
-      camera.layers.set(1);
+      camera.layers.set(renderLayers.optics);
       renderer.render(scene, camera);
-      if (overlay.visible) {
-        camera.layers.set(2);
+      if (overlays.some((overlay) => overlay.visible)) {
+        camera.layers.set(renderLayers.overlay);
         renderer.render(scene, camera);
       }
     } finally {

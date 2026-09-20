@@ -14,13 +14,16 @@ export class CameraMotion {
   private transition: Transition | null = null;
   private zoomDistance: number | null = null;
   private readonly zoomAnchor = new Vector3();
+  private readonly centerOffset = new Vector3();
   private readonly position: Vector3;
   private readonly target: Vector3;
+  private readonly limits: { readonly minDistance: number; readonly maxDistance: number };
 
   // 仅借用向量, 不拥有 Three.js 或 DOM 资源.
-  constructor(position: Vector3, target: Vector3) {
+  constructor(position: Vector3, target: Vector3, limits: { readonly minDistance: number; readonly maxDistance: number } = sceneConfig.camera) {
     this.position = position;
     this.target = target;
+    this.limits = limits;
   }
 
   // 从当前姿态重新规划推进, 拷贝终点以防外部后续修改.
@@ -34,11 +37,7 @@ export class CameraMotion {
     this.transition = null;
     this.zoomAnchor.copy(anchor);
     const scale = Math.exp(MathUtils.clamp(pixels, -150, 150) * 0.0015);
-    this.zoomDistance = MathUtils.clamp(
-      (this.zoomDistance ?? this.position.distanceTo(this.target)) * scale,
-      sceneConfig.camera.minDistance,
-      sceneConfig.camera.maxDistance,
-    );
+    this.zoomDistance = MathUtils.clamp((this.zoomDistance ?? this.position.distanceTo(this.target)) * scale, this.limits.minDistance, this.limits.maxDistance);
   }
 
   // 用户拖动取得控制权时终止尚未完成的推进和缩放.
@@ -50,6 +49,27 @@ export class CameraMotion {
   // 隐藏页面时丢弃滚轮惯性, 保留推进的已用时间供恢复后继续.
   pause(): void {
     this.zoomDistance = null;
+  }
+
+  // 将观察坐标系随选中的恒星一起平移; 同步未完成的推进与缩放, 保留用户平移偏移.
+  translateFrame(delta: Vector3): void {
+    this.position.add(delta);
+    this.target.add(delta);
+    this.zoomAnchor.add(delta);
+    if (this.transition) {
+      this.transition.from.add(delta);
+      this.transition.to.add(delta);
+      this.transition.targetFrom.add(delta);
+      this.transition.targetTo.add(delta);
+    }
+  }
+
+  // 聚焦完成后锁定观察中心, 同步平移相机和缩放锚点以保留距离与观察角度; 不打断初始平滑推进.
+  keepCentered(center: Vector3): void {
+    if (this.transition) return;
+    this.centerOffset.subVectors(center, this.target);
+    this.translateFrame(this.centerOffset);
+    this.target.copy(center);
   }
 
   // 五次平滑曲线推进与指数缩放均按秒计算, 同一时长不依赖帧数.

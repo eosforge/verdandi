@@ -5,12 +5,15 @@ import type { GalaxyData, Position3 } from "./types.ts";
 export function validateGalaxyData(data: GalaxyData): void {
   const stars = new Set<string>();
   const planets = new Set<string>();
+  let pulsars = 0;
   for (const star of data.stars) {
     if (!star.id || stars.has(star.id)) throw new Error(`Duplicate or empty Star id: ${star.id}`);
     stars.add(star.id);
     validatePosition(star.position);
     if (!/^#[\da-f]{6}$/i.test(star.color)) throw new Error(`Invalid Star color: ${star.id}`);
-    if (star.status !== "available" && star.status !== "unavailable") throw new Error(`Invalid Star status: ${star.id}`);
+    if (star.status !== "available" && star.status !== "black-hole") throw new Error(`Invalid Star status: ${star.id}`);
+    if (star.appearance !== undefined && star.appearance !== "star" && star.appearance !== "pulsar") throw new Error(`Invalid Star appearance: ${star.id}`);
+    if (star.status === "available" && star.appearance === "pulsar" && ++pulsars > 1) throw new Error("Only one pulsar is supported");
     for (const planet of star.planets) {
       if (!planet.id || planets.has(planet.id)) throw new Error(`Duplicate or empty planet id: ${planet.id}`);
       if (planet.starId !== star.id || !planetKinds.includes(planet.kind)) throw new Error(`Invalid planet owner or kind: ${planet.id}`);
@@ -18,6 +21,7 @@ export function validateGalaxyData(data: GalaxyData): void {
       validatePosition(planet.position);
     }
   }
+  if (data.centerStarId !== undefined && !stars.has(data.centerStarId)) throw new Error("Invalid overview center Star id");
   const edges = new Map<string, Set<string>>();
   for (const link of data.links) {
     if (!stars.has(link.source) || !stars.has(link.target) || link.source === link.target) throw new Error("Invalid Star link endpoints");

@@ -4,9 +4,11 @@ import { NButton } from "naive-ui";
 import { useGalaxyScene } from "../composables/useGalaxyScene.ts";
 import type { GalaxyData } from "../model/types.ts";
 import PlanetDetails from "./PlanetDetails.vue";
+import GalaxyEditor from "./GalaxyEditor.vue";
 const props = defineProps<{ data: GalaxyData }>();
+const emit = defineEmits<{ regenerate: [data: GalaxyData] }>();
 const canvasHost = ref<HTMLElement>();
-const { selectedStar, selectedPlanet, fps, error, retry, overview, selectPlanet, focusPlanet } = useGalaxyScene(canvasHost, () => props.data);
+const { selectedStar, selectedPlanet, fps, cameraPosition, error, retry, overview, selectPlanet, focusPlanet } = useGalaxyScene(canvasHost, () => props.data);
 const availableIds = computed(() => new Set(props.data.stars.filter((star) => star.status === "available").map((star) => star.id)));
 const neighborCount = computed(
   () =>
@@ -40,6 +42,12 @@ const neighborCount = computed(
       @select="selectPlanet"
       @focus="focusPlanet"
     />
+    <output v-if="!error && cameraPosition" class="camera-coordinates" aria-label="相机世界坐标" aria-live="off" title="相机世界坐标，可选中复制">
+      <span>X {{ cameraPosition[0].toFixed(2) }}</span>
+      <span>Y {{ cameraPosition[1].toFixed(2) }}</span>
+      <span>Z {{ cameraPosition[2].toFixed(2) }}</span>
+    </output>
+    <GalaxyEditor :data="data" @confirm="emit('regenerate', $event)" />
   </section>
 </template>
 <style scoped>
@@ -86,6 +94,28 @@ const neighborCount = computed(
   background: #121925;
   text-align: center;
   font-size: 12px;
+}
+.camera-coordinates {
+  position: absolute;
+  right: 74px;
+  bottom: 18px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: center;
+  gap: 4px 12px;
+  max-width: calc(100% - 90px);
+  min-height: 44px;
+  color: #a2b7c7;
+  font:
+    12px ui-monospace,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+.camera-coordinates span {
+  white-space: nowrap;
 }
 .scene-error strong {
   color: #dfb578;

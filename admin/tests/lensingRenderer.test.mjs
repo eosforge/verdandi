@@ -14,6 +14,7 @@ test("lensing isolates scene, optical volumes and overlays, restores state and r
   const material = scope.own(new THREE.ShaderMaterial());
   const horizon = new THREE.Mesh(scope.own(new THREE.SphereGeometry()), material);
   const overlay = new THREE.Object3D();
+  const orbitLines = new THREE.LineSegments();
   let activeTarget = null;
   let width = 800;
   let fail = false;
@@ -28,7 +29,8 @@ test("lensing isolates scene, optical volumes and overlays, restores state and r
       if (fail && renderScene === scene && renderCamera.layers.mask === 2) throw new Error("optics failed");
     },
   };
-  const draw = createLensingRenderer(renderer, scene, camera, [horizon], overlay, scope);
+  const draw = createLensingRenderer(renderer, scene, camera, [horizon], [overlay, orbitLines], scope);
+  assert.equal(orbitLines.layers.mask, 4, "orbital guides are excluded from the lens background layer");
   draw();
   assert.equal(calls.length, 4);
   const capture = calls[0].target;
@@ -53,6 +55,10 @@ test("lensing isolates scene, optical volumes and overlays, restores state and r
   calls.length = 0;
   draw();
   assert.equal(capture.width, 1200);
+  assert.equal(calls.length, 4, "visible orbital guides still render when the selection ring is hidden");
+  orbitLines.visible = false;
+  calls.length = 0;
+  draw();
   assert.equal(calls.length, 3);
   fail = true;
   assert.throws(draw, /optics failed/);
@@ -62,6 +68,9 @@ test("lensing isolates scene, optical volumes and overlays, restores state and r
   assert.deepEqual(scope.dispose(), []);
   assert.equal(horizon.layers.mask, 1);
   assert.equal(overlay.layers.mask, 1);
+  assert.equal(orbitLines.layers.mask, 1);
+  orbitLines.geometry.dispose();
+  orbitLines.material.dispose();
   assert.equal(material.uniforms.backgroundEnabled.value, 0);
   assert.deepEqual(scope.dispose(), []);
 });
@@ -78,7 +87,9 @@ test("a scene without black holes needs no capture or extra render passes", () =
       calls++;
     },
   };
-  createLensingRenderer(renderer, scene, camera, [], new THREE.Object3D(), scope)();
+  const guide = new THREE.Object3D();
+  createLensingRenderer(renderer, scene, camera, [], [guide], scope)();
   assert.equal(calls, 1);
+  assert.equal(guide.layers.mask, 1, "without lensing, guides remain in the normal render layer");
   assert.deepEqual(scope.dispose(), []);
 });

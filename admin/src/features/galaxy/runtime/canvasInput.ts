@@ -25,7 +25,7 @@ export function bindCanvasInput(options: InputOptions, scope: ResourceScope): { 
   let pointerDown: { id: number; x: number; y: number; button: number; moved: boolean } | null = null;
   let clickEligible = false;
 
-  // 使用实时画布尺寸设置射线, 折叠侧栏或窗口变化后仍保持准确.
+  // 使用实时画布尺寸设置射线, 窗口或容器变化后仍保持准确.
   function setRay(event: MouseEvent): void {
     const rect = canvas.getBoundingClientRect();
     pointer.set(((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1, (-(event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1);
@@ -46,6 +46,7 @@ export function bindCanvasInput(options: InputOptions, scope: ResourceScope): { 
 
   // 按下时立即中断自动推进和缩放, 先于 OrbitControls 接管; 多指输入不参与单击拾取.
   function onPointerDown(event: PointerEvent): void {
+    preventMiddleDefault(event);
     motion.cancel();
     clickEligible = false;
     if (!event.isPrimary) {
@@ -54,6 +55,11 @@ export function bindCanvasInput(options: InputOptions, scope: ResourceScope): { 
     }
     pointerDown = { id: event.pointerId, x: event.clientX, y: event.clientY, button: event.button, moved: false };
     canvas.focus({ preventScroll: true });
+  }
+
+  // 中键保留给画布平移, 阻止浏览器自动滚屏; 不停止传播, OrbitControls 仍接收完整手势.
+  function preventMiddleDefault(event: MouseEvent): void {
+    if (event.button === 1) event.preventDefault();
   }
 
   // 一旦越过拖动阈值便持续记为拖动, 即使最终回到起点也不会误选实体.
@@ -96,6 +102,9 @@ export function bindCanvasInput(options: InputOptions, scope: ResourceScope): { 
 
   canvas.addEventListener("wheel", onWheel, { capture: true, passive: false, signal });
   canvas.addEventListener("pointerdown", onPointerDown, { capture: true, signal });
+  // mousedown 兼容浏览器的鼠标默认行为, auxclick 覆盖中键释放时的默认动作.
+  canvas.addEventListener("mousedown", preventMiddleDefault, { capture: true, signal });
+  canvas.addEventListener("auxclick", preventMiddleDefault, { capture: true, signal });
   canvas.addEventListener("pointermove", onPointerMove, { signal });
   canvas.addEventListener("pointerup", onPointerUp, { signal });
   canvas.addEventListener("pointercancel", cancelPointer, { signal });

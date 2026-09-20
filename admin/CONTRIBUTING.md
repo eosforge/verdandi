@@ -20,7 +20,7 @@
 - 模块使用具名导出, Vue 单文件组件按约定默认导出. 本地 TypeScript 导入显式写 `.ts`, 兼容 Node.js 原生测试.
 - 保持 strict、索引越界检查、可选属性精确检查和可擦除类型语法. 不以 `any`、非空断言或 `@ts-ignore` 掩盖契约问题.
 - 数据模型使用只读字段和只读集合. 对外传递稳定 ID, 不用对象引用相等表达实体身份.
-- Three.js 对象不进入 Vue 深层响应式系统. 每帧计算留在运行时, Vue 仅接收选择、错误和每秒 FPS.
+- Three.js 对象不进入 Vue 深层响应式系统. 每帧计算留在运行时, Vue 仅接收选择、错误、FPS 和限频相机坐标.
 - 组件名使用 PascalCase, 函数和变量使用 camelCase, 文件按职责命名; composable 使用 `use` 前缀.
 - 全局样式仅位于 `app/styles/`; 布局和功能组件使用 scoped 样式, 公共颜色与字体由 CSS 变量管理.
 - 当前仅一页, 由 App 装配布局和功能. 增加真实页面后再引入路由; 出现跨功能共享状态后再评估状态库.
@@ -33,6 +33,7 @@
 - `pnpm check:boundaries` 用现有 TypeScript 解析器检查这些导入边界. 修改分层时同步更新规则和架构文档.
 - 运行时装配入口保持在 `createGalaxyScene.ts` 和 `createGalaxyObjects.ts`. `scene/` 负责画布与选择命令, `objects/` 负责建模、运动和拾取, `blackHole/` 负责黑洞光学与动画.
 - `blackHole/config.ts`、`flow.ts`、`optics.ts` 保持纯数值计算, 不创建 GPU 或 DOM 资源. `shaders/` 只组合 GLSL 字符串与数值常量; 材质、纹理和模型准备各自负责资源创建.
+- `background/` 分开保存资源构造和 GLSL; `rendering/` 维护共用层编号和全屏几何, 不依赖场景装配. `createStarPicker` 只做拾取范围回退, 不维护第二份选择状态.
 - 纯类型依赖使用 `import type`, 不为共享类型加载资产工厂. 架构检查同时拒绝运行时循环依赖, 类型引用不算运行时边.
 - 按职责与所有权拆文件, 不按固定行数切割连续算法. 优先用具体函数和只读输入契约, 不增加只有一个透传实现的管理类、容器或空接口层.
 - 取得 GPU、事件监听、观察器或 RAF 资源后立即登记清理. 初始化失败和正常卸载走同一清理路径.

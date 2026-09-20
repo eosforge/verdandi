@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { demoGalaxy } from "../src/features/galaxy/data/demo.ts";
-import { spherePosition } from "../src/features/galaxy/model/layout.ts";
+import { diskPosition } from "../src/features/galaxy/model/layout.ts";
+import { createSystemPlane } from "../src/features/galaxy/model/orbitalPlane.ts";
 import { starScaleForPlanetCount } from "../src/features/galaxy/model/presentation.ts";
 import { validateGalaxyData } from "../src/features/galaxy/model/validate.ts";
 import { createGalaxyScene } from "../src/features/galaxy/runtime/createGalaxyScene.ts";
@@ -30,32 +31,40 @@ test("star scale follows the requested piecewise count landmarks and clamps both
   }
 });
 
-test("demo retains the three available systems and an isolated unavailable star", () => {
+test("demo contains nine connected ordinary stars, an isolated black hole and an isolated pulsar", () => {
   validateGalaxyData(demoGalaxy);
   assert.deepEqual(
     demoGalaxy.stars.map((star) => star.planets.length),
-    [36, 48, 60, 0],
+    [36, 48, 60, 12, 15, 18, 21, 24, 18, 0, 0],
   );
-  assert.equal(demoGalaxy.links.length, 3);
+  assert.equal(demoGalaxy.links.length, 36);
   assert.ok(demoGalaxy.links.every((link) => link.source !== "star-orion" && link.target !== "star-orion"));
+  assert.ok(demoGalaxy.links.every((link) => link.source !== "star-pulsar" && link.target !== "star-pulsar"));
+  assert.equal(demoGalaxy.stars.find((star) => star.id === "star-pulsar").appearance, "pulsar");
+  const members = demoGalaxy.stars.filter((star) => star.appearance !== "pulsar");
+  const central = demoGalaxy.stars.find((star) => star.id === demoGalaxy.centerStarId);
+  for (let axis = 0; axis < 3; axis++)
+    assert.ok(Math.abs(central.position[axis] - members.reduce((sum, star) => sum + star.position[axis] / members.length, 0)) < 1e-10);
   assert.deepEqual(
-    demoGalaxy.stars.filter((star) => star.status === "available").map((star) => star.id),
-    ["star-atlas", "star-lyra", "star-vega"],
+    demoGalaxy.stars.filter((star) => star.status === "available" && star.appearance !== "pulsar").map((star) => star.id),
+    ["star-atlas", "star-lyra", "star-vega", "star-sirius", "star-capella", "star-rigel", "star-procyon", "star-altair", "star-deneb"],
   );
   assert.deepEqual(
-    demoGalaxy.stars.filter((star) => star.status === "unavailable").map((star) => star.id),
+    demoGalaxy.stars.filter((star) => star.status === "black-hole").map((star) => star.id),
     ["star-orion"],
   );
-  validateGalaxyData({ ...demoGalaxy, stars: [], links: [] });
+  validateGalaxyData({ stars: [], links: [], sourceLabel: "", description: "" });
 });
 
-test("spherical layout is deterministic, finite, and stays on its requested radius", () => {
+test("disk layout is deterministic, finite, and stays on its requested plane and radius", () => {
+  const plane = createSystemPlane("layout-test-star");
   for (const count of [1, 12, 100, 1000]) {
-    const positions = Array.from({ length: count }, (_, index) => spherePosition(index, count, 27, 0.85));
+    const positions = Array.from({ length: count }, (_, index) => diskPosition(index, count, 27, plane, 0.85));
     assert.equal(new Set(positions.map(String)).size, count);
     positions.forEach((position, index) => {
       assert.ok(Math.abs(Math.hypot(...position) - 27) < 1e-10);
-      assert.deepEqual(position, spherePosition(index, count, 27, 0.85));
+      assert.deepEqual(position, diskPosition(index, count, 27, plane, 0.85));
+      assert.ok(Math.abs(position.reduce((sum, value, axis) => sum + value * plane.normal[axis], 0)) < 1e-10);
     });
   }
   for (const args of [
@@ -66,7 +75,7 @@ test("spherical layout is deterministic, finite, and stays on its requested radi
     [0, 1, Infinity],
     [0, 1, 1, NaN],
   ]) {
-    assert.throws(() => spherePosition(...args), RangeError);
+    assert.throws(() => diskPosition(args[0], args[1], args[2], plane, args[3]), RangeError);
   }
 });
 
@@ -78,6 +87,18 @@ for (const [name, mutate] of [
     },
   ],
   ["duplicate star", (data) => data.stars.push(data.stars[0])],
+  [
+    "missing overview center",
+    (data) => {
+      data.centerStarId = "missing";
+    },
+  ],
+  [
+    "invalid star appearance",
+    (data) => {
+      data.stars[0].appearance = "unknown";
+    },
+  ],
   ["duplicate planet", (data) => data.stars[0].planets.push(data.stars[0].planets[0])],
   [
     "wrong owner",

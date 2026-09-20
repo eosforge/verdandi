@@ -97,6 +97,22 @@ test("pressing during focus cancels the tween before the first sub-threshold mov
   }
 });
 
+test("middle-button defaults are cancelled without affecting other buttons and listeners are released", () => {
+  const { counts, scope, send } = harness();
+  try {
+    for (const type of ["pointerdown", "mousedown", "auxclick"]) {
+      assert.equal(send(type, { button: 1 }).defaultPrevented, true, `${type} must not start browser autoscroll`);
+      assert.equal(send(type, { button: 0 }).defaultPrevented, false);
+      assert.equal(send(type, { button: 2 }).defaultPrevented, false);
+    }
+    assert.equal(counts.picks, 0);
+  } finally {
+    scope.dispose();
+  }
+  for (const type of ["pointerdown", "mousedown", "auxclick"])
+    assert.equal(send(type, { button: 1 }).defaultPrevented, false, "disposal must remove default-action guards");
+});
+
 test("double click returns to overview; cancelled and secondary pointers cannot select", () => {
   const { counts, input, scope, send } = harness();
   try {

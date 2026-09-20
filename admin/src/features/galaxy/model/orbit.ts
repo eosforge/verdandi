@@ -1,4 +1,6 @@
+// 焦点椭圆与 Kepler 时间求解; 每颗行星相对所属星系的共同面仅允许小倾角.
 import type { Position3 } from "./types.ts";
+import { maxPlanetInclination, orbitSeed, type OrbitalPlane } from "./orbitalPlane.ts";
 
 export interface PlanetOrbit {
   readonly semiMajorAxis: number;
@@ -9,27 +11,28 @@ export interface PlanetOrbit {
   readonly meanMotion: number;
 }
 
-// 从已校验的初始位置和稳定 ID 构造轨道; 恒星位于焦点, 初始姿态不因启用公转而跳变.
-export function createPlanetOrbit(id: string, position: Position3): PlanetOrbit {
-  let seed = 2166136261;
-  for (const character of id) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
-  const phase = ((seed >>> 0) / 0x100000000) * Math.PI * 2;
+// position 是布局提示: 保留距星距离, 方向投影到小倾角轨道面; plane 必须为所属星系的正交单位基.
+export function createPlanetOrbit(id: string, position: Position3, plane: OrbitalPlane): PlanetOrbit {
+  const seed = orbitSeed(id);
+  const phase = (seed / 0x100000000) * Math.PI * 2;
   const radius = Math.hypot(...position);
-  if (radius < 1e-8) return { semiMajorAxis: 0, eccentricity: 0, periapsis: [1, 0, 0], transverse: [0, 1, 0], meanAnomaly: 0, meanMotion: 0 };
-  const [x, y, z] = position.map((value) => value / radius) as [number, number, number];
-  const reference: Position3 = Math.abs(y) < 0.9 ? [0, 1, 0] : [1, 0, 0];
-  const tx = y * reference[2] - z * reference[1];
-  const ty = z * reference[0] - x * reference[2];
-  const tz = x * reference[1] - y * reference[0];
-  const length = Math.hypot(tx, ty, tz);
-  const tangent: Position3 = [tx / length, ty / length, tz / length];
-  const normal: Position3 = [y * tangent[2] - z * tangent[1], z * tangent[0] - x * tangent[2], x * tangent[1] - y * tangent[0]];
-  const tilt = phase * 2.37;
-  const direction = tangent.map((value, index) => value * Math.cos(tilt) + (normal[index] ?? 0) * Math.sin(tilt)) as [number, number, number];
+  if (radius < 1e-8) return { semiMajorAxis: 0, eccentricity: 0, periapsis: plane.reference, transverse: plane.transverse, meanAnomaly: 0, meanMotion: 0 };
+  const node = phase * 2.37;
+  const inclination = (((seed >>> 16) & 255) / 255) * maxPlanetInclination;
+  const axis = plane.reference.map((value, index) => value * Math.cos(node) + (plane.transverse[index] ?? 0) * Math.sin(node)) as [number, number, number];
+  const across = plane.reference.map(
+    (value, index) =>
+      (-value * Math.sin(node) + (plane.transverse[index] ?? 0) * Math.cos(node)) * Math.cos(inclination) + (plane.normal[index] ?? 0) * Math.sin(inclination),
+  ) as [number, number, number];
+  const x = position[0] * axis[0] + position[1] * axis[1] + position[2] * axis[2];
+  const y = position[0] * across[0] + position[1] * across[1] + position[2] * across[2];
+  // 布局提示接近轨道法线时, 用 ID 选定相位, 避免对接近零的投影归一化.
+  const angle = Math.hypot(x, y) > radius * 1e-8 ? Math.atan2(y, x) : phase;
+  const radial = axis.map((value, index) => value * Math.cos(angle) + (across[index] ?? 0) * Math.sin(angle)) as [number, number, number];
+  const direction = axis.map((value, index) => -value * Math.sin(angle) + (across[index] ?? 0) * Math.cos(angle)) as [number, number, number];
   const eccentricity = 0.08 + (((seed >>> 8) & 255) / 255) * 0.24;
   const cos = Math.cos(phase);
   const sin = Math.sin(phase);
-  const radial: Position3 = [x, y, z];
   const periapsis = radial.map((value, index) => value * cos - (direction[index] ?? 0) * sin) as [number, number, number];
   const transverse = radial.map((value, index) => value * sin + (direction[index] ?? 0) * cos) as [number, number, number];
   const semiMajorAxis = (radius * (1 + eccentricity * cos)) / (1 - eccentricity * eccentricity);
