@@ -37,8 +37,8 @@ int main(int argc, char** argv) {
         logger.write("started", "{\"admission\":" + astra::json_string(server.admission_endpoint()) + ",\"pulse\":" + astra::json_string(server.pulse_endpoint()) + "}");
         // wake 用于主循环有界等待, 不承载业务时间或 RPC 生命周期.
         astra::Wakeup wake;
-        // reported_ready 初始为 false, 记录上次已打印的资格, 避免反复输出相同状态.
-        bool reported_ready = false;
+        // reported_synchronized 初始为 false, 记录上次已打印的同步质量, 避免反复输出相同状态.
+        bool reported_synchronized = false;
         // next_report 是下一次状态日志的本地单调截止, 与公开的 Unix 时间分离.
         auto next_report = astra::Steady::now();
         while (!signals.requested()) {
@@ -47,13 +47,14 @@ int main(int argc, char** argv) {
             if (local >= next_report) {
                 // 每秒公开时间质量, 首次未校准也可诊断; 登记服务不因外部对时失效而退出.
                 const auto time = server.time();
-                // ready 要求读数存在且质量达标, 单纯已有锚点不意味着可以签发新有限租约.
-                const bool ready = time && time->ready;
-                if (ready != reported_ready) {
-                    reported_ready = ready;
-                    logger.write(ready ? "clock_synchronized" : "clock_unavailable");
+                // synchronized 要求参考质量达标, 单纯本地走时可用不意味着可以继续提供可信对时样本.
+                const bool synchronized = time && time->synchronized;
+                if (synchronized != reported_synchronized) {
+                    reported_synchronized = synchronized;
+                    logger.write(synchronized ? "clock_synchronized" : time ? "clock_holdover"
+                                                                            : "clock_unavailable");
                 }
-                logger.write("clock_status", time ? std::string("{\"ready\":") + (ready ? "true" : "false") + ",\"nanoseconds\":" + std::to_string(time->time.time_since_epoch().count()) + ",\"uncertainty_ns\":" + std::to_string(time->uncertainty_ns) + "}" : "{\"ready\":false}");
+                logger.write("clock_status", time ? std::string("{\"ready\":") + (time->ready ? "true" : "false") + ",\"synchronized\":" + (synchronized ? "true" : "false") + ",\"nanoseconds\":" + std::to_string(time->time.time_since_epoch().count()) + ",\"uncertainty_ns\":" + std::to_string(time->uncertainty_ns) + "}" : "{\"ready\":false,\"synchronized\":false}");
                 next_report = local + std::chrono::seconds(1);
             }
             wake.wait(wake.observe());
@@ -62,7 +63,7 @@ int main(int argc, char** argv) {
         logger.write("stopped");
         return 0;
     } catch (...) {
-        std::cerr << "Pulsar failed to start or operate; check configuration, identity, ports and journal\n";
+        std::cerr << "Pulsar failed to start or operate; check configuration, identity, ports and database\n";
         return 1;
     }
 }

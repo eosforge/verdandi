@@ -1,14 +1,22 @@
 # Astra Admin
 
 > 目标星图采用 Star 恒星、Planet 中继和业务卫星, 见 [当前架构](../docs/architecture.md).
-> 当前演示仍使用业务行星模型, 该展示迁移及真实后端接入尚未实现.
+> 当前演示仍使用业务行星模型, 该展示迁移尚未实现; 独立真实管理模式已接入 Astrolabe, 新源码待验证.
 
-Astra Supervisor 的管理端基础工程, 使用 Vue 3、TypeScript、Vite、Naive UI 和 Three.js.
+Astra 的管理前端基础工程, 使用 Vue 3、TypeScript、Vite、Naive UI 和 Three.js; 目标后端为 [Astrolabe](../astra/astrolabe/README.md#管理登录与-admin-接入).
 当前为无侧栏的全视口星图, 包含九颗正常状态恒星、一颗黑洞状态恒星、一个独立脉冲星的拓扑演示. Atlas、Lyra、Vega 分别带有 36、48、60 颗行星;
 Sirius、Capella、Rigel、Procyon、Altair、Deneb 分别带有 12、15、18、21、24、18 颗行星.
 九个普通恒星节点共 252 个 Registry、Subscriber、Publisher 实体, 两两连接形成 36 条无重复连线; Orion 黑洞与 Pulsar 脉冲星均无行星和连线.
-所有连接和实体均为本地示例, 尚未接入 Supervisor API, 不代表真实集群状态.
+演示星图的连接和实体均为本地示例, 不代表真实集群状态. 顶部可切换到独立的真实管理模式, 后端故障不会静默退回演示.
 当前隐藏全部恒星连线, 保留连接数据; 隐藏时不绘制或更新连线缓冲. 可通过 `sceneConfig.showStarLinks` 调整显示.
+
+## Astrolabe 接入方向
+
+Admin 提供登录与管理界面, Astrolabe 提供管理后端和数据适配来源; 完整边界见 [管理登录与 Admin 接入](../astra/astrolabe/README.md#管理登录与-admin-接入). 首版管理用户仅做登录验证, 不实现用户角色等级、按分组授权或菜单权限表. 真实模式已编写 Cookie 登录、目录/指标观察、Almanac 完整读取、单 Key Set/Delete 和脱敏凭据管理; 尚未类型检查、构建或浏览器验收, 不改变下文演示星图的性质.
+
+管理网络层只向 Go Astrolabe 请求管理数据和提交操作, 登录校验及 [管理账号](../astra/astrolabe/README.md#管理账号) 由后端负责. [会话](../astra/astrolabe/README.md#管理会话) 与 [同源/跨源部署](../astra/astrolabe/README.md#同源与跨源部署) 使用唯一契约, 不在前端另存登录 token 或用 CORS 失败自动降级认证. 浏览器不取得 Pulsar 的服务部署密码、签名凭据或私钥, 不因一次用户登录登记新节点. 网络数据经独立适配层转为 GalaxyData, 渲染器继续只消费展示契约; 不将登录状态或后端协议加入逐帧逻辑.
+
+Admin 经 Astrolabe [编辑 Almanac 并提交到 Polaris](../astra/astrolabe/README.md#编辑保存与发布), 分开展示 Polaris 持久提交与各 Star 安装进度, 不把页面修改或某个 Star 已应用当成权威持久成功. 管理底稿只来自 Polaris, 列表过滤、分页、读取失败或落后 Star 的缺项不能变成删除指令. 部分成功、结果不确定、后端不可读和视图陈旧分别报告, 不自动回退演示数据或由前端补发旧请求. 当前编辑器使用完整 Buffer 的 Base64, 显式提交版本; __auth/comet 自动使用专用凭据接口, 不回显已有 SECRET. 部分快照不替换旧视图, 界面分别报告未提交与结果不确定.
 
 ## 本地运行
 
@@ -70,7 +78,7 @@ tests/                         # Node.js 回归测试
 docs/                          # 架构说明与浏览器验收清单
 ```
 
-`src/app/App.vue` 负责将 `demoGalaxy` 注入 `GalaxyView`. 渲染器不导入演示数据, 不请求 Supervisor API;
+`src/app/App.vue` 负责将 `demoGalaxy` 注入 `GalaxyView`. 渲染器不导入演示数据, 不请求管理后端 API;
 资产加载器仅按需读取随应用发布的同源 GLB 文件.
 未来接入 API 时, 在数据适配层把网络 DTO 转成 `GalaxyData`, 再替换整个快照.
 当前快照替换会重建场景并回到总览; 高频实时更新需要另行设计增量更新和背压.
@@ -117,4 +125,4 @@ docs/                          # 架构说明与浏览器验收清单
 ## 许可证与状态
 
 沿用仓库根目录的 [MIT License](../LICENSE). 当前是 Alpha 管理端基础骨架;
-认证授权、真实拓扑接口、增量同步、大规模性能与长期稳定性仍待实现和验证.
+管理登录、Astrolabe 真实接口接入、增量同步、大规模性能与长期稳定性仍待实现和验证.

@@ -1,7 +1,7 @@
-// Astra v1 节点间控制消息. Orbit 凭证作为原始字节传输, 类型由 Orbit 唯一定义.
+// Astra v1 节点间控制与动态来源复制消息. Orbit 凭证作为原始字节传输, 类型由 Orbit 唯一定义.
 syntax = "proto3";
 package proto.astra.v1;
-option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
+option go_package = "github.com/eosforge/verdandi/astra/internal/generated/astra;astra";
 
 // TLS 1.3 建链后交换签名 bearer 凭证. 不携带第三方名单或业务数据.
 message Hello {
@@ -61,95 +61,182 @@ enum ProtocolErrorCode {
 
 // Star/Planet 的互联传输. Supervisor 准入使用 orbit.proto 中的 gRPC 接口.
 
-// 每次 RPC 建立一条逻辑会话. 双方第一条均为 Hello, 后续消息由当前阶段验证.
-// 角色索引按成员身份、代次和方向隔离重复会话, 不依赖底层连接是否复用.
+// 每对 Star 保留一条双向逻辑会话. 双方第一条均为 Hello, 后续消息由当前阶段验证.
+// 相反方向的竞争按发起方身份裁决, 不依赖底层连接是否复用.
 // 拨号方先发送 Hello, 接收方验证准入后再返回自己的 bearer 凭证.
 service StarTransport {
     rpc OpenSession(stream SessionPacket) returns (stream SessionPacket);
 }
 
-// 显式类型分派, 不把旧 MessageID 或六字节帧重新装进 bytes 隧道.
-// 当前仅实现控制会话, Catalog/Registry 业务同步另行定义有界消息.
+// 控制消息优先占用下一次写机会, 不能抢占已在途的帧. 来源身份始终从本流已验证的 Hello 取得.
 message SessionPacket {
     oneof body {
         Hello hello = 1;
         Ping ping = 2;
         Pong pong = 3;
         ProtocolError rejection = 4;
+        Position resume = 5;
+        Position ack = 6;
+        CatalogSnapshot catalog_snapshot = 7;
+        CatalogChanges catalog_changes = 8;
+        EphemerisSnapshot ephemeris_snapshot = 9;
+        EphemerisChanges ephemeris_changes = 10;
+        Repair repair = 11;
+        Repaired repaired = 12;
     }
 }
 
-// 草案: 生成类型用于审阅协议, 当前 Star/Planet 尚未注册此服务或对外提供业务同步.
-
-// 业务同步候选接口. 每条 RPC 都必须校验准入, 不能因另一条流已经验证就直接放行.
-service SyncTransport {
-    // 信令和增量候选通道. 完成整份 SyncResponse 后才可确认其提交位置.
-    rpc OpenDeltaStream(stream SyncPacket) returns (stream SyncPacket);
-
-    // 快照候选通道. 独立 RPC 不保证独立资源或端到端零拷贝.
-    // 实例校验, 快照期间的历史保留和切回增量规则尚未实施, 不据此声明可用.
-    rpc OpenSnapshotStream(stream SnapshotRequest) returns (stream SnapshotChunk);
+// Almanac 永远不进入对等来源域, 由 Polaris 直接向每台 Star 同步.
+enum Domain {
+    // 未提供域, 所有恢复或确认消息均拒绝此值.
+    DOMAIN_UNSPECIFIED = 0;
+    // 每 Key 业务版本/TTL 的业务发布数据.
+    DOMAIN_CATALOG = 1;
+    // 来源 Star 权威维护的临时注册.
+    DOMAIN_EPHEMERIS = 2;
 }
 
-// 增量通道的消息载体.
-message SyncPacket {
+// 来源域的连续已安装位置, 覆盖全部 Scope. 初始零为合法空前缀, 不等于业务版本.
+message Position {
+    Domain domain = 1;
+    uint64 version = 2;
+}
+
+// Scope 只定位记录, 不是独立的对等恢复边界.
+message Scope {
+    string sector = 1;
+    string spectrum = 2;
+}
+
+// 明确的无正文分支, 不将合法的零字节正文误认为水位或删除.
+message Empty {}
+
+// 活动 Catalog 正文, deadline 为原始 Unix 纳秒截止, 接收者不得重算 TTL.
+message CatalogValue {
+    bytes value = 1;
+    uint64 deadline = 2;
+}
+
+// 快照/完整发布事实含正内容版本; value 与 watermark 两个分支必须明确选一个.
+message CatalogRecord {
+    uint64 version = 1;
     oneof body {
-        Hello hello = 1;
-        Ping ping = 2;
-        Pong pong = 3;
-        SyncRequest request = 4;
-        SyncResponse response = 5;
+        CatalogValue value = 2;
+        Empty watermark = 3;
     }
 }
 
-// 候选恢复请求. 当前版本属于一个服务端实例和一个明确的订阅范围.
-message SyncRequest {
-    // 客户端已完整应用的本地提交序号, 不是 Catalog 发布者的业务版本.
-    uint64 client_global_version = 1;
-    // 上次对账的服务端不透明实例 ID, 复用现有准入身份. 为空或不匹配时必须全量.
-    string server_instance_id = 2;
-    // 本次希望订阅的范围, 例如 "Catalog/Routes/" 或 "Registry/". 空字符串表示全部.
-    string subscribe_prefix = 3;
-    // 游标原来所属的范围. 与本次范围不同必须重新快照, 重连也不能省略此比较.
-    string cursor_prefix = 4;
+// 完整来源清单的一行, 不包含第三方来源或合并视图.
+message CatalogEntry {
+    Scope scope = 1;
+    string key = 2;
+    CatalogRecord record = 3;
 }
 
-// 候选同步响应. requires_full_snapshot 为 true 时不得把此响应当成已同步的提交屏障.
-message SyncResponse {
-    // 全部增量应用成功后才能保存的提交位置.
-    uint64 server_global_version = 1;
-    // 当前服务端的不透明实例 ID, 供客户端下次携带.
-    string server_instance_id = 2;
-
-    // 历史不足, 游标超前, 实例不匹配或范围改变时必须全量.
-    // 草案仍需实现快照与增量的衔接, 当前没有对应服务处理器.
-    bool requires_full_snapshot = 3;
-
-    // 按提交顺序排列的完整增量与删除记录, 不在批次中间确认进度.
-    repeated DeltaRecord deltas = 4;
+// 分页共享同一来源基线, complete 前不安装或 ACK; position=0 只允许空组.
+message CatalogSnapshot {
+    uint64 position = 1;
+    repeated CatalogEntry entries = 2;
+    bool complete = 3;
 }
 
-message DeltaRecord {
-    // 完整业务 Key.
-    string key = 1;
-    // 业务二进制正文.
-    bytes payload = 2;
-    // true 表示删除该 Key.
-    bool deleted = 3;
-    // 当前草案使用所在 Store 的提交号, 不能用于 Catalog 业务版本校验.
-    uint64 field_version = 4;
+// 期限刷新只传当前业务版本和原截止, 缺正文时需精确回补, 不凭此创建记录.
+message CatalogLease {
+    uint64 version = 1;
+    uint64 deadline = 2;
 }
 
-// 快照请求草案, 其准入与关联规则仍待服务层实现.
-message SnapshotRequest {
-    string subscribe_prefix = 1;
+// 一个位置对应一个原子事实, 期限变化与内容变化均进入本来源连续序列.
+message CatalogDelta {
+    uint64 position = 1;
+    Scope scope = 2;
+    string key = 3;
+    oneof action {
+        CatalogRecord record = 4;
+        CatalogLease lease = 5;
+    }
 }
 
-message SnapshotChunk {
-    // 全部块必须来自同一个不可变快照.
-    uint64 snapshot_version = 1;
-    // 分块大小由后续实现的资源预算决定, 协议不固定为 4 KiB.
-    bytes chunk_data = 2;
-    // 收齐最后一块后才能将完整快照应用到本地视图.
-    bool is_last_chunk = 3;
+// 装包不改变提交边界, 接收方只确认已完整安装的连续前缀.
+message CatalogChanges {
+    repeated CatalogDelta entries = 1;
+    // 同一捕获边界的来源头部, 首次空组也发送一次 head=0 的空确认.
+    uint64 head = 2;
+}
+
+// Ephemeris 原生完整行, Attr 永久固定, 两个 order 分别防止更新及续租乱序.
+message EphemerisRecord {
+    bytes attr = 1;
+    bytes data = 2;
+    uint64 deadline = 3;
+    uint64 update = 4;
+    uint64 renewal = 5;
+    uint32 ttl_ms = 6;
+}
+
+// 标准小写 UUIDv4 原样索引, 不在续租路径反复格式化.
+message EphemerisEntry {
+    Scope scope = 1;
+    string uuid = 2;
+    EphemerisRecord record = 3;
+}
+
+// 完整组基线, 缺项只结束该来源旧记录, 不能清空其他 Star 的注册.
+message EphemerisSnapshot {
+    uint64 position = 1;
+    repeated EphemerisEntry entries = 2;
+    bool complete = 3;
+}
+
+// Data-only 不隐式延期, 未掌握 Attr 或完整记录时请求精确回补.
+message EphemerisData {
+    bytes data = 1;
+    uint64 order = 2;
+}
+
+// 续租保留固定 TTL, 只更新原绝对截止及独立的续租 order.
+message EphemerisLease {
+    uint64 deadline = 1;
+    uint64 order = 2;
+}
+
+// 只有来源 Star 的 Remove/到期才广播 erase; 接收者本地 TTL 不产生这个消息.
+message EphemerisDelta {
+    uint64 position = 1;
+    Scope scope = 2;
+    string uuid = 3;
+    oneof action {
+        EphemerisRecord record = 4;
+        EphemerisData data = 5;
+        EphemerisLease lease = 6;
+        Empty erase = 7;
+    }
+}
+
+// 一次网络发送可以携带多个严格连续提交, 不等于跨提交事务.
+message EphemerisChanges {
+    repeated EphemerisDelta entries = 1;
+    // 用于首次恢复完成判断, 不允许以此跳过 entries 尚未完整处理的位置.
+    uint64 head = 2;
+}
+
+// 目标及触发位置构成有界回补关联, 不新增全局请求序号. version 仅 Catalog 使用.
+message Repair {
+    Domain domain = 1;
+    Scope scope = 2;
+    string key = 3;
+    uint64 trigger = 4;
+    uint64 version = 5;
+}
+
+// position 只覆盖本目标, 不能直接推进整个来源的累计 ACK.
+// Catalog 无活动正文但已见版本必须返回 watermark, unknown 只用于真正未知目标.
+message Repaired {
+    Repair request = 1;
+    uint64 position = 2;
+    oneof result {
+        CatalogRecord catalog = 3;
+        EphemerisRecord ephemeris = 4;
+        Empty unknown = 5;
+    }
 }

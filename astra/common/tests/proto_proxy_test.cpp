@@ -32,32 +32,6 @@ void test_fields_and_oneof() {
     CHECK(packet.has_pong() && packet.pong().request_id() == 10);
     astra::mutate(packet).rejection(error);
     CHECK(packet.has_rejection() && packet.rejection().code() == error.code());
-    // request 同时设置游标,实例和订阅范围, 确保代理映射到正确生成字段.
-    proto::astra::v1::SyncRequest request;
-    astra::mutate(request).client_global_version(std::uint64_t{11}).server_instance_id("instance").subscribe_prefix("catalog/").cursor_prefix("catalog/");
-    // delta 带嵌入 NUL 的载荷, 验证按长度持有字节而不是截断为 C 字符串.
-    proto::astra::v1::DeltaRecord delta;
-    astra::mutate(delta).key("catalog/key").value(std::string("a\0b", 3)).deleted(false).version(std::uint64_t{12});
-    // deltas 整体替换一次; 第二次设置同一容器不应追加重复项.
-    google::protobuf::RepeatedPtrField<proto::astra::v1::DeltaRecord> deltas;
-    *deltas.Add() = delta;
-    // response 验证 repeated 整体替换, 连续两次设置不能变成追加.
-    proto::astra::v1::SyncResponse response;
-    astra::mutate(response).server_global_version(std::uint64_t{12}).server_instance_id("instance").requires_full_snapshot(false).deltas(deltas).deltas(deltas);
-    CHECK(response.deltas_size() == 1 && response.deltas(0).payload() == std::string("a\0b", 3));
-    // sync 验证增量通道 oneof 的请求与响应分支以及消息移动赋值.
-    proto::astra::v1::SyncPacket sync;
-    astra::mutate(sync).hello(hello).ping(ping).pong(pong).request(request);
-    CHECK(sync.has_request() && sync.request().client_global_version() == 11);
-    astra::mutate(sync).response(std::move(response));
-    CHECK(sync.has_response() && sync.response().deltas(0).field_version() == 12);
-    // snapshot 为全量订阅请求, 仅检查代理正确写入范围字段.
-    proto::astra::v1::SnapshotRequest snapshot;
-    // chunk 带快照版本,块字节和末块标记, 三者必须独立保留.
-    proto::astra::v1::SnapshotChunk chunk;
-    astra::mutate(snapshot).subscribe_prefix("catalog/");
-    astra::mutate(chunk).snapshot_version(std::uint64_t{12}).chunk_data("data").is_last_chunk(true);
-    CHECK(snapshot.subscribe_prefix() == "catalog/" && chunk.is_last_chunk() && chunk.snapshot_version() == 12);
     // pulse_ping 保存发送时的本机纳秒值, 用来核对 Pong 原样回显.
     proto::pulsar::v1::Ping pulse_ping;
     // pulse_pong 同时设置四时间戳中的服务端部分,误差和同步资格.

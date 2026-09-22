@@ -5,7 +5,7 @@
 #include <stop_token>
 
 namespace astra {
-// Pulsar/Star 共用的新有限租约误差门槛, 含上游, 网络, 残余校正与样本年龄, 单位 ns.
+// Pulsar/Star 共用的首次校准与同步质量门槛, 单位 ns; 已校准 Star 的租约不受此门槛限制.
 inline constexpr std::uint64_t clock_uncertainty_limit_ns = 500'000'000;
 
 // 统一业务纪元时钟: 对外提供单调不减的 Unix 纳秒, 读取不分配, 不写盘, 不调用 RPC.
@@ -42,7 +42,7 @@ public:
 
     // 从时钟读数生成有限期限的失败分类, 不与网络 Status 混用.
     enum class Error {
-        // 来源未就绪或质量不足, 不能受理新的有限期限.
+        // 尚无可用本地时间读数, 不能受理新的有限期限; 单纯失去参考源不属于此错误.
         clock_unready,
         // TTL 为负或调用方提供了非法时间读数.
         invalid_time,
@@ -59,22 +59,24 @@ public:
         std::uint64_t rtt_ns{};
         // 最后有效观测时刻, 用于区分重连后的新鲜样本.
         ElapsedTime sampled{};
-        // 来源可信, 样本不超过 5 s 且总误差不超过 500 ms 才接受新有限期限.
+        // 本次读取已建立纪元锚点且本地推进正常, 才能生成有限期限; 默认 false 防止空读数签发截止.
         bool ready{};
+        // 来源可信, 样本不超过 5 s 且总误差不超过 500 ms 时为 true; 默认 false, 不作为续租门槛.
+        bool synchronized{};
         // ready 且 ttl 非负, 加法不溢出时返回一次性绝对截止. 错误不可隐式转成 Store 的无限期空值.
         std::expected<Time, Error> deadline_after(std::chrono::nanoseconds ttl) const noexcept;
     };
 
     // Star 默认 1000 ppm, 为跟踪 Pulsar 的 500 ppm 调速保留余量; 有效范围 1..1000.
     explicit Clock(std::uint32_t slew_ppm = 1000);
-    // 未初始化/设施故障返回空; 失联只降低 ready, 不清除锚点.
+    // 未初始化/已锁定设施故障返回空, 内核读时失败抛异常; 失联只降低 synchronized, 不清除锚点.
     std::optional<Clock::Reading> now() const;
     // 测试/确定性驱动入口, local 必须顺序提交, 反序视为计时设施故障.
     std::optional<Clock::Reading> now(ElapsedTime local) const;
     // 校验并外推至消费时刻, 替换残余偏差; 无效/过期/重复观测不改变原模型.
     bool publish(const Clock::Estimate& estimate);
     bool publish(const Clock::Estimate& estimate, ElapsedTime local);
-    // 撤销新租约资格, 保留已有走时; 后续有效观测可恢复资格.
+    // 撤销参考源同步质量, 保留本地走时及有限期限能力; 后续有效观测可恢复同步质量.
     void revoke();
 
 private:

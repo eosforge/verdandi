@@ -284,7 +284,9 @@ test("independent pulsar remains pickable and its spin can pause, reverse and ch
     );
     assert.ok(objects.bounds.center.distanceTo(center) < 1e-9, "overview and orbit controls must use the common center");
     assert.equal(system.shells.length, 0);
-    assert.equal(objects.pick(new Raycaster(center.clone().add(new Vector3(0, 0, 8)), new Vector3(0, 0, -1), 0, 10), null)?.star.id, "star-pulsar");
+    // 从放大后的实体外侧发射, 避免正面材质的背面剔除把内部起点误判为拾取失败.
+    const radius = pulsarConfig.coreRadius * system.surface.getWorldScale(new Vector3()).x;
+    assert.equal(objects.pick(new Raycaster(center.clone().add(new Vector3(0, 0, radius + 8)), new Vector3(0, 0, -1), 0, 10), null)?.star.id, "star-pulsar");
     const selection = { star: demoGalaxy.stars[0], planet: demoGalaxy.stars[0].planets[0] };
     objects.update(0.6, selection);
     const expected = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), pulsarConfig.radiansPerSecond * 0.6);
@@ -292,7 +294,7 @@ test("independent pulsar remains pickable and its spin can pause, reverse and ch
     assert.equal(objects.setStarRotationSpeed(system.star.id, 0), true);
     const paused = rotor.quaternion.clone();
     objects.update(1, null);
-    assert.deepEqual(rotor.quaternion, paused);
+    assert.deepEqual(rotor.quaternion.toArray(), paused.toArray());
     assert.equal(objects.setStarRotationSpeed(system.star.id, -pulsarConfig.radiansPerSecond), true);
     objects.update(0.6, selection);
     assert.ok(rotor.quaternion.angleTo(new Quaternion()) < 1e-7);

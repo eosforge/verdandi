@@ -2,14 +2,20 @@
 #include <astra/runtime.hpp>
 
 #include "admission.hpp"
+#include "catalog_service.hpp"
+#include "ephemeris_service.hpp"
+#include "exchange.hpp"
 #include "grpc_session.hpp"
+#include "intake.hpp"
+#include "metrics.hpp"
 #include "process.hpp"
 #include "pulse_client.hpp"
-#include "store.hpp"
+#include "readout.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <grpc/support/time.h>
+#include <grpcpp/health_check_service_interface.h>
 #include <grpcpp/server_builder.h>
 #include <iostream>
 #include <iterator>
@@ -87,10 +93,11 @@ public:
     // 返回值: 进程退出码.
     int run(const Signals& signals) {
 
+        grpc::EnableDefaultHealthCheckService(true); // 使用 gRPC 自带标准健康服务, 不增加 Comet Inspect 握手.
         // 先取得实际监听端口再登记准入, 避免向 Supervisor 发布尚未绑定或端口仍为 0 的端点.
         grpc::ServerBuilder builder;
-        builder.SetMaxReceiveMessageSize(4096);
-        builder.SetMaxSendMessageSize(4096);
+        builder.SetMaxReceiveMessageSize(static_cast<int>(config_.max_frame_bytes));
+        builder.SetMaxSendMessageSize(static_cast<int>(config_.max_frame_bytes));
         builder.AddChannelArgument("grpc.server_handshake_timeout_ms", static_cast<int>(config_.handshake_timeout.count()));
         // 同一部署端点必须唯一, 不允许独立进程以 SO_REUSEPORT 分摊成不同身份.
         builder.AddChannelArgument("grpc.so_reuseport", 0);
@@ -108,12 +115,18 @@ public:
         if (!server_ || port <= 0) {
             throw std::runtime_error("Cannot bind TLS gRPC listener");
         }
+        if (auto* health = server_->GetHealthCheckService())
+            health->SetServingStatus(false); // 身份/基线未就绪, 监听存在不等于业务可用.
 
         // 若配置中的通告地址未指明端口, 使用实际监听分配的端口
         if (config_.advertise.port == 0) {
             config_.advertise.port = static_cast<std::uint16_t>(port);
         }
         try {
+            if (config_.metrics) {
+                metrics_ = std::make_unique<Metrics>(*config_.metrics);
+                logger_.write("metrics_started", "{\"listen\":\"" + metrics_->endpoint().text() + "\"}");
+            }
             // 创建准入管理器
             admission_ = std::make_unique<Admission>(config_, identity_, notifier());
             logger_.write("started", "{\"advertise\":\"" + config_.advertise.text() + "\"}");
@@ -228,10 +241,93 @@ private:
                     (*old)->cancel();
                 }
             }
+            bind(session, now); // 本轮新 Hello 后立即接线, 下一轮任何数据到达前完成.
         }
 
         // 集中清理本轮操作中宣告结束的会话
         reap(now);
+    }
+
+    // 来源身份只接受受信名单/已验签 Hello, 保持每个部署最高代次, 不因断线或 TTL 清理忘记旧实例禁入.
+    Result<void> observe(const Member& member) {
+
+        if (member.role != Member::Role::star || member.id == id_) {
+            return {};
+        }
+        const auto found = sources_.find(member.principal);
+        if (found == sources_.end()) {
+            if (sources_.size() >= config_.max_members - 1) {
+                return Status::capacity("Peer identity capacity exceeded");
+            }
+            sources_.emplace(member.principal, member);
+            return {};
+        }
+        const auto replacement = supersedes(member, found->second);
+        if (!replacement) {
+            return std::unexpected(replacement.error());
+        }
+        if (*replacement) {
+            Member prepared = member; // 先完成字符串分配, 退役后的身份发布不得再抛分配异常.
+            catalog_->retire(found->second.id);
+            ephemeris_->retire(found->second.id);
+            found->second = std::move(prepared);
+        }
+        return {};
+    }
+
+    // 为已经安装的当前 Star 会话连接业务复制, 旧会话只取消不再推进数据, Planet 保持冻结控制路径.
+    void bind(const std::shared_ptr<Session>& session, Steady::time_point now) {
+
+        if (!catalog_ || !ephemeris_ || !session->installed() || session->bound() || session->error() || !session->peer() || session->peer()->role != Member::Role::star) {
+            return;
+        }
+        try {
+            const auto accepted = observe(*session->peer());
+            if (!accepted) {
+                session->cancel(accepted.error().code);
+                return;
+            }
+            const auto catalog = catalog_->admit(session->peer()->id);
+            const auto ephemeris = ephemeris_->admit(session->peer()->id);
+            if (!catalog || !ephemeris) {
+                session->cancel(Status::Code::capacity);
+                return;
+            }
+            session->bind(std::make_unique<Exchange>(*catalog_, *ephemeris_, session->peer()->id, recovery_, session->capacity(), now));
+        } catch (const std::bad_alloc&) {
+            session->cancel(Status::Code::capacity);
+        } catch (...) {
+            session->cancel(Status::Code::internal);
+        }
+    }
+
+    // 首轮来源恢复采用 30 s 有界等待; 超时只允许明确降级开放, 不将缺失来源或半份基线标为成功.
+    void ready(Steady::time_point now, bool clock) {
+
+        if (business_ready_ || !clock || !almanac_ready_ || config_.role != Member::Role::star) {
+            return;
+        }
+        if (!recovery_deadline_) {
+            recovery_deadline_ = now + std::chrono::seconds(30);
+        }
+        std::size_t complete{}; // 只统计当前最高身份且当前有效流已完成双域初始化的来源.
+        for (const auto& [principal, member] : sources_) {
+            (void)principal;
+            complete += std::ranges::any_of(sessions_, [&](const auto& session) { return session->peer() && session->peer()->id == member.id && session->synchronized(); });
+        }
+        if (complete == sources_.size() || now >= *recovery_deadline_) {
+            business_ready_ = true;
+            if (gateway_) {
+                gateway_->ready();
+            }
+            if (auto* health = server_->GetHealthCheckService())
+                health->SetServingStatus(true);
+            if (public_) {
+                if (auto* health = public_->GetHealthCheckService())
+                    health->SetServingStatus(true);
+            }
+            logger_.write(complete == sources_.size() ? "business_ready" : "business_degraded", "{\"synchronized\":" + std::to_string(complete) + ",\"sources\":" + std::to_string(sources_.size()) + "}");
+        }
     }
 
     // advance_admission: 准入独立推进首次登记与候选刷新, 失败保留原有重试期限和本地身份.
@@ -243,11 +339,26 @@ private:
             if (*result) {
                 // 成功注册
                 auto& joined = **result;
-                // 初始化策略对象以设置合法的节点成员信息
-                if (auto initialized = policy_->initialize(joined.local, joined.members); !initialized) {
-                    fatal_ = true;
-                    logger_.failure("registration_rejected", initialized.error().code);
-                    return;
+                if (hello_ && config_.role == Member::Role::star) {
+                    auto refreshed = policy_->refresh(joined.local, joined.members); // 迟到名单不能回退已验签的新身份.
+                    if (!refreshed) {
+                        fatal_ = true;
+                        logger_.failure("directory_rejected", refreshed.error().code);
+                        return;
+                    }
+                    for (const auto generation : *refreshed) {
+                        for (const auto& session : sessions_) {
+                            if (session->generation() == generation) {
+                                session->cancel();
+                            }
+                        }
+                    }
+                } else {
+                    if (auto initialized = policy_->initialize(joined.local, joined.members); !initialized) {
+                        fatal_ = true;
+                        logger_.failure("registration_rejected", initialized.error().code);
+                        return;
+                    }
                 }
 
                 // 首次连接成功, 设置核心凭证对象
@@ -256,12 +367,66 @@ private:
                     std::lock_guard lock(incoming_mutex_);
                     id_ = joined.local.id;
                     hello_ = joined.hello;
-                    accepting_ = true;
+                    accepting_ = config_.role != Member::Role::star;
                     logger_.write("initialized", "{\"id\":" + json_string(id_) + "}");
                 }
 
                 // 重置重试计数器
                 registration_failures_ = 0;
+                if (config_.role == Member::Role::star) {
+                    next_registration_ = now + Milliseconds(30000 + std::hash<std::string>{}(id_) % 5001);
+                    if (!almanac_) {
+                        almanac_ = std::make_unique<Library>(Library::Limits{}, [this](const Scope& scope, const Almanac::Change& change) noexcept {
+                            if (readout_) {
+                                readout_->changed(scope, change);
+                            }
+                        });
+                        access_ = std::make_unique<Access>();
+                        ephemeris_ = std::make_unique<Ephemeris::State>([this] { return synchronized_clock_.now(); }, Ephemeris::State::Limits{.source = {}, .projection = {}, .replicas = config_.max_members - 1});
+                        catalog_ = std::make_unique<Catalog::State>([this] { return synchronized_clock_.now(); }, Catalog::State::Limits{.source = {}, .projection = {}, .replicas = config_.max_members - 1});
+                        if (config_.comet) {
+                            gateway_ = std::make_unique<Gateway>(*access_, id_, config_.auth);
+                            readout_ = std::make_unique<Readout>(*almanac_, *gateway_, notifier());
+                            ephemeris_service_ = std::make_unique<Ephemeris::Service>(*ephemeris_, *gateway_, notifier());
+                            catalog_service_ = std::make_unique<Catalog::Service>(*catalog_, *gateway_, notifier());
+                            open_comet();
+                        }
+                    }
+                    for (const auto& member : joined.members) {
+                        const auto found = sources_.find(member.principal);
+                        if (found != sources_.end() && member.epoch < found->second.epoch) {
+                            continue; // 查询可以滞后于已验签 Hello, 不回退部署身份.
+                        }
+                        if (const auto accepted = observe(member); !accepted) {
+                            fatal_ = true;
+                            logger_.failure("source_identity_rejected", accepted.error().code);
+                            return;
+                        }
+                    }
+                    if (!joined.services.empty()) {
+                        auto candidate = joined.services.front(); // 已通过受信完整名单的角色/别名校验.
+                        if (polaris_ && candidate.principal != polaris_->principal) {
+                            polaris_conflict_ = true;
+                            if (intake_) {
+                                intake_->cancel(Status::Code::conflict);
+                            }
+                            logger_.failure("polaris_conflict", Status::Code::conflict);
+                        } else if (!polaris_ || candidate.epoch >= polaris_->epoch) {
+                            if (polaris_ && !supersedes(candidate, *polaris_)) {
+                                polaris_conflict_ = true;
+                                if (intake_) {
+                                    intake_->cancel(Status::Code::identity);
+                                }
+                            } else {
+                                if (intake_ && candidate != intake_->target()) {
+                                    intake_->cancel();
+                                }
+                                polaris_ = std::move(candidate);
+                                polaris_conflict_ = false;
+                            }
+                        }
+                    }
+                }
                 // Star 对时线程只在准入成功后启动, 复用本进程凭证. 旧 Go 控制面没有 Pulse 字段时显式保持未就绪.
                 if (config_.role == Member::Role::star && joined.pulse_endpoint != pulse_endpoint_) {
                     pulse_.reset();
@@ -273,8 +438,20 @@ private:
             } else {
                 // 注册失败
                 const auto code = result->error().code;
+                if (admission_->revoked()) {
+                    fatal_ = true;
+                    logger_.failure("admission_revoked", code);
+                    return;
+                }
                 // temporary 仅允许传输,超时和容量失败在首次准入时进入重试.
                 const bool temporary = code == Status::Code::transport || code == Status::Code::timeout || code == Status::Code::capacity;
+                if (config_.role == Member::Role::star && hello_ && !temporary) {
+                    // 不可信/冲突名单暂停新的权威安装, 完整旧底稿仍保留, 下次只读查询可以恢复.
+                    polaris_conflict_ = true;
+                    if (intake_) {
+                        intake_->cancel(code);
+                    }
+                }
                 // 对于非临时错误且尚未初始化的, 认定为严重致命错误直接退出
                 if (!temporary && !hello_) {
                     fatal_ = true;
@@ -294,6 +471,8 @@ private:
             if (!hello_) {
                 // 还没拿到入场券, 发起初始注册, 0 作为第0轮候选
                 admission_->begin(0);
+            } else if (config_.role == Member::Role::star) {
+                admission_->begin(0); // 已登记 Star 复用准入 metadata 调用 List, 不再发送密码.
             } else if (policy_->needs_refresh(now)) {
                 // 如果策略判断需要向 Supervisor 刷新候选列表
                 if (candidate_round_ == std::numeric_limits<std::uint32_t>::max()) {
@@ -307,11 +486,84 @@ private:
         }
     }
 
+    // advance_almanac 在既有控制循环接收有界页, 不为每个分组创建线程或独立连接.
+    // clock 表示本进程绝对时间已建立, 后续 holdover 不撤销已完成的启动资格.
+    void advance_almanac(Steady::time_point now, bool clock) {
+
+        if (config_.role != Member::Role::star || !hello_ || !almanac_) {
+            return;
+        }
+        if (intake_) {
+            intake_->pump(now);
+            if (polaris_ && intake_->target().principal == polaris_->principal && intake_->target().epoch > polaris_->epoch) {
+                polaris_ = intake_->target(); // 已验签的新实例优先于下一轮可能迟到的查询.
+            }
+            if (intake_->ready() && !almanac_ready_) {
+                almanac_ready_ = true;
+                logger_.write("almanac_initialized");
+            }
+            if (intake_->done()) {
+                logger_.failure("almanac_disconnected", intake_->error().value_or(Status::Code::transport));
+                intake_.reset();
+                almanac_failures_ = std::min(almanac_failures_ + 1, 100U);
+                next_almanac_ = now + retry_delay(almanac_failures_, config_, std::hash<std::string>{}(id_));
+            } else if (intake_->ready()) {
+                almanac_failures_ = 0;
+            }
+        }
+
+        if (!intake_ && polaris_ && !polaris_conflict_ && clock && now >= next_almanac_) {
+            intake_ = std::make_unique<Intake>(identity_, *hello_, *polaris_, *almanac_, *access_, notifier());
+        }
+        if (almanac_ready_ && clock) {
+            const std::lock_guard lock(incoming_mutex_); // 初始底稿完成后才接纳 Star 对等流.
+            accepting_ = true;
+        }
+    }
+
+    // 显式业务端口只挂公共服务. 与内部端口完全独立的 TLS/消息预算, 不注册 Orbit/Pulse/Polaris 写入.
+    void open_comet() {
+
+        auto credentials = config_.tls ? Identity::external(config_.comet_identity) : Result<std::shared_ptr<grpc::ServerCredentials>>(grpc::InsecureServerCredentials());
+        if (!credentials) {
+            throw std::runtime_error("Cannot prepare independent Comet transport");
+        }
+        grpc::ServerBuilder builder;
+        builder.SetMaxReceiveMessageSize(8 * 1024 * 1024);
+        builder.SetMaxSendMessageSize(8 * 1024 * 1024);
+        builder.AddChannelArgument("grpc.so_reuseport", 0);
+        builder.AddChannelArgument("grpc.server_handshake_timeout_ms", 5000);
+        builder.AddChannelArgument("grpc.http2.min_recv_ping_interval_without_data_ms", 60000);
+        builder.AddChannelArgument("grpc.keepalive_time_ms", 60000);
+        builder.AddChannelArgument("grpc.keepalive_timeout_ms", 20000);
+        builder.AddChannelArgument("grpc.keepalive_permit_without_calls", 0);
+        grpc::ResourceQuota quota; // 接收/解码和传输资源另设上限, 不等同于 Readout 的逻辑保有预算.
+        quota.Resize(64 * 1024 * 1024);
+        builder.SetResourceQuota(quota);
+        builder.RegisterService(gateway_.get());
+        builder.RegisterService(readout_.get());
+        builder.RegisterService(ephemeris_service_.get());
+        builder.RegisterService(catalog_service_.get());
+        int port{}; // 实际绑定的端口只记录在公开日志, 不覆盖内部 advertise.
+        builder.AddListeningPort(config_.comet->text(), *credentials, &port);
+        public_ = builder.BuildAndStart();
+        if (!public_ || port <= 0) {
+            throw std::runtime_error("Cannot bind independent Comet listener");
+        }
+        if (auto* health = public_->GetHealthCheckService()) {
+            health->SetServingStatus(false);
+            for (const auto name : {"proto.comet.v1.Gateway", "proto.comet.v1.Almanac", "proto.comet.v1.Catalog", "proto.comet.v1.Ephemeris"})
+                health->SetServingStatus(name, false);
+        }
+        config_.comet->port = static_cast<std::uint16_t>(port);
+        logger_.write("comet_listening", "{\"endpoint\":" + json_string(config_.comet->text()) + "}");
+    }
+
     // dial: 拨号预算跨轮次生效, 每轮最多建立一个流, 避免集中启动时出现连接突发.
     // 参数 now: 当前时钟.
     void dial(Steady::time_point now) {
 
-        if (hello_ && now >= next_dial_) {
+        if (hello_ && (config_.role != Member::Role::star || almanac_ready_) && now >= next_dial_) {
             // 计算当前尚未建立起稳定通信(即正在连接/握手中的)外呼会话的数量
             const auto pending = std::count_if(sessions_.begin(), sessions_.end(), [](const auto& session) { return session->direction() == Policy::Direction::outbound && !session->installed(); });
             // 如果还未超出并行拨号的限制
@@ -338,25 +590,39 @@ private:
         if (fatal_) {
             return;
         }
-        dial(now); // 进行必要的外拨尝试
-        // 业务时间只读取一次. 未初始化时不猜测有限截止, holdover 时仍驱动既有租约.
-        const auto synchronized = synchronized_clock_.now();
-        if (config_.role == Member::Role::star && synchronized) {
-            store_.tick(synchronized->time, now);
+        // time 是本轮唯一业务读数. 未初始化时不猜测有限截止, 失联后本地推进及有限期限能力保持可用.
+        const auto time = synchronized_clock_.now();
+        advance_almanac(now, time.has_value());
+        if (readout_) {
+            readout_->pump(now);
         }
+        if (catalog_service_) {
+            catalog_service_->pump(now);
+        }
+        if (ephemeris_service_) {
+            ephemeris_service_->pump(now); // 来源期限和活动 Watch 由同一个既有控制循环推进.
+        }
+        ready(now, time.has_value()); // 完整初始来源或明确有界降级后才开放 Comet.
+        dial(now);                    // 准入、时钟和初始 Almanac 完成后开始对等互联.
 
-        // ready 表示可接受新有限租约, 失去资格仍允许已初始化纪元时钟推进现有 TTL.
-        const bool ready = synchronized && synchronized->ready;
-        if (config_.role == Member::Role::star && ready != reported_ready_) {
-            reported_ready_ = ready;
-            logger_.write(ready ? "clock_synchronized" : "clock_unavailable");
+        // synchronized 只报告参考质量, 与本地计时是否可用分离; holdover 不使注册和续租失去时间资格.
+        const bool synchronized = time && time->synchronized;
+        if (metrics_ && now >= next_metrics_) {
+            const auto state = policy_->status(); // 只读有界拓扑计数, 不遍历业务 Key 或 Scope.
+            static_cast<void>(metrics_->publish({id_, business_ready_, almanac_ready_, time && time->ready, synchronized, time ? time->uncertainty_ns : 0, state.members, state.inbound + state.outbound, recovery_.used}));
+            next_metrics_ = now + std::chrono::seconds(1); // 不为每个 HTTP 请求重采样或争用业务锁.
+        }
+        if (config_.role == Member::Role::star && synchronized != reported_synchronized_) {
+            reported_synchronized_ = synchronized;
+            logger_.write(synchronized ? "clock_synchronized" : time ? "clock_holdover"
+                                                                     : "clock_unavailable");
         }
 
         // 按配置的时间间隔定期打印健康状态
         if (config_.status_interval.count() != 0 && now >= next_status_) {
             logger_.status(policy_->status(), id_);
             if (config_.role == Member::Role::star) {
-                logger_.write("clock_status", synchronized ? std::string("{\"ready\":") + (synchronized->ready ? "true" : "false") + ",\"nanoseconds\":" + std::to_string(synchronized->time.time_since_epoch().count()) + ",\"uncertainty_ns\":" + std::to_string(synchronized->uncertainty_ns) + ",\"rtt_ns\":" + std::to_string(synchronized->rtt_ns) + "}" : "{\"ready\":false}");
+                logger_.write("clock_status", time ? std::string("{\"ready\":") + (time->ready ? "true" : "false") + ",\"synchronized\":" + (synchronized ? "true" : "false") + ",\"nanoseconds\":" + std::to_string(time->time.time_since_epoch().count()) + ",\"uncertainty_ns\":" + std::to_string(time->uncertainty_ns) + ",\"rtt_ns\":" + std::to_string(time->rtt_ns) + "}" : "{\"ready\":false,\"synchronized\":false}");
             }
             next_status_ = now + config_.status_interval;
         }
@@ -368,6 +634,27 @@ private:
 
         // deadline 是本次关闭各阶段共用的截止, 后续阶段只消费剩余预算.
         const auto deadline = Steady::now() + config_.shutdown_timeout;
+        if (server_) {
+            if (auto* health = server_->GetHealthCheckService())
+                health->SetServingStatus(false);
+        }
+        if (public_) {
+            if (auto* health = public_->GetHealthCheckService())
+                health->SetServingStatus(false);
+        }
+        metrics_.reset(); // 停止独立指标线程, 不让关闭中的节点继续报告先前 ready 状态.
+        if (gateway_) {
+            gateway_->stop();
+        }
+        if (readout_) {
+            readout_->stop();
+        }
+        if (catalog_service_) {
+            catalog_service_->stop();
+        }
+        if (ephemeris_service_) {
+            ephemeris_service_->stop();
+        }
         if (pulse_) {
             pulse_->stop();
         }
@@ -379,6 +666,9 @@ private:
         if (admission_) {
             admission_->cancel(); // 取消正在进行的准入请求
         }
+        if (intake_) {
+            intake_->cancel();
+        }
         collect();
         // 向所有持有的活动会话发出取消信号
         for (const auto& session : sessions_) {
@@ -387,12 +677,24 @@ private:
 
         // 控制循环继续推进 Finish/RemoveHold 和 OnDone, 不能先 join 或销毁仍被回调借用的对象.
         // 直到队列变空, 才安全退出.
-        while (!sessions_.empty() || (admission_ && admission_->pending())) {
+        while (!sessions_.empty() || (admission_ && admission_->pending()) || intake_ || (readout_ && !readout_->empty()) || (ephemeris_service_ && !ephemeris_service_->empty()) || (catalog_service_ && !catalog_service_->empty())) {
             // observed 保存当前唤醒序号, wait 仅在序号未变化时休眠, 避免检查与等待间丢失事件.
             const auto observed = wake_->observe();
             pump_sessions(Steady::now());
+            if (readout_) {
+                readout_->pump(Steady::now());
+            }
+            if (catalog_service_) {
+                catalog_service_->pump(Steady::now());
+            }
+            if (ephemeris_service_) {
+                ephemeris_service_->pump(Steady::now());
+            }
             if (admission_) {
                 static_cast<void>(admission_->poll());
+            }
+            if (intake_ && intake_->done()) {
+                intake_.reset();
             }
             if (Steady::now() >= deadline) {
                 // 超时无法完全排空, 为了防止破坏正在被 gRPC 核心引用的内存数据, 直接系统级强制退出.
@@ -403,6 +705,12 @@ private:
         }
 
         // 平缓关闭 gRPC 服务端监听, 在设定的截止时间内
+        if (public_) {
+            const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(deadline - Steady::now(), Steady::duration::zero())).count();
+            public_->Shutdown(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)));
+            public_->Wait();
+            public_.reset();
+        }
         const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(deadline - Steady::now(), Steady::duration::zero())).count();
         server_->Shutdown(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)));
         server_->Wait();
@@ -419,6 +727,13 @@ private:
     Logger logger_;                                             // 日志器实例, 打印格式化日志输出.
     std::shared_ptr<Wakeup> wake_ = std::make_shared<Wakeup>(); // 同步机制, 当有异步网络事件时触发.
 
+    Exchange::Budget recovery_;                           // 比所有 Session 数据协作者活得更久, 跨流约束恢复额外工作区.
+    std::map<Principal, Member> sources_;                 // 每部署当前可信身份, 缺项/失联不删除, 上限受 max_members 控制.
+    std::optional<Steady::time_point> recovery_deadline_; // 首轮 Almanac/Clock 后开始的来源等待截止.
+    bool business_ready_{};                               // 一次开放后不因后续来源离线撤销本地业务能力.
+    std::unique_ptr<Metrics> metrics_;                    // 可选独立指标线程, 只共享不可变固定规模快照.
+    Steady::time_point next_metrics_{};                   // 下次允许发布指标的单调时间, 初始立即采样.
+
     // handler 只写 incoming_/inbound_, collect 之后的 sessions_ 只归控制循环. hello_ 安装后不再修改.
     std::mutex incoming_mutex_;                            // 互斥锁, 用于跨线程保护 incoming_ 和 accepting_.
     bool accepting_{};                                     // 服务端是否还愿意接收新的入站连接, 初始值为 false.
@@ -428,16 +743,41 @@ private:
     std::shared_ptr<const proto::astra::v1::Hello> hello_; // 握手用的 Hello 封包数据缓存.
     std::atomic_uint64_t next_generation_{1};              // 原子变量, 用于生成全进程唯一且递增的会话识别世代号.
     std::unique_ptr<Admission> admission_;                 // Supervisor 交互管理器实例指针.
-    // 先声明输出再声明线程所有者, 关闭时先 join 再销毁输出.
+    // 时钟先于借用它的动态状态/对时线程声明, 后于这些所有者销毁.
     Clock synchronized_clock_;
-    // 业务层后续复用此存储, 当前由公共绝对时间推进, Store 不拥有第二层对时映射.
-    Store store_;
+    // 自有来源和公开投影使用原生注册结构, 不再以通用 Store 作为业务占位.
+    std::unique_ptr<Catalog::State> catalog_; // 自有 Catalog 内容版本/水位和有限 TTL.
+    std::unique_ptr<Ephemeris::State> ephemeris_;
+    // Almanac 原生数据先于接收流声明, 流彻底退出后才释放完整已安装底稿.
+    std::unique_ptr<Library> almanac_;
+    // 与内部凭据共同提交的业务会话索引, 比 Intake 与后续公共 RPC 活得更久.
+    std::unique_ptr<Access> access_;
+    // 公共服务先于 Library/Access 释放, 实际 Server 关闭后才销毁这些被借用的对象.
+    std::unique_ptr<Gateway> gateway_;
+    std::unique_ptr<Readout> readout_;
+    // 同一个公共服务包含原生写入和活动 Watch, Server 排空后才释放.
+    std::unique_ptr<Catalog::Service> catalog_service_; // 公开单 Key 写入与动态内容 Watch.
+    std::unique_ptr<Ephemeris::Service> ephemeris_service_;
+    // 独立业务监听, 内部 RPC 永远不挂入本 Server.
+    std::unique_ptr<grpc::Server> public_;
+    // 当前同步流包含退出中对象, 直到 OnDone 才归还唯一槽位.
+    std::unique_ptr<Intake> intake_;
+    // 同一部署最新已验证 Polaris, 不以缺项列表或暂时离线删除替换依据.
+    std::optional<Member> polaris_;
+    // 名单存在歧义时暂停安装, 默认 false, 不根据网络可达性擅自选主.
+    bool polaris_conflict_{};
+    // 首轮完整 Almanac 安装事实, 一旦成立保留, 失联不回滚或把所有业务变为未初始化.
+    bool almanac_ready_{};
+    // 同步失败次数和下一次重连时间, 默认零, 完整就绪后清零失败数.
+    std::uint32_t almanac_failures_{};
+    // 下一次允许建流的单调截止, 不重置已经安装的业务版本.
+    Steady::time_point next_almanac_{};
     // 拥有独立对时线程, 初始为空, 准入取得 Pulse 地址后创建并在关闭时排空.
     std::unique_ptr<Sampler> pulse_;
     // 当前采样端点和已经报告的质量状态, 只由 Runtime 控制线程访问.
     std::string pulse_endpoint_;
-    // 上次已记录的对时资格, 初始 false, 只在资格变化时输出事件.
-    bool reported_ready_{};
+    // 上次已记录的同步质量, 初始 false, 只在质量变化时输出事件; 不代表业务是否可以续租.
+    bool reported_synchronized_{};
 
     // shutdown 完成所有 OnDone 后才释放 server 和 Admission, 不依赖成员析构顺序来取消 RPC.
     std::unique_ptr<grpc::Server> server_;   // gRPC 服务监听器句柄.

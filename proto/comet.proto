@@ -1,4 +1,258 @@
-// Comet v1 是未来 SDK 接入协议的命名边界. 当前未定义消息或开放 RPC.
+// Comet v1 公共业务契约. 此文件不暴露 Pulsar、内部凭据表或管理写入接口.
 syntax = "proto3";
 package proto.comet.v1;
-option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
+option go_package = "github.com/eosforge/verdandi/astra/internal/generated/comet;comet";
+
+// 登录仅确认一次, 流存活期间维持对应 Session; 流结束即失效.
+service Gateway {
+    rpc Session(SessionRequest) returns (stream SessionReply);
+}
+
+// Almanac 只读, 发布权威为 Polaris.
+service Almanac {
+    rpc Watch(WatchRequest) returns (stream AlmanacWatchReply);
+}
+
+// 动态业务数据按 Key 由业务保证单一发布者, Publish/Renew 在接入 Star 内存提交.
+service Catalog {
+    rpc Publish(PublishRequest) returns (PublishReply);
+    rpc Renew(CatalogRenewRequest) returns (Empty);
+    rpc Watch(WatchRequest) returns (stream CatalogWatchReply);
+}
+
+// 注册只能在来源 Star 更新或续租, 两种 order 独立, 切换 Star 必须重新 Create.
+service Ephemeris {
+    rpc Create(CreateRequest) returns (CreateReply);
+    rpc Update(UpdateRequest) returns (UpdateReply);
+    rpc Renew(RenewRequest) returns (RenewReply);
+    rpc Remove(RemoveRequest) returns (Empty);
+    rpc Watch(WatchRequest) returns (stream EphemerisWatchReply);
+}
+
+// 无响应业务字段, 仍以 RPC 最终状态确认本次结果.
+message Empty {}
+
+// 字节精确匹配的范围, 两字段均必需; 公共接口拒绝 sector 的 __ 前缀.
+message Scope {
+    string sector = 1;
+    string spectrum = 2;
+}
+
+// value 允许零字节, action presence 明确区分删除、空值与非法缺失操作.
+message AlmanacChange {
+    string key = 1;
+    oneof action {
+        bytes value = 2;
+        Empty erase = 3;
+    }
+}
+
+// version 是每 Key 的正业务版本, 本地过期 erase 使用 0, 不是 Watch 游标.
+message CatalogChange {
+    string key = 1;
+    oneof action {
+        bytes value = 2;
+        Empty erase = 3;
+    }
+    uint64 version = 4;
+}
+
+// 完整注册只在首次出现/快照/回补发送; data 分支只替换已有 UUID 的 Data.
+message EphemerisChange {
+    // attr 和 data 都可为空, 不在子记录重复 UUID.
+    message Record {
+        bytes attr = 1;
+        bytes data = 2;
+    }
+    string uuid = 1;
+    oneof action {
+        Record record = 2;
+        Empty erase = 3;
+        bytes data = 4;
+    }
+}
+
+// APIKEY 是有界非空 UTF-8 文本, SECRET 是非空不透明字节; 不输出到诊断.
+message SessionRequest {
+    string key = 1;
+    bytes secret = 2;
+}
+
+// session 固定 32 个原始随机字节, 后续 RPC 用 comet-session-bin 初始 metadata 提交.
+message SessionReply {
+    string instance = 1;
+    bytes session = 2;
+}
+
+// 首次定位允许空 instance; version 必须为正, TTL 明确指定整数毫秒.
+message PublishRequest {
+    string instance = 1;
+    Scope scope = 2;
+    uint64 version = 3;
+    string key = 4;
+    bytes value = 5;
+    uint32 ttl_ms = 6;
+}
+
+// 确认当前实例本次受理, 不承诺对等复制完成或固定重试期限.
+message PublishReply {
+    string instance = 1;
+    uint64 version = 2;
+}
+
+// 仅续接该 Star 仍有效的本机来源记录, 缺失时须通过完整 Publish 恢复.
+message CatalogRenewRequest {
+    string instance = 1;
+    Scope scope = 2;
+    string key = 3;
+    uint64 version = 4;
+    uint32 ttl_ms = 5;
+}
+
+// 每次成功受理分配新 UUID, 不提供客户端请求 ID 或创建结果查询.
+message CreateRequest {
+    string instance = 1;
+    Scope scope = 2;
+    bytes attr = 3;
+    bytes data = 4;
+    uint32 ttl_ms = 5;
+}
+
+// uuid 为小写连字符 UUIDv4; 注册时固定 TTL, 两种 order 初始均为 0.
+message CreateReply {
+    string instance = 1;
+    string uuid = 2;
+    uint32 ttl_ms = 3;
+}
+
+// Data 整体替换不延期; order 必须为正且按 UUID 独立验证.
+message UpdateRequest {
+    string instance = 1;
+    Scope scope = 2;
+    string uuid = 3;
+    uint64 order = 4;
+    bytes data = 5;
+}
+
+// 单次 RPC 上下文提供身份, 响应只回显成功确认的正 order.
+message UpdateReply {
+    uint64 order = 1;
+}
+
+// Renew 使用注册时保存的 TTL, 相同 order 只确认旧结果, 不再次延长.
+message RenewRequest {
+    string instance = 1;
+    Scope scope = 2;
+    string uuid = 3;
+    uint64 order = 4;
+}
+
+// Renew order 与 Data order 是两条独立序列.
+message RenewReply {
+    uint64 order = 1;
+}
+
+// 只结束该实例/范围/UUID; 不存在返回明确 ended, 不永久保留注销墓碑.
+message RemoveRequest {
+    string instance = 1;
+    Scope scope = 2;
+    string uuid = 3;
+}
+
+// target 空为全 Scope, 非空为精确 Key/UUID; version 缺失与显式 0 不同.
+message WatchRequest {
+    string instance = 1;
+    Scope scope = 2;
+    string target = 3;
+    optional uint64 version = 4;
+}
+
+// complete 之前只暂存; 最后一页才包含 instance 与具有 presence 的 version.
+message AlmanacWatchReply {
+    Mode mode = 1;
+    repeated AlmanacChange changes = 2;
+    bool complete = 3;
+    optional uint64 version = 4;
+    string instance = 5;
+}
+
+// Watch version 是本地视图游标, 不等于 changes 中的每 Key 业务版本.
+message CatalogWatchReply {
+    Mode mode = 1;
+    repeated CatalogChange changes = 2;
+    bool complete = 3;
+    optional uint64 version = 4;
+    string instance = 5;
+}
+
+// reset 仅允许 record, apply 可以 record/data/erase, 不暴露半条注册.
+message EphemerisWatchReply {
+    Mode mode = 1;
+    repeated EphemerisChange changes = 2;
+    bool complete = 3;
+    optional uint64 version = 4;
+    string instance = 5;
+}
+
+// 同一批 mode 不变, reset 仅允许为新流首批, 断档须结束流后恢复.
+enum Mode {
+    // 未指定不是合法批次.
+    MODE_UNSPECIFIED = 0;
+    // 以完整暂存视图替换当前范围.
+    MODE_RESET = 1;
+    // 对已有完整基线应用变更.
+    MODE_APPLY = 2;
+}
+
+// 非 OK trailing metadata comet-error-bin, 总编码至多 4 KiB, 不含载荷或秘密.
+message Failure {
+    Reason reason = 1;
+    Effect effect = 2;
+    optional uint64 version = 3;
+    optional uint64 order = 4;
+    optional uint32 ttl_min_ms = 5;
+    optional uint32 ttl_max_ms = 6;
+    optional uint32 retry_ms = 7;
+    string limit = 8;
+    optional uint64 maximum = 9;
+    string message = 10;
+    string instance = 11;
+}
+
+// 业务分类不能替代实际提交效果, SDK 不因一次 unapplied 抹去之前尝试的不确定性.
+enum Reason {
+    // 未识别或未提供业务分类.
+    REASON_UNSPECIFIED = 0;
+    // 请求格式或范围非法.
+    REASON_INPUT = 1;
+    // 登录会话不存在或已失效.
+    REASON_SESSION = 2;
+    // 拒绝访问内部范围等固定边界, 不表示存在细粒度 ACL.
+    REASON_DENIED = 3;
+    // 内容版本冲突或 Almanac 副本落后.
+    REASON_VERSION = 4;
+    // 注册或来源活动记录已结束.
+    REASON_ENDED = 5;
+    // 更新或续租顺序已过时.
+    REASON_OBSOLETE = 6;
+    // 已不能连续恢复该游标.
+    REASON_HISTORY = 7;
+    // 输入或资源预算超限.
+    REASON_LIMIT = 8;
+    // 暂无受理容量, 可有界退避.
+    REASON_BUSY = 9;
+    // 实际实例与请求预期不符.
+    REASON_INSTANCE = 10;
+    // 本地业务时间尚未建立或不可用.
+    REASON_CLOCK = 11;
+    // 无法确认先前提交结果.
+    REASON_UNCERTAIN = 12;
+}
+
+// 仅描述本次尝试, 不是整个逻辑操作的全局结论.
+enum Effect {
+    // 默认无法证明是否提交, 包含缺失或未知细节.
+    EFFECT_UNKNOWN = 0;
+    // 服务端确定本次业务修改未提交.
+    EFFECT_UNAPPLIED = 1;
+}

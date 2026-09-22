@@ -1,0 +1,429 @@
+#include "catalog_state.hpp"
+#include <cassert>
+#include <utility>
+
+namespace astra {
+Catalog::State::State(Clock& clock) : State([&clock] { return clock.now(); }, Limits{}) {}
+
+Catalog::State::State(Time time, Limits limits) : time_(std::move(time)), limits_(limits), source_(gate_, static_cast<Source::Measure>(&State::measure), true, limits.source), merged_(gate_, static_cast<Source::Measure>(&State::measure), false, limits.source) {
+    if (!time_) {
+        throw std::invalid_argument("Catalog requires a clock");
+    }
+}
+
+Catalog::State::~State() = default;
+
+Catalog::State::Pending::~Pending() {
+
+    if (committed) {
+        return;
+    }
+    if (timer) {
+        owner.timers_.erase(timer);
+    }
+    if (deadline) {
+        owner.deadlines_.erase(deadline);
+    }
+    if (created) {
+        const auto sector = owner.scenes_.find(scope.sector); // 只回收本次新增的游标零范围.
+        sector->second.erase(scope.spectrum);
+        if (sector->second.empty()) {
+            owner.scenes_.erase(sector);
+        }
+        --owner.scopes_;
+    }
+}
+
+std::size_t Catalog::State::measure(const Record& record) noexcept {
+    return record.value ? record.value->size() : 0;
+}
+
+std::size_t Catalog::State::measure(const Content& record) noexcept {
+    return record.value ? record.value->size() : 0;
+}
+
+Catalog::State::Error Catalog::State::error(Catalog::Error value) noexcept {
+    switch (value) {
+    case Catalog::Error::input:
+        return Error::input;
+    case Catalog::Error::clock:
+        return Error::clock;
+    case Catalog::Error::ended:
+        return Error::ended;
+    case Catalog::Error::version:
+        return Error::version;
+    case Catalog::Error::conflict:
+        return Error::conflict;
+    case Catalog::Error::exhausted:
+        return Error::exhausted;
+    }
+    return Error::input;
+}
+
+Catalog::State::Error Catalog::State::error(Source::Error value) noexcept {
+    switch (value) {
+    case Source::Error::input:
+        return Error::input;
+    case Source::Error::duplicate:
+        return Error::conflict;
+    case Source::Error::capacity:
+        return Error::capacity;
+    case Source::Error::version:
+        return Error::exhausted;
+    case Source::Error::history:
+        return Error::history;
+    }
+    return Error::input;
+}
+
+Catalog::State::Error Catalog::State::error(Projection::Error value) noexcept {
+    switch (value) {
+    case Projection::Error::input:
+        return Error::input;
+    case Projection::Error::capacity:
+        return Error::capacity;
+    case Projection::Error::version:
+        return Error::exhausted;
+    case Projection::Error::history:
+        return Error::history;
+    }
+    return Error::input;
+}
+
+void Catalog::State::notify(Notify notify, void* context) {
+    const std::lock_guard lock(*gate_); // 只更新内部收集器, 不在此触发回放.
+    notify_ = notify;
+    context_ = context;
+}
+
+std::expected<Clock::Reading, Catalog::State::Error> Catalog::State::reading() {
+
+    auto value = time_(); // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
+    if (!value || !value->ready || value->time.time_since_epoch().count() < 0 || (observed_ && value->time < *observed_)) {
+        return std::unexpected(Error::clock);
+    }
+    observed_ = value->time;
+    return *value;
+}
+
+std::expected<Catalog::State::Projection*, Catalog::State::Error> Catalog::State::obtain(const Scope& scope) {
+
+    if (!scope.valid()) {
+        return std::unexpected(Error::input);
+    }
+    const auto found = scenes_.find(scope.sector); // 普通路径只查两级目录, 不复制文本.
+    if (found != scenes_.end()) {
+        const auto spectrum = found->second.find(scope.spectrum);
+        if (spectrum != found->second.end()) {
+            return &spectrum->second;
+        }
+    }
+    if (scopes_ == limits_.scopes) {
+        return std::unexpected(Error::capacity);
+    }
+    auto [sector, created] = scenes_.try_emplace(scope.sector); // 新范围失败时也移除空 Sector.
+    try {
+        auto [spectrum, inserted] = sector->second.try_emplace(scope.spectrum, gate_, static_cast<Projection::Measure>(&State::measure), limits_.projection);
+        scopes_ += inserted;
+        return &spectrum->second;
+    } catch (...) {
+        if (created) {
+            scenes_.erase(sector);
+        }
+        throw;
+    }
+}
+
+std::size_t Catalog::State::allowance(const Projection& scene) const {
+    return limits_.history - (history_ - scene.history()); // 本范围的旧历史允许在自己新历史的额度内替换.
+}
+
+void Catalog::State::publish(Projection& scene, std::size_t before, const Projection::Event& event) noexcept {
+    history_ = history_ - before + scene.history(); // Edit 已结束, 计费与来源状态同边界可见.
+    if (notify_) {
+        notify_(context_, *event.name->scope, event);
+    } // 只能有界合并/标记溢出, 不执行网络或应用回调.
+}
+
+std::expected<void, Catalog::State::Error> Catalog::State::publish(const Scope& scope, std::string_view key, Value value, std::uint64_t version, std::uint32_t ttl) {
+    return change(scope, key, std::move(value), version, ttl, false);
+}
+
+std::expected<void, Catalog::State::Error> Catalog::State::renew(const Scope& scope, std::string_view key, std::uint64_t version, std::uint32_t ttl) {
+    return change(scope, key, {}, version, ttl, true);
+}
+
+std::expected<void, Catalog::State::Error> Catalog::State::change(const Scope& scope, std::string_view key, Value value, std::uint64_t version, std::uint32_t ttl, bool renewal) {
+
+    if (!scope.valid() || !Scope::text(key, 1024)) {
+        return std::unexpected(Error::input);
+    }
+    std::vector<Retired> expired; // 全部旧引用在提交锁外释放, 不持锁销毁最终大正文.
+    Retired retired;
+    const std::lock_guard lock(*gate_);
+    auto stamp = reading();
+    if (!stamp) {
+        return std::unexpected(stamp.error());
+    }
+    advance(stamp->time, expired);
+    const auto old = source_.find(scope, key), known = merged_.find(scope, key);
+    const auto* current = old ? &*old : nullptr;
+    const auto* highest = known ? &*known : nullptr;
+    auto candidate = renewal ? Catalog::renew(current, highest, version, ttl, *stamp) : Catalog::publish(current, highest, value, version, ttl, *stamp);
+    if (!candidate) {
+        return std::unexpected(error(candidate.error()));
+    }
+    auto combined = Catalog::merge(highest, *candidate, stamp->time);
+    if (!combined) {
+        return std::unexpected(error(combined.error()));
+    }
+    Pending pending{*this, scope}; // 三份候选均提交前, 新 Scope/两类钩子自动回滚.
+    const auto scopes = scopes_;
+    const auto located = obtain(scope);
+    if (!located) {
+        return std::unexpected(located.error());
+    }
+    pending.created = scopes_ != scopes;
+    auto& scene = **located;
+    const auto before = scene.history();
+    const auto retention = allowance(scene);
+    const auto position = source_.next();
+    if (!position) {
+        return std::unexpected(error(position.error()));
+    }
+    auto origin = source_.prepare(scope, key, *candidate, *position, std::chrono::steady_clock::now(), renewal ? Source::Form::renew : Source::Form::record);
+    if (!origin) {
+        return std::unexpected(error(origin.error()));
+    }
+    auto merged = merged_.prepare(scope, key, combined->record, std::nullopt, std::chrono::steady_clock::now());
+    if (!merged) {
+        return std::unexpected(error(merged.error()));
+    }
+    std::optional<Projection::Edit> projection;
+    if (combined->visible) {
+        auto prepared = scene.prepare(merged->name(), Content{combined->record.version, combined->record.value}, std::chrono::steady_clock::now(), false, retention);
+        if (!prepared) {
+            return std::unexpected(error(prepared.error()));
+        }
+        projection.emplace(std::move(*prepared));
+    }
+    if (!agenda_) {
+        agenda_ = std::make_unique<Agenda>(stamp->time);
+    }
+    if (!outlook_) {
+        outlook_ = std::make_unique<Agenda>(stamp->time);
+    }
+    auto found = timers_.find(origin->name().get());
+    if (found == timers_.end()) {
+        found = timers_.emplace(origin->name().get(), std::make_unique<Timer>(origin->name())).first;
+        pending.timer = origin->name().get();
+    }
+    auto visible = deadlines_.find(merged->name().get());
+    if (visible == deadlines_.end()) {
+        visible = deadlines_.emplace(merged->name().get(), std::make_unique<Timer>(merged->name())).first;
+        pending.deadline = merged->name().get();
+    }
+
+    stamp = reading(); // 最终时间同时决定本机候选及合并期限, 不借远端较晚截止延长自己的来源事实.
+    if (!stamp) {
+        return std::unexpected(stamp.error());
+    }
+    candidate = renewal ? Catalog::renew(current, highest, version, ttl, *stamp) : Catalog::publish(current, highest, value, version, ttl, *stamp);
+    if (!candidate) {
+        return std::unexpected(error(candidate.error()));
+    }
+    combined = Catalog::merge(highest, *candidate, stamp->time);
+    if (!combined || !origin->revise(*candidate) || !merged->revise(combined->record)) {
+        throw std::logic_error("Catalog final check changed prepared payload");
+    }
+    retired.source = origin->commit();
+    retired.merged = merged->commit();
+    if (projection) {
+        retired.scene = projection->commit();
+    }
+    agenda_->set(*found->second, *candidate->deadline);
+    outlook_->set(*visible->second, *combined->record.deadline);
+    pending.committed = true;
+    if (projection) {
+        publish(scene, before, retired.scene.event);
+    }
+    return {};
+}
+
+std::expected<Catalog::State::Retired, Catalog::State::Error> Catalog::State::expire(const Scope& scope, std::string_view key, Clock::Time time, bool projected) {
+
+    auto& source = projected ? merged_ : source_; // 两份期限不可混用, 本机来源到期并不撤销远端同版本保活.
+    auto& timers = projected ? deadlines_ : timers_;
+    const auto old = source.find(scope, key);
+    if (!old || !old->value || *old->deadline > time) {
+        return std::unexpected(Error::ended);
+    }
+    Projection* scene{};
+    std::size_t before{}, retention{};
+    if (projected) {
+        const auto located = obtain(scope);
+        if (!located) {
+            return std::unexpected(located.error());
+        }
+        scene = *located;
+        before = scene->history();
+        retention = allowance(*scene);
+    }
+    auto origin = source.prepare(scope, key, Catalog::expire(*old, time), std::nullopt, std::chrono::steady_clock::now());
+    if (!origin) {
+        return std::unexpected(error(origin.error()));
+    }
+    std::optional<Projection::Edit> projection;
+    if (projected) {
+        auto prepared = scene->prepare(origin->name(), {}, std::chrono::steady_clock::now(), false, retention);
+        if (!prepared) {
+            return std::unexpected(error(prepared.error()));
+        }
+        projection.emplace(std::move(*prepared));
+    }
+    const auto timer = timers.find(origin->name().get());
+    if (timer == timers.end()) {
+        throw std::logic_error("Active Catalog lacks its timer");
+    }
+
+    Retired retired;
+    retired.source = origin->commit(); // 无论来源或合并水位维护都不增加来源位置/广播日志.
+    if (projection) {
+        retired.scene = projection->commit();
+    }
+    Agenda::erase(*timer->second);
+    retired.timer = std::move(timer->second);
+    timers.erase(timer);
+    if (projection) {
+        publish(*scene, before, retired.scene.event);
+    }
+    return retired;
+}
+
+void Catalog::State::advance(Clock::Time now, std::vector<Retired>& retired) {
+
+    const auto advance = [&](Source& source, Agenda* agenda, bool projected) {
+        if (!agenda) {
+            return;
+        }
+        agenda->advance(now, [&](Agenda::Node* hook, Clock::Time boundary) {
+            auto& timer = *static_cast<Timer*>(hook);
+            const auto record = source.find(*timer.name->scope, timer.name->key);
+            if (!record || !record->value) {
+                throw std::logic_error("Scheduled Catalog lacks an active native record");
+            }
+            if (*record->deadline > boundary) {
+                agenda->set(timer, *record->deadline);
+                return;
+            }
+            retired.emplace_back();
+            auto removed = expire(*timer.name->scope, timer.name->key, boundary, projected);
+            if (!removed) {
+                throw std::runtime_error("Catalog expiry could not commit");
+            }
+            retired.back() = std::move(*removed);
+        });
+    };
+    advance(source_, agenda_.get(), false);
+    advance(merged_, outlook_.get(), true);
+    for (auto current = replicas_.begin(); current != replicas_.end();) {
+        auto& replica = *current->second; // 正在受理的来源不能 retired, 回收不会使 receive 的引用悬空.
+        this->advance(replica, now, retired);
+        if (replica.retired && replica.timers.empty()) {
+            replica_bytes_ -= replica.source.bytes();
+            current = replicas_.erase(current); // 已学到的水位保留在 merged_, 拒绝旧身份的依据由控制器保持.
+        } else {
+            ++current;
+        }
+    }
+}
+
+void Catalog::State::tick() {
+
+    std::vector<Retired> retired;
+    const std::lock_guard lock(*gate_);
+    if (!agenda_ && !outlook_ && replicas_.empty()) {
+        return;
+    } // 未受理过有限租约时无清理责任, 首次校准前不反复抛出空轮错误.
+    const auto stamp = reading();
+    if (!stamp) {
+        throw std::runtime_error("Catalog clock is unavailable");
+    }
+    advance(stamp->time, retired);
+}
+
+auto Catalog::State::execute(auto&& action) {
+
+    std::vector<Retired> retired;       // 必须先于 lock 构造, 正常返回及异常退出都在解锁后析构旧载荷.
+    const std::lock_guard lock(*gate_); // 覆盖取时、到期提交与完整结果捕获, 不把同步责任交给回调调用方.
+    return reading().and_then([&](const Clock::Reading& stamp) {
+        advance(stamp.time, retired);                    // 与 action 使用同一域边界; 取时失败时两者都不执行.
+        return std::forward<decltype(action)>(action)(); // 直接调用内部闭包, 不分配执行器或擦除类型.
+    });
+}
+
+std::expected<Catalog::State::Projection::View, Catalog::State::Error> Catalog::State::capture(const Scope& scope) {
+
+    if (!scope.valid()) {
+        return std::unexpected(Error::input);
+    }
+
+    // scene 仅在域锁内借用, 返回的 View 自持页面和同步域, 不把指针泄漏到锁外.
+    return execute([&]() -> std::expected<Projection::View, Error> {
+        const auto* scene = locate(scope); // 未创建的范围不占永久目录额度, 观察注册仍由 Feed 保持.
+        return scene ? scene->capture() : Projection::empty(gate_);
+    });
+}
+
+std::expected<Catalog::State::Projection::Point, Catalog::State::Error> Catalog::State::find(const Scope& scope, std::string_view key) {
+
+    if (!scope.valid() || !Scope::text(key, 1024)) {
+        return std::unexpected(Error::input);
+    }
+
+    // key 同步借用调用参数, Point 拥有名称/正文引用; 未创建范围返回版本零的空结果.
+    return execute([&]() -> std::expected<Projection::Point, Error> {
+        const auto* scene = locate(scope); // 缺失范围与缺失目标都返回明确缺项, 不隐式创建 Scope.
+        return scene ? scene->find(key) : Projection::Point{};
+    });
+}
+
+std::expected<std::vector<Catalog::State::Projection::Event>, Catalog::State::Error> Catalog::State::changes(const Scope& scope, std::uint64_t since) {
+
+    if (!scope.valid()) {
+        return std::unexpected(Error::input);
+    }
+
+    // scene 借用限于本次读取, since 超前仍是输入错误; 临时 expected 的成功向量按移动交付.
+    return execute([&]() -> std::expected<std::vector<Projection::Event>, Error> {
+        if (const auto* scene = locate(scope)) {
+            return scene->replay(since).transform_error([](Projection::Error failure) { return failure == Projection::Error::version ? Error::input : error(failure); });
+        }
+        if (since != 0) {
+            return std::unexpected(Error::input); // 未创建范围只有合法位置零, 不能确认超前游标.
+        }
+        return std::vector<Projection::Event>{};
+    });
+}
+
+Catalog::State::Source::View Catalog::State::source() {
+
+    std::vector<Retired> retired;
+    const std::lock_guard lock(*gate_);
+    const auto stamp = reading();
+    if (!stamp) {
+        throw std::runtime_error("Catalog clock is unavailable");
+    }
+    advance(stamp->time, retired);
+    return source_.capture();
+}
+
+std::expected<std::vector<Catalog::State::Source::Event>, Catalog::State::Error> Catalog::State::events(std::uint64_t since) {
+    return execute([&] { return source_.replay(since).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); }); });
+}
+
+std::expected<Catalog::State::Source::Delivery, Catalog::State::Error> Catalog::State::deliver(std::uint64_t since, std::size_t count, std::size_t bytes) {
+    return execute([&] { return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); }); });
+}
+
+} // namespace astra

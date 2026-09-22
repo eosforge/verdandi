@@ -48,7 +48,7 @@ static void test_common_coordinate() {
     CHECK(first.snapshot()->data.empty() && second.snapshot()->data.empty());
 }
 
-// 参考前跳或回拨只影响调速与资格, 不重写已接受租约的绝对截止.
+// 参考前跳或回拨只影响调速与质量, 不重写已接受租约的绝对截止或阻止本地生成新期限.
 static void test_reference_change() {
 
     for (const auto correction : {-10s, 10s}) {
@@ -67,9 +67,10 @@ static void test_reference_change() {
         clock.revoke();
         store.tick(clock.now(local(2s))->time);
         calibrate(clock, 3s, 103s + correction);
-        // reading 为参考变更后的连续输出, 偏差尚未消化时应拒绝签发新有限期限.
+        // reading 为参考变更后的连续输出, 偏差未消化只降低同步质量, 新期限仍按本地连续时间计算.
         const auto reading = clock.now(local(3s));
-        CHECK(reading->time == epoch(103s) && !reading->ready && !reading->deadline_after(5s));
+        CHECK(reading->time == epoch(103s) && reading->ready && !reading->synchronized);
+        CHECK(reading->deadline_after(5s) == epoch(108s));
         store.tick(reading->time);
         CHECK(store.snapshot() == snapshot && store.version() == 1);
         CHECK(store.extract(0).deltas.front().deadline == *deadline);
@@ -100,7 +101,7 @@ static void test_holdover_and_recovery() {
     store.tick(clock.now(local(6s))->time);
     CHECK(store.snapshot()->data.empty());
     calibrate(clock, 7s, 107s);
-    CHECK(clock.now(local(7s))->ready);
+    CHECK(clock.now(local(7s))->ready && clock.now(local(7s))->synchronized);
     store.tick(clock.now(local(7s))->time);
     CHECK(store.snapshot()->data.empty() && store.version() == 2);
     // 模拟新进程已校准后恢复同一个绝对截止, 不能按原 TTL 重新续满.
@@ -112,6 +113,57 @@ static void test_holdover_and_recovery() {
     CHECK(!restored.snapshot()->data.contains("expired") && restored.snapshot()->data.contains("future"));
     restored.tick(epoch(108s));
     CHECK(restored.snapshot()->data.empty());
+}
+
+// 模拟参考失联期间持续创建和延长期限, 未续租项正常到期, 恢复参考不改变任何已提交截止.
+static void test_offline_leases() {
+
+    // clock 首次校准到 Unix 100 s, 后续全部经过时间由本测试显式推进.
+    Clock clock;
+    // store 承载会续租和不会续租的两类数据, 默认 10 ms 拍间隔.
+    Store store;
+    calibrate(clock, 0s, 100s);
+    store.tick(epoch(100s));
+    store.put("expires", {1}, epoch(130s));
+    store.put("renewed", {2}, epoch(130s));
+    // snapshot 固定失联前两项的共同截止, 检查续租和删除不修改旧视图.
+    const auto snapshot = store.snapshot();
+    clock.revoke();
+
+    // elapsed 分别在失联 10, 20, 30 s 时发起一次 30 s 续租, 全程不接受新的参考样本.
+    for (const auto elapsed : {10s, 20s, 30s}) {
+        // reading 独占本轮时钟快照; ready 必须保持为 true, synchronized 必须为 false.
+        const auto reading = clock.now(local(elapsed));
+        CHECK(reading && reading->ready && !reading->synchronized);
+        store.tick(reading->time);
+        CHECK(store.snapshot()->data.contains("renewed"));
+        // deadline 只从当前时间增加 30 s, 不从旧样本时间或旧截止重新估算.
+        const auto deadline = reading->deadline_after(30s);
+        CHECK(deadline == epoch(130s + elapsed));
+        store.put("renewed", {2}, *deadline);
+
+        if (elapsed == 10s) {
+            // created 为失联后新建项的 5 s 截止, 后续不续租, 必须独立正常到期.
+            const auto created = reading->deadline_after(5s);
+            CHECK(created == epoch(115s));
+            store.put("created-offline", {3}, *created);
+        } else {
+            CHECK(!store.snapshot()->data.contains("created-offline"));
+        }
+        CHECK(store.snapshot()->data.contains("expires") == (elapsed < 30s));
+    }
+
+    calibrate(clock, 31s, 131s);
+    CHECK(clock.now(local(31s))->synchronized);
+    store.tick(clock.now(local(31s))->time);
+    CHECK(store.snapshot()->data.size() == 1);
+    CHECK(store.snapshot()->data.at("renewed").deadline == epoch(160s));
+    CHECK(snapshot->data.at("expires").deadline == epoch(130s));
+    CHECK(snapshot->data.at("renewed").deadline == epoch(130s));
+    store.tick(clock.now(local(59990ms))->time);
+    CHECK(store.snapshot()->data.contains("renewed"));
+    store.tick(clock.now(local(60s))->time);
+    CHECK(store.snapshot()->data.empty());
 }
 
 // 覆盖未锚定的有限写入拒绝,初次 Unix 锚定,快照截止隔离及非法负时间.
@@ -169,6 +221,7 @@ int main() {
         test_common_coordinate();
         test_reference_change();
         test_holdover_and_recovery();
+        test_offline_leases();
         test_initialization_and_metadata();
         std::cout << "PASS single Unix deadlines, continuous correction, holdover and snapshot metadata\n";
         return 0;

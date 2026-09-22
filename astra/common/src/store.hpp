@@ -81,7 +81,7 @@ public:
     }
 
     // 接管 value 并原子提交值, 单一绝对 deadline 与历史. 空 deadline 表示无限期.
-    // 有限截止必须非负且 Store 已由 tick 初始化; 时钟质量由调用方 Clock::Reading::deadline_after 校验.
+    // 有限截止必须非负且 Store 已由 tick 初始化; 本地计时可用性由调用方 Clock::Reading::deadline_after 校验.
     // 分配失败/版本耗尽不提交部分数据; 不在 put 中隐式删除到期项或更新时钟.
     void put(const std::string& key, Buffer value, std::optional<Clock::Time> deadline = {});
 

@@ -75,6 +75,17 @@ struct Options {
     // 若显式填写该值, 则所输入地址必须具有真实的网络可达性, 并必须确切使用非零真实网络端口.
     [[=Option{"advertise", "Reachable numeric IP:PORT; defaults to bound listener"}]] std::string advertise;
 
+    // 独立外部监听, 缺省不绑定; 不复用内部端口或向 Pulsar 登记为对等端点.
+    [[=Option{"comet", "Optional public numeric IP:PORT; Star only"}]] std::string comet;
+    // 默认不暴露指标端口, 本机使用回环地址; 不把该地址登记为对等端点.
+    [[=Option{"metrics", "Optional read-only HTTP metrics IP:PORT; Star only"}]] std::string metrics;
+    // 显式业务证书目录, 只读 cert.pem/key.pem, 没有节点身份材料的隐式回退.
+    [[=Option{"comet-identity", "Public TLS certificate/key directory"}]] std::string comet_identity;
+    // 默认启用公共登录, 只接受完整的小写 true/false.
+    [[=Option{"auth", "Require Comet login: true or false"}]] bool auth = true;
+    // 默认启用公共 TLS, 关闭后不能同时指定公共证书目录.
+    [[=Option{"tls", "Protect Comet transport: true or false"}]] bool tls = true;
+
     // identity: 安全认证身份目录原文配置, 如果不指定则隐式默认取值为当前目录下的 "identity";
     // 处理时所有的相对路径解析操作都会严格依赖于当前工作目录为基准进行解释执行, 本 CLI 层解析阶段纯粹处理文本, 绝不主动去发起实质的文件读写动作.
     [[=Option{"identity", "Directory containing TLS, admission.pub and login.json"}]] std::string identity = "identity";

@@ -75,7 +75,7 @@ int main() {
             wait_until([&] {
                 // value 独立保存本次读取, 先检查存在再检查是否满足就绪状态.
                 const auto value = source.now();
-                return value && value->ready;
+                return value && value->synchronized;
             });
             // initial 记录首次就绪时间, 后续故障和恢复不能回退它.
             const auto initial = *source.now();
@@ -84,11 +84,12 @@ int main() {
             wait_until([&] {
                 // value 独立保存本次读取, 先检查存在再检查是否满足就绪状态.
                 const auto value = source.now();
-                return value && !value->ready;
+                return value && !value->synchronized;
             });
             CHECK(source.now()->time >= initial.time);
+            CHECK(source.now()->ready && source.now()->deadline_after(1s));
             mode.store(Mode::valid);
-            wait_until([&] { return source.now()->ready; });
+            wait_until([&] { return source.now()->synchronized; });
             // jumped 依次选择正跳和回拨, 对两种方向检查连续调速.
             for (const auto jumped : {Mode::jumped, Mode::reversed}) {
                 // before 是注入跳变前的完整时钟读数.
@@ -96,21 +97,22 @@ int main() {
                 // started 记录本机经过时间起点, 用于估算正常推进上界.
                 const auto started = Clock::Elapsed::now();
                 mode.store(jumped);
-                wait_until([&] { return !source.now()->ready; });
-                // after 是失去新租约资格后的连续读数, 应仍单调.
+                wait_until([&] { return !source.now()->synchronized; });
+                // after 是失去参考质量后的连续读数, 本地推进与有限期限能力应保持有效.
                 const auto after = *source.now();
                 // elapsed 是两次本机采样之间的时长, 不包含人为墙钟跳变.
                 const auto elapsed = Clock::Elapsed::now() - started;
                 CHECK(after.time >= before.time && after.uncertainty_ns >= 9'000'000'000ULL);
                 // 允许调度抖动, 但输出差必须接近本地经过时间, 不直接跨越十秒校正值.
                 CHECK(after.time - before.time < elapsed + 100ms);
-                CHECK(!after.deadline_after(1s));
+                CHECK(after.ready && after.deadline_after(1s) == after.time + 1s);
                 mode.store(Mode::valid);
-                wait_until([&] { return source.now()->ready; });
+                wait_until([&] { return source.now()->synchronized; });
             }
             mode.store(Mode::uncertain);
-            wait_until([&] { return !source.now()->ready; });
+            wait_until([&] { return !source.now()->synchronized; });
             CHECK(source.now()->time >= initial.time);
+            CHECK(source.now()->ready && source.now()->deadline_after(1s));
         }
 
         // 空 Provider 是明确配置错误, 不能静默运行一个永远无参考源的线程.
@@ -131,7 +133,7 @@ int main() {
         wait_until([&] {
             // value 独立保存本次读取, 先检查存在再检查是否满足就绪状态.
             const auto value = restarted.now();
-            return value && value->ready;
+            return value && value->synchronized;
         });
         // now 是重启实例首次就绪后的读数, 与前后采样区间比较.
         const auto now = *restarted.now();

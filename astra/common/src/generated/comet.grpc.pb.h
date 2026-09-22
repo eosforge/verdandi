@@ -2,7 +2,7 @@
 // If you make any local change, they will be lost.
 // source: comet.proto
 // Original file comments:
-// Comet v1 是未来 SDK 接入协议的命名边界. 当前未定义消息或开放 RPC.
+// Comet v1 公共业务契约. 此文件不暴露 Pulsar、内部凭据表或管理写入接口.
 #ifndef GRPC_comet_2eproto__INCLUDED
 #define GRPC_comet_2eproto__INCLUDED
 
@@ -31,6 +31,1776 @@
 namespace proto {
 namespace comet {
 namespace v1 {
+
+// 登录仅确认一次, 流存活期间维持对应 Session; 流结束即失效.
+class Gateway final {
+ public:
+  static constexpr char const* service_full_name() {
+    return "proto.comet.v1.Gateway";
+  }
+  class StubInterface {
+   public:
+    virtual ~StubInterface() {}
+    std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::SessionReply>> Session(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::SessionReply>>(SessionRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::SessionReply>> AsyncSession(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::SessionReply>>(AsyncSessionRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::SessionReply>> PrepareAsyncSession(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::SessionReply>>(PrepareAsyncSessionRaw(context, request, cq));
+    }
+    class async_interface {
+     public:
+      virtual ~async_interface() {}
+      virtual void Session(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::SessionReply>* reactor) = 0;
+    };
+    typedef class async_interface experimental_async_interface;
+    virtual class async_interface* async() { return nullptr; }
+    class async_interface* experimental_async() { return async(); }
+   private:
+    virtual ::grpc::ClientReaderInterface< ::proto::comet::v1::SessionReply>* SessionRaw(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::SessionReply>* AsyncSessionRaw(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::SessionReply>* PrepareAsyncSessionRaw(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq) = 0;
+  };
+  class Stub final : public StubInterface {
+   public:
+    Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+    std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::SessionReply>> Session(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::SessionReply>>(SessionRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::SessionReply>> AsyncSession(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::SessionReply>>(AsyncSessionRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::SessionReply>> PrepareAsyncSession(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::SessionReply>>(PrepareAsyncSessionRaw(context, request, cq));
+    }
+    class async final :
+      public StubInterface::async_interface {
+     public:
+      void Session(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::SessionReply>* reactor) override;
+     private:
+      friend class Stub;
+      explicit async(Stub* stub): stub_(stub) { }
+      Stub* stub() { return stub_; }
+      Stub* stub_;
+    };
+    class async* async() override { return &async_stub_; }
+
+   private:
+    std::shared_ptr< ::grpc::ChannelInterface> channel_;
+    class async async_stub_{this};
+    ::grpc::ClientReader< ::proto::comet::v1::SessionReply>* SessionRaw(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::SessionReply>* AsyncSessionRaw(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq, void* tag) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::SessionReply>* PrepareAsyncSessionRaw(::grpc::ClientContext* context, const ::proto::comet::v1::SessionRequest& request, ::grpc::CompletionQueue* cq) override;
+    const ::grpc::internal::RpcMethod rpcmethod_Session_;
+  };
+  static std::unique_ptr<Stub> NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+
+  class Service : public ::grpc::Service {
+   public:
+    Service();
+    virtual ~Service();
+    virtual ::grpc::Status Session(::grpc::ServerContext* context, const ::proto::comet::v1::SessionRequest* request, ::grpc::ServerWriter< ::proto::comet::v1::SessionReply>* writer);
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Session : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Session() {
+      ::grpc::Service::MarkMethodAsync(0);
+    }
+    ~WithAsyncMethod_Session() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Session(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::SessionRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::SessionReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestSession(::grpc::ServerContext* context, ::proto::comet::v1::SessionRequest* request, ::grpc::ServerAsyncWriter< ::proto::comet::v1::SessionReply>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(0, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  typedef WithAsyncMethod_Session<Service > AsyncService;
+  template <class BaseClass>
+  class WithCallbackMethod_Session : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Session() {
+      ::grpc::Service::MarkMethodCallback(0,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::proto::comet::v1::SessionRequest, ::proto::comet::v1::SessionReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::SessionRequest* request) { return this->Session(context, request); }));
+    }
+    ~WithCallbackMethod_Session() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Session(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::SessionRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::SessionReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::proto::comet::v1::SessionReply>* Session(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::SessionRequest* /*request*/)  { return nullptr; }
+  };
+  typedef WithCallbackMethod_Session<Service > CallbackService;
+  typedef CallbackService ExperimentalCallbackService;
+  template <class BaseClass>
+  class WithGenericMethod_Session : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Session() {
+      ::grpc::Service::MarkMethodGeneric(0);
+    }
+    ~WithGenericMethod_Session() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Session(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::SessionRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::SessionReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Session : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Session() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_Session() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Session(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::SessionRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::SessionReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestSession(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(0, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Session : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Session() {
+      ::grpc::Service::MarkMethodRawCallback(0,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const::grpc::ByteBuffer* request) { return this->Session(context, request); }));
+    }
+    ~WithRawCallbackMethod_Session() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Session(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::SessionRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::SessionReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::grpc::ByteBuffer>* Session(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)  { return nullptr; }
+  };
+  typedef Service StreamedUnaryService;
+  template <class BaseClass>
+  class WithSplitStreamingMethod_Session : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithSplitStreamingMethod_Session() {
+      ::grpc::Service::MarkMethodStreamed(0,
+        new ::grpc::internal::SplitServerStreamingHandler<
+          ::proto::comet::v1::SessionRequest, ::proto::comet::v1::SessionReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerSplitStreamer<
+                     ::proto::comet::v1::SessionRequest, ::proto::comet::v1::SessionReply>* streamer) {
+                       return this->StreamedSession(context,
+                         streamer);
+                  }));
+    }
+    ~WithSplitStreamingMethod_Session() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Session(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::SessionRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::SessionReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with split streamed
+    virtual ::grpc::Status StreamedSession(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::proto::comet::v1::SessionRequest,::proto::comet::v1::SessionReply>* server_split_streamer) = 0;
+  };
+  typedef WithSplitStreamingMethod_Session<Service > SplitStreamedService;
+  typedef WithSplitStreamingMethod_Session<Service > StreamedService;
+};
+
+// Almanac 只读, 发布权威为 Polaris.
+class Almanac final {
+ public:
+  static constexpr char const* service_full_name() {
+    return "proto.comet.v1.Almanac";
+  }
+  class StubInterface {
+   public:
+    virtual ~StubInterface() {}
+    std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::AlmanacWatchReply>> Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::AlmanacWatchReply>>(WatchRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::AlmanacWatchReply>> AsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::AlmanacWatchReply>>(AsyncWatchRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::AlmanacWatchReply>> PrepareAsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::AlmanacWatchReply>>(PrepareAsyncWatchRaw(context, request, cq));
+    }
+    class async_interface {
+     public:
+      virtual ~async_interface() {}
+      virtual void Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::AlmanacWatchReply>* reactor) = 0;
+    };
+    typedef class async_interface experimental_async_interface;
+    virtual class async_interface* async() { return nullptr; }
+    class async_interface* experimental_async() { return async(); }
+   private:
+    virtual ::grpc::ClientReaderInterface< ::proto::comet::v1::AlmanacWatchReply>* WatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::AlmanacWatchReply>* AsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::AlmanacWatchReply>* PrepareAsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) = 0;
+  };
+  class Stub final : public StubInterface {
+   public:
+    Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+    std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::AlmanacWatchReply>> Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::AlmanacWatchReply>>(WatchRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::AlmanacWatchReply>> AsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::AlmanacWatchReply>>(AsyncWatchRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::AlmanacWatchReply>> PrepareAsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::AlmanacWatchReply>>(PrepareAsyncWatchRaw(context, request, cq));
+    }
+    class async final :
+      public StubInterface::async_interface {
+     public:
+      void Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::AlmanacWatchReply>* reactor) override;
+     private:
+      friend class Stub;
+      explicit async(Stub* stub): stub_(stub) { }
+      Stub* stub() { return stub_; }
+      Stub* stub_;
+    };
+    class async* async() override { return &async_stub_; }
+
+   private:
+    std::shared_ptr< ::grpc::ChannelInterface> channel_;
+    class async async_stub_{this};
+    ::grpc::ClientReader< ::proto::comet::v1::AlmanacWatchReply>* WatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::AlmanacWatchReply>* AsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::AlmanacWatchReply>* PrepareAsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) override;
+    const ::grpc::internal::RpcMethod rpcmethod_Watch_;
+  };
+  static std::unique_ptr<Stub> NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+
+  class Service : public ::grpc::Service {
+   public:
+    Service();
+    virtual ~Service();
+    virtual ::grpc::Status Watch(::grpc::ServerContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ServerWriter< ::proto::comet::v1::AlmanacWatchReply>* writer);
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Watch() {
+      ::grpc::Service::MarkMethodAsync(0);
+    }
+    ~WithAsyncMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::AlmanacWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestWatch(::grpc::ServerContext* context, ::proto::comet::v1::WatchRequest* request, ::grpc::ServerAsyncWriter< ::proto::comet::v1::AlmanacWatchReply>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(0, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  typedef WithAsyncMethod_Watch<Service > AsyncService;
+  template <class BaseClass>
+  class WithCallbackMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Watch() {
+      ::grpc::Service::MarkMethodCallback(0,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::proto::comet::v1::WatchRequest, ::proto::comet::v1::AlmanacWatchReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::WatchRequest* request) { return this->Watch(context, request); }));
+    }
+    ~WithCallbackMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::AlmanacWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::proto::comet::v1::AlmanacWatchReply>* Watch(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/)  { return nullptr; }
+  };
+  typedef WithCallbackMethod_Watch<Service > CallbackService;
+  typedef CallbackService ExperimentalCallbackService;
+  template <class BaseClass>
+  class WithGenericMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Watch() {
+      ::grpc::Service::MarkMethodGeneric(0);
+    }
+    ~WithGenericMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::AlmanacWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Watch() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::AlmanacWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestWatch(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(0, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Watch() {
+      ::grpc::Service::MarkMethodRawCallback(0,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const::grpc::ByteBuffer* request) { return this->Watch(context, request); }));
+    }
+    ~WithRawCallbackMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::AlmanacWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::grpc::ByteBuffer>* Watch(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)  { return nullptr; }
+  };
+  typedef Service StreamedUnaryService;
+  template <class BaseClass>
+  class WithSplitStreamingMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithSplitStreamingMethod_Watch() {
+      ::grpc::Service::MarkMethodStreamed(0,
+        new ::grpc::internal::SplitServerStreamingHandler<
+          ::proto::comet::v1::WatchRequest, ::proto::comet::v1::AlmanacWatchReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerSplitStreamer<
+                     ::proto::comet::v1::WatchRequest, ::proto::comet::v1::AlmanacWatchReply>* streamer) {
+                       return this->StreamedWatch(context,
+                         streamer);
+                  }));
+    }
+    ~WithSplitStreamingMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::AlmanacWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with split streamed
+    virtual ::grpc::Status StreamedWatch(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::proto::comet::v1::WatchRequest,::proto::comet::v1::AlmanacWatchReply>* server_split_streamer) = 0;
+  };
+  typedef WithSplitStreamingMethod_Watch<Service > SplitStreamedService;
+  typedef WithSplitStreamingMethod_Watch<Service > StreamedService;
+};
+
+// 动态业务数据按 Key 由业务保证单一发布者, Publish/Renew 在接入 Star 内存提交.
+class Catalog final {
+ public:
+  static constexpr char const* service_full_name() {
+    return "proto.comet.v1.Catalog";
+  }
+  class StubInterface {
+   public:
+    virtual ~StubInterface() {}
+    virtual ::grpc::Status Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::proto::comet::v1::PublishReply* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>> AsyncPublish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>>(AsyncPublishRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>> PrepareAsyncPublish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>>(PrepareAsyncPublishRaw(context, request, cq));
+    }
+    virtual ::grpc::Status Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::proto::comet::v1::Empty* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>> AsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>>(AsyncRenewRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>> PrepareAsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>>(PrepareAsyncRenewRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::CatalogWatchReply>> Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::CatalogWatchReply>>(WatchRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::CatalogWatchReply>> AsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::CatalogWatchReply>>(AsyncWatchRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::CatalogWatchReply>> PrepareAsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::CatalogWatchReply>>(PrepareAsyncWatchRaw(context, request, cq));
+    }
+    class async_interface {
+     public:
+      virtual ~async_interface() {}
+      virtual void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::CatalogWatchReply>* reactor) = 0;
+    };
+    typedef class async_interface experimental_async_interface;
+    virtual class async_interface* async() { return nullptr; }
+    class async_interface* experimental_async() { return async(); }
+   private:
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>* AsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>* PrepareAsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>* AsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>* PrepareAsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientReaderInterface< ::proto::comet::v1::CatalogWatchReply>* WatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::CatalogWatchReply>* AsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::CatalogWatchReply>* PrepareAsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) = 0;
+  };
+  class Stub final : public StubInterface {
+   public:
+    Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+    ::grpc::Status Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::proto::comet::v1::PublishReply* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>> AsyncPublish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>>(AsyncPublishRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>> PrepareAsyncPublish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>>(PrepareAsyncPublishRaw(context, request, cq));
+    }
+    ::grpc::Status Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::proto::comet::v1::Empty* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>> AsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>>(AsyncRenewRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>> PrepareAsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>>(PrepareAsyncRenewRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::CatalogWatchReply>> Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::CatalogWatchReply>>(WatchRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>> AsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>>(AsyncWatchRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>> PrepareAsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>>(PrepareAsyncWatchRaw(context, request, cq));
+    }
+    class async final :
+      public StubInterface::async_interface {
+     public:
+      void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, std::function<void(::grpc::Status)>) override;
+      void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response, std::function<void(::grpc::Status)>) override;
+      void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::CatalogWatchReply>* reactor) override;
+     private:
+      friend class Stub;
+      explicit async(Stub* stub): stub_(stub) { }
+      Stub* stub() { return stub_; }
+      Stub* stub_;
+    };
+    class async* async() override { return &async_stub_; }
+
+   private:
+    std::shared_ptr< ::grpc::ChannelInterface> channel_;
+    class async async_stub_{this};
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>* AsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>* PrepareAsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>* AsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>* PrepareAsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientReader< ::proto::comet::v1::CatalogWatchReply>* WatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>* AsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>* PrepareAsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) override;
+    const ::grpc::internal::RpcMethod rpcmethod_Publish_;
+    const ::grpc::internal::RpcMethod rpcmethod_Renew_;
+    const ::grpc::internal::RpcMethod rpcmethod_Watch_;
+  };
+  static std::unique_ptr<Stub> NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+
+  class Service : public ::grpc::Service {
+   public:
+    Service();
+    virtual ~Service();
+    virtual ::grpc::Status Publish(::grpc::ServerContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response);
+    virtual ::grpc::Status Renew(::grpc::ServerContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response);
+    virtual ::grpc::Status Watch(::grpc::ServerContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* writer);
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Publish : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Publish() {
+      ::grpc::Service::MarkMethodAsync(0);
+    }
+    ~WithAsyncMethod_Publish() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Publish(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::PublishRequest* /*request*/, ::proto::comet::v1::PublishReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestPublish(::grpc::ServerContext* context, ::proto::comet::v1::PublishRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::PublishReply>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Renew() {
+      ::grpc::Service::MarkMethodAsync(1);
+    }
+    ~WithAsyncMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogRenewRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestRenew(::grpc::ServerContext* context, ::proto::comet::v1::CatalogRenewRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::Empty>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Watch() {
+      ::grpc::Service::MarkMethodAsync(2);
+    }
+    ~WithAsyncMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestWatch(::grpc::ServerContext* context, ::proto::comet::v1::WatchRequest* request, ::grpc::ServerAsyncWriter< ::proto::comet::v1::CatalogWatchReply>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(2, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  typedef WithAsyncMethod_Publish<WithAsyncMethod_Renew<WithAsyncMethod_Watch<Service > > > AsyncService;
+  template <class BaseClass>
+  class WithCallbackMethod_Publish : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Publish() {
+      ::grpc::Service::MarkMethodCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response) { return this->Publish(context, request, response); }));}
+    void SetMessageAllocatorFor_Publish(
+        ::grpc::MessageAllocator< ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Publish() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Publish(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::PublishRequest* /*request*/, ::proto::comet::v1::PublishReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Publish(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::PublishRequest* /*request*/, ::proto::comet::v1::PublishReply* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithCallbackMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Renew() {
+      ::grpc::Service::MarkMethodCallback(1,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response) { return this->Renew(context, request, response); }));}
+    void SetMessageAllocatorFor_Renew(
+        ::grpc::MessageAllocator< ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogRenewRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Renew(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::CatalogRenewRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithCallbackMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Watch() {
+      ::grpc::Service::MarkMethodCallback(2,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::proto::comet::v1::WatchRequest, ::proto::comet::v1::CatalogWatchReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::WatchRequest* request) { return this->Watch(context, request); }));
+    }
+    ~WithCallbackMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::proto::comet::v1::CatalogWatchReply>* Watch(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/)  { return nullptr; }
+  };
+  typedef WithCallbackMethod_Publish<WithCallbackMethod_Renew<WithCallbackMethod_Watch<Service > > > CallbackService;
+  typedef CallbackService ExperimentalCallbackService;
+  template <class BaseClass>
+  class WithGenericMethod_Publish : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Publish() {
+      ::grpc::Service::MarkMethodGeneric(0);
+    }
+    ~WithGenericMethod_Publish() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Publish(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::PublishRequest* /*request*/, ::proto::comet::v1::PublishReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Renew() {
+      ::grpc::Service::MarkMethodGeneric(1);
+    }
+    ~WithGenericMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogRenewRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Watch() {
+      ::grpc::Service::MarkMethodGeneric(2);
+    }
+    ~WithGenericMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Publish : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Publish() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_Publish() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Publish(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::PublishRequest* /*request*/, ::proto::comet::v1::PublishReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestPublish(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Renew() {
+      ::grpc::Service::MarkMethodRaw(1);
+    }
+    ~WithRawMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogRenewRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestRenew(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Watch() {
+      ::grpc::Service::MarkMethodRaw(2);
+    }
+    ~WithRawMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestWatch(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(2, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Publish : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Publish() {
+      ::grpc::Service::MarkMethodRawCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Publish(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Publish() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Publish(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::PublishRequest* /*request*/, ::proto::comet::v1::PublishReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Publish(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Renew() {
+      ::grpc::Service::MarkMethodRawCallback(1,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Renew(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogRenewRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Renew(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Watch() {
+      ::grpc::Service::MarkMethodRawCallback(2,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const::grpc::ByteBuffer* request) { return this->Watch(context, request); }));
+    }
+    ~WithRawCallbackMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::grpc::ByteBuffer>* Watch(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_Publish : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Publish() {
+      ::grpc::Service::MarkMethodStreamed(0,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>* streamer) {
+                       return this->StreamedPublish(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Publish() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Publish(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::PublishRequest* /*request*/, ::proto::comet::v1::PublishReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedPublish(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::PublishRequest,::proto::comet::v1::PublishReply>* server_unary_streamer) = 0;
+  };
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Renew() {
+      ::grpc::Service::MarkMethodStreamed(1,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>* streamer) {
+                       return this->StreamedRenew(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogRenewRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedRenew(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::CatalogRenewRequest,::proto::comet::v1::Empty>* server_unary_streamer) = 0;
+  };
+  typedef WithStreamedUnaryMethod_Publish<WithStreamedUnaryMethod_Renew<Service > > StreamedUnaryService;
+  template <class BaseClass>
+  class WithSplitStreamingMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithSplitStreamingMethod_Watch() {
+      ::grpc::Service::MarkMethodStreamed(2,
+        new ::grpc::internal::SplitServerStreamingHandler<
+          ::proto::comet::v1::WatchRequest, ::proto::comet::v1::CatalogWatchReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerSplitStreamer<
+                     ::proto::comet::v1::WatchRequest, ::proto::comet::v1::CatalogWatchReply>* streamer) {
+                       return this->StreamedWatch(context,
+                         streamer);
+                  }));
+    }
+    ~WithSplitStreamingMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with split streamed
+    virtual ::grpc::Status StreamedWatch(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::proto::comet::v1::WatchRequest,::proto::comet::v1::CatalogWatchReply>* server_split_streamer) = 0;
+  };
+  typedef WithSplitStreamingMethod_Watch<Service > SplitStreamedService;
+  typedef WithStreamedUnaryMethod_Publish<WithStreamedUnaryMethod_Renew<WithSplitStreamingMethod_Watch<Service > > > StreamedService;
+};
+
+// 注册只能在来源 Star 更新或续租, 两种 order 独立, 切换 Star 必须重新 Create.
+class Ephemeris final {
+ public:
+  static constexpr char const* service_full_name() {
+    return "proto.comet.v1.Ephemeris";
+  }
+  class StubInterface {
+   public:
+    virtual ~StubInterface() {}
+    virtual ::grpc::Status Create(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::proto::comet::v1::CreateReply* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CreateReply>> AsyncCreate(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CreateReply>>(AsyncCreateRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CreateReply>> PrepareAsyncCreate(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CreateReply>>(PrepareAsyncCreateRaw(context, request, cq));
+    }
+    virtual ::grpc::Status Update(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::proto::comet::v1::UpdateReply* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::UpdateReply>> AsyncUpdate(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::UpdateReply>>(AsyncUpdateRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::UpdateReply>> PrepareAsyncUpdate(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::UpdateReply>>(PrepareAsyncUpdateRaw(context, request, cq));
+    }
+    virtual ::grpc::Status Renew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::proto::comet::v1::RenewReply* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::RenewReply>> AsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::RenewReply>>(AsyncRenewRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::RenewReply>> PrepareAsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::RenewReply>>(PrepareAsyncRenewRaw(context, request, cq));
+    }
+    virtual ::grpc::Status Remove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::proto::comet::v1::Empty* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>> AsyncRemove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>>(AsyncRemoveRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>> PrepareAsyncRemove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>>(PrepareAsyncRemoveRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::EphemerisWatchReply>> Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReaderInterface< ::proto::comet::v1::EphemerisWatchReply>>(WatchRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::EphemerisWatchReply>> AsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::EphemerisWatchReply>>(AsyncWatchRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::EphemerisWatchReply>> PrepareAsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::EphemerisWatchReply>>(PrepareAsyncWatchRaw(context, request, cq));
+    }
+    class async_interface {
+     public:
+      virtual ~async_interface() {}
+      virtual void Create(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest* request, ::proto::comet::v1::CreateReply* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Create(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest* request, ::proto::comet::v1::CreateReply* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Update(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest* request, ::proto::comet::v1::UpdateReply* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Update(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest* request, ::proto::comet::v1::UpdateReply* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest* request, ::proto::comet::v1::RenewReply* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest* request, ::proto::comet::v1::RenewReply* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Remove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest* request, ::proto::comet::v1::Empty* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Remove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest* request, ::proto::comet::v1::Empty* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::EphemerisWatchReply>* reactor) = 0;
+    };
+    typedef class async_interface experimental_async_interface;
+    virtual class async_interface* async() { return nullptr; }
+    class async_interface* experimental_async() { return async(); }
+   private:
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CreateReply>* AsyncCreateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CreateReply>* PrepareAsyncCreateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::UpdateReply>* AsyncUpdateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::UpdateReply>* PrepareAsyncUpdateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::RenewReply>* AsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::RenewReply>* PrepareAsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>* AsyncRemoveRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>* PrepareAsyncRemoveRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientReaderInterface< ::proto::comet::v1::EphemerisWatchReply>* WatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::EphemerisWatchReply>* AsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
+    virtual ::grpc::ClientAsyncReaderInterface< ::proto::comet::v1::EphemerisWatchReply>* PrepareAsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) = 0;
+  };
+  class Stub final : public StubInterface {
+   public:
+    Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+    ::grpc::Status Create(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::proto::comet::v1::CreateReply* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CreateReply>> AsyncCreate(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CreateReply>>(AsyncCreateRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CreateReply>> PrepareAsyncCreate(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CreateReply>>(PrepareAsyncCreateRaw(context, request, cq));
+    }
+    ::grpc::Status Update(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::proto::comet::v1::UpdateReply* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::UpdateReply>> AsyncUpdate(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::UpdateReply>>(AsyncUpdateRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::UpdateReply>> PrepareAsyncUpdate(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::UpdateReply>>(PrepareAsyncUpdateRaw(context, request, cq));
+    }
+    ::grpc::Status Renew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::proto::comet::v1::RenewReply* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::RenewReply>> AsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::RenewReply>>(AsyncRenewRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::RenewReply>> PrepareAsyncRenew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::RenewReply>>(PrepareAsyncRenewRaw(context, request, cq));
+    }
+    ::grpc::Status Remove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::proto::comet::v1::Empty* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>> AsyncRemove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>>(AsyncRemoveRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>> PrepareAsyncRemove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>>(PrepareAsyncRemoveRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::EphemerisWatchReply>> Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) {
+      return std::unique_ptr< ::grpc::ClientReader< ::proto::comet::v1::EphemerisWatchReply>>(WatchRaw(context, request));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::EphemerisWatchReply>> AsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::EphemerisWatchReply>>(AsyncWatchRaw(context, request, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::EphemerisWatchReply>> PrepareAsyncWatch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncReader< ::proto::comet::v1::EphemerisWatchReply>>(PrepareAsyncWatchRaw(context, request, cq));
+    }
+    class async final :
+      public StubInterface::async_interface {
+     public:
+      void Create(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest* request, ::proto::comet::v1::CreateReply* response, std::function<void(::grpc::Status)>) override;
+      void Create(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest* request, ::proto::comet::v1::CreateReply* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Update(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest* request, ::proto::comet::v1::UpdateReply* response, std::function<void(::grpc::Status)>) override;
+      void Update(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest* request, ::proto::comet::v1::UpdateReply* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest* request, ::proto::comet::v1::RenewReply* response, std::function<void(::grpc::Status)>) override;
+      void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest* request, ::proto::comet::v1::RenewReply* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Remove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest* request, ::proto::comet::v1::Empty* response, std::function<void(::grpc::Status)>) override;
+      void Remove(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest* request, ::proto::comet::v1::Empty* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Watch(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ClientReadReactor< ::proto::comet::v1::EphemerisWatchReply>* reactor) override;
+     private:
+      friend class Stub;
+      explicit async(Stub* stub): stub_(stub) { }
+      Stub* stub() { return stub_; }
+      Stub* stub_;
+    };
+    class async* async() override { return &async_stub_; }
+
+   private:
+    std::shared_ptr< ::grpc::ChannelInterface> channel_;
+    class async async_stub_{this};
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CreateReply>* AsyncCreateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CreateReply>* PrepareAsyncCreateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CreateRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::UpdateReply>* AsyncUpdateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::UpdateReply>* PrepareAsyncUpdateRaw(::grpc::ClientContext* context, const ::proto::comet::v1::UpdateRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::RenewReply>* AsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::RenewReply>* PrepareAsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RenewRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>* AsyncRemoveRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>* PrepareAsyncRemoveRaw(::grpc::ClientContext* context, const ::proto::comet::v1::RemoveRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientReader< ::proto::comet::v1::EphemerisWatchReply>* WatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::EphemerisWatchReply>* AsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) override;
+    ::grpc::ClientAsyncReader< ::proto::comet::v1::EphemerisWatchReply>* PrepareAsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) override;
+    const ::grpc::internal::RpcMethod rpcmethod_Create_;
+    const ::grpc::internal::RpcMethod rpcmethod_Update_;
+    const ::grpc::internal::RpcMethod rpcmethod_Renew_;
+    const ::grpc::internal::RpcMethod rpcmethod_Remove_;
+    const ::grpc::internal::RpcMethod rpcmethod_Watch_;
+  };
+  static std::unique_ptr<Stub> NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+
+  class Service : public ::grpc::Service {
+   public:
+    Service();
+    virtual ~Service();
+    virtual ::grpc::Status Create(::grpc::ServerContext* context, const ::proto::comet::v1::CreateRequest* request, ::proto::comet::v1::CreateReply* response);
+    virtual ::grpc::Status Update(::grpc::ServerContext* context, const ::proto::comet::v1::UpdateRequest* request, ::proto::comet::v1::UpdateReply* response);
+    virtual ::grpc::Status Renew(::grpc::ServerContext* context, const ::proto::comet::v1::RenewRequest* request, ::proto::comet::v1::RenewReply* response);
+    virtual ::grpc::Status Remove(::grpc::ServerContext* context, const ::proto::comet::v1::RemoveRequest* request, ::proto::comet::v1::Empty* response);
+    virtual ::grpc::Status Watch(::grpc::ServerContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ServerWriter< ::proto::comet::v1::EphemerisWatchReply>* writer);
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Create : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Create() {
+      ::grpc::Service::MarkMethodAsync(0);
+    }
+    ~WithAsyncMethod_Create() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Create(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CreateRequest* /*request*/, ::proto::comet::v1::CreateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestCreate(::grpc::ServerContext* context, ::proto::comet::v1::CreateRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::CreateReply>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Update : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Update() {
+      ::grpc::Service::MarkMethodAsync(1);
+    }
+    ~WithAsyncMethod_Update() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Update(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::UpdateRequest* /*request*/, ::proto::comet::v1::UpdateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestUpdate(::grpc::ServerContext* context, ::proto::comet::v1::UpdateRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::UpdateReply>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Renew() {
+      ::grpc::Service::MarkMethodAsync(2);
+    }
+    ~WithAsyncMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RenewRequest* /*request*/, ::proto::comet::v1::RenewReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestRenew(::grpc::ServerContext* context, ::proto::comet::v1::RenewRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::RenewReply>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Remove : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Remove() {
+      ::grpc::Service::MarkMethodAsync(3);
+    }
+    ~WithAsyncMethod_Remove() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Remove(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RemoveRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestRemove(::grpc::ServerContext* context, ::proto::comet::v1::RemoveRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::Empty>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(3, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Watch() {
+      ::grpc::Service::MarkMethodAsync(4);
+    }
+    ~WithAsyncMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::EphemerisWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestWatch(::grpc::ServerContext* context, ::proto::comet::v1::WatchRequest* request, ::grpc::ServerAsyncWriter< ::proto::comet::v1::EphemerisWatchReply>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(4, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  typedef WithAsyncMethod_Create<WithAsyncMethod_Update<WithAsyncMethod_Renew<WithAsyncMethod_Remove<WithAsyncMethod_Watch<Service > > > > > AsyncService;
+  template <class BaseClass>
+  class WithCallbackMethod_Create : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Create() {
+      ::grpc::Service::MarkMethodCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CreateRequest, ::proto::comet::v1::CreateReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::CreateRequest* request, ::proto::comet::v1::CreateReply* response) { return this->Create(context, request, response); }));}
+    void SetMessageAllocatorFor_Create(
+        ::grpc::MessageAllocator< ::proto::comet::v1::CreateRequest, ::proto::comet::v1::CreateReply>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CreateRequest, ::proto::comet::v1::CreateReply>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Create() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Create(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CreateRequest* /*request*/, ::proto::comet::v1::CreateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Create(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::CreateRequest* /*request*/, ::proto::comet::v1::CreateReply* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithCallbackMethod_Update : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Update() {
+      ::grpc::Service::MarkMethodCallback(1,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::UpdateRequest, ::proto::comet::v1::UpdateReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::UpdateRequest* request, ::proto::comet::v1::UpdateReply* response) { return this->Update(context, request, response); }));}
+    void SetMessageAllocatorFor_Update(
+        ::grpc::MessageAllocator< ::proto::comet::v1::UpdateRequest, ::proto::comet::v1::UpdateReply>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::UpdateRequest, ::proto::comet::v1::UpdateReply>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Update() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Update(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::UpdateRequest* /*request*/, ::proto::comet::v1::UpdateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Update(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::UpdateRequest* /*request*/, ::proto::comet::v1::UpdateReply* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithCallbackMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Renew() {
+      ::grpc::Service::MarkMethodCallback(2,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::RenewRequest, ::proto::comet::v1::RenewReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::RenewRequest* request, ::proto::comet::v1::RenewReply* response) { return this->Renew(context, request, response); }));}
+    void SetMessageAllocatorFor_Renew(
+        ::grpc::MessageAllocator< ::proto::comet::v1::RenewRequest, ::proto::comet::v1::RenewReply>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(2);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::RenewRequest, ::proto::comet::v1::RenewReply>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RenewRequest* /*request*/, ::proto::comet::v1::RenewReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Renew(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::RenewRequest* /*request*/, ::proto::comet::v1::RenewReply* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithCallbackMethod_Remove : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Remove() {
+      ::grpc::Service::MarkMethodCallback(3,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::RemoveRequest, ::proto::comet::v1::Empty>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::RemoveRequest* request, ::proto::comet::v1::Empty* response) { return this->Remove(context, request, response); }));}
+    void SetMessageAllocatorFor_Remove(
+        ::grpc::MessageAllocator< ::proto::comet::v1::RemoveRequest, ::proto::comet::v1::Empty>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(3);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::RemoveRequest, ::proto::comet::v1::Empty>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Remove() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Remove(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RemoveRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Remove(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::RemoveRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithCallbackMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Watch() {
+      ::grpc::Service::MarkMethodCallback(4,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::proto::comet::v1::WatchRequest, ::proto::comet::v1::EphemerisWatchReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::WatchRequest* request) { return this->Watch(context, request); }));
+    }
+    ~WithCallbackMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::EphemerisWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::proto::comet::v1::EphemerisWatchReply>* Watch(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/)  { return nullptr; }
+  };
+  typedef WithCallbackMethod_Create<WithCallbackMethod_Update<WithCallbackMethod_Renew<WithCallbackMethod_Remove<WithCallbackMethod_Watch<Service > > > > > CallbackService;
+  typedef CallbackService ExperimentalCallbackService;
+  template <class BaseClass>
+  class WithGenericMethod_Create : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Create() {
+      ::grpc::Service::MarkMethodGeneric(0);
+    }
+    ~WithGenericMethod_Create() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Create(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CreateRequest* /*request*/, ::proto::comet::v1::CreateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_Update : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Update() {
+      ::grpc::Service::MarkMethodGeneric(1);
+    }
+    ~WithGenericMethod_Update() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Update(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::UpdateRequest* /*request*/, ::proto::comet::v1::UpdateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Renew() {
+      ::grpc::Service::MarkMethodGeneric(2);
+    }
+    ~WithGenericMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RenewRequest* /*request*/, ::proto::comet::v1::RenewReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_Remove : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Remove() {
+      ::grpc::Service::MarkMethodGeneric(3);
+    }
+    ~WithGenericMethod_Remove() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Remove(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RemoveRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Watch() {
+      ::grpc::Service::MarkMethodGeneric(4);
+    }
+    ~WithGenericMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::EphemerisWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Create : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Create() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_Create() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Create(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CreateRequest* /*request*/, ::proto::comet::v1::CreateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestCreate(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Update : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Update() {
+      ::grpc::Service::MarkMethodRaw(1);
+    }
+    ~WithRawMethod_Update() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Update(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::UpdateRequest* /*request*/, ::proto::comet::v1::UpdateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestUpdate(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Renew() {
+      ::grpc::Service::MarkMethodRaw(2);
+    }
+    ~WithRawMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RenewRequest* /*request*/, ::proto::comet::v1::RenewReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestRenew(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Remove : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Remove() {
+      ::grpc::Service::MarkMethodRaw(3);
+    }
+    ~WithRawMethod_Remove() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Remove(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RemoveRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestRemove(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(3, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Watch() {
+      ::grpc::Service::MarkMethodRaw(4);
+    }
+    ~WithRawMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::EphemerisWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestWatch(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncServerStreaming(4, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Create : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Create() {
+      ::grpc::Service::MarkMethodRawCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Create(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Create() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Create(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CreateRequest* /*request*/, ::proto::comet::v1::CreateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Create(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Update : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Update() {
+      ::grpc::Service::MarkMethodRawCallback(1,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Update(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Update() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Update(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::UpdateRequest* /*request*/, ::proto::comet::v1::UpdateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Update(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Renew() {
+      ::grpc::Service::MarkMethodRawCallback(2,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Renew(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RenewRequest* /*request*/, ::proto::comet::v1::RenewReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Renew(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Remove : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Remove() {
+      ::grpc::Service::MarkMethodRawCallback(3,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Remove(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Remove() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Remove(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RemoveRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Remove(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Watch() {
+      ::grpc::Service::MarkMethodRawCallback(4,
+          new ::grpc::internal::CallbackServerStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const::grpc::ByteBuffer* request) { return this->Watch(context, request); }));
+    }
+    ~WithRawCallbackMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::EphemerisWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerWriteReactor< ::grpc::ByteBuffer>* Watch(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_Create : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Create() {
+      ::grpc::Service::MarkMethodStreamed(0,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::comet::v1::CreateRequest, ::proto::comet::v1::CreateReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::comet::v1::CreateRequest, ::proto::comet::v1::CreateReply>* streamer) {
+                       return this->StreamedCreate(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Create() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Create(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CreateRequest* /*request*/, ::proto::comet::v1::CreateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedCreate(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::CreateRequest,::proto::comet::v1::CreateReply>* server_unary_streamer) = 0;
+  };
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_Update : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Update() {
+      ::grpc::Service::MarkMethodStreamed(1,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::comet::v1::UpdateRequest, ::proto::comet::v1::UpdateReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::comet::v1::UpdateRequest, ::proto::comet::v1::UpdateReply>* streamer) {
+                       return this->StreamedUpdate(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Update() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Update(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::UpdateRequest* /*request*/, ::proto::comet::v1::UpdateReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedUpdate(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::UpdateRequest,::proto::comet::v1::UpdateReply>* server_unary_streamer) = 0;
+  };
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_Renew : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Renew() {
+      ::grpc::Service::MarkMethodStreamed(2,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::comet::v1::RenewRequest, ::proto::comet::v1::RenewReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::comet::v1::RenewRequest, ::proto::comet::v1::RenewReply>* streamer) {
+                       return this->StreamedRenew(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Renew() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Renew(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RenewRequest* /*request*/, ::proto::comet::v1::RenewReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedRenew(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::RenewRequest,::proto::comet::v1::RenewReply>* server_unary_streamer) = 0;
+  };
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_Remove : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Remove() {
+      ::grpc::Service::MarkMethodStreamed(3,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::comet::v1::RemoveRequest, ::proto::comet::v1::Empty>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::comet::v1::RemoveRequest, ::proto::comet::v1::Empty>* streamer) {
+                       return this->StreamedRemove(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Remove() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Remove(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::RemoveRequest* /*request*/, ::proto::comet::v1::Empty* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedRemove(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::RemoveRequest,::proto::comet::v1::Empty>* server_unary_streamer) = 0;
+  };
+  typedef WithStreamedUnaryMethod_Create<WithStreamedUnaryMethod_Update<WithStreamedUnaryMethod_Renew<WithStreamedUnaryMethod_Remove<Service > > > > StreamedUnaryService;
+  template <class BaseClass>
+  class WithSplitStreamingMethod_Watch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithSplitStreamingMethod_Watch() {
+      ::grpc::Service::MarkMethodStreamed(4,
+        new ::grpc::internal::SplitServerStreamingHandler<
+          ::proto::comet::v1::WatchRequest, ::proto::comet::v1::EphemerisWatchReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerSplitStreamer<
+                     ::proto::comet::v1::WatchRequest, ::proto::comet::v1::EphemerisWatchReply>* streamer) {
+                       return this->StreamedWatch(context,
+                         streamer);
+                  }));
+    }
+    ~WithSplitStreamingMethod_Watch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Watch(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/, ::grpc::ServerWriter< ::proto::comet::v1::EphemerisWatchReply>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with split streamed
+    virtual ::grpc::Status StreamedWatch(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::proto::comet::v1::WatchRequest,::proto::comet::v1::EphemerisWatchReply>* server_split_streamer) = 0;
+  };
+  typedef WithSplitStreamingMethod_Watch<Service > SplitStreamedService;
+  typedef WithStreamedUnaryMethod_Create<WithStreamedUnaryMethod_Update<WithStreamedUnaryMethod_Renew<WithStreamedUnaryMethod_Remove<WithSplitStreamingMethod_Watch<Service > > > > > StreamedService;
+};
 
 }  // namespace v1
 }  // namespace comet

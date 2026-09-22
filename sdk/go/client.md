@@ -1,5 +1,7 @@
 # Go Root Client API
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+
 Status: implemented for non-production Alpha version 0.1.0 on 2026-08-28.
 
 ## 1. Boundary

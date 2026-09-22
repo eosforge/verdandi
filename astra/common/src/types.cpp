@@ -185,8 +185,8 @@ Result<void> Member::validate() const {
 
     // 检查集群名, 组名, ID 的通用规范.
     // epoch 的值必须大于 0.
-    // 角色必须是已知的 star 或者 planet.
-    if (!Member::valid_name(galaxy) || !Member::valid_name(group) || !Member::valid_id(id) || epoch.value == 0 || (role != Member::Role::star && role != Member::Role::planet)) {
+    // 角色必须是明确支持的基础设施角色, 未知枚举值不默认降为 Star.
+    if (!Member::valid_name(galaxy) || !Member::valid_name(group) || !Member::valid_id(id) || epoch.value == 0 || (role != Member::Role::star && role != Member::Role::planet && role != Member::Role::polaris && role != Member::Role::astrolabe)) {
         return Status::identity("Invalid member identity");
     }
 

@@ -34,6 +34,10 @@ enum class Scenario {
     registration_deadline,
     // 首次成功后返回另一实例, 检查刷新不能替换本地身份.
     changed_identity,
+    // 目录明确返回凭证撤销, 客户端必须区分普通控制面暂时失联.
+    revoked,
+    // 只读目录暂时不可达, 保留已登记身份且不自动重新登录.
+    directory_outage,
     // 使用与目标地址不匹配的证书 SAN, 检查 TLS 端点身份验证.
     wrong_san,
     // 使用不受客户端信任的签发根, 检查 TLS 信任链验证.
@@ -52,6 +56,8 @@ public:
     std::atomic_uint registrations{};
     // request_changed 初始 false, 任一重试改变启动幂等键时置 true.
     std::atomic_bool request_changed{};
+    // queries 单独统计只读请求, 不能把刷新重新计为密码登录.
+    std::atomic_uint queries{};
 
     // 借用本次 context/request/response, 按 scenario 制造响应或等待取消, 请求不能越过 handler 寿命.
     grpc::Status Register(grpc::ServerContext* context, const proto::orbit::v1::RegistrationRequest* request, proto::orbit::v1::RegistrationResponse* response) override {
@@ -83,13 +89,18 @@ public:
         proto::orbit::v1::Member member;
         member.set_galaxy(request->galaxy());
         member.set_advertise(request->advertise());
-        member.set_id(scenario_ == Scenario::changed_identity && attempt > 1 ? "other-instance" : "issued/session:α/42");
+        member.set_id("issued/session:α/42");
         member.set_role(request->role());
         member.set_group(scenario_ == Scenario::wrong_identity ? "wrong" : request->group());
         member.set_epoch(1);
         member.set_principal(identity_->principal(member.galaxy(), member.advertise()).text());
         response->set_admission(member.SerializeAsString());
         response->set_signature(test::sign(response->admission()));
+        {
+            // current_ 保留测试签发结果, List 只复制它, 不构造另一启动身份.
+            std::lock_guard lock(mutex_);
+            current_ = member;
+        }
         for (unsigned n = 0; n < (scenario_ == Scenario::excessive_members ? 5U : 1U); ++n) {
             response->add_members()->CopyFrom(member);
         }
@@ -105,11 +116,39 @@ public:
         return grpc::Status::OK;
     }
 
+    // 已登记后的刷新使用凭证 metadata, 请求本身为空; 故障只改变这次读取结果.
+    grpc::Status List(grpc::ServerContext* context, const proto::orbit::v1::DirectoryRequest*, proto::orbit::v1::DirectoryResponse* response) override {
+
+        ++queries;
+        std::lock_guard lock(mutex_);
+        const auto& metadata = context->client_metadata();
+        const auto admission = metadata.find("astra-admission-bin");
+        const auto signature = metadata.find("astra-signature-bin");
+        const auto encoded = current_.SerializeAsString();
+        const auto signed_value = test::sign(encoded);
+        if (metadata.count("astra-admission-bin") != 1 || metadata.count("astra-signature-bin") != 1 || admission == metadata.end() || signature == metadata.end() || std::string_view(admission->second.data(), admission->second.size()) != encoded || std::string_view(signature->second.data(), signature->second.size()) != signed_value) {
+            return {grpc::StatusCode::UNAUTHENTICATED, "Invalid test directory credential"};
+        }
+        if (scenario_ == Scenario::revoked) {
+            return {grpc::StatusCode::UNAUTHENTICATED, "Replaced test identity"};
+        }
+        if (scenario_ == Scenario::directory_outage) {
+            return {grpc::StatusCode::UNAVAILABLE, "Directory temporarily unavailable"};
+        }
+        *response->add_members() = current_;
+        if (scenario_ == Scenario::changed_identity) {
+            response->mutable_members(0)->set_id("other-instance");
+        }
+        return grpc::Status::OK;
+    }
+
 private:
     // 只保护跨 RPC 观察的 request_id_, 不在等待取消期间持锁.
     std::mutex mutex_;
     // 首次请求的 32 字节启动键, 初始为空, 后续请求只与其比较.
     std::string request_id_;
+    // 首次签发成员, 由 mutex_ 保护跨 handler 的赋值和读取.
+    proto::orbit::v1::Member current_;
     // 共享测试身份, 确保处理器存活期间摘要计算材料仍有效.
     std::shared_ptr<Identity> identity_;
     // 本夹具固定故障情景, 构造后只读, 不在并发 RPC 间切换.
@@ -233,6 +272,10 @@ int main() {
             const auto joined = fixture.result();
             CHECK(joined && joined->pulse_endpoint.empty());
             CHECK(fixture.authority.registrations == 2 && !fixture.authority.request_changed);
+            fixture.client->begin(0);
+            const auto refreshed = fixture.result(); // 成功登记后的刷新不重新提交密码和启动键.
+            CHECK(refreshed && refreshed->local == joined->local);
+            CHECK(fixture.authority.registrations == 2 && fixture.authority.queries == 1 && !fixture.client->revoked());
         }
         {
             Fixture fixture(*identity, Scenario::changed_identity);
@@ -242,7 +285,16 @@ int main() {
             // changed 是刷新返回另一实例的结果, 应被判为身份错误而保留原身份.
             auto changed = fixture.result();
             CHECK(!changed && changed.error().code == Status::Code::identity);
-            CHECK(!fixture.authority.request_changed);
+            CHECK(!fixture.authority.request_changed && fixture.authority.registrations == 1 && fixture.authority.queries == 1 && !fixture.client->revoked());
+        }
+        for (const auto scenario : {Scenario::revoked, Scenario::directory_outage}) {
+            Fixture fixture(*identity, scenario);
+            fixture.client->begin(0);
+            CHECK(fixture.result());
+            fixture.client->begin(0);
+            CHECK(!fixture.result());
+            CHECK(fixture.client->revoked() == (scenario == Scenario::revoked));
+            CHECK(fixture.authority.registrations == 1 && fixture.authority.queries == 1);
         }
         for (auto scenario : {Scenario::excessive_members, Scenario::wrong_identity, Scenario::oversized_reply, Scenario::empty_member, Scenario::reply_limit, Scenario::request_limit, Scenario::invalid_pulse}) {
             Fixture fixture(*identity, scenario);

@@ -23,35 +23,56 @@ class PulsarHarnessTests(unittest.TestCase):
 
     def records(self, *samples):
         records = [{"event": "clock_status", "fields": fields} for fields in samples]
-        self.log.write_text("".join(json.dumps(record) + "\n" for record in records), encoding="utf-8")
+        self.log.write_text(
+            "".join(json.dumps(record) + "\n" for record in records), encoding="utf-8"
+        )
 
     def test_continuous_holdover_and_recovery(self):
         self.records(
-            {"ready": False},
-            {"ready": True, "nanoseconds": 100},
-            {"ready": True, "nanoseconds": 100},
-            {"ready": False, "nanoseconds": 110},
-            {"ready": True, "nanoseconds": 120},
+            {"ready": False, "synchronized": False},
+            {"ready": True, "synchronized": True, "nanoseconds": 100},
+            {"ready": True, "synchronized": True, "nanoseconds": 100},
+            {"ready": True, "synchronized": False, "nanoseconds": 110},
+            {"ready": True, "synchronized": True, "nanoseconds": 120},
         )
         harness.verify_clock_log(self.log, require_holdover=True)
 
     def test_invalid_epoch_and_anchor_loss(self):
         for fields in (
-            {"ready": True, "nanoseconds": 99},
-            {"ready": False},
-            {"ready": True, "nanoseconds": -1},
-            {"ready": True, "nanoseconds": True},
+            {"ready": True, "synchronized": True, "nanoseconds": 99},
+            {"ready": False, "synchronized": False},
+            {"ready": True, "synchronized": True, "nanoseconds": -1},
+            {"ready": True, "synchronized": True, "nanoseconds": True},
+            {"ready": False, "synchronized": False, "nanoseconds": 110},
+            {"ready": False, "synchronized": True, "nanoseconds": 110},
+            {"ready": True, "nanoseconds": 110},
+            {"ready": True, "synchronized": 1, "nanoseconds": 110},
+            {"ready": 1, "synchronized": True, "nanoseconds": 110},
+            {"ready": True, "synchronized": True},
         ):
             with self.subTest(fields=fields):
-                self.records({"ready": True, "nanoseconds": 100}, fields)
+                self.records(
+                    {"ready": True, "synchronized": True, "nanoseconds": 100}, fields
+                )
                 with self.assertRaises(RuntimeError):
                     harness.verify_clock_log(self.log)
 
     def test_missing_holdover_or_recovery_is_not_success(self):
         for samples in (
-            ({"ready": False},),
-            ({"ready": True, "nanoseconds": 100}, {"ready": True, "nanoseconds": 110}),
-            ({"ready": True, "nanoseconds": 100}, {"ready": False, "nanoseconds": 110}),
+            ({"ready": False, "synchronized": False},),
+            (
+                {"ready": True, "synchronized": True, "nanoseconds": 100},
+                {"ready": True, "synchronized": True, "nanoseconds": 110},
+            ),
+            (
+                {"ready": True, "synchronized": True, "nanoseconds": 100},
+                {"ready": True, "synchronized": False, "nanoseconds": 110},
+            ),
+            (
+                {"ready": True, "synchronized": False, "nanoseconds": 100},
+                {"ready": True, "synchronized": False, "nanoseconds": 110},
+                {"ready": True, "synchronized": True, "nanoseconds": 120},
+            ),
         ):
             with self.subTest(samples=samples):
                 self.records(*samples)
@@ -71,35 +92,43 @@ class PulsarHarnessTests(unittest.TestCase):
                     harness.events(self.log)
 
     def test_non_json_and_incomplete_lines_do_not_create_events(self):
-        self.records({"ready": True, "nanoseconds": 100})
+        self.records({"ready": True, "synchronized": True, "nanoseconds": 100})
         with self.log.open("a", encoding="utf-8") as output:
             output.write('ordinary diagnostic\n[1,2]\n{"event":')
         self.assertEqual(len(harness.events(self.log)), 1)
 
-    def test_wait_does_not_reuse_an_earlier_ready_event(self):
-        self.records({"ready": True, "nanoseconds": 100}, {"ready": False, "nanoseconds": 110})
+    def test_wait_does_not_reuse_an_earlier_synchronized_event(self):
+        self.records(
+            {"ready": True, "synchronized": True, "nanoseconds": 100},
+            {"ready": True, "synchronized": False, "nanoseconds": 110},
+        )
         process = Mock()
         process.poll.return_value = None
-        with patch.object(harness.time, "monotonic", side_effect=[0, 0, 1]), patch.object(harness.time, "sleep"):
+        with patch.object(
+            harness.time, "monotonic", side_effect=[0, 0, 1]
+        ), patch.object(harness.time, "sleep"):
             with self.assertRaises(TimeoutError):
                 harness.wait(
                     process,
                     self.log,
-                    lambda record: record["fields"]["ready"],
+                    lambda record: record["fields"]["synchronized"],
                     seconds=0.5,
                     overall_deadline=100,
                     after=1,
                 )
 
     def test_wait_accepts_new_recovery_event(self):
-        self.records({"ready": False, "nanoseconds": 100}, {"ready": True, "nanoseconds": 110})
+        self.records(
+            {"ready": True, "synchronized": False, "nanoseconds": 100},
+            {"ready": True, "synchronized": True, "nanoseconds": 110},
+        )
         process = Mock()
         process.poll.return_value = None
         with patch.object(harness.time, "monotonic", side_effect=[0, 0]):
             value = harness.wait(
                 process,
                 self.log,
-                lambda record: record["fields"]["ready"],
+                lambda record: record["fields"]["synchronized"],
                 seconds=0.5,
                 overall_deadline=100,
                 after=1,

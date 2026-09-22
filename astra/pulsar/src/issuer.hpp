@@ -10,6 +10,8 @@ public:
     Issuer(std::string galaxy, std::string pulse_endpoint, const Authority& authority, Ledger& ledger);
     // TLS 账号验证后登记; 所有异常在 RPC 边界转换为固定状态, 不泄露密码或本地文件路径.
     grpc::Status Register(grpc::ServerContext* context, const proto::orbit::v1::RegistrationRequest* request, proto::orbit::v1::RegistrationResponse* response) override;
+    // 当前签名身份读取同一已提交快照, 不进行 KDF、续签、登记或在线性探测.
+    grpc::Status List(grpc::ServerContext* context, const proto::orbit::v1::DirectoryRequest* request, proto::orbit::v1::DirectoryResponse* response) override;
 
 private:
     // 只允许登记到启动配置的 Galaxy.

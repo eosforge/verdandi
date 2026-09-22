@@ -17,10 +17,12 @@ public:
         std::string pulse_endpoint;
         // 当前节点成功注册后获得的本地身份.
         Member local;
-        // 当前集群/组内其他成员的独立名单.
+        // 仅含 Star 对等目标或 Planet 的 Star 候选, 不含控制服务.
         std::vector<Member> members;
         // 节点握手共享的 Hello, 包含准入凭证和签名.
         std::shared_ptr<const proto::astra::v1::Hello> hello;
+        // 已登记控制服务的独立名单, 当前 Star 准入仅允许 Polaris, 不参与 Policy 互联.
+        std::vector<Member> services;
     };
 
     // 构造函数: 复制已校验配置, 持有 identity, 进程 ID 由 Supervisor 签发, wake 须可由 gRPC 回调安全调用且不得借用 Runtime.
@@ -59,6 +61,8 @@ public:
     // pending: 由控制循环查询是否仍有未消费的尝试, 包括连接等待阶段; true 不表示已经提交 Register.
     // 返回值: bool 类型, true 表示状态机不处于 idle, 有任务正在进行或等待中.
     bool pending() const;
+    // 已登记后的只读查询明确撤销本进程凭证时为 true, 临时断线或名单冲突不会置位.
+    bool revoked() const noexcept;
 
 private:
     // Admission::Call 结构体: 封装了一次 gRPC Register 调用的所有相关数据和状态.
@@ -67,6 +71,10 @@ private:
         grpc::ClientContext context;
         // response: gRPC 调用的响应消息缓冲.
         proto::orbit::v1::RegistrationResponse response;
+        // Star 已登记后改用只读 List, 不重复发送密码或制造新启动身份.
+        proto::orbit::v1::DirectoryResponse directory;
+        // 本调用是否为只读目录刷新, 初始 false, 发起前固定.
+        bool listing{};
         // status: gRPC 调用完成后的状态码和错误信息.
         grpc::Status status;
         // done: 原子布尔变量, 标记异步 RPC 回调是否已经执行完毕.默认值为 false.
@@ -108,12 +116,20 @@ private:
     Admission::Phase phase_{};
     // cancelled_: 标志是否已被要求取消操作, 默认为 false (由于 {} 初始化).
     bool cancelled_{};
+    // 只由控制循环设置, 一旦撤销不重新登录换取另一身份来掩盖部署替换.
+    bool revoked_{};
     // deadline_: 单次 begin 启动后的整体截止时间.
     Steady::time_point deadline_;
     // connect_deadline_: 仅用于连接阶段的截止时间.
     Steady::time_point connect_deadline_;
     // request_: 复用的注册请求消息体.
     proto::orbit::v1::RegistrationRequest request_;
+    // 无字段只读请求, 寿命覆盖所有 List 调用.
+    proto::orbit::v1::DirectoryRequest query_;
+    // 首次成功的固定准入凭证和 Pulse 端点, List 不重新签发或改变它们.
+    std::shared_ptr<const proto::astra::v1::Hello> hello_;
+    // 可信 Pulse 监听地址, 随首次登记固定, 不从普通成员端点猜测.
+    std::string pulse_endpoint_;
     // registration_: 当前在途的 Admission::Call 实例指针, 无在途时为 nullptr.
     std::shared_ptr<Admission::Call> registration_;
 };

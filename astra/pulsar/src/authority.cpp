@@ -142,19 +142,21 @@ Result<std::unique_ptr<Authority>> Authority::load(const std::filesystem::path& 
                     }
                 } else if (name == "roles") {
                     slot = 3;
-                    if (!yyjson_is_arr(value) || yyjson_arr_size(value) == 0 || yyjson_arr_size(value) > 2) {
+                    if (!yyjson_is_arr(value) || yyjson_arr_size(value) == 0 || yyjson_arr_size(value) > 4) {
                         return Status::identity("Invalid account roles");
                     }
 
-                    // role_index/role_maximum 用于遍历一至两个角色, 不参与协议编码.
+                    // role_index/role_maximum 用于遍历一至四个角色, 不参与协议编码.
                     std::size_t role_index{}, role_maximum{};
                     // role 借用当前角色字符串, 未知文本和重复授权位都被拒绝.
                     yyjson_val* role{};
                     yyjson_arr_foreach(value, role_index, role_maximum, role) {
 
-                        // bit 使用内部角色位 1=Star,2=Planet, 零表示未知角色, 不直接复用 Protobuf 枚举数值.
-                        const auto bit = text(role) == "star" ? 1U : text(role) == "planet" ? 2U
-                                                                                            : 0U;
+                        // bit 使用内部四种独立角色位, 零表示未知角色, 不直接复用 Protobuf 枚举数值.
+                        const auto bit = text(role) == "star" ? 1U : text(role) == "planet"  ? 2U
+                                                                 : text(role) == "polaris"   ? 4U
+                                                                 : text(role) == "astrolabe" ? 8U
+                                                                                             : 0U;
                         if (bit == 0 || (account.roles & bit) != 0) {
                             return Status::identity("Invalid account role");
                         }
@@ -225,8 +227,10 @@ grpc::Status Authority::authenticate(grpc::ServerContext& context, const proto::
     }
 
     // role 将已请求的角色映射为内部授权位, 未知协议值映射零而不能获准.
-    const auto role = request.role() == proto::orbit::v1::ROLE_STAR ? 1U : request.role() == proto::orbit::v1::ROLE_PLANET ? 2U
-                                                                                                                           : 0U;
+    const auto role = request.role() == proto::orbit::v1::ROLE_STAR ? 1U : request.role() == proto::orbit::v1::ROLE_PLANET  ? 2U
+                                                                       : request.role() == proto::orbit::v1::ROLE_POLARIS   ? 4U
+                                                                       : request.role() == proto::orbit::v1::ROLE_ASTROLABE ? 8U
+                                                                                                                            : 0U;
     return (account.roles & role) != 0 ? grpc::Status::OK : grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Role not authorized");
 }
 

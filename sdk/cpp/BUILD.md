@@ -1,5 +1,7 @@
 # Verdandi Native Build Guide
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+
 Verdandi uses one standard-library Python implementation in this directory:
 
 - `build.py` owns dependency policy, probes, cache layout and build/test stages;

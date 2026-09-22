@@ -520,6 +520,19 @@ void test_snapshot_index_prepared_paths() {
     index.erase(1024);
     index.erase(0);
     CHECK(index.capture().size() == 0 && index.next() == 0 && before.size() == 2);
+
+    // 分页必须跳过稀疏高位树, 不把数值槽号当有效项排名, 读者暂停不消费当前行.
+    index.prepare(1);
+    index.set(1, low_key, {value, {}});
+    index.prepare(std::uint64_t{1} << 62);
+    index.set(std::uint64_t{1} << 62, high_key, {value, {}});
+    const auto sparse = index.capture(); // 独立固定深度 15 的旧根.
+    CHECK(sparse.page(1, 1, [&](const std::string& key, const Index::Record& record) { CHECK(key == "high" && record.value == value); return true; }) == 1);
+    CHECK(sparse.page(0, 1, [&](const std::string& key, const Index::Record&) { CHECK(key == "low"); return false; }) == 0);
+    index.prepare(std::uint64_t{1} << 62);
+    index.erase(std::uint64_t{1} << 62);
+    CHECK(sparse.page(1, 1, [&](const std::string& key, const Index::Record&) { CHECK(key == "high"); return true; }) == 1);
+    CHECK(index.capture().page(1, 1, [](const auto&, const auto&) { return false; }) == 0);
 }
 
 } // namespace

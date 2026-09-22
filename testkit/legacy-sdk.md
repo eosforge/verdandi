@@ -1,5 +1,7 @@
 > Frozen Verdandi test instructions. Historical Rust comparison commands may no longer run; see the current README for Astra service tests.
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../legacy-sdk.md).
+
 # Verdandi Testkit
 
 The independent Star/Planet/Supervisor backend defaults to C++26 on Linux:
@@ -11,8 +13,8 @@ adds timed restart/failover loops with the same owned-resource cleanup.
 The matrix includes four Stars, two Planets, role rejection, group preference,
 Supervisor-offline switching and restart admission. It does not test business
 data replication, which is not implemented. See the
-[current connection rules](../cluster/connection-rules.md) and
-[validation record](../cluster/star-planet-validation-20260910.md).
+[current connection rules](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/cluster/connection-rules.md) and
+[validation record](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/cluster/star-planet-validation-20260910.md).
 
 The C++26 replacement has an independent Linux entry:
 `bash cluster-cpp/build.sh regression` and
@@ -24,7 +26,7 @@ Use `--implementation=rust` for the old Linux comparison. The shared default
 entry also checks generated C++ sources and runs C++/Rust interoperability.
 For mixed-host tests, remote JSON can explicitly set `star_implementation` to
 `cpp` or `rust`; its default is `cpp`. A missing binary never triggers a fallback.
-See the [C++ instructions and qualification limits](../cluster-cpp/README.md).
+See the [C++ instructions and qualification limits](../astra/README.md).
 
 The current testkit covers the Registration and Catalog Lua contracts,
 independently executable Go, Rust, C++, and C# regressions, live Go/Rust

@@ -1,11 +1,11 @@
 # Astra Supervisor
 
-当前准入为Orbit 协议 v1, 单次 Register 完成账号认证和持久幂等登记, Supervisor 签发不透明 `id` 与 Hello 准入凭证. 不再使用启动票据, 详见[身份与准入契约](../cluster/identity-contract.md).
+当前准入为Orbit 协议 v1, 单次 Register 完成账号认证和持久幂等登记, Supervisor 签发不透明 `id` 与 Hello 准入凭证. 不再使用启动票据, 详见[身份与准入契约](../proto/README.md#admission).
 
 Go Supervisor 提供管理 HTTP 和独立 gRPC/TLS 准入入口, 通过账号密码授权节点,
 用 bbolt 持久保存成员, 签发每进程独立的 Ed25519 bearer 凭证. Star 获得完整 Star 名单,
 Planet 获得最多 8 个候选. 同账号可运行多节点, 不承担节点间数据转发.
-完整规则见 [gRPC 契约](../cluster/grpc-implementation.md) 和 [连接规则](../cluster/connection-rules.md).
+完整规则见 [协议契约](../proto/README.md) 和 [当前架构](../docs/architecture.md).
 
 ## 构建与启动
 
@@ -84,6 +84,6 @@ Windows 检查 Go: `scripts/check-services.ps1 -Service supervisor`; Linux Go/C+
 可选长时模式 `-Mode soak -Duration 3600` / `--mode soak --duration 3600`, 自动清理资源.
 Linux 检查默认包含 Go race, Windows race 需要已有 cgo 编译器和显式开关.
 有限 fuzz: `scripts/check-services.ps1 -Service supervisor -FuzzSeconds 10` 或 `bash scripts/check-services.sh --fuzz-seconds=10`.
-当前整理和完整测试范围见 [骨架补强报告](../cluster/service-hardening-20260911.md).
+当前测试范围见 [最新验证](../testkit/validation.md); Go 独立 race/fuzz 未在最新 C++ 整理轮重复执行, 不据此声称重新通过.
 
-协议入口为 `proto/orbit.proto`, 签名域为 `proto.orbit.v1.admission` + NUL. 详见 [v1 修正记录](../protocol-v1.md).
+协议入口为 `proto/orbit.proto`, 签名域为 `proto.orbit.v1.admission` + NUL. 详见 [当前协议](../proto/README.md).

@@ -8,25 +8,28 @@
 #include <mutex>
 
 namespace astra {
-// Pulsar 的持久成员账本, 用追加日志恢复身份代次并发布不可变当前视图.
+// Pulsar 的 SQLite 成员账本, 持久确认后发布不可变当前视图, 不承载业务数据.
 class Ledger {
 public:
     // 同一个部署摘要只存在一个当前成员. 旧启动请求另存精简绑定, 不缓存整个应答.
     using Members = std::map<std::string, Member, std::less<>>;
-    // 打开或创建专用日志并独占锁定. 截断末尾未完成记录, 完整记录损坏则拒绝启动.
-    // galaxy 和 authority 绑定日志用途; maximum 为每角色上限, starts 为累计启动上限, 达限拒绝新登记.
-    Ledger(const std::filesystem::path& path, std::string galaxy, std::string authority, std::size_t maximum, std::size_t starts);
+    // 打开专用库并独占服务锁. initialize 默认 false, 缺库失败; true 只允许显式创建新库.
+    // galaxy 和 authority 绑定用途; maximum 为每角色上限, starts 为累计启动上限, 达限拒绝新登记.
+    Ledger(const std::filesystem::path& path, std::string galaxy, std::string authority, std::size_t maximum, std::size_t starts, bool initialize = false);
     // 关闭文件并释放进程锁, 所有服务 handler 必须已停止.
     ~Ledger();
     // 禁止复制文件和写入责任.
     Ledger(const Ledger&) = delete;
-    // 禁止覆盖持有独占日志锁和当前视图的账本.
+    // 禁止覆盖持有独占服务锁和当前视图的账本.
     Ledger& operator=(const Ledger&) = delete;
     // 在写锁中校验重试或准备新成员, prepare 构造拥有数据的应答, 然后持久提交.
     // prepare 可以抛异常, 此时没有写盘或修改可见状态; 它不得重入本账本的登记方法.
     Result<void> register_member(Member candidate, std::string_view request_id, const std::function<void(const Member&, const Members&)>& prepare);
     // 用不可变快照验证当前凭证, 不等待登记的密码计算或磁盘提交锁.
     bool current(const Member& member) const;
+    // 若 member 是捕获视图中的当前身份, 返回该不可变目录; 否则返回空指针.
+    // 校验和读取共享同一次快照, 不将目录事实解释为节点在线状态.
+    std::shared_ptr<const Members> snapshot(const Member& member) const;
 
 private:
     // 每个请求只记部署和当时的成员代次, 已被替换的请求永远不能重新取得准入.
@@ -39,9 +42,12 @@ private:
 
     // 只验证新记录与旧状态的关系; 启动恢复原地建表, 线上提交另行复制小型当前成员表.
     Result<void> validate(const Member& member, std::string_view request_id, const Members& view) const;
-    // 追加长度 + 链式 SHA256 + Protobuf, fdatasync 成功才返回 true; 失败后禁止继续写入.
-    bool append(std::string_view payload);
-    // 读取并回放已有日志, 只修复末尾物理不完整记录, 不吞掉校验或语义错误.
+    // 隐藏 SQLite 连接, 预备语句与进程锁, 不将第三方类型暴露到使用者头文件.
+    struct Database;
+    // 原子持久化当前成员与启动绑定, 完整 uint64 代次编码成八字节大端 BLOB.
+    // 任何数据库异常都隔离写入, 旧内存视图保留, 必须重启确认实际提交结果.
+    bool commit(const Member& member, std::string_view request, std::string_view payload);
+    // 校验已知 Schema, 绑定及全部成员/启动历史, 一次性恢复内存, 不导入旧日志.
     void restore();
     // 只由登记 handler 竞争, Pulse 读取不获取此锁.
     std::mutex mutex_;
@@ -49,16 +55,12 @@ private:
     std::atomic<std::shared_ptr<const Members>> members_{std::make_shared<const Members>()};
     // 历史启动索引, 有硬容量上限, 只在写锁下访问.
     std::map<std::string, Start, std::less<>> starts_;
-    // 唯一 Galaxy, 不允许请求切换或在错误日志上继续登记.
+    // 唯一 Galaxy, 不允许请求切换或在错误数据库上继续登记.
     std::string galaxy_;
-    // 日志头包含格式版本, Galaxy 和签发公钥摘要, 不包含私钥.
-    std::string header_;
     // 每角色成员容量和累计启动容量.
     std::size_t maximum_, maximum_starts_;
-    // 进程持有的追加日志描述符, 析构关闭.
-    int file_ = -1;
-    // 最近完整记录的链摘要, 每次成功提交后更新.
-    std::array<std::uint8_t, 32> chain_{};
+    // 独占 SQLite 连接和服务锁, 在成员声明之外完整定义, 析构后释放全部句柄.
+    std::unique_ptr<Database> database_;
     // I/O 错误后保持 false, 必须重启回放确认实际落盘结果.
     bool writable_ = true;
 };

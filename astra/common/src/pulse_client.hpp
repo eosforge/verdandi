@@ -24,7 +24,7 @@ public:
 private:
     // 单次采样最多两秒/八个请求, 只有完整结束且至少三个有效样本才发布.
     grpc::Status sample(std::stop_token stop);
-    // 有界退避和错峰采样循环, 捕获异常并撤销新租约资格, 不清除连续走时锚点.
+    // 有界退避和错峰采样循环, 捕获异常并降低同步质量, 不清除连续走时锚点或撤销本地租约能力.
     void run(std::stop_token stop) noexcept;
     // 批内间隔与批间退避共用可取消等待; stop 返回 false, 不承诺操作系统调度的硬实时界限.
     bool wait(std::stop_token stop, Milliseconds delay);

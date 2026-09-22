@@ -48,11 +48,22 @@ class Admission final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::RegistrationResponse>> PrepareAsyncRegister(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::RegistrationResponse>>(PrepareAsyncRegisterRaw(context, request, cq));
     }
+    // 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.
+    virtual ::grpc::Status List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::proto::orbit::v1::DirectoryResponse* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::DirectoryResponse>> AsyncList(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::DirectoryResponse>>(AsyncListRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::DirectoryResponse>> PrepareAsyncList(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::DirectoryResponse>>(PrepareAsyncListRaw(context, request, cq));
+    }
     class async_interface {
      public:
       virtual ~async_interface() {}
       virtual void Register(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest* request, ::proto::orbit::v1::RegistrationResponse* response, std::function<void(::grpc::Status)>) = 0;
       virtual void Register(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest* request, ::proto::orbit::v1::RegistrationResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      // 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.
+      virtual void List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response, ::grpc::ClientUnaryReactor* reactor) = 0;
     };
     typedef class async_interface experimental_async_interface;
     virtual class async_interface* async() { return nullptr; }
@@ -60,6 +71,8 @@ class Admission final {
    private:
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::RegistrationResponse>* AsyncRegisterRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::RegistrationResponse>* PrepareAsyncRegisterRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::DirectoryResponse>* AsyncListRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::orbit::v1::DirectoryResponse>* PrepareAsyncListRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) = 0;
   };
   class Stub final : public StubInterface {
    public:
@@ -71,11 +84,20 @@ class Admission final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::RegistrationResponse>> PrepareAsyncRegister(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::RegistrationResponse>>(PrepareAsyncRegisterRaw(context, request, cq));
     }
+    ::grpc::Status List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::proto::orbit::v1::DirectoryResponse* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>> AsyncList(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>>(AsyncListRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>> PrepareAsyncList(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>>(PrepareAsyncListRaw(context, request, cq));
+    }
     class async final :
       public StubInterface::async_interface {
      public:
       void Register(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest* request, ::proto::orbit::v1::RegistrationResponse* response, std::function<void(::grpc::Status)>) override;
       void Register(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest* request, ::proto::orbit::v1::RegistrationResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response, std::function<void(::grpc::Status)>) override;
+      void List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response, ::grpc::ClientUnaryReactor* reactor) override;
      private:
       friend class Stub;
       explicit async(Stub* stub): stub_(stub) { }
@@ -89,7 +111,10 @@ class Admission final {
     class async async_stub_{this};
     ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::RegistrationResponse>* AsyncRegisterRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::RegistrationResponse>* PrepareAsyncRegisterRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>* AsyncListRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>* PrepareAsyncListRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) override;
     const ::grpc::internal::RpcMethod rpcmethod_Register_;
+    const ::grpc::internal::RpcMethod rpcmethod_List_;
   };
   static std::unique_ptr<Stub> NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
 
@@ -98,6 +123,8 @@ class Admission final {
     Service();
     virtual ~Service();
     virtual ::grpc::Status Register(::grpc::ServerContext* context, const ::proto::orbit::v1::RegistrationRequest* request, ::proto::orbit::v1::RegistrationResponse* response);
+    // 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.
+    virtual ::grpc::Status List(::grpc::ServerContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response);
   };
   template <class BaseClass>
   class WithAsyncMethod_Register : public BaseClass {
@@ -119,7 +146,27 @@ class Admission final {
       ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
-  typedef WithAsyncMethod_Register<Service > AsyncService;
+  template <class BaseClass>
+  class WithAsyncMethod_List : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_List() {
+      ::grpc::Service::MarkMethodAsync(1);
+    }
+    ~WithAsyncMethod_List() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status List(::grpc::ServerContext* /*context*/, const ::proto::orbit::v1::DirectoryRequest* /*request*/, ::proto::orbit::v1::DirectoryResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestList(::grpc::ServerContext* context, ::proto::orbit::v1::DirectoryRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::orbit::v1::DirectoryResponse>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  typedef WithAsyncMethod_Register<WithAsyncMethod_List<Service > > AsyncService;
   template <class BaseClass>
   class WithCallbackMethod_Register : public BaseClass {
    private:
@@ -147,7 +194,34 @@ class Admission final {
     virtual ::grpc::ServerUnaryReactor* Register(
       ::grpc::CallbackServerContext* /*context*/, const ::proto::orbit::v1::RegistrationRequest* /*request*/, ::proto::orbit::v1::RegistrationResponse* /*response*/)  { return nullptr; }
   };
-  typedef WithCallbackMethod_Register<Service > CallbackService;
+  template <class BaseClass>
+  class WithCallbackMethod_List : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_List() {
+      ::grpc::Service::MarkMethodCallback(1,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response) { return this->List(context, request, response); }));}
+    void SetMessageAllocatorFor_List(
+        ::grpc::MessageAllocator< ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_List() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status List(::grpc::ServerContext* /*context*/, const ::proto::orbit::v1::DirectoryRequest* /*request*/, ::proto::orbit::v1::DirectoryResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* List(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::orbit::v1::DirectoryRequest* /*request*/, ::proto::orbit::v1::DirectoryResponse* /*response*/)  { return nullptr; }
+  };
+  typedef WithCallbackMethod_Register<WithCallbackMethod_List<Service > > CallbackService;
   typedef CallbackService ExperimentalCallbackService;
   template <class BaseClass>
   class WithGenericMethod_Register : public BaseClass {
@@ -162,6 +236,23 @@ class Admission final {
     }
     // disable synchronous version of this method
     ::grpc::Status Register(::grpc::ServerContext* /*context*/, const ::proto::orbit::v1::RegistrationRequest* /*request*/, ::proto::orbit::v1::RegistrationResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_List : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_List() {
+      ::grpc::Service::MarkMethodGeneric(1);
+    }
+    ~WithGenericMethod_List() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status List(::grpc::ServerContext* /*context*/, const ::proto::orbit::v1::DirectoryRequest* /*request*/, ::proto::orbit::v1::DirectoryResponse* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -187,6 +278,26 @@ class Admission final {
     }
   };
   template <class BaseClass>
+  class WithRawMethod_List : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_List() {
+      ::grpc::Service::MarkMethodRaw(1);
+    }
+    ~WithRawMethod_List() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status List(::grpc::ServerContext* /*context*/, const ::proto::orbit::v1::DirectoryRequest* /*request*/, ::proto::orbit::v1::DirectoryResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestList(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
   class WithRawCallbackMethod_Register : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
@@ -206,6 +317,28 @@ class Admission final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     virtual ::grpc::ServerUnaryReactor* Register(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_List : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_List() {
+      ::grpc::Service::MarkMethodRawCallback(1,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->List(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_List() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status List(::grpc::ServerContext* /*context*/, const ::proto::orbit::v1::DirectoryRequest* /*request*/, ::proto::orbit::v1::DirectoryResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* List(
       ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
@@ -235,9 +368,36 @@ class Admission final {
     // replace default version of method with streamed unary
     virtual ::grpc::Status StreamedRegister(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::orbit::v1::RegistrationRequest,::proto::orbit::v1::RegistrationResponse>* server_unary_streamer) = 0;
   };
-  typedef WithStreamedUnaryMethod_Register<Service > StreamedUnaryService;
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_List : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_List() {
+      ::grpc::Service::MarkMethodStreamed(1,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse>* streamer) {
+                       return this->StreamedList(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_List() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status List(::grpc::ServerContext* /*context*/, const ::proto::orbit::v1::DirectoryRequest* /*request*/, ::proto::orbit::v1::DirectoryResponse* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedList(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::orbit::v1::DirectoryRequest,::proto::orbit::v1::DirectoryResponse>* server_unary_streamer) = 0;
+  };
+  typedef WithStreamedUnaryMethod_Register<WithStreamedUnaryMethod_List<Service > > StreamedUnaryService;
   typedef Service SplitStreamedService;
-  typedef WithStreamedUnaryMethod_Register<Service > StreamedService;
+  typedef WithStreamedUnaryMethod_Register<WithStreamedUnaryMethod_List<Service > > StreamedService;
 };
 
 }  // namespace v1

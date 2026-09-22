@@ -13,6 +13,31 @@ namespace astra {
 // 这个类是对单个 RPC 会话的抽象, 主要职责是处理 gRPC 传输的状态, 调度读写操作, 以及检查权限和生命周期管理.
 class Session {
 public:
+    // 已鉴权逻辑流的数据协作者, 只在 Runtime 控制线程调用, 不在 gRPC 回调中推进业务.
+    class Data {
+    public:
+        virtual ~Data() = default; // 流停止后释放私有恢复候选, 不撤销已安装来源.
+        // 接收一个有界已解码消息, 失败由 Session 关闭当前流并以已确认位置恢复.
+        virtual Result<void> receive(const proto::astra::v1::SessionPacket& packet, Steady::time_point now) = 0;
+        // 准备至多一个待发包, nullptr 表示无尾部; 不提前移动发送位置.
+        virtual Result<const proto::astra::v1::SessionPacket*> prepare(Steady::time_point now) = 0;
+        // 紧接唯一 StartWrite 之前交接所有权/确认发送位置, 不在这里分配或做业务准备.
+        virtual proto::astra::v1::SessionPacket take() = 0;
+        // 对端两个来源初始前缀已经完整安装, 不表示其余集群来源都就绪.
+        virtual bool ready() const noexcept = 0;
+    };
+
+    // Runtime 在 Hello 接纳后安装唯一协作者, 借用数据状态的寿命必须覆盖 Session.
+    void bind(std::unique_ptr<Data> data);
+    // 仅在已验证 Hello 后有值, 入站身份不能用 expected 推测.
+    const std::optional<Member>& peer() const noexcept;
+    // 协商包上限用于数据发送器, 不是 SDK 的业务限额发现接口.
+    std::size_t capacity() const noexcept;
+    // 是否已经安装数据协作者, 供 Runtime 单次接线.
+    bool bound() const noexcept;
+    // 本流两个来源都完成初始同步后才为真, 取消/最终完成的流不算当前健康.
+    bool synchronized() const noexcept;
+
     // 构造函数: 复制配置与 expected, 持有不可变 hello 及 wake, generation 由 Runtime 唯一分配.
     // direction 决定握手方向 (出站或入站), 出站携带授权目标, 入站 expected 为空; wake 不能借用会话或 Runtime.
     // 参数 config: 包含心跳, 超时等会话配置 (默认值通常由外部配置对象提供).
@@ -135,6 +160,8 @@ private:
     std::shared_ptr<const proto::astra::v1::Hello> hello_;
     // expected_: 仅对于出站连接, 包含期望远端具备的成员身份.
     std::optional<Member> expected_;
+    std::optional<Member> peer_; // 实际验证身份, 控制线程独占, 生命周期内不变.
+    std::unique_ptr<Data> data_; // 活动 Star 业务复制, 冻结 Planet 路径不安装.
     // wake_: 唤醒绑定在宿主环境控制循环的事件触发器回调.
     std::function<void()> wake_;
     // mutex_: 会话级别的互斥锁, 用于保护与异步回调交织的并发状态.

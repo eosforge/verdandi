@@ -111,16 +111,35 @@ struct Client {
         response.Clear();
         return stub->Register(&context, request, &response);
     }
+
+    // 使用已有原始凭证查询目录; duplicate 用于构造重复 metadata 负例, 默认不重复.
+    grpc::Status list(std::string_view admission, std::string_view signature, proto::orbit::v1::DirectoryResponse& response, bool duplicate = false) {
+
+        // context 独占此有界查询, 不发送账号或启动幂等键.
+        grpc::ClientContext context;
+        context.set_deadline(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_seconds(3, GPR_TIMESPAN)));
+        if (!admission.empty()) {
+            context.AddMetadata("astra-admission-bin", std::string(admission));
+            context.AddMetadata("astra-signature-bin", std::string(signature));
+            if (duplicate) {
+                context.AddMetadata("astra-admission-bin", std::string(admission));
+            }
+        }
+        // request 明确为空, 查询不能被当作重新登记或代次刷新.
+        const proto::orbit::v1::DirectoryRequest request;
+        response.Clear();
+        return stub->List(&context, request, &response);
+    }
 };
 
-// 等待 clock 就绪且采样新于 after, after 默认零; 15 s 内不满足则测试失败.
+// 等待 clock 同步质量达标且采样新于 after, after 默认零; 15 s 内不满足则测试失败.
 static Clock::Reading wait_clock(const Clock& clock, ElapsedTime after = {}) {
 
     // deadline 是本轮等待的本地单调上界, 不受被测时钟校正影响.
     const auto deadline = Steady::now() + 15s;
     while (Steady::now() < deadline) {
         // value 独立保存读取快照, 只有新鲜且就绪时才交给调用者.
-        if (auto value = clock.now(); value && value->ready && value->sampled > after) {
+        if (auto value = clock.now(); value && value->synchronized && value->sampled > after) {
             return *value;
         }
         std::this_thread::sleep_for(10ms);
@@ -142,7 +161,8 @@ int main() {
         config.pulse_listen = *Endpoint::parse("127.0.0.1:0", true);
         config.galaxy = "alpha";
         config.identity = std::filesystem::path(ASTRA_FIXTURES) / "supervisor";
-        config.state = directory.path / "membership.journal";
+        config.state = directory.path / "membership.db";
+        config.initialize = true;
         // RPC 测试注入独立参考源, 不要求测试主机联网对时, 也不更改系统墙钟或生产配置.
         std::atomic_bool source_available{false};
         // provider 只借用 source_available, 生产没有此测试参考源开关.
@@ -158,6 +178,8 @@ int main() {
         // server 独占 Pulsar 实例, 允许在场景内停止和重新构造.
         auto server = std::make_unique<Server>(config, provider);
         server->start();
+        // 后续同库重启只允许恢复, 初始化权限不随 Config 重用自动延续.
+        config.initialize = false;
         config.listen = *Endpoint::parse(server->admission_endpoint());
         config.pulse_listen = *Endpoint::parse(server->pulse_endpoint());
         CHECK(config.listen != config.pulse_listen);
@@ -170,9 +192,15 @@ int main() {
             CHECK(!parse({"--listen=127.0.0.1:0", "--pulse-listen=127.0.0.1:0", "--galaxy=alpha", "--galaxy=alpha"}));
             CHECK(!parse({"--listen=127.0.0.1:0", "--pulse-listen=127.0.0.1:0", "--galaxy=alpha", "--max-starts=0"}));
             CHECK(!parse({"--listen=127.0.0.1:0", "--galaxy=alpha"}));
+            CHECK(!parse({"--listen=127.0.0.1:0", "--pulse-listen=127.0.0.1:0", "--galaxy=alpha", "--init=1"}));
+            CHECK(!parse({"--listen=127.0.0.1:0", "--pulse-listen=127.0.0.1:0", "--galaxy=alpha", "--init=true", "--init=false"}));
+            // initialized 显式启用新群组初始化, 普通解析的默认值必须为 false.
+            const auto initialized = parse({"--listen=127.0.0.1:0", "--pulse-listen=127.0.0.1:0", "--galaxy=alpha", "--init=true"});
+            CHECK(initialized && initialized->initialize);
             // duplicate_config 仅替换日志路径, 保留同端口来验证监听冲突.
             auto duplicate_config = config;
-            duplicate_config.state = directory.path / "duplicate.journal";
+            duplicate_config.state = directory.path / "duplicate.db";
+            duplicate_config.initialize = true;
             // refused 初始 false, 构造或监听抛异常才表示端口冲突被拒绝.
             bool refused = false;
             try {
@@ -201,6 +229,13 @@ int main() {
         CHECK(client.call(first, response).ok());
         CHECK(response.admission() == original && response.members_size() == 2);
         CHECK(response.members(0).id() < response.members(1).id());
+        // directory_response 只拥有当前查询结果; 目录读取不改变原实例或持久启动次数.
+        proto::orbit::v1::DirectoryResponse directory_response;
+        CHECK(client.list(original, original_signature, directory_response).ok());
+        CHECK(directory_response.members_size() == 2 && directory_response.members(0).id() < directory_response.members(1).id());
+        CHECK(client.list({}, {}, directory_response).error_code() == grpc::StatusCode::UNAUTHENTICATED);
+        CHECK(client.list(original, std::string(64, '\0'), directory_response).error_code() == grpc::StatusCode::UNAUTHENTICATED);
+        CHECK(client.list(original, original_signature, directory_response, true).error_code() == grpc::StatusCode::UNAUTHENTICATED);
         // bad 独立复制合法请求, 每个负例只变更一个条件.
         auto bad = first;
         bad.set_password("not-the-fixture-password");
@@ -234,6 +269,9 @@ int main() {
         // committed 保存新启动的准入正文, 重启回放后应保持一致.
         const auto committed = response.admission();
         CHECK(client.call(first, response).error_code() == grpc::StatusCode::ABORTED);
+        CHECK(client.list(original, original_signature, directory_response).error_code() == grpc::StatusCode::UNAUTHENTICATED);
+        CHECK(client.list(hello->admission(), hello->admission_signature(), directory_response).ok());
+        CHECK(directory_response.members_size() == 2);
 
         // pulse_stub 使用独立对时端点, 后续拒绝场景复用此存根.
         auto pulse_stub = proto::pulsar::v1::Pulse::NewStub(grpc::CreateChannel(server->pulse_endpoint(), client.identity->channel_credentials()));
@@ -291,12 +329,12 @@ int main() {
         const auto reference_deadline = Steady::now() + 10s;
         while (Steady::now() < reference_deadline) {
             // time 是单次服务端读数, 不把不同调用的存在与就绪结果拼接.
-            if (const auto time = server->time(); time && time->ready) {
+            if (const auto time = server->time(); time && time->synchronized) {
                 break;
             }
             std::this_thread::sleep_for(10ms);
         }
-        CHECK(server->time() && server->time()->ready);
+        CHECK(server->time() && server->time()->synchronized);
         {
             // 无符号协议字段不能把有符号本地计数的越界值带入偏移运算.
             Idle invalid(server->pulse_endpoint(), *client.identity, *hello);
@@ -375,26 +413,37 @@ int main() {
             const auto snapshot = store.snapshot();
             // previous_sample 是停机前采样下界, 恢复必须使用更新的观测.
             const auto previous_sample = before.sampled;
-            server->stop();
-            server.reset();
-            // 暂停参考服务直到采样过期, 业务时间仍前进. 重启只提供新观测, 不重建 Star 的锚点.
+            source_available.store(false);
+            // 先仅撤销 Pulsar 的物理参考. Pulse 不能把仍在走时的旧读数当作可信样本, 掩盖 Star 的失联状态.
             const auto outage_deadline = Steady::now() + 10s;
-            while (Steady::now() < outage_deadline && clock.now()->ready) {
+            while (Steady::now() < outage_deadline && clock.now()->synchronized) {
                 std::this_thread::sleep_for(10ms);
             }
-            CHECK(clock.now() && !clock.now()->ready && clock.now()->time > before.time);
-            store.tick(clock.now()->time);
+            CHECK(server->time() && server->time()->ready && !server->time()->synchronized);
+            // offline 已超过采样新鲜度, 仍能为本地新写入生成有限期限.
+            const auto offline = clock.now();
+            CHECK(offline && offline->ready && !offline->synchronized && offline->time > before.time);
+            store.tick(offline->time);
             CHECK(store.snapshot()->data.empty() && store.version() == 2);
             CHECK(snapshot->data.at("expires-during-outage").deadline == *deadline);
+            // created 固定断开参考期间的新期限, 恢复不能按回执时间重新续满.
+            const auto created = offline->deadline_after(30s);
+            CHECK(created);
+            store.put("accepted-during-outage", {2}, *created);
+            server->stop();
+            server.reset();
             // before_restart 保存重启参考服务前的业务时间, 恢复不可回退.
             const auto before_restart = clock.now()->time;
+            source_available.store(true);
             server = std::make_unique<Server>(config, provider);
             server->start();
             // recovered 必须来自新样本且就绪, 继续使用原 clock 状态.
             const auto recovered = wait_clock(clock, previous_sample);
             CHECK(recovered.time >= before_restart);
             store.tick(recovered.time);
-            CHECK(store.snapshot()->data.empty() && store.version() == 2);
+            CHECK(store.snapshot()->data.size() == 1 && store.version() == 3);
+            CHECK(store.snapshot()->data.at("accepted-during-outage").deadline == *created);
+            CHECK(!store.snapshot()->data.contains("expires-during-outage"));
             // restored 在重启后的同一端点重试登记, 验证持久身份和成员表恢复.
             Client restored(server->admission_endpoint());
             CHECK(restored.call(replacement, response).ok());
@@ -402,7 +451,8 @@ int main() {
             CHECK(restored.call(first, response).error_code() == grpc::StatusCode::ABORTED);
             synchronizer.stop();
         }
-        CHECK(clock.now() && !clock.now()->ready);
+        CHECK(clock.now() && clock.now()->ready && !clock.now()->synchronized);
+        CHECK(clock.now()->deadline_after(1s));
         server->stop();
         server->stop();
         std::cout << "PASS Pulsar TLS/password admission, current topology, signed Pulse, restart recovery and Star clock reconnect\n";

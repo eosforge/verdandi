@@ -177,51 +177,62 @@ static void test_continuity() {
     CHECK(replacement.now(local(12s))->time == epoch(112s + 10ms));
 }
 
-// 覆盖资格过期,参考恢复,计数耗尽和反序失效, 确认坏样本不会恢复永久设施故障.
+// 覆盖参考质量与本地计时能力分离, 以及计数耗尽和反序失效; 坏样本不能恢复永久设施故障.
 static void test_quality_and_limits() {
 
     // clock 是当前场景独立的默认调速时钟, 初始尚无纪元锚点.
     Clock clock;
+    CHECK(Clock::Reading{}.deadline_after(1s) == std::unexpected(Clock::Error::clock_unready));
     CHECK(!clock.publish(observation(0ns, -1ns), local(0ns)));
     CHECK(!clock.publish(observation(0ns, 100s, 500'000'001), local(0ns)));
     CHECK(!clock.publish(observation(0ns, 100s), local(6s)));
+    CHECK(!clock.now(local(6s)));
     CHECK(clock.publish(observation(0ns, 100s), local(0ns)));
-    CHECK(clock.now(local(5s))->ready);
-    CHECK(!clock.now(local(5s + 1ns))->ready);
-    CHECK(clock.now(local(6s))->time == epoch(106s));
-    CHECK(!clock.now(local(6s))->deadline_after(1s));
+    CHECK(clock.now(local(5s))->synchronized);
+    CHECK(!clock.now(local(5s + 1ns))->synchronized);
+    // offline 超过旧的 5 s 门槛, 仍可从连续时间生成新期限, 不等待下一次 Pulsar 响应.
+    const auto offline = clock.now(local(6s));
+    CHECK(offline && offline->ready && !offline->synchronized && offline->time == epoch(106s));
+    CHECK(offline->deadline_after(1s) == epoch(107s));
     CHECK(clock.publish(observation(6s, 106s), local(6s)));
     // ready 为恢复后的同一读数, 用它同时检查合法和负 TTL 的截止计算.
     const auto ready = clock.now(local(6s));
+    CHECK(ready->ready && ready->synchronized);
     CHECK(ready->deadline_after(1s) == epoch(107s));
-    CHECK(!ready->deadline_after(-1ns));
+    CHECK(ready->deadline_after(-1ns) == std::unexpected(Clock::Error::invalid_time));
     clock.revoke();
-    CHECK(!clock.now(local(7s))->ready && clock.now(local(7s))->time == epoch(107s));
+    // revoked 表示参考源被明确撤销, 也不能撤销已经建立的本地纪元计时能力.
+    const auto revoked = clock.now(local(7s));
+    CHECK(revoked->ready && !revoked->synchronized && revoked->time == epoch(107s));
+    CHECK(revoked->deadline_after(1s) == epoch(108s));
     // 来源重启即使给出相差很大的新估计, 也只能影响质量和校正速度.
     CHECK(clock.publish(observation(8s, 5000s), local(8s)));
-    CHECK(clock.now(local(8s))->time == epoch(108s) && !clock.now(local(8s))->ready);
+    CHECK(clock.now(local(8s))->time == epoch(108s) && !clock.now(local(8s))->synchronized);
+    CHECK(clock.now(local(8s))->deadline_after(1s) == epoch(109s));
     CHECK(clock.now(local(9s))->time == epoch(109s + 1ms));
     CHECK(clock.now(local(9s))->uncertainty_ns >= 4'891'000'000'000ULL);
 
-    // 门槛明确锁定为 500 ms. 边界可接受, 再老化一纳秒也不能隐去新增误差.
+    // 同步门槛明确锁定为 500 ms. 超限仍失去同步质量, 但已校准本地时钟可以生成有限期限.
     Clock boundary;
     CHECK(boundary.publish(observation(0ns, 100s, 500'000'000), local(0ns)));
-    CHECK(boundary.now(local(0ns))->ready);
-    CHECK(!boundary.now(local(1ns))->ready);
+    CHECK(boundary.now(local(0ns))->synchronized);
+    CHECK(!boundary.now(local(1ns))->synchronized);
+    CHECK(boundary.now(local(1ns))->deadline_after(1s) == epoch(101s + 1ns));
     // relaxed 使用 400 ms 误差观测, 确认低于当前 500 ms 门槛可正常就绪.
     Clock relaxed;
     CHECK(relaxed.publish(observation(0ns, 100s, 400'000'000), local(0ns)));
-    CHECK(relaxed.now(local(0ns))->ready);
+    CHECK(relaxed.now(local(0ns))->ready && relaxed.now(local(0ns))->synchronized);
 
-    // suspended 一次推进一周经过时间, 验证走时继续但新租约资格过期.
+    // suspended 一次推进一周经过时间, 超过旧质量预算仍可创建秒级期限, 不把样本年龄加进 TTL.
     Clock suspended;
     CHECK(suspended.publish(observation(0ns, 100s), local(0ns)));
     CHECK(suspended.now(local(24h * 7))->time == epoch(100s + 24h * 7));
-    CHECK(!suspended.now(local(24h * 7))->ready);
+    CHECK(!suspended.now(local(24h * 7))->synchronized);
+    CHECK(suspended.now(local(24h * 7))->deadline_after(1s) == epoch(101s + 24h * 7));
     // overflow 从纳秒坐标上界前一刻开始, 覆盖截止和走时加法耗尽.
     Clock overflow;
     CHECK(overflow.publish({Clock::Time::max() - 1ns, local(0ns), 0, 0}, local(0ns)));
-    CHECK(!overflow.now(local(0ns))->deadline_after(2ns));
+    CHECK(overflow.now(local(0ns))->deadline_after(2ns) == std::unexpected(Clock::Error::exhausted));
     CHECK(overflow.now(local(1ns))->time == Clock::Time::max());
     CHECK(!overflow.now(local(2ns)));
     CHECK(!overflow.publish(observation(3ns, 100s), local(3ns)));
@@ -229,6 +240,8 @@ static void test_quality_and_limits() {
     Clock backwards;
     CHECK(backwards.publish(observation(1s, 100s), local(1s)));
     CHECK(!backwards.now(local(0ns)));
+    CHECK(!backwards.publish(observation(2s, 102s), local(2s)));
+    CHECK(!backwards.now(local(3s)));
     for (const auto rate : {0U, 1001U}) {
         // rejected 初始为 false, 只在捕获预期异常时设置, 防止无异常的静默回退通过用例.
         bool rejected = false;

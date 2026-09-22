@@ -1,5 +1,7 @@
 # Verdandi C ABI v1
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+
 ## Purpose
 
 Verdandi has one C++23 implementation of Redis transport, Registration,

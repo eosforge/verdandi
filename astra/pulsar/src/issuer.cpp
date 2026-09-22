@@ -6,21 +6,6 @@
 
 namespace astra {
 namespace {
-// 向传输层编码拥有数据的成员值, 名单与签名使用同一组字段.
-proto::orbit::v1::Member encode(const Member& member) {
-
-    // result 独立拥有传输字段, 不引用成员表中的字符串.
-    proto::orbit::v1::Member result;
-    result.set_galaxy(member.galaxy);
-    result.set_id(member.id);
-    result.set_principal(member.principal.text());
-    result.set_advertise(member.address.text());
-    result.set_epoch(member.epoch.value);
-    result.set_role(member.role == Member::Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET);
-    result.set_group(member.group);
-    return result;
-}
-
 // 数据面沿用 Go 的候选选择规则: 本组/跨组各优先四个, 不足时补齐, 最多八个.
 std::vector<const Member*> candidates(const Ledger::Members& members, const Member& local, std::uint32_t round) {
 
@@ -28,12 +13,12 @@ std::vector<const Member*> candidates(const Ledger::Members& members, const Memb
     std::vector<const Member*> stars;
     for (const auto& [key, member] : members) {
         static_cast<void>(key);
-        if (member.role == Member::Role::star) {
+        if (member.role == Member::Role::star || local.role == Member::Role::astrolabe || (member.role == Member::Role::polaris && local.role != Member::Role::planet)) {
             stars.push_back(&member);
         }
     }
     std::ranges::sort(stars, {}, [](const Member* item) -> const Id& { return item->id; });
-    if (local.role == Member::Role::star) {
+    if (local.role != Member::Role::planet) {
         return stars;
     }
 
@@ -104,7 +89,9 @@ Issuer::Issuer(std::string galaxy, std::string pulse_endpoint, const Authority& 
 grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::v1::RegistrationRequest* request, proto::orbit::v1::RegistrationResponse* response) {
 
     try {
-        if (request->ByteSizeLong() > 4096 || request->request_id().size() != 32 || (request->role() != proto::orbit::v1::ROLE_STAR && request->role() != proto::orbit::v1::ROLE_PLANET)) {
+        // role 显式解码所有基础设施身份, 仅 Planet 的旧候选协议允许非零轮次.
+        const auto role = Identity::role(request->role());
+        if (request->ByteSizeLong() > 4096 || request->request_id().size() != 32 || !role || (*role != Member::Role::planet && request->candidate_round() != 0)) {
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid registration bounds or role");
         }
         if (auto authenticated = authority_.authenticate(*context, *request); !authenticated.ok()) {
@@ -127,7 +114,7 @@ grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::
         const auto fingerprint = request->username() + '\0' + galaxy_ + '\0' + request->advertise();
         SHA256(reinterpret_cast<const std::uint8_t*>(fingerprint.data()), fingerprint.size(), principal.bytes.data());
         // candidate 拥有随机进程 ID 和固定部署摘要, epoch 初始零, 由账本分配下一代次.
-        Member candidate{galaxy_, "p_" + random.text(), principal, *address, {}, request->role() == proto::orbit::v1::ROLE_STAR ? Member::Role::star : Member::Role::planet, request->group()};
+        Member candidate{galaxy_, "p_" + random.text(), principal, *address, {}, *role, request->group()};
         // 应答在持久提交之前完整准备. 提交后 Swap 不分配, 发送失败的客户端安全重试原请求.
         proto::orbit::v1::RegistrationResponse prepared;
         // committed 表示账本提交结果; lambda 借用 local/members 只准备应答, 不在锁内发送网络数据.
@@ -135,12 +122,14 @@ grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::
             if (context->IsCancelled()) {
                 throw std::runtime_error("Registration cancelled");
             }
-            authority_.sign(encode(local), prepared);
-            prepared.set_pulse_endpoint(pulse_endpoint_);
-            for (const auto* member : candidates(members, local, request->candidate_round())) {
-                *prepared.add_members() = encode(*member);
+            authority_.sign(Identity::encode(local), prepared);
+            if (local.role == Member::Role::star) {
+                prepared.set_pulse_endpoint(pulse_endpoint_);
             }
-            if (prepared.ByteSizeLong() > 2 * 1024 * 1024) {
+            for (const auto* member : candidates(members, local, request->candidate_round())) {
+                *prepared.add_members() = Identity::encode(*member);
+            }
+            if (prepared.ByteSizeLong() > 8 * 1024 * 1024) {
                 throw std::runtime_error("Registration response capacity exceeded");
             }
         });
@@ -153,6 +142,57 @@ grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::
         return grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "Registration resources unavailable");
     } catch (...) {
         return grpc::Status(context->IsCancelled() ? grpc::StatusCode::CANCELLED : grpc::StatusCode::INTERNAL, "Registration unavailable");
+    }
+}
+
+grpc::Status Issuer::List(grpc::ServerContext* context, const proto::orbit::v1::DirectoryRequest* request, proto::orbit::v1::DirectoryResponse* response) {
+
+    try {
+        if (request->ByteSizeLong() != 0) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Directory request must be empty");
+        }
+
+        // metadata 只借用本次 RPC 的初始头; 必须恰好一份凭证, 避免重复键解释不一致.
+        const auto& metadata = context->client_metadata();
+        if (metadata.count("astra-admission-bin") != 1 || metadata.count("astra-signature-bin") != 1) {
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Current admission required");
+        }
+        // admission/signature 借用 metadata 中原始字节, 验签不重新编码这些字节.
+        const auto admission = metadata.find("astra-admission-bin")->second;
+        const auto signature = metadata.find("astra-signature-bin")->second;
+        // member 为验签且通过格式检查的独立身份值, 仍需与同一次目录快照核对.
+        const auto member = authority_.identity().verify({reinterpret_cast<const std::uint8_t*>(admission.data()), admission.size()}, {reinterpret_cast<const std::uint8_t*>(signature.data()), signature.size()});
+        if (!member || member->galaxy != galaxy_ || member->role == Member::Role::planet) {
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Directory admission rejected");
+        }
+        // snapshot 同时提供身份确认依据和返回内容, 不在两次原子 load 之间混用代次.
+        const auto snapshot = ledger_.snapshot(*member);
+        if (!snapshot) {
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Admission no longer current");
+        }
+
+        // prepared 先准备完整有界响应, 失败不向调用方交付半张名单.
+        proto::orbit::v1::DirectoryResponse prepared;
+        // bytes 以单条编码尺寸加 tag/length 的保守六字节上限累计, 避免反复遍历整个应答形成 O(N^2).
+        std::size_t bytes{};
+        for (const auto* item : candidates(*snapshot, *member, 0)) {
+            if (context->IsCancelled()) {
+                return grpc::Status(grpc::StatusCode::CANCELLED, "Directory cancelled");
+            }
+            // encoded 是当前成员的独立报文, 可在容量检查通过后移动进最终响应.
+            auto encoded = Identity::encode(*item);
+            bytes += encoded.ByteSizeLong() + 6;
+            if (bytes > 8 * 1024 * 1024) {
+                return grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "Directory response exceeds capacity");
+            }
+            *prepared.add_members() = std::move(encoded);
+        }
+        response->Swap(&prepared);
+        return grpc::Status::OK;
+    } catch (const std::bad_alloc&) {
+        return grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED, "Directory resources unavailable");
+    } catch (...) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, "Directory unavailable");
     }
 }
 } // namespace astra

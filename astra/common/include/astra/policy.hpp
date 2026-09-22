@@ -19,7 +19,7 @@ public:
     enum class Direction {
         // 本进程主动发起的会话, 索引为 0, 也是值初始化的默认方向.
         outbound,
-        // 本进程接受的远端会话, 索引为 1; 与同一成员的出站槽位独立.
+        // 本进程接受的远端会话, 索引为 1; Star 与相反方向共享唯一活动会话, Planet 仍仅用既有上游方向.
         inbound
     };
 
@@ -66,6 +66,12 @@ public:
     // 参数 local: 本节点的 Member 信息.
     // 参数 members: 其他相关成员的列表.
     virtual Result<void> initialize(const Member& local, std::span<const Member> members) = 0;
+
+    // Star 的受信只读名单刷新, 保留已观察的更新身份及缺项成员; 返回须在锁外取消的旧会话.
+    // 默认拒绝, 暂停开发的 Planet 继续使用既有候选流程, 不扩展为业务同步节点.
+    virtual Result<std::vector<Generation>> refresh(const Member&, std::span<const Member>) {
+        return Status::protocol("Role does not support directory refresh");
+    }
 
     // 接受一个来自远端的新连接, 并准备安装相应的会话.
     // 返回需要由上层网络框架去主动断开(取消)的旧代次会话编号列表,

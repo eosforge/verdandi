@@ -24,11 +24,11 @@ public:
 
         // 创建指定属性的 grpc 通道, 关闭了内部重试, 并设置包大小限制以对应会话机制
         grpc::ChannelArguments arguments;
-        arguments.SetMaxReceiveMessageSize(4096);
-        arguments.SetMaxSendMessageSize(4096);
+        arguments.SetMaxReceiveMessageSize(static_cast<int>(config.max_frame_bytes));
+        arguments.SetMaxSendMessageSize(static_cast<int>(config.max_frame_bytes));
         arguments.SetInt("grpc.enable_retries", 0);
 
-        // 创建具备目标地址和安全认证策略(如 mTLS)的通信 Channel.
+        // 创建验证服务端 TLS 证书的 Channel, 节点准入凭证随后通过 Hello 验证.
         channel_ = grpc::CreateCustomChannel(target.address.text(), identity.channel_credentials(), arguments);
         // 初始化请求一次获取连接状态, 以促使 grpc 尽早开始解析并进行建立 TCP 建连动作.
         channel_->GetState(true);
@@ -160,6 +160,7 @@ Result<std::vector<Generation>> Session::receive(const proto::astra::v1::Session
         }
 
         // 所有校验均通过后将状态设置已完成初次就绪安装阶段
+        peer_ = std::move(*member);
         installed_ = true;
         if (direction_ == Policy::Direction::inbound) {
             // 凭证是 bearer, 对于入站连接, 被动方只向已经通过准入和角色验证的调用方返回本端 Hello, 用作双向握手的响应.
@@ -170,8 +171,8 @@ Result<std::vector<Generation>> Session::receive(const proto::astra::v1::Session
             }
         }
 
-        // 敲定双方接受的每包最大载荷: 取双方宣称数值及本段系统最大支持量 4096 间的极小值
-        maximum_ = std::min({4096U, hello_->max_frame_bytes(), packet.hello().max_frame_bytes()});
+        // 敲定双方接受的每包最大载荷: 取双方宣称数值及两端声明的较小值
+        maximum_ = std::min(hello_->max_frame_bytes(), packet.hello().max_frame_bytes());
         // 重置下一次主动发往对端心跳的时间点为当前 + 心跳间隙参数
         next_ping_ = now + config_.heartbeat_interval;
         return install;
@@ -191,6 +192,11 @@ Result<std::vector<Generation>> Session::receive(const proto::astra::v1::Session
             // 清空本地挂起记录并重新安排下一个检测周期
             pending_ping_.reset();
             next_ping_ = now + config_.heartbeat_interval;
+        }
+    } else if (data_) {
+        const auto accepted = data_->receive(packet, now); // 同步业务处理在会话 I/O 锁外执行.
+        if (!accepted) {
+            return std::unexpected(accepted.error());
         }
     } else {
         // 握手后接收到了无法识别, 或是异常类型的非正常生命期载荷
@@ -281,7 +287,15 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
     // 如果没有抛出故障且已经提取了新收到的协议包, 调用 receive() 层解析.
     if (!error_ && message) {
         // result 拥有本轮接收处理结果, 失败记录本会话原因, 成功移走待取消列表.
-        auto result = receive(*message, policy, identity, now);
+        auto result = [&]() -> Result<std::vector<Generation>> {
+            try {
+                return receive(*message, policy, identity, now);
+            } catch (const std::bad_alloc&) {
+                return Status::capacity("Peer receive allocation failed");
+            } catch (...) {
+                return Status::internal("Peer receive failed");
+            }
+        }();
         if (!result) {
             cancel(result.error().code);
         } else {
@@ -306,6 +320,32 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
             if (!enqueue(std::move(ping), now + config_.pong_timeout)) {
                 cancel(Status::Code::capacity);
             }
+        }
+    }
+
+    // 只有控制队列为空且实际写槽空闲时才准备数据, 不为繁忙流构建额外编码 FIFO.
+    bool writable{};
+    {
+        const std::lock_guard lock(mutex_);
+        writable = !write_inflight_ && !metadata_inflight_ && !read_failed_ && !write_failed_ && !remote_cancelled_;
+    }
+    bool prepared{};
+    if (!error_ && installed_ && data_ && queued_ == 0 && writable) {
+        try {
+            const auto packet = data_->prepare(now);
+            if (!packet) {
+                cancel(packet.error().code);
+            } else if (*packet) {
+                if ((*packet)->ByteSizeLong() > maximum_) {
+                    cancel(Status::Code::capacity);
+                } else {
+                    prepared = true;
+                }
+            }
+        } catch (const std::bad_alloc&) {
+            cancel(Status::Code::capacity);
+        } catch (...) {
+            cancel(Status::Code::internal);
         }
     }
 
@@ -336,7 +376,14 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
                 begin_write(&write_);
             }
 
-            // 当前流只有控制消息, 必须继续接收 Pong. 队列超限按 capacity 关闭, 不暂停心跳读取.
+            if (!write_inflight_ && !metadata_inflight_ && queued_ == 0 && prepared) {
+                write_ = data_->take(); // 与 StartWrite 同一步推进来源发送位置, 回调只归还写槽.
+                write_deadline_ = now + config_.pong_timeout;
+                write_inflight_ = true;
+                begin_write(&write_);
+            }
+
+            // 即使等待业务回补也继续接收 Pong/Repair. 积压超限按 capacity 关闭, 不暂停控制读取.
             // 未消费的 read_ 仍归控制循环, 不能重新交给 gRPC 写入.
             if (!read_inflight_ && !read_ready_) {
                 read_inflight_ = true;
@@ -347,6 +394,29 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
 
     // 返回因为本逻辑会话正常建立或取代过程导致的其余待取消的旧连结代次列表.
     return cancelled;
+}
+
+void Session::bind(std::unique_ptr<Data> data) {
+    if (!installed_ || data_ || !data || error_) {
+        throw std::logic_error("Cannot bind peer data before admission or twice");
+    }
+    data_ = std::move(data);
+}
+
+const std::optional<Member>& Session::peer() const noexcept {
+    return peer_;
+}
+
+std::size_t Session::capacity() const noexcept {
+    return maximum_;
+}
+
+bool Session::bound() const noexcept {
+    return static_cast<bool>(data_);
+}
+
+bool Session::synchronized() const noexcept {
+    return data_ && data_->ready() && !error_ && !done();
 }
 
 // cancel 函数实现: 设置中止状态和最后期限限额. 不立刻关停以备平稳退出或汇报正确异常码.

@@ -1,151 +1,96 @@
-# Astra C++26 Star / Planet
+# Astra C++26 服务
 
-Linux x64 / GCC 16.2.0 的 C++26 连接骨架, 与 Go Supervisor 通过 gRPC/TLS 协议 v1 协作.
-当前运行范围是准入、互联、心跳和有界资源清理, 尚无 Catalog/Registry 业务接口或 SDK 接入.
-已有内部 Store 和同步协议草案; 之前的底层测试记录见 [性能与审查报告](sync-store-performance-review-20260915.md).
-Store 当前已接入五层时间轮. 最新测试范围与修正见 [2026-09-17 回归记录](regression-20260917.md).
-当前协议边界见 [Orbit/Astra/Comet v1](../protocol-v1.md). 更名时的测试与缓存路径见 [Astra 更名说明](../astra-migration.md), 不沿用旧版本的验证结论.
+当前 C++ 目标为 Linux x64 / GCC 16.2.0. 已接入 Pulsar SQLite 成员库、Go Polaris、Star 三域存储/登录/Watch、多 Star 单流恢复、Comet C++ 读写保活、必要 Go Astrolabe、指标与 Admin 管理适配. Planet 继续冻结. 当前实现边界见 [推进进度](../docs/progress.md), 构建与运行结果统一见 [验证记录](../testkit/validation.md).
 
-首次阅读从本文的结构和启动方式开始, 然后查看[维护指南](CONTRIBUTING.md)与[身份契约](../cluster/identity-contract.md).
-本轮类型、状态与入口精简见[review 说明](minimal-review-20260914.md).
-既有验收历史保留在[验证记录](validation.md), 不将旧协议长测成绩转记给当前源码.
+范围见 [架构](../docs/architecture.md), 源码职责见 [维护指南](CONTRIBUTING.md), 存储见 [三域存储](common/README.md), 时间服务见 [Pulsar](pulsar/README.md). [Polaris](polaris/README.md) 负责持久 Almanac, [Astrolabe](astrolabe/README.md) 提供无自身数据库的 Go 管理入口与实时观测. 首版 SDK 是 [Comet C++](comet/cpp/README.md), [Comet Go](comet/go/README.md) 后续推进, 不作为 C++ 业务闭环的前置条件.
 
-目录职责:
+## 运行模式与接线
 
-- `common`: 配置、身份、准入、逻辑会话、gRPC 与进程生命周期.
-- `star`: Star 成员表和两方向会话拓扑.
-- `planet`: 至多八个候选、单活动上游与故障切换.
-- `common/src/generated`: 从仓库 `proto/` 显式生成并保留的 C++ 源码.
-- `common/src/process.*`: 私有信号、唤醒与 JSON 日志, 与连接生命周期分开维护.
-- `bench`: 隔离推流夹具及其生成协议, 不链接进两个服务程序.
-- `test_build.py`, `test_language.py`, `test_scale.py`, `test_push.py`: 构建入口、编译诊断、真实组网规模和推流对照.
+取消架构级 standalone 分支. 单机与 All-in-One 仅是部署方式, 同样完成 Pulsar 准入及首次校准、Polaris 初始 Almanac、首轮对等连接与动态数据同步. 不因部署同机、材料缺失或依赖离线绕过初始化. 具体启动预算与已运行节点的降级规则只在 [架构](../docs/architecture.md#启动与运行) 定义.
 
-已实现的边界是连接骨架: 账号登录和 Supervisor 签发准入, Supervisor 签发的进程 id, TLS 1.3, 双向 gRPC 流,
-Star 两方向逻辑会话互联, Planet 本组优先/跨组故障切换, Ping/Pong, 有界重试和 SIGINT/SIGTERM 清理.
-Star 与 Planet 的差异留在各自的 Policy 中, Common 不判断哪一台 Star 应成为 Planet 的上游.
+Star 业务认证与 TLS 独立配置, 目标默认均开启, 允许分别显式关闭, 配置失败不自动降级. APIKEY/APISECRET 只验证 Comet 登录, 不建立范围权限或注册所有者; 外部接口始终隔离 `__` Sector. 凭据只从 Polaris 的内部 Almanac 安装, 不再提供 standalone 凭据文件或另一份启动权威.
 
-Planet 业务推进暂停, 下一阶段优先完成 Star 与第一版 SDK 的直接接入闭环.
-本次[准入精简](admission-simplification-20260912.md)不实现业务同步.
+内部必需材料缺失或非法时明确失败, 暂时不可达时按初始化及退避规则处理. 业务 TLS 开启时必须具有有效的服务端证书和私钥, 关闭 Comet TLS 不取消基础设施链路的保护. 初始 Almanac 的合法空凭据表可以完成同步, 但认证开启时没有合法 Comet 账号就拒绝登录, 不改成匿名.
 
-此阶段没有业务存储、Catalog/Registry 同步、Planet 换绑重新登记或 SDK 接入.
-`initialized` 表示完成准入, `upstream` 表示认证连接存在, 均不表示业务数据就绪.
+### 监听与配置入口
 
-下一阶段的数据方向已在当前的 Proto 草案中定型，采用基于 **实例 ID、订阅范围 (Scope) 和单调提交游标 (Commit Cursor)** 的流式同步范式。
-这种极简设计彻底抛弃了按 Key 逐一做 Diff 对账的复杂客户端状态；当游标滞后导致增量不足时，直接降级拉取全量快照并重新接入流。
-该同步模型尚未转为完整的业务实现，不属于以上连接测试的覆盖范围。
+业务与内部服务使用两个独立的 gRPC Server/Builder. 不能在注册了内部服务的同一个 Server 上增加业务明文端口, 否则业务 TLS 开关会一并暴露内部 RPC.
 
-身份已迁移为 [Supervisor 签发不透明 id](../cluster/identity-contract.md). Star/Planet 不生成或解析 UUID, 登记通过一个 RPC 完成, 重试复用随机请求键, 幂等和代次由 Supervisor 管理. 控制协议主版本为 1, 旧 Rust 服务已废弃. 上述历史性能与耐久报告不自动覆盖本次协议迁移.
+| 入口 | 调用者与服务 | 控制规则 |
+| --- | --- | --- |
+| 外部业务入口 | Comet Session, Almanac 读取, Catalog/Ephemeris 业务 | 独立认证/TLS 配置, 始终隔离 `__` Sector |
+| 内部系统入口 | 获准节点的对等流和必要内部控制 | 内部 TLS 与 Pulsar 身份, 按角色限制系统职责 |
+| 指标 HTTP 入口 | Astrolabe 读取 /metrics | 独立可选只读监听与资源预算, 不依赖外部监控系统 |
 
-## 构建与生成
+Star 对等节点不能替 Polaris 发布 Almanac, Astrolabe 也不能绕过 Polaris 直接改写该权威数据. APIKEY 只用于普通 Comet 准入, 不等于内部服务角色. 内部监听先于公共业务开放, 以便冷启动恢复, 不等待浏览器登录或尚不可用的 Comet 会话.
 
-内部 TTL 工具的使用约定:
+Almanac 同步由 Star 主动连接 Pulsar 名单中的唯一 Polaris, 接收其推送并返回安装确认, 不再为 Polaris 入站灌注另开 Star RPC. 该出站同步与上述两套 Server 共用受控存储, 内部身份和 TLS 仍独立于 Comet 开关; 具体规则见 [Polaris 同步流](../proto/README.md#polaris-stream).
 
-- `Store::tick(now)` 按单调时间补齐经过的完整拍, 省略参数时读取 `Clock::now()`; 事件循环负责调用, Store 不创建后台线程.
-- 构造参数 `interval` 默认为 1ms 且必须为正, `initial` 默认读取当前单调时间. 测试通过这两个参数控制时间, 不依赖真实休眠.
-- 有限截止向上取整到拍边界, 重复或倒退时间不推进, `Clock::time_point::max()` 始终表示永不过期.
-- 续租会重排钩子, 手动删除或改为永不过期会取消钩子. 超出单轮范围的有限截止先分段唤醒, 仍按原始截止判断是否过期.
-- 一次 `tick()` 的全部到期项形成一个提交批次. 分配失败时状态、历史和版本不变, 已摘节点在下一拍重试.
-- `Delta::expire` 属于本进程单调时钟域, 不能原样作为跨主机截止传播. 当前没有业务复制或租约迁移实现.
-- 时间轮逐拍补齐, 不跳过空拍, 同拍回调没有工作预算. 这些边界保留为内部工具的使用约束.
+两套 Server 共享受控业务存储, 分别限制流数、消息、资源及退出工作. 独立 Server 不等于独占 CPU, 仍需限制快照、解析和发送工作. 鉴权前 Hello 的 4 KiB 预算不等于已鉴权消息上限; 当前内部消息默认上限为 8 MiB, 由双方声明取较小值, 也不因此取消业务预算. 长流继续采用 Callback/异步路径, 不用同步阻塞 Read 占住服务线程.
 
-首版构建平台为 Linux x64 / GCC 16.2.0. 源码、工具和依赖产物使用项目目录.
-从仓库根目录运行下列命令. 普通构建不下载依赖、不运行 protoc, 缺失时直接失败.
+### 业务监听与材料参数
+
+下列业务配置已接入实现, 具体构建配置和已验证源码身份见 [验证记录](../testkit/validation.md):
+
+| 参数 | 目标含义 |
+| --- | --- |
+| `--listen` / `--advertise` | 保留内部节点监听和可达登记地址, 不改作 Comet 地址 |
+| `--comet=IP:PORT` | 显式启用独立业务监听, 不自动占用内部端口 |
+| `--auth=true|false` | 只控制 Comet 登录验证, 目标默认 true |
+| `--tls=true|false` | 只控制 Star–Comet TLS, 目标默认 true |
+| `--comet-identity=目录` | 外部 TLS 的 cert.pem / key.pem, 不从节点 identity 隐式借用 |
+| `--metrics=IP:PORT` | 独立只读 HTTP 指标监听, 缺省不监听, 与 Comet TLS 开关分开 |
+| `COMET_CA_FILE` CMake 缓存项 | SDK 可选嵌入的 CA 证书文件, 不是服务端私钥 |
+
+各入口地址冲突直接失败, 外部 TLS 关闭时显式提供 comet-identity 视为冲突配置. 不提供 --standalone、本地 credentials 引导分支或单独指定 Polaris 地址的参数. 目录查找、Almanac 接收及动态域首轮同步均已接入业务开放门, 动态来源超时按已确认的有界降级规则处理.
+
+SDK 信任材料的外部加载、编译嵌入与证书来源见 [Comet TLS](comet/cpp/README.md#tls). 关闭业务 TLS 时凭据和载荷不再获得该链路的机密性, 登录本身不提供加密. 指标的实时抓取边界见 [Astrolabe](astrolabe/README.md#实时观测), 未接入外部监控不影响业务初始化.
+
+## 构建
+
+从仓库根目录使用现有项目工具和缓存, 不隐式下载:
 
 ```bash
 bash astra/build.sh build --profile debug
-bash astra/build.sh test --profile debug
 bash astra/build.sh build --profile release
 ```
 
-构建输出为 `build/astra/<profile>/star` 和 `planet`. Debug 开发产物携带项目 GCC 运行库搜索路径.
-Windows 可编辑源码, `build.ps1` 会明确报告当前平台不受支持, 不偷偷切换编译器或远程主机.
+目标产物位于 `build/astra/<profile>/`: C++ `star`, `planet`, `pulsar`, Go `polaris`, `astrolabe`, 以及 Comet 静态库. 已移除 C++ Astrolabe 占位程序的构建目标; Planet 继续冻结. 各构建配置的实际结果见 [验证记录](../testkit/validation.md).
+Windows 可编辑和格式化源码, `build.ps1` 会明确拒绝当前不支持的平台, 不自动远程执行或切换编译器.
 
-依赖是独立的显式准备动作, 需要 Python 3.12+, 应先按项目规则取得下载授权. 本轮批准的是 Ubuntu 项目目录.
-已有工具和源码缓存优先复用. 服务和依赖的 `build` 阶段均离线并单任务编译;
-依赖准备脚本另对普通依赖构建子进程施加 2 GiB 地址空间上限.
-完整 TSan 使用独立的 `linux-gcc16-tsan` 前缀重新插桩依赖, 显式执行
-`python3 astra/prepare_dependencies.py build --profile tsan`. 它复用已下载源码, 不覆盖普通运行库或生成工具.
-TSan 生成器需要很大的虚拟 shadow 地址空间, 这项配置不套用 2 GiB 虚拟地址限制, 仍保持单任务.
+普通构建不运行 protoc. [dependencies.lock.json](dependencies.lock.json) 是依赖版本、来源及校验值的唯一清单; 工具在 `build/tools`, 依赖在 `build/deps/astra`.
+生成源码保存在 `common/src/generated`, 由 [协议入口](../proto/README.md#generation) 的显式命令更新; 禁止手改生成文件.
+gRPC 使用配套 BoringSSL, 不另找系统 OpenSSL. 第三方许可见 [licenses](licenses/README.md).
 
-```bash
-python3 astra/prepare_dependencies.py fetch
-python3 astra/prepare_dependencies.py build
-bash astra/build.sh generate
-bash astra/build.sh check-generated
-```
+`build.py` 的非 core-only 构建同时要求项目内 Go 1.27.1 及已批准模块缓存. Go 子进程只使用 build/deps/go 和 build/cache/go, 设置 GOPROXY=off、GOTOOLCHAIN=local 与只读模块模式, 缺依赖明确失败. Pulsar 的 SQLite C 后端仅消费已缓存并校验的 amalgamation, 不影响 Star 的纯内存业务设计.
 
-固定版本、源码 commit 和归档 SHA-256 见 [dependencies.lock.json](dependencies.lock.json).
-源码和静态依赖前缀在 `build/deps/astra`, protoc/plugin 在 `build/tools`.
-`generate` 显式更新 `common/src/generated` 和 `bench/generated`, `check-generated` 只逐字节比较. 两者都不下载工具.
-gRPC 使用其配套 BoringSSL, 不另找系统 OpenSSL. 第三方授权原文保存在 [licenses/](licenses/README.md).
+构建和测试并行度分别通过 `--jobs` / `--test-jobs` 限制, 默认根据本次实际 CPU、可用内存及 cgroup v2 预算选择. 显式上限不会突破估算的资源预算, Go 测试与 CTest 顺序运行. 这些命令仍需本轮明确授权后才能执行.
+
+`prepare_dependencies.py fetch/build` 是单独的依赖准备动作, 须先获得具体下载/构建授权. 正常检查缺少工具时失败, 不代为安装.
+TSan 消费独立的 `linux-gcc16-tsan` 已插桩前缀, 不覆盖普通依赖. 正常依赖构建的虚拟内存限制不能机械套用到 TSan shadow 地址空间.
+
+Linux 继续使用 `/home/ubuntu/verdandi` 下的源码、构建树与缓存. `build/deps/astra` 可能指向原 `build/deps/peer-cpp` 安装目录; 不移动安装前缀或清缓存以“整理”名称.
+并行度由上述统一入口按实际资源选择, 不因虚拟机配置为 16 核便同时启动 16 个高内存编译任务.
 
 ## 启动
 
-两个入口使用同一组选项, 角色由可执行文件决定. 账号、TLS 和准入公钥放在各自的身份目录中:
-`ca.pem`, `cert.pem`, `key.pem`, `admission.pub`, `login.json`.
-`login.json` 包含 `username` 和 `password`, 不通过命令行或日志传递密码.
-跨语言部署的 TLS 证书使用 ECDSA P-256 / SHA-256. 当前 BoringSSL 默认 TLS 验证算法不包含 Ed25519,
-这与 Supervisor 使用 Ed25519 签署准入正文是两件事; 不修改 TLS 私有配置来绕过限制.
-部署身份的准备规则沿用 [服务基础说明](../service-foundation.md).
-仓库公开测试私钥仅供测试夹具使用.
+身份目录包含 `ca.pem`, `cert.pem`, `key.pem`, `admission.pub`, `login.json`. 密码保存在受保护的 login.json, 不放到命令行或日志. 仓库公开身份仅用于测试.
 
 ```bash
-build/astra/debug/star --listen=192.168.1.10:7443 --super=supervisor.example:7440 \
-    --cluster=example --group=east --identity=/path/to/star-identity --status-interval-seconds=5
-build/astra/debug/planet --listen=192.168.1.11:7443 --super=supervisor.example:7440 \
-    --cluster=example --group=east --identity=/path/to/planet-identity --status-interval-seconds=5
+build/astra/debug/star --listen=192.168.0.119:7442 --super=192.168.0.119:7440 --galaxy=alpha --group=east --identity=build/deployment/star-a
+build/astra/debug/planet --listen=192.168.0.119:7443 --super=192.168.0.119:7440 --galaxy=alpha --group=east --identity=build/deployment/planet-a
 ```
 
-`--help` 显示完整选项、默认值和范围. `--worker-threads` 被明确拒绝: 应用控制循环固定一个,
-gRPC 独立管理 I/O worker. Supervisor 暂时不可用时, 已准入进程按已有授权继续通信/切换;
-新进程仍需重新登录. Planet 此阶段不接受下游业务连接.
+C++ 当前使用 `--galaxy`, Go Supervisor 使用 `--cluster`; 不把旧文档的参数套到所有程序.
+`--super` 指向 Orbit 登记端口. 使用 Pulsar 时响应携带 Pulse 地址, Star 启动采样; Go Supervisor 返回空地址时仅有连接准入, 不获得新有限租约的时间资格.
 
-## 测试
+TLS 1.3/h2, 跨 Go/C++ 测试证书采用 ECDSA P-256/SHA-256, 准入签名采用 Ed25519. TLS 服务端证书与签名 bearer 的职责不同.
+通配监听需提供可达 `--advertise`; 实际选项、范围和默认值见配置与 `--help`. 角色由可执行文件决定, `--worker-threads` 不支持.
 
-公共一键入口默认选择 C++: `bash scripts/test-services.sh`, 长时加 `--mode soak --duration 3600`.
-旧 Rust 服务已废弃, 不再提供实现切换选项. Windows 可运行 `scripts/check-services.ps1 -Service supervisor` 检查 Go.
-独立 C++ 入口用于切换下面的构建和诊断配置.
+服务不随 stdin 关闭退出. Linux 接收 SIGINT/SIGTERM, 停止接纳、取消并排空自有 RPC 后退出. 参数错误为 2, 运行错误为 1, 正常退出为 0.
+Planet 当前不提供业务下游服务; `initialized` 和 `upstream` 不能作为业务同步就绪标志.
 
-```bash
-bash astra/build.sh regression --profile debug
-bash astra/build.sh soak --profile release --duration=3600
-bash astra/build.sh regression --profile asan
-bash astra/build.sh regression --profile tsan
-bash astra/build.sh regression --profile release --contracts ignore
-bash astra/build.sh scale --profile release
-bash astra/build.sh scale --profile release --measure-allocations
-```
+## 验证与交付
 
-`regression` 包含 CTest、生成一致性、真实 TLS/RPC 边界、Go Supervisor/C++ 组网和现有进程回归.
-`soak` 先执行同样的前置检查, 再按指定秒数运行故障循环, 收集 RSS/线程/FD 的初始、峰值和末值.
-两者需要项目内已有 Python 测试依赖、Go Supervisor 及 C++ Star/Planet 产物, 不自动安装或下载它们.
-测试创建自己持有的服务与临时目录, 结束和异常时均清理, 报告保留在 `build/testkit/results/`.
-不复用或清理部署中的进程和数据库.
-
-`scale` 阶梯为 2/4/8/16 Star 和 0/1/8/32 Planet, 每组包含加入、故障切换、重启和清理.
-旧 `benchmark` 命令及 `--benchmark-smoke` 选项已移除; 它们原本就因 Rust v4 接收器废弃而不可执行.
-`bench/` 和历史测量脚本保留为隔离实验材料, `--benchmarks` 仍可显式编译实验目标, 不属于生产服务或当前性能验收.
-容量拒绝保留为失败样本, 报告 `completed_with_capacity_rejections` 表示完成矩阵, 不代表所有负载通过.
-分配统计输出到独立 `release-allocations` 目录, 只计 C++ new 的累计请求, 不用于正常性能排名.
-关闭契约的对照输出到 `release-contracts-ignore`, 不覆盖默认 enforce 产物.
-
-`test --core-only` 仅运行无 gRPC 的配置/拓扑测试, 不产生服务, 不能用来声称网络验收通过.
-构建入口主动恢复 `BUILD_TESTING=ON`, CTest 未发现测试时失败; 不兼容的诊断选项组合也会明确拒绝.
-ASan 配置同时启用 UBSan, 发现诊断立即失败. ASan 插桩覆盖本项目手写目标;
-完整 TSan 还要求生成消息与独立前缀的第三方 C/C++ 库一同插桩, 避免缺失内部同步信息.
-两者均不声称覆盖系统运行库或第三方汇编实现.
-当前整理后的实际结果和限制以 [review 说明](minimal-review-20260914.md) 为准.
-
-## 维护约定
-
-配置选项使用 C++26 反射注解和 `template for` 生成解析、范围检查与帮助, 默认值只写一处.
-Planet 使用 `inplace_vector` 存放至多八个候选, 控制消息使用四个固定槽位.
-`expected` 表达可恢复错误, 契约只检查内部不变量, 不因不可信网络输入触发契约终止.
-角色索引使用普通锁, gRPC 回调只交接完成状态, 控制循环统一推进协议和生命周期.
-
-生产源码采用中文注释和 ASCII 标点. 每次写入后执行本目录 `.clang-format`; 仅现有格式化器不能解析的反射语法
-使用局部保护. 测试不依赖 `assert` 在 Release 中是否开启.
-文件头写当前功能说明, 配置字段和每个枚举元素逐项注释, 函数声明与关键实现块说明契约和原因;
-详细要求见 [文件职责与注释](CONTRIBUTING.md#文件职责与注释).
-安装阶段复制两个程序及许可证, 不保留开发机 RPATH. 正式分发仍需匹配 GCC/libstdc++ 与系统运行库并完成部署验证,
-本骨架不承诺跨发行版二进制兼容.
+测试及前置构建须先获当轮授权, 命令和配置见 [Testkit](../testkit/README.md). 最新结果只在 [验证记录](../testkit/validation.md) 维护.
+安装目标保留根许可证和第三方授权文本, 不继承开发机 GCC RPATH. 发布需携带匹配运行库并在目标发行版验证; 当前骨架不承诺跨发行版二进制兼容或生产业务就绪.

@@ -4,6 +4,7 @@
 #include <astra/types.hpp>
 
 #include <filesystem>
+#include <optional>
 #include <span>
 
 namespace astra {
@@ -32,6 +33,17 @@ struct Config {
     // 回退的端口 0 在绑定成功后被实际值替换, 显式端点不允许包含零端口或通配 IP.
     Endpoint advertise;
 
+    // 独立公共业务监听, 默认不开放; 允许数值通配 IP 和端口 0, 不参与内部准入登记.
+    std::optional<Endpoint> comet;
+    // 独立 HTTP /metrics 监听, 默认关闭; 显式跨机绑定必须由部署网络/代理保护, 不继承业务 TLS 开关.
+    std::optional<Endpoint> metrics;
+    // 只用于公共 TLS 的 cert.pem/key.pem 目录, 默认空; 启用 comet 和 TLS 时必须显式提供.
+    std::filesystem::path comet_identity;
+    // 公共业务登录默认开启, 不影响内部节点认证或 __ 保留地址.
+    bool auth = true;
+    // 公共 TLS 默认开启, 不影响始终受保护的内部监听和对时链路.
+    bool tls = true;
+
     // supervisor: Supervisor 的远程拨号地址, 对应 --super 选项, 必填.
     // 支持 DNS 主机名或数值 IP, 且必须提供非零端口; 该选项解析阶段不联网也不执行 DNS 查询.
     std::string supervisor;
@@ -49,9 +61,9 @@ struct Config {
     std::size_t max_members = 64;
 
     // max_frame_bytes: 声明在 Hello 协议握手中的最大接收帧字节数.
-    // 内部写死默认值为 1 MiB, 暂无对外 CLI 选项; 协议要求有效声明至少为 1024 字节.
-    // 当前控制帧的实际限制仍然是 min(4096, 本端声明, 远端声明), 需要指出该值既不是发送队列的容量, 也不是 HTTP/2 的窗口大小.
-    std::uint32_t max_frame_bytes = 1024 * 1024;
+    // 内部默认值为 8 MiB, 暂无对外 CLI 选项; 协议要求有效声明至少为 1024 字节.
+    // Hello 在鉴权前仍限制为 4096 字节, 之后以双方声明较小值承载数据; 这不是发送队列容量或 HTTP/2 窗口.
+    std::uint32_t max_frame_bytes = 8 * 1024 * 1024;
 
     // connect_timeout: 建立底层连接直到等待 TLS 通道就绪的时间预算.
     // 内部默认 3000 ms (3秒), 必须大于 0; 实际的连接截止时间会取此预算与握手总截止时间 (handshake_timeout) 间的较早者.

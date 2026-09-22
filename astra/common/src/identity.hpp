@@ -29,6 +29,13 @@ Result<Member> decode_member(const proto::orbit::v1::Member& value);
 // 详细说明: 封装了本地密钥, 证书等安全材料, 支持构造客户端和服务端的 gRPC TLS 凭证, 并提供 Ed25519 的验签功能.
 class Identity {
 public:
+    // 显式转换基础设施角色; 未知线上值返回 identity, 不静默归类为 Star/Planet.
+    static Result<Member::Role> role(proto::orbit::v1::Role value);
+    // 编码合法内部角色; 非法内部值返回 UNSPECIFIED, 由发送边界拒绝.
+    static proto::orbit::v1::Role role(Member::Role value);
+    // 编码已经校验的成员, 返回独立拥有字段的消息; 不执行签名或发送.
+    static proto::orbit::v1::Member encode(const Member& member);
+
     // - directory (const std::filesystem::path&): 存放凭据文件的目录路径.
     // - advertise (const Endpoint&): 需要在 TLS 证书扩展 (SAN) 中进行匹配校验的 IP 端点.
     // 返回值: 成功返回一个在堆上分配且只读共享的 Identity 实例.
@@ -62,6 +69,10 @@ public:
     // 返回值: 共享的 ServerCredentials 实例.如果底层选项创建失败则返回 nullptr.
     // 详细说明: 构造共享 TLS 1.3 服务端凭证, 且配置为不主动要求客户端出示客户端 TLS 证书; 因为客户端身份由后续的准入 (admission) 协议另外验证.
     std::shared_ptr<grpc::ServerCredentials> server_credentials() const;
+
+    // 加载独立公共 cert.pem/key.pem, 检查有效叶证书及匹配私钥, 不读取或回退到节点 CA/登录材料.
+    // 公共主机与信任链由 Comet 正常校验, 允许自签证书或正规完整证书链, 始终只开启 TLS 1.3.
+    static Result<std::shared_ptr<grpc::ServerCredentials>> external(const std::filesystem::path& directory);
 
     // 返回值: 用户名字符串的只读引用.
     // 详细说明: 只允许准入模块读取账号材料; 这些借用引用决不能逃出 Identity 的生命周期(不能存储为长期引用的指针), 且不用于通用的诊断输出.

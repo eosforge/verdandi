@@ -1,5 +1,7 @@
 # Registration Public API
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../legacy-sdk.md).
+
 Status: implemented working-tree contract, pending maintainer release review.
 This document defines the Registration/Selector API and source ownership.
 
@@ -74,7 +76,7 @@ nil-default from an explicit zero. Rust `Config::new(zone)` materializes the
 same defaults into public native fields. The owning `Config` and
 `RegistrationLimits` methods perform all range and relationship checks without
 exporting a separate constants API. Exact defaults and ranges are reviewed in
-[`../configuration.md`](../configuration.md). The shared Go `configuration`
+[`../configuration.md`](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/configuration.md). The shared Go `configuration`
 package and Rust `configuration` module strictly load the canonical v1 JSON and
 convert its optional Registration/Selector object into these native types.
 

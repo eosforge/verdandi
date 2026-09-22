@@ -6,6 +6,23 @@ option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;
 // Supervisor 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
 service Admission {
     rpc Register(RegistrationRequest) returns (RegistrationResponse);
+    // 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.
+    rpc List(DirectoryRequest) returns (DirectoryResponse);
+}
+
+// 请求无业务字段; 身份来自受 TLS 保护的 astra-admission-bin / astra-signature-bin.
+message DirectoryRequest {}
+
+// 已提交目录是登记事实, 不是在线探测结果; 不包含密码、启动幂等键或签名私钥.
+message DirectoryResponse {
+    // 按 id 排序. Star/Polaris 仅返回 Star 和 Polaris; Astrolabe 可读取全部角色.
+    repeated Member members = 1;
+}
+
+// 内部 Almanac[__auth][comet] 的值, Key 是 APIKEY. 仅用于 Comet 登录, 不包含权限或所有者.
+message Credential {
+    // 非空不透明字节, 工程初值上限 4096 字节, 不发送给公共业务 Watch.
+    bytes secret = 1;
 }
 
 // 账号通过 TLS 提交, Supervisor 从已验证账号和规范端点构建指纹.
@@ -32,9 +49,10 @@ message RegistrationRequest {
     bytes request_id = 13;
 }
 
-// 登记持久提交后返回有界名单: Star 得到完整 Star 列表, Planet 得到最多 8 个候选.
+// 登记持久提交后返回有界名单. 控制角色不成为 Star 的对等连接目标.
 message RegistrationResponse {
-    // Star 按 id 严格排序并包含自身. Planet 本组优先, 每组内按 id 排序, 不含自身.
+    // Star/Polaris 得到 Star 与 Polaris; Astrolabe 得到全部角色, 均按 id 排序.
+    // Planet 仍为本组优先的最多 8 个 Star 候选, 不含自身.
     repeated Member members = 1;
     // 本次登记的 Member 原始编码及其签名, 与完整名单放在同一个应答中.
     bytes admission = 2;
@@ -67,4 +85,8 @@ enum Role {
     ROLE_STAR = 1;
     // 从授权候选中维持单个 Star 上游的 Planet.
     ROLE_PLANET = 2;
+    // Almanac 的单点持久发布权威, 不进入 Star 对等网格.
+    ROLE_POLARIS = 3;
+    // 管理入口和目录观察者, 不进入 Star 对等网格.
+    ROLE_ASTROLABE = 4;
 }

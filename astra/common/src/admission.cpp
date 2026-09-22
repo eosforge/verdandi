@@ -41,7 +41,7 @@ Admission::Admission(const Config& config, std::shared_ptr<Identity> identity, s
     }
 
     // 填充将要发送到 Supervisor 的请求消息基础字段
-    mutate(request_).request_id(std::move(request_id)).username(identity_->username()).password(identity_->password()).galaxy(config_.galaxy).advertise(config_.advertise.text()).role(config_.role == Member::Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET).group(config_.group);
+    mutate(request_).request_id(std::move(request_id)).username(identity_->username()).password(identity_->password()).galaxy(config_.galaxy).advertise(config_.advertise.text()).role(Identity::role(config_.role)).group(config_.group);
 }
 
 // begin: 启动一次新的准入尝试或候选刷新.
@@ -74,6 +74,17 @@ void Admission::start_registration() {
     registration_->context.set_deadline(rpc_deadline(deadline_));
     // 切换到注册中状态
     phase_ = Admission::Phase::registration;
+    if (config_.role == Member::Role::star && hello_) {
+        registration_->listing = true;
+        registration_->context.AddMetadata("astra-admission-bin", hello_->admission());
+        registration_->context.AddMetadata("astra-signature-bin", hello_->admission_signature());
+        stub_->async()->List(&registration_->context, &query_, &registration_->directory, [call = registration_, wake = wake_](grpc::Status status) {
+            call->status = std::move(status); // 回调只拥有一次查询的缓冲, 不接触角色状态.
+            call->done.store(true, std::memory_order_release);
+            wake();
+        });
+        return;
+    }
     // 异步调用 Register 接口
     stub_->async()->Register(&registration_->context, &request_, &registration_->response, [call = registration_, wake = wake_](grpc::Status status) {
         // 回调中保存返回的状态码
@@ -117,11 +128,21 @@ std::optional<Result<Admission::Joined>> Admission::poll() {
         // 成功和失败都消费当前调用. 回调仍持有自己的 shared_ptr, 发布完成后只执行独立唤醒.
         // 将 registration_ 指针交换为空, 转移所有权
         auto completed = std::exchange(registration_, {});
+        if (completed->listing && (completed->status.error_code() == grpc::StatusCode::UNAUTHENTICATED || completed->status.error_code() == grpc::StatusCode::PERMISSION_DENIED)) {
+            revoked_ = true;
+        }
         // 检查 RPC 调用是否成功或被整体取消
         if (!completed->status.ok() || cancelled_) {
             return std::unexpected(cancelled_ ? Status{Status::Code::cancelled, "Admission cancelled"} : rpc_error(completed->status));
         }
 
+        if (completed->listing) {
+            // 复用原准入验证路径, 只读查询不提供也不改变自己的签名身份与对时端点.
+            completed->response.mutable_members()->Swap(completed->directory.mutable_members());
+            completed->response.set_admission(hello_->admission());
+            completed->response.set_signature(hello_->admission_signature());
+            completed->response.set_pulse_endpoint(pulse_endpoint_);
+        }
         // 调用成功, 进行业务层面的有效性校验
         return validate(completed->response);
     }
@@ -146,7 +167,7 @@ Result<Admission::Joined> Admission::validate(proto::orbit::v1::RegistrationResp
     // count 为返回名单长度, 先检查角色容量再分配本地成员数组.
     const auto count = static_cast<std::size_t>(response.members_size());
     // 检查返回的节点成员数量是否超过硬限制, 或者超过配置所允许的角色容量限制
-    if (count > 4096 || (config_.role == Member::Role::planet && count > 8) || (config_.role == Member::Role::star && count > config_.max_members)) {
+    if (count > 8192 || (config_.role == Member::Role::planet && count > 8)) {
         return Status::capacity("Admission list exceeds role capacity");
     }
 
@@ -161,13 +182,39 @@ Result<Admission::Joined> Admission::validate(proto::orbit::v1::RegistrationResp
     // 名单转换为拥有的成员值, 生成消息只留在适配层; 完整角色关系由后续 Policy 初始化检查.
     std::vector<Member> members;
     members.reserve(count);
+    // services 仅保留控制面目标, 单点 Polaris 限制在这里明确检查, 不按可达性任选一个.
+    std::vector<Member> services;
     // 遍历响应中包含的所有成员节点
     for (const auto& encoded : response.members()) {
         auto member = decode_member(encoded); // 解码字节流为 Member 结构体
         if (!member) {
             return std::unexpected(member.error());
         }
+        if (member->galaxy != config_.galaxy) {
+            return Status::identity("Directory galaxy mismatch");
+        }
+        if (member->role == Member::Role::polaris && config_.role == Member::Role::star) {
+            if (!services.empty() || member->id == local->id || member->principal == local->principal || member->address == local->address) {
+                return Status::identity("Conflicting Polaris deployment");
+            }
+            services.push_back(std::move(*member));
+            continue;
+        }
+        if (member->role != Member::Role::star) {
+            return Status::identity("Unexpected admission directory role");
+        }
         members.push_back(std::move(*member));
+    }
+    if (members.size() > config_.max_members) {
+        return Status::capacity("Star directory exceeds configured capacity");
+    }
+    // Star 的完整目录必须包含本次已签发身份. 缺失/被替换不更新缓存, 也不凭名单缺项自行重新登记.
+    if (config_.role == Member::Role::star && std::ranges::find(members, *local) == members.end()) {
+        return Status::identity("Directory does not contain this Star identity");
+    }
+    // 控制服务不能与任一 Star 共用身份或端点, 即使后续 Policy 只看 Star 数组也必须拒绝.
+    if (!services.empty() && std::ranges::any_of(members, [&](const auto& member) { return member.id == services.front().id || member.principal == services.front().principal || member.address == services.front().address; })) {
+        return Status::identity("Control service conflicts with Star directory");
     }
 
     // 更新或确认本地身份
@@ -175,9 +222,11 @@ Result<Admission::Joined> Admission::validate(proto::orbit::v1::RegistrationResp
     // 构造即将用于与其他节点通讯的 Hello 消息, 并预先填充相关属性
     auto hello = std::make_shared<proto::astra::v1::Hello>();
     mutate(*hello).protocol_major(protocol_major).protocol_minor(0U).max_frame_bytes(config_.max_frame_bytes).admission(std::move(*response.mutable_admission())).admission_signature(std::move(*response.mutable_signature()));
+    hello_ = hello;
+    pulse_endpoint_ = pulse_endpoint;
 
     // 返回成功验证后的完整 Admission::Joined 对象
-    return Admission::Joined{std::move(pulse_endpoint), std::move(*local), std::move(members), std::move(hello)};
+    return Admission::Joined{std::move(pulse_endpoint), std::move(*local), std::move(members), std::move(hello), std::move(services)};
 }
 
 // cancel: 发出取消信号.
@@ -193,5 +242,9 @@ void Admission::cancel() {
 // pending: 返回是否有操作正在处理中.
 bool Admission::pending() const {
     return phase_ != Admission::Phase::idle;
+}
+
+bool Admission::revoked() const noexcept {
+    return revoked_;
 }
 } // namespace astra

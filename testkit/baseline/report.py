@@ -1,0 +1,53 @@
+"""汇总统一基线, 只比较同场景同轮次且双方均无扩容/换页的配对样本."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import statistics
+
+
+def summarize(results):
+    """保留轮次数量和范围, 不合并分位数样本或把短窗口包装为 SLA."""
+    groups = {}
+    for result in results:
+        key = json.dumps(result["case"], sort_keys=True)
+        rounds = groups.setdefault(key, {})
+        pair = rounds.setdefault(result["round"], {})
+        if result["implementation"] in pair:
+            raise ValueError("Duplicate implementation in a paired round")
+        pair[result["implementation"]] = result
+    output = []
+    for key, rounds in groups.items():
+        pairs = [
+            pair for pair in rounds.values() if set(pair) == {"redis", "comet"} and all(value["passed"] and value["stable_memory"] for value in pair.values())
+        ]
+        row = dict(case=json.loads(key), paired_rounds=len(pairs), total_rounds=len(rounds), implementations={}, failures={})
+        for implementation in ("redis", "comet"):
+            row["failures"][implementation] = sum(implementation in pair and not pair[implementation]["passed"] for pair in rounds.values())
+            values = [pair[implementation] for pair in pairs]
+            metrics = {}
+            for name in ("commit", "visible"):
+                samples = [metric for value in values for metric in value["measurements"] if metric["metric"] == name]
+                if samples:
+                    fields = ("operations_per_second", "p50_us", "p95_us", "p99_us", "p999_us")
+                    metrics[name] = {field: statistics.median(sample[field] for sample in samples) for field in fields}
+                    metrics[name]["throughput_range"] = [
+                        min(sample["operations_per_second"] for sample in samples),
+                        max(sample["operations_per_second"] for sample in samples),
+                    ]
+            row["implementations"][implementation] = metrics
+        if pairs:
+            row["comet_redis_throughput_ratio"] = (
+                row["implementations"]["comet"]["commit"]["operations_per_second"] / row["implementations"]["redis"]["commit"]["operations_per_second"]
+            )
+        output.append(row)
+    return output
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("results", type=Path)
+    arguments = parser.parse_args()
+    print(json.dumps(summarize(json.loads(arguments.results.read_text(encoding="utf-8"))), indent=2, ensure_ascii=False))

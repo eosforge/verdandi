@@ -14,8 +14,10 @@ public:
         std::string galaxy;
         // 既有 TLS/签名/账号格式的目录, 默认 identity, 路径上限 4096 字节.
         std::filesystem::path identity = "identity";
-        // 专用持久日志, 默认 state/pulsar.journal; 不能指向旧 Supervisor 的 bbolt 文件.
-        std::filesystem::path state = "state/pulsar.journal";
+        // 专用 SQLite 文件, 默认 state/pulsar.db; 不接受旧 journal/bbolt, 父目录须已存在.
+        std::filesystem::path state = "state/pulsar.db";
+        // 默认仅恢复已有库. true 显式初始化新群组, 遇已有文件拒绝覆盖.
+        bool initialize = false;
         // 每角色最多 64 个当前成员, 允许 1..4096.
         std::size_t maximum = 64;
         // 最多 65536 条历史启动记录, 允许 1..1000000. 达限必须显式维护, 不静默忘掉旧请求.

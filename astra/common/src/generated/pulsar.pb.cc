@@ -33,8 +33,6 @@ PROTOBUF_CONSTINIT ::google::protobuf::internal::ReflectionData
         {&::_pbi::kDescriptorMethods, &::descriptor_table_pulsar_2eproto, /* tracker*/ nullptr,},
         // ::proto::pulsar::v1::Pong
         {&::_pbi::kDescriptorMethods, &::descriptor_table_pulsar_2eproto, /* tracker*/ nullptr,},
-        // ::proto::pulsar::v1::RegistrationRecord
-        {&::_pbi::kDescriptorMethods, &::descriptor_table_pulsar_2eproto, /* tracker*/ nullptr,},
 };
 }  // namespace
 #endif
@@ -358,161 +356,6 @@ const ::_pbi::ClassData* Ping_get_class_data() {
 }
 }  // namespace
 #endif  // PROTOBUF_CUSTOM_VTABLE
-class RegistrationRecord::_Internal {
- public:
-  using HasBits = decltype(::std::declval<RegistrationRecord>()._impl_._has_bits_);
-  static constexpr ::int32_t kHasBitsOffset =
-      8 * PROTOBUF_FIELD_OFFSET(RegistrationRecord, _impl_._has_bits_);
-};
-
-constexpr RegistrationRecord::ParseTableT_ RegistrationRecord::InternalGenerateParseTable_(const ::_pbi::ClassData* class_data) {
-  return ParseTableT_{
-    {
-      PROTOBUF_FIELD_OFFSET(RegistrationRecord, _impl_._has_bits_),
-      0, // no _extensions_
-      2, 8,  // max_field_number, fast_idx_mask
-      offsetof(ParseTableT_, field_lookup_table),
-      4294967292,  // skipmap
-      offsetof(ParseTableT_, field_entries),
-      2,  // num_field_entries
-      1,  // num_aux_entries
-      offsetof(ParseTableT_, aux_entries),
-      class_data,
-      nullptr,  // post_loop_handler
-      ::_pbi::TcParser::MpUnknownFields,  // fallback
-      #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
-      ::_pbi::TcParser::GetTable<::proto::pulsar::v1::RegistrationRecord>(),  // to_prefetch
-      #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
-    }, {{
-      // bytes request_id = 2;
-      {::_pbi::TcParser::FastBS1,
-       {18, 0, 0,
-        PROTOBUF_FIELD_OFFSET(RegistrationRecord, _impl_.request_id_)}},
-      // .proto.orbit.v1.Member member = 1;
-      {::_pbi::TcParser::FastMtS1,
-       {10, 1, 0,
-        PROTOBUF_FIELD_OFFSET(RegistrationRecord, _impl_.member_)}},
-    }}, {{
-      65535, 65535
-    }}, {{
-      // .proto.orbit.v1.Member member = 1;
-      {PROTOBUF_FIELD_OFFSET(RegistrationRecord, _impl_.member_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // bytes request_id = 2;
-      {PROTOBUF_FIELD_OFFSET(RegistrationRecord, _impl_.request_id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
-    }},
-    {{
-        #ifndef PROTOBUF_MESSAGE_GLOBALS
-        {::_pbi::TcParser::GetTable<::proto::orbit::v1::Member>()},
-        #else
-        {::_pbi::FieldAuxMessageGlobals(), &::proto::orbit::v1::Member_globals_},
-        #endif
-    }},
-    {{
-    }},
-  };
-}
-
-
-inline constexpr RegistrationRecord::Impl_::Impl_(
-    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
-    ::_pbi::ConstantInitialized) noexcept
-      : request_id_(
-            &::google::protobuf::internal::fixed_address_empty_string,
-            ::_pbi::ConstantInitialized()),
-        member_{nullptr} {}
-
-template <typename>
-constexpr RegistrationRecord::RegistrationRecord(::_pbi::ConstantInitialized,
-                       const ::_pbi::ClassData* PROTOBUF_NONNULL class_data)
-    : Super_(
-#if defined(PROTOBUF_CUSTOM_VTABLE)
-          class_data
-#endif  // PROTOBUF_CUSTOM_VTABLE
-          ),
-      _impl_(internal_visibility(), ::_pbi::ConstantInitialized()) {
-}
-inline void* PROTOBUF_NONNULL RegistrationRecord::PlacementNew_(
-    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
-    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
-  return ::new (mem) RegistrationRecord(arena);
-}
-constexpr auto RegistrationRecord::InternalNewImpl_() {
-  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(RegistrationRecord), alignof(RegistrationRecord));
-}
-constexpr auto RegistrationRecord::InternalGenerateClassData_(
-    const MessageLite& prototype,
-    const ::google::protobuf::internal::TcParseTableBase* tc_table) {
-  return ::google::protobuf::internal::ClassDataFull{
-      ::google::protobuf::internal::ClassData{
-          &prototype,
-#ifndef PROTOBUF_MESSAGE_GLOBALS
-          &_table_.header,
-#else
-          tc_table,
-#endif
-          nullptr,  // IsInitialized
-          &RegistrationRecord::MergeImpl,
-          Super_::GetNewImpl<RegistrationRecord>(),
-#if defined(PROTOBUF_CUSTOM_VTABLE)
-          &RegistrationRecord::SharedDtor,
-          Super_::GetClearImpl<RegistrationRecord>(), &RegistrationRecord::ByteSizeLong,
-              &RegistrationRecord::_InternalSerialize,
-#endif  // PROTOBUF_CUSTOM_VTABLE
-          PROTOBUF_FIELD_OFFSET(RegistrationRecord, _impl_._cached_size_),
-          false,
-      },
-#ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[2],
-#else   // !PROTOBUF_MESSAGE_GLOBALS
-      &::_pbi::kDescriptorMethods,
-      &descriptor_table_pulsar_2eproto,
-      nullptr,  // tracker
-#endif  // PROTOBUF_MESSAGE_GLOBALS
-  };
-}
-struct RegistrationRecordGlobalsTypeInternal : ::_pbi::MessageGlobalsBase {
-  constexpr RegistrationRecordGlobalsTypeInternal()
-      :
-#ifndef PROTOBUF_MESSAGE_GLOBALS
-        _default(::_pbi::ConstantInitialized{},
-                 RegistrationRecord_class_data_.base())
-#else   // !PROTOBUF_MESSAGE_GLOBALS
-        MessageGlobalsBase(RegistrationRecord::InternalGenerateClassData_(
-            _default, &RegistrationRecord_globals_._table.header)),
-        _default(::_pbi::ConstantInitialized{}, GetClassData()),
-        _table(::_pbi::PrivateAccess::GenerateParseTable<RegistrationRecord>(
-            GetClassData()))
-#endif  // PROTOBUF_MESSAGE_GLOBALS
-  {
-  }
-  ~RegistrationRecordGlobalsTypeInternal() {}
-  union {
-    alignas(::_pbi::kMaxMessageAlignment) RegistrationRecord _default;
-  };
-#ifdef PROTOBUF_MESSAGE_GLOBALS
-  decltype(::_pbi::PrivateAccess::GenerateParseTable<RegistrationRecord>(
-      ::std::declval<const ::_pbi::ClassData*>())) _table;
-#endif
-};
-#ifdef PROTOBUF_MESSAGE_GLOBALS
-static_assert(PROTOBUF_FIELD_OFFSET(RegistrationRecordGlobalsTypeInternal, _default) ==
-              ::_pbi::MessageGlobalsBase::OffsetToDefault());
-#endif  // PROTOBUF_MESSAGE_GLOBALS
-
-PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
-    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PROTOBUF_MESSAGE_GLOBALS_CONST RegistrationRecordGlobalsTypeInternal RegistrationRecord_globals_
-        PROTOBUF_MESSAGE_GLOBALS_SECTION(.data.rel.ro);
-#if defined(PROTOBUF_CUSTOM_VTABLE)
-namespace {
-const ::_pbi::ClassData* RegistrationRecord_get_class_data() {
-#ifdef PROTOBUF_MESSAGE_GLOBALS
-  return RegistrationRecord_globals_.GetClassData();
-#else
-  return RegistrationRecord_class_data_.base();
-#endif  // PROTOBUF_MESSAGE_GLOBALS
-}
-}  // namespace
-#endif  // PROTOBUF_CUSTOM_VTABLE
 }  // namespace v1
 }  // namespace pulsar
 }  // namespace proto
@@ -543,54 +386,39 @@ const ::uint32_t
         3,
         4,
         5,
-        0x081, // bitmap
-        PROTOBUF_FIELD_OFFSET(::proto::pulsar::v1::RegistrationRecord, _impl_._has_bits_),
-        5, // hasbit index offset
-        PROTOBUF_FIELD_OFFSET(::proto::pulsar::v1::RegistrationRecord, _impl_.member_),
-        PROTOBUF_FIELD_OFFSET(::proto::pulsar::v1::RegistrationRecord, _impl_.request_id_),
-        1,
-        0,
 };
 
 static const ::_pbi::MigrationSchema
     schemas[] ABSL_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
         {0, sizeof(::proto::pulsar::v1::Ping)},
         {5, sizeof(::proto::pulsar::v1::Pong)},
-        {20, sizeof(::proto::pulsar::v1::RegistrationRecord)},
 };
 static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
     file_message_globals[] = {
         &::proto::pulsar::v1::Ping_globals_,
         &::proto::pulsar::v1::Pong_globals_,
-        &::proto::pulsar::v1::RegistrationRecord_globals_,
 };
 const char descriptor_table_protodef_pulsar_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
-    "\n\014pulsar.proto\022\017proto.pulsar.v1\032\013orbit.p"
-    "roto\"\022\n\004Ping\022\n\n\002t0\030\001 \001(\004\"y\n\004Pong\022\n\n\002t0\030\001"
-    " \001(\004\022\n\n\002t1\030\002 \001(\004\022\n\n\002t2\030\003 \001(\004\022\024\n\014precisio"
-    "n_ns\030\005 \001(\004\022\026\n\016uncertainty_ns\030\006 \001(\004\022\024\n\014sy"
-    "nchronized\030\007 \001(\010J\004\010\004\020\005R\003era\"P\n\022Registrat"
-    "ionRecord\022&\n\006member\030\001 \001(\0132\026.proto.orbit."
-    "v1.Member\022\022\n\nrequest_id\030\002 \001(\0142C\n\005Pulse\022:"
-    "\n\006Bounce\022\025.proto.pulsar.v1.Ping\032\025.proto."
-    "pulsar.v1.Pong(\0010\001b\006proto3"
-};
-static const ::_pbi::DescriptorTable* PROTOBUF_NONNULL const
-    descriptor_table_pulsar_2eproto_deps[1] = {
-        &::descriptor_table_orbit_2eproto,
+    "\n\014pulsar.proto\022\017proto.pulsar.v1\"\022\n\004Ping\022"
+    "\n\n\002t0\030\001 \001(\004\"y\n\004Pong\022\n\n\002t0\030\001 \001(\004\022\n\n\002t1\030\002 "
+    "\001(\004\022\n\n\002t2\030\003 \001(\004\022\024\n\014precision_ns\030\005 \001(\004\022\026\n"
+    "\016uncertainty_ns\030\006 \001(\004\022\024\n\014synchronized\030\007 "
+    "\001(\010J\004\010\004\020\005R\003era2C\n\005Pulse\022:\n\006Bounce\022\025.prot"
+    "o.pulsar.v1.Ping\032\025.proto.pulsar.v1.Pong("
+    "\0010\001b\006proto3"
 };
 static ::absl::once_flag descriptor_table_pulsar_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_pulsar_2eproto = {
     false,
     false,
-    346,
+    251,
     descriptor_table_protodef_pulsar_2eproto,
     "pulsar.proto",
     &descriptor_table_pulsar_2eproto_once,
-    descriptor_table_pulsar_2eproto_deps,
-    1,
-    3,
+    nullptr,
+    0,
+    2,
     schemas,
     file_message_globals,
     TableStruct_pulsar_2eproto::offsets,
@@ -1094,255 +922,6 @@ void Pong::InternalSwap(Pong* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
 }
 
 ::google::protobuf::Metadata Pong::GetMetadata() const {
-  return Super_::GetMetadataImpl(GetClassData()->full());
-}
-// ===================================================================
-
-void RegistrationRecord::clear_member() {
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  if (_impl_.member_ != nullptr) _impl_.member_->Clear();
-  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
-}
-RegistrationRecord::RegistrationRecord(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
-#if defined(PROTOBUF_CUSTOM_VTABLE)
-    : Super_(arena, RegistrationRecord_get_class_data()) {
-#else   // PROTOBUF_CUSTOM_VTABLE
-    : Super_(arena) {
-#endif  // PROTOBUF_CUSTOM_VTABLE
-  SharedCtor(arena);
-  // @@protoc_insertion_point(arena_constructor:proto.pulsar.v1.RegistrationRecord)
-}
-PROTOBUF_NDEBUG_INLINE RegistrationRecord::Impl_::Impl_(
-    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
-    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
-    [[maybe_unused]] const ::proto::pulsar::v1::RegistrationRecord& from_msg)
-      : _has_bits_{from._has_bits_},
-        request_id_(arena, from.request_id_) {}
-
-RegistrationRecord::RegistrationRecord(
-    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
-    const RegistrationRecord& from)
-#if defined(PROTOBUF_CUSTOM_VTABLE)
-    : Super_(arena, RegistrationRecord_get_class_data()) {
-
-#else   // PROTOBUF_CUSTOM_VTABLE
-    : Super_(arena) {
-#endif  // PROTOBUF_CUSTOM_VTABLE
-  RegistrationRecord* const _this = this;
-  (void)_this;
-  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
-      from._internal_metadata_);
-  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
-  ::uint32_t cached_has_bits = _impl_._has_bits_[0];
-  _impl_.member_ = (CheckHasBit(cached_has_bits, 0x00000002U))
-                 ? Super_::CopyConstruct(arena, *from._impl_.member_)
-                 : nullptr;
-
-  // @@protoc_insertion_point(copy_constructor:proto.pulsar.v1.RegistrationRecord)
-}
-PROTOBUF_NDEBUG_INLINE RegistrationRecord::Impl_::Impl_(
-    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
-    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
-      : request_id_(arena) {}
-
-inline void RegistrationRecord::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
-  new (&_impl_) Impl_(internal_visibility(), arena);
-  _impl_.member_ = {};
-}
-RegistrationRecord::~RegistrationRecord() {
-  // @@protoc_insertion_point(destructor:proto.pulsar.v1.RegistrationRecord)
-  SharedDtor(*this);
-}
-inline void RegistrationRecord::SharedDtor(MessageLite& self) {
-  RegistrationRecord& this_ = static_cast<RegistrationRecord&>(self);
-  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
-    this_.CheckHasBitConsistency();
-  }
-  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
-  ABSL_DCHECK(this_.GetArena() == nullptr);
-  this_._impl_.request_id_.Destroy();
-  delete this_._impl_.member_;
-  this_._impl_.~Impl_();
-}
-
-#ifndef PROTOBUF_MESSAGE_GLOBALS
-PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
-    ::google::protobuf::internal::ClassDataFull RegistrationRecord_class_data_ =
-        RegistrationRecord::InternalGenerateClassData_(RegistrationRecord_globals_._default);
-
-PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
-RegistrationRecord::GetClassData() const {
-  ::google::protobuf::internal::PrefetchToLocalCache(&RegistrationRecord_class_data_);
-  ::google::protobuf::internal::PrefetchToLocalCache(RegistrationRecord_class_data_.tc_table);
-  return RegistrationRecord_class_data_.base();
-}
-#else
-PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
-RegistrationRecord::GetClassData() const {
-  ::google::protobuf::internal::PrefetchToLocalCache(&RegistrationRecord_globals_);
-  ::google::protobuf::internal::PrefetchToLocalCache(
-      ::google::protobuf::internal::MessageGlobalsBase::ToParseTableBase(&RegistrationRecord_globals_));
-  return RegistrationRecord_globals_.GetClassData();
-}
-#endif  // !PROTOBUF_MESSAGE_GLOBALS
-#ifndef PROTOBUF_MESSAGE_GLOBALS
-PROTOBUF_CONSTINIT
-PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const RegistrationRecord::ParseTableT_
-    RegistrationRecord::_table_ =
-        RegistrationRecord::InternalGenerateParseTable_(RegistrationRecord_class_data_.base());
-#endif  // !PROTOBUF_MESSAGE_GLOBALS
-PROTOBUF_NOINLINE void RegistrationRecord::Clear() {
-  auto& this_ [[maybe_unused]] = *this;
-  // @@protoc_insertion_point(message_clear_start:proto.pulsar.v1.RegistrationRecord)
-  ::google::protobuf::internal::TSanWrite(&_impl_);
-  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
-
-  cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      this_._impl_.request_id_.ClearNonDefaultToEmpty();
-    }
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
-      ABSL_DCHECK(this_._impl_.member_ != nullptr);
-      this_._impl_.member_->Clear();
-    }
-  }
-  _impl_._has_bits_.Clear();
-  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
-}
-
-#if defined(PROTOBUF_CUSTOM_VTABLE)
-::uint8_t* PROTOBUF_NONNULL RegistrationRecord::_InternalSerialize(
-    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
-    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
-  const RegistrationRecord& this_ = static_cast<const RegistrationRecord&>(base);
-#else   // PROTOBUF_CUSTOM_VTABLE
-::uint8_t* PROTOBUF_NONNULL RegistrationRecord::_InternalSerialize(
-    ::uint8_t* PROTOBUF_NONNULL target,
-    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
-  const RegistrationRecord& this_ = *this;
-#endif  // PROTOBUF_CUSTOM_VTABLE
-  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
-    this_.CheckHasBitConsistency();
-  }
-  // @@protoc_insertion_point(serialize_to_array_start:proto.pulsar.v1.RegistrationRecord)
-  ::uint32_t cached_has_bits = 0;
-  (void)cached_has_bits;
-
-  cached_has_bits = this_._impl_._has_bits_[0];
-  // .proto.orbit.v1.Member member = 1;
-  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
-    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
-        1, *this_._impl_.member_, this_._impl_.member_->GetCachedSize(), target,
-        stream);
-  }
-
-  // bytes request_id = 2;
-  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-    if (!this_._internal_request_id().empty()) {
-      const ::std::string& _s = this_._internal_request_id();
-      target = stream->WriteBytesMaybeAliased(2, _s, target);
-    }
-  }
-
-  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
-    target =
-        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
-            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:proto.pulsar.v1.RegistrationRecord)
-  return target;
-}
-
-#if defined(PROTOBUF_CUSTOM_VTABLE)
-::size_t RegistrationRecord::ByteSizeLong(const MessageLite& base) {
-  const RegistrationRecord& this_ = static_cast<const RegistrationRecord&>(base);
-#else   // PROTOBUF_CUSTOM_VTABLE
-::size_t RegistrationRecord::ByteSizeLong() const {
-  const RegistrationRecord& this_ = *this;
-#endif  // PROTOBUF_CUSTOM_VTABLE
-  // @@protoc_insertion_point(message_byte_size_start:proto.pulsar.v1.RegistrationRecord)
-  ::size_t total_size = 0;
-
-  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
-
-  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
-  cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    // bytes request_id = 2;
-    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      if (!this_._internal_request_id().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
-                                        this_._internal_request_id());
-      }
-    }
-    // .proto.orbit.v1.Member member = 1;
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
-      total_size += 1 +
-                    ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.member_);
-    }
-  }
-  return this_.MaybeComputeUnknownFieldsSize(total_size,
-                                             &this_._impl_._cached_size_);
-}
-
-void RegistrationRecord::MergeImpl(::google::protobuf::MessageLite& to_msg,
-                      const ::google::protobuf::MessageLite& from_msg) {
-   auto* const _this = static_cast<RegistrationRecord*>(&to_msg);
-  auto& from = static_cast<const RegistrationRecord&>(from_msg);
-  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
-    from.CheckHasBitConsistency();
-  }
-  ::google::protobuf::Arena* arena = _this->GetArena();
-  // @@protoc_insertion_point(class_specific_merge_from_start:proto.pulsar.v1.RegistrationRecord)
-  ABSL_DCHECK_NE(&from, _this);
-  ::uint32_t cached_has_bits = 0;
-  (void)cached_has_bits;
-
-  cached_has_bits = from._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-      if (!from._internal_request_id().empty()) {
-        _this->_internal_set_request_id(from._internal_request_id());
-      } else {
-        if (_this->_impl_.request_id_.IsDefault()) {
-          _this->_internal_set_request_id("");
-        }
-      }
-    }
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
-      ABSL_DCHECK(from._impl_.member_ != nullptr);
-      if (_this->_impl_.member_ == nullptr) {
-        _this->_impl_.member_ = Super_::CopyConstruct(arena, *from._impl_.member_);
-      } else {
-        _this->_impl_.member_->MergeFrom(*from._impl_.member_);
-      }
-    }
-  }
-  _this->_impl_._has_bits_[0] |= cached_has_bits;
-  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
-      from._internal_metadata_);
-}
-
-void RegistrationRecord::CopyFrom(const RegistrationRecord& from) {
-  // @@protoc_insertion_point(class_specific_copy_from_start:proto.pulsar.v1.RegistrationRecord)
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-
-void RegistrationRecord::InternalSwap(RegistrationRecord* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
-  using ::std::swap;
-  auto* arena = GetArena();
-  ABSL_DCHECK_EQ(arena, other->GetArena());
-  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
-  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
-  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.request_id_, &other->_impl_.request_id_, arena);
-  swap(_impl_.member_, other->_impl_.member_);
-}
-
-::google::protobuf::Metadata RegistrationRecord::GetMetadata() const {
   return Super_::GetMetadataImpl(GetClassData()->full());
 }
 // @@protoc_insertion_point(namespace_scope)

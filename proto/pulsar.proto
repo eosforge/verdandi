@@ -3,8 +3,6 @@
 syntax = "proto3";
 package proto.pulsar.v1;
 
-import "orbit.proto";
-
 // TLS 上的有界采样流. metadata 携带 astra-admission-bin 和 astra-signature-bin.
 // 服务端每条流验一次当前 Star 准入凭证; 单条流最多 8 个采样, 不负责修改客户端时钟.
 service Pulse {
@@ -38,12 +36,4 @@ message Pong {
 
     // 来源已校准且质量达标. 缺省 false, 旧语义的 Pong 不能被误认为公共纪元时间.
     bool synchronized = 7;
-}
-
-// Pulsar 私有持久登记日志的记录体, 不作为 RPC 请求或响应.
-// 一个记录同时提交当前成员与启动请求; 不包含账号密码或私钥.
-message RegistrationRecord {
-    proto.orbit.v1.Member member = 1;
-    // 本次启动的 32 字节随机幂等键. 历史记录保留以拒绝已被替换的进程请求.
-    bytes request_id = 2;
 }

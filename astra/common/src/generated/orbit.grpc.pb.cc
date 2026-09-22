@@ -26,6 +26,7 @@ namespace v1 {
 
 static const char* Admission_method_names[] = {
   "/proto.orbit.v1.Admission/Register",
+  "/proto.orbit.v1.Admission/List",
 };
 
 std::unique_ptr< Admission::Stub> Admission::NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options) {
@@ -36,6 +37,7 @@ std::unique_ptr< Admission::Stub> Admission::NewStub(const std::shared_ptr< ::gr
 
 Admission::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options)
   : channel_(channel), rpcmethod_Register_(Admission_method_names[0], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_List_(Admission_method_names[1], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   {}
 
 ::grpc::Status Admission::Stub::Register(::grpc::ClientContext* context, const ::proto::orbit::v1::RegistrationRequest& request, ::proto::orbit::v1::RegistrationResponse* response) {
@@ -61,6 +63,29 @@ void Admission::Stub::async::Register(::grpc::ClientContext* context, const ::pr
   return result;
 }
 
+::grpc::Status Admission::Stub::List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::proto::orbit::v1::DirectoryResponse* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_List_, context, request, response);
+}
+
+void Admission::Stub::async::List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_List_, context, request, response, std::move(f));
+}
+
+void Admission::Stub::async::List(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response, ::grpc::ClientUnaryReactor* reactor) {
+  ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_List_, context, request, response, reactor);
+}
+
+::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>* Admission::Stub::PrepareAsyncListRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::proto::orbit::v1::DirectoryResponse, ::proto::orbit::v1::DirectoryRequest, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_List_, context, request);
+}
+
+::grpc::ClientAsyncResponseReader< ::proto::orbit::v1::DirectoryResponse>* Admission::Stub::AsyncListRaw(::grpc::ClientContext* context, const ::proto::orbit::v1::DirectoryRequest& request, ::grpc::CompletionQueue* cq) {
+  auto* result =
+    this->PrepareAsyncListRaw(context, request, cq);
+  result->StartCall();
+  return result;
+}
+
 Admission::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       Admission_method_names[0],
@@ -72,12 +97,29 @@ Admission::Service::Service() {
              ::proto::orbit::v1::RegistrationResponse* resp) {
                return service->Register(ctx, req, resp);
              }, this)));
+  AddMethod(new ::grpc::internal::RpcServiceMethod(
+      Admission_method_names[1],
+      ::grpc::internal::RpcMethod::NORMAL_RPC,
+      new ::grpc::internal::RpcMethodHandler< Admission::Service, ::proto::orbit::v1::DirectoryRequest, ::proto::orbit::v1::DirectoryResponse, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+          [](Admission::Service* service,
+             ::grpc::ServerContext* ctx,
+             const ::proto::orbit::v1::DirectoryRequest* req,
+             ::proto::orbit::v1::DirectoryResponse* resp) {
+               return service->List(ctx, req, resp);
+             }, this)));
 }
 
 Admission::Service::~Service() {
 }
 
 ::grpc::Status Admission::Service::Register(::grpc::ServerContext* context, const ::proto::orbit::v1::RegistrationRequest* request, ::proto::orbit::v1::RegistrationResponse* response) {
+  (void) context;
+  (void) request;
+  (void) response;
+  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+}
+
+::grpc::Status Admission::Service::List(::grpc::ServerContext* context, const ::proto::orbit::v1::DirectoryRequest* request, ::proto::orbit::v1::DirectoryResponse* response) {
   (void) context;
   (void) request;
   (void) response;

@@ -9,6 +9,56 @@ using namespace astra;
 
 namespace {
 
+// 公共监听只依赖证书与私钥, 不读取内部准入、账号或 CA; 所有文件限于本例临时目录.
+void external() {
+
+    // directory 使用原子排他创建, 析构只清理本例已经取得所有权的路径.
+    struct Directory {
+        std::filesystem::path path; // 当前进程独占的临时路径, 不覆盖已有目录.
+
+        Directory() {
+            for (unsigned attempt = 0; attempt < 32; ++attempt) {
+                path = std::filesystem::temp_directory_path() / ("astra-public-tls-" + std::to_string(Steady::now().time_since_epoch().count()) + "-" + std::to_string(attempt));
+                if (std::filesystem::create_directory(path)) {
+                    return;
+                }
+            }
+            throw std::runtime_error("Cannot create public TLS test directory");
+        }
+
+        ~Directory() {
+            std::error_code ignored; // 清理不得覆盖原始测试异常, 正常路径仍显式校验文件删除.
+            std::filesystem::remove_all(path, ignored);
+        }
+    } directory;
+
+    const auto fixtures = std::filesystem::path(ASTRA_FIXTURES); // 仅公开测试材料.
+    for (const auto* name : {"cert.pem", "key.pem"}) {
+        std::filesystem::copy_file(fixtures / "star-a" / name, directory.path / name);
+    }
+    const auto credentials = Identity::external(directory.path); // 无 ca.pem、login.json 或 admission.pub 仍须成功.
+    if (!credentials) {
+        throw std::runtime_error(credentials.error().message);
+    }
+
+    // 有效叶子后跟截断的中间证书也必须拒绝, 不能只验证第一张后把坏链交给后台握手.
+    {
+        std::ofstream output(directory.path / "cert.pem", std::ios::app);
+        output << "\n-----BEGIN CERTIFICATE-----\nbroken\n";
+    }
+    CHECK(!Identity::external(directory.path));
+    std::filesystem::copy_file(fixtures / "star-a/cert.pem", directory.path / "cert.pem", std::filesystem::copy_options::overwrite_existing);
+
+    // 证书/私钥不匹配、过期、缺失均必须拒绝, 不因公共端口无需客户端 CA 而放宽材料校验.
+    std::filesystem::copy_file(fixtures / "star-b/key.pem", directory.path / "key.pem", std::filesystem::copy_options::overwrite_existing);
+    CHECK(!Identity::external(directory.path));
+    CHECK(!Identity::external(fixtures / "expired"));
+    CHECK(std::filesystem::remove(directory.path / "key.pem"));
+    CHECK(!Identity::external(directory.path));
+    CHECK(std::filesystem::remove(directory.path / "cert.pem"));
+    CHECK(std::filesystem::remove(directory.path));
+}
+
 // 借用 object 中指定 field 的字符串, 类型不符直接断言, 返回视图不超过 JSON 文档寿命.
 std::string_view text(yyjson_val* object, const char* field) {
 
@@ -91,6 +141,17 @@ void signatures(const Identity& identity) {
     member.set_epoch(0);
     CHECK(!decode_member(member));
     member.set_epoch(1);
+    // 每个基础设施角色均须显式编解码往返; 未知数值不能默默变成 Star/Planet.
+    for (const auto role : {Member::Role::star, Member::Role::planet, Member::Role::polaris, Member::Role::astrolabe}) {
+        member.set_role(Identity::role(role));
+        // decoded 拥有经边界校验的成员, 成功角色必须与输入完全一致.
+        const auto decoded = decode_member(member);
+        CHECK(decoded && decoded->role == role && Identity::encode(*decoded).SerializeAsString() == member.SerializeAsString());
+    }
+    member.set_role(static_cast<proto::orbit::v1::Role>(99));
+    CHECK(!decode_member(member));
+    CHECK(Identity::role(static_cast<Member::Role>(99)) == proto::orbit::v1::ROLE_UNSPECIFIED);
+    member.set_role(proto::orbit::v1::ROLE_STAR);
     member.set_advertise("127.0.0.1:07443");
     CHECK(!decode_member(member));
 }
@@ -108,6 +169,7 @@ int main() {
         CHECK(identity);
         CHECK(!Identity::load(std::filesystem::path(ASTRA_FIXTURES) / "expired", endpoint));
         CHECK(!Identity::load(std::filesystem::path(ASTRA_FIXTURES) / "star-a", *Endpoint::parse("192.0.2.1:7443")));
+        external();
         vectors(**identity);
         signatures(**identity);
         std::cout << "PASS shared v1 vectors, raw-byte Ed25519, local certificate validation\n";

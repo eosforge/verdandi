@@ -1,5 +1,7 @@
 # Catalog v1 API and Redis protocol
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../legacy-sdk.md).
+
 Status: implemented latest contract. This document supersedes the former
 Hash/Stream Mirror and `Catalog<T>` designs.
 
@@ -105,7 +107,7 @@ func (*Client) Close(context.Context) error
 ```
 
 All numeric defaults, ranges, and relationship checks are owned by Catalog's
-native `Config` methods and listed in [`../configuration.md`](../configuration.md).
+native `Config` methods and listed in [`../configuration.md`](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/configuration.md).
 No parallel exported constants API is provided. Catalog configuration remains
 separate from root Redis and Registration/Selector configuration. Go zero values
 select documented defaults; the recovery-jitter pointer distinguishes its nil

@@ -23,7 +23,7 @@ std::uint64_t magnitude(std::int64_t value) noexcept {
 
 // Unix/BOOTTIME 纳秒坐标的有符号上界, 所有相加操作在提交前检查.
 constexpr auto maximum = std::numeric_limits<std::int64_t>::max();
-// 观测新鲜度上限为 5 s, 使用 BOOTTIME 年龄并包含系统挂起时间.
+// 样本接纳与同步质量的新鲜度上限为 5 s, 包含系统挂起时间; 不限制已初始化时钟的租约能力.
 constexpr std::uint64_t freshness = 5'000'000'000;
 } // namespace
 
@@ -148,6 +148,7 @@ std::optional<Clock::Estimate> Filter::result() const {
 std::expected<Clock::Time, Clock::Error> Clock::Reading::deadline_after(std::chrono::nanoseconds ttl) const noexcept {
 
     // base 为本次读数的 Unix 纳秒坐标, 必须非负; ttl 为调用方给定的非负时长.
+    // ready 只表示本地计时可用. synchronized 过期不阻止已校准 Star 创建或延长有限期限.
     const auto base = time.time_since_epoch().count();
     if (!ready) {
         return std::unexpected(Clock::Error::clock_unready);
@@ -208,7 +209,7 @@ std::optional<Clock::Reading> Clock::read(ElapsedTime local) const {
     const auto age = static_cast<std::uint64_t>((local - estimate_->sampled).count());
     // 留出底层漂移及上游调速余量; 本机残余偏差单独计入, 新样本不能掩盖尚未追平的事实.
     const auto uncertainty = estimate_->uncertainty_ns + drift(age, 2000) + magnitude(debt_);
-    return Clock::Reading{epoch_, uncertainty, estimate_->rtt_ns, estimate_->sampled, trusted_ && age <= freshness && uncertainty <= clock_uncertainty_limit_ns};
+    return Clock::Reading{epoch_, uncertainty, estimate_->rtt_ns, estimate_->sampled, true, trusted_ && age <= freshness && uncertainty <= clock_uncertainty_limit_ns};
 }
 
 std::optional<Clock::Reading> Clock::now() const {

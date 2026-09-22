@@ -11,6 +11,11 @@
 
 namespace astra {
 namespace {
+// 布尔字段没有数值配额, 默认值由字段初始化器直接表达.
+constexpr bool valid_default(bool, const detail::Option&) {
+    return true;
+}
+
 // 检查数值默认值是否落在 option 的包含式范围内, 供编译期元数据校验使用, 不修改输入.
 // - value (std::uint64_t): 结构体定义中预设的默认数字值.
 // - option (const detail::Option&): 反射抓取到的属性配置.
@@ -92,6 +97,20 @@ Result<void> assign(std::uint64_t& output, std::string_view text, const detail::
     }
     output = value;
     return {};
+}
+
+// 只接受完整的小写 true/false, 不把拼写错误当成关闭认证或 TLS.
+Result<void> assign(bool& output, std::string_view text, const detail::Option&) {
+    if (text != "true" && text != "false") {
+        return Status::configuration("Boolean options require true or false");
+    }
+    output = text == "true";
+    return {};
+}
+
+// 默认帮助不把 bool 意外格式化为数值区间.
+std::string default_help(bool value, const detail::Option&) {
+    return value ? "; default=true" : "; default=false";
 }
 
 // 字符串先转为拥有的值, 地址/名称关系在解析完全部字段后检查.
@@ -221,6 +240,31 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Member
 
     // 全部输入和跨字段约束通过后才形成运行配置, 派生入站预算并将 CLI 秒数统一转换为毫秒.
     Config result;
+    if (!options.comet.empty()) {
+        if (role != Member::Role::star) {
+            return Status::configuration("Comet listening is available only on Star");
+        }
+        auto endpoint = Endpoint::parse(options.comet, true); // 公共端口独立绑定, 通配与零端口不进入节点目录.
+        if (!endpoint || (endpoint->port != 0 && endpoint->text() == listen->text())) {
+            return Status::configuration("Invalid or conflicting public listener");
+        }
+        if (options.tls == options.comet_identity.empty()) {
+            return Status::configuration("Public TLS requires its own identity directory; plaintext must omit it");
+        }
+        result.comet = std::move(*endpoint);
+    } else if (!options.comet_identity.empty() || !options.auth || !options.tls) {
+        return Status::configuration("Public transport options require --comet");
+    }
+    if (!options.metrics.empty()) {
+        auto endpoint = Endpoint::parse(options.metrics, true); // 绑定端点, 允许测试时端口零, 不查 DNS.
+        if (role != Member::Role::star || !endpoint || (endpoint->port != 0 && (endpoint->text() == listen->text() || (result.comet && *endpoint == *result.comet)))) {
+            return Status::configuration("Invalid or conflicting metrics listener");
+        }
+        result.metrics = std::move(*endpoint);
+    }
+    result.comet_identity = std::move(options.comet_identity);
+    result.auth = options.auth;
+    result.tls = options.tls;
     result.role = role;
     result.galaxy = std::move(options.galaxy);
     result.group = std::move(options.group);

@@ -174,7 +174,11 @@ struct Member {
         // 星节点, 承担对等网络的核心职责; 值初始化的默认角色.
         star,
         // 行星节点, 通过选定的 Star 上游接入; 不参与 Star 全互联.
-        planet
+        planet,
+        // Almanac 持久发布权威, 仅参与控制同步, 不作为对等节点.
+        polaris,
+        // 管理与观察入口, 不参与对等复制或提供业务对时.
+        astrolabe
     };
 
     // galaxy: 该成员所属的逻辑集群(Galaxy)标识.
@@ -187,7 +191,7 @@ struct Member {
     Endpoint address;
     // epoch: 成员的当前状态代次, 用于识别数据新鲜度.
     Member::Epoch epoch;
-    // role: 成员在系统中所扮演的角色 (Star 或 Planet), 默认为 star.
+    // role: 成员的基础设施职责, 默认为 star; 协议转换不以默认值兜底未知角色.
     Member::Role role{};
     // group: 成员所在的连接偏好分组名称, 用于 Planet 选择上游.
     std::string group;

@@ -43,6 +43,7 @@ void configuration() {
     CHECK(parsed->heartbeat_interval == Milliseconds(10000));
     CHECK(parsed->identity == "identity");
     CHECK(parsed->galaxy == "alpha");
+    CHECK(!parsed->comet && parsed->auth && parsed->tls && parsed->comet_identity.empty());
     CHECK(parsed->max_admission_request_bytes == 4096 && parsed->max_admission_response_bytes == 2 * 1024 * 1024);
     CHECK(Config::help(Member::Role::planet).contains("Usage: planet"));
     CHECK(Config::help(Member::Role::star).contains("default=5000"));
@@ -82,6 +83,23 @@ void configuration() {
     // bounded 使用收发容量的最小合法值, 检查配置是否真正被赋给运行参数.
     const auto bounded = Config::parse(limits, Member::Role::star);
     CHECK(bounded && bounded->max_admission_request_bytes == 1 && bounded->max_admission_response_bytes == 1024);
+    // 公共端口和证书必须显式成套配置, 不改变内部身份或借用其端口; 布尔拼写不能触发降级.
+    std::vector<std::string_view> public_options(arguments.begin(), arguments.end());
+    public_options.insert(public_options.end(), {"--comet=0.0.0.0:0", "--tls=false", "--auth=false"});
+    const auto plaintext = Config::parse(public_options, Member::Role::star);
+    CHECK(plaintext && plaintext->comet->wildcard && !plaintext->tls && !plaintext->auth && plaintext->listen.port == 7443);
+    CHECK(!Config::parse(public_options, Member::Role::planet));
+    public_options.push_back("--comet-identity=public");
+    CHECK(!Config::parse(public_options, Member::Role::star));
+    for (const auto invalid : {"--tls=TRUE", "--tls=0", "--auth=off", "--tls=false", "--auth=false", "--comet=127.0.0.1:7443", "--comet=127.0.0.1:7445", "--comet-identity=public"}) {
+        std::vector<std::string_view> values(arguments.begin(), arguments.end());
+        values.push_back(invalid);
+        CHECK(!Config::parse(values, Member::Role::star));
+    }
+    public_options.assign(arguments.begin(), arguments.end());
+    public_options.insert(public_options.end(), {"--comet=127.0.0.1:7445", "--comet-identity=public"});
+    const auto encrypted = Config::parse(public_options, Member::Role::star);
+    CHECK(encrypted && encrypted->tls && encrypted->auth && encrypted->comet_identity == "public");
     // Supervisor 主机解析移动实现文件后仍保留端口与 DNS 标签验证.
     CHECK(Config::format_supervisor("Supervisor.EXAMPLE:7444") == "Supervisor.EXAMPLE:7444");
     for (const auto invalid : {"host:0", "host:65536", "host:1x", "-host:7444", "host..local:7444", "[::]:7444"}) {
@@ -89,7 +107,7 @@ void configuration() {
     }
 }
 
-// 覆盖 Star 双向槽位,重复连接拒绝,升代替换和 Planet 入站限制.
+// 覆盖 Star 单流裁决,重复连接拒绝,升代替换和既有 Planet 入站限制.
 void stars() {
 
     // config 从默认值构造, 本场景仅覆盖要验证的 Galaxy,角色或容量参数.
@@ -110,16 +128,16 @@ void stars() {
     CHECK(targets);
     CHECK(!topology.due(Steady::now()));
     CHECK(topology.accept(b, Policy::Direction::outbound, {1}, *targets));
-    CHECK(topology.accept(b, Policy::Direction::inbound, {2}, std::nullopt));
+    CHECK(!topology.accept(b, Policy::Direction::inbound, {2}, std::nullopt));
     CHECK(!topology.accept(b, Policy::Direction::inbound, {3}, std::nullopt));
-    // next 从远端 b 复制后提升代次, 用于替换既有两个方向的会话.
+    // next 从远端 b 复制后提升代次, 用于替换既有唯一会话.
     auto next = b;
     next.epoch = Member::Epoch{2};
     next.id += "/restart";
     // replacement 收集替换时需取消的旧代次, 成功后新入站会话仍有效.
     auto replacement = topology.accept(next, Policy::Direction::inbound, {4}, std::nullopt);
-    CHECK(replacement && replacement->size() == 2);
-    topology.closed({2}, {}, Steady::now());
+    CHECK(replacement && replacement->size() == 1);
+    topology.closed({1}, {}, Steady::now());
     CHECK(topology.status().inbound == 1);
     CHECK(!topology.accept(b, Policy::Direction::outbound, {5}, *targets));
     CHECK(topology.status().members == 2);
@@ -165,6 +183,8 @@ void single_dial_ownership() {
     restarted.id += "/restart";
     ++restarted.epoch.value;
     CHECK(topology.accept(restarted, Policy::Direction::inbound, {20}, std::nullopt));
+    CHECK(!topology.due(now + config.reconnect_max));
+    topology.closed({20}, Status::Code::transport, now);
     // replacement 为升代后的新拨号目标, 旧目标的迟到失败不得清除其 pending.
     const auto replacement = topology.due(now + config.reconnect_max);
     CHECK(replacement && *replacement == restarted);
@@ -172,6 +192,51 @@ void single_dial_ownership() {
     CHECK(!topology.due(now + config.reconnect_max));
     CHECK(topology.accept(restarted, Policy::Direction::outbound, {21}, replacement));
     CHECK(topology.status().outbound == 1);
+}
+
+// 同时拨号时两端独立选中同一条逻辑流, 验证两种到达顺序及迟到完成的隔离.
+void arbitration() {
+
+    // a 的 ID 小于 b, 因此冲突时保留 a 发起的流, 不需要额外全局仲裁者.
+    Config config;
+    config.galaxy = "alpha";
+    const auto a = member(1), b = member(2);
+    const auto now = Steady::now();
+    for (const bool preferred_first : {false, true}) {
+        Star left(config), right(config); // 每轮独立的两端策略, 不复用已关闭的代次.
+        CHECK(left.initialize(a, std::array{a, b}));
+        CHECK(right.initialize(b, std::array{a, b}));
+        const auto outbound = left.due(now), inbound = right.due(now); // 同时持有两个拨号责任.
+        CHECK(outbound && inbound);
+        if (!preferred_first) {
+            CHECK(left.accept(b, Policy::Direction::inbound, {1}, std::nullopt));
+            CHECK(right.accept(a, Policy::Direction::outbound, {2}, inbound));
+        }
+        const auto installed = left.accept(b, Policy::Direction::outbound, {3}, outbound);
+        const auto accepted = right.accept(a, Policy::Direction::inbound, {4}, std::nullopt);
+        CHECK(installed && accepted);
+        CHECK(installed->size() == (preferred_first ? 0 : 1));
+        CHECK(accepted->size() == (preferred_first ? 0 : 1));
+        if (preferred_first) {
+            CHECK(!left.accept(b, Policy::Direction::inbound, {1}, std::nullopt));
+            CHECK(!right.accept(a, Policy::Direction::outbound, {2}, inbound));
+        }
+
+        // 被淘汰 RPC 的完成/拨号失败不能关闭新流, 也不能使健康入站触发反向补拨.
+        left.closed({1}, Status::Code::transport, now);
+        right.closed({2}, Status::Code::transport, now);
+        right.failed(*inbound, Status::Code::transport, now);
+        CHECK(left.status().outbound == 1 && left.status().inbound == 0);
+        CHECK(right.status().inbound == 1 && right.status().outbound == 0);
+        CHECK(!left.due(now + config.reconnect_max) && !right.due(now + config.reconnect_max));
+        CHECK(!left.accept(b, Policy::Direction::outbound, {5}, outbound));
+        CHECK(!right.accept(a, Policy::Direction::inbound, {6}, std::nullopt));
+
+        // 唯一流断开后, 两端均可退避重连; 裁决只解决并发冲突, 不固定永久拨号责任.
+        left.closed({3}, Status::Code::transport, now);
+        right.closed({4}, Status::Code::transport, now);
+        CHECK(left.due(now + config.reconnect_max) && right.due(now + config.reconnect_max));
+    }
 }
 
 // 核对部署摘要的固定小写编码, 拒绝截短和非法字符, 保持跨语言字节一致.
@@ -263,6 +328,11 @@ void atomic_lists_and_capacity() {
     // valid 是失败后的合法重试名单, 用于确认对象仍可正常初始化.
     std::array valid{a, b};
     CHECK(star.initialize(a, valid));
+    // 控制服务即使具有合法成员格式, 也不能借基础设施准入占用对等或 Planet 会话槽.
+    for (const auto role : {Member::Role::polaris, Member::Role::astrolabe}) {
+        CHECK(!star.accept(member(8, role), Policy::Direction::inbound, {99}, std::nullopt));
+        CHECK(!star.accept(member(8, role), Policy::Direction::outbound, {99}, member(8, role)));
+    }
     CHECK(!star.accept(member(3), Policy::Direction::inbound, {1}, std::nullopt));
     // Star 和 Planet 分别计数, 一个角色满额不能污染另一个角色或原有索引.
     CHECK(star.accept(member(3, Member::Role::planet), Policy::Direction::inbound, {2}, std::nullopt));
@@ -443,6 +513,7 @@ int main() {
         configuration();
         stars();
         single_dial_ownership();
+        arbitration();
         principal_encoding();
         planets();
         atomic_lists_and_capacity();

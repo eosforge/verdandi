@@ -1,142 +1,283 @@
 #include "ledger.hpp"
 #include "identity.hpp"
-#include "pulsar.pb.h"
 #include <algorithm>
-#include <cerrno>
 #include <fcntl.h>
 #include <limits>
-#include <openssl/sha.h>
+#include <set>
+#include <sqlite3.h>
 #include <stdexcept>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 namespace astra {
-namespace {
-// 普通文件 I/O 处理 EINTR 和短写, 不动态分配; 已写一部分仍失败由调用者隔离账本.
-bool write_all(int file, std::string_view bytes) {
 
-    while (!bytes.empty()) {
-        // count 为本次实际写入字节数, 短写推进剩余视图, EINTR 不丢失原位置.
-        const auto count = ::write(file, bytes.data(), bytes.size());
-        if (count < 0 && errno == EINTR) {
-            continue;
-        }
-        if (count <= 0) {
-            return false;
-        }
-        bytes.remove_prefix(static_cast<std::size_t>(count));
-    }
-    return true;
-}
+// 仅供 Ledger 使用的连接与语句所有权. 单写锁保护所有运行期 SQL, 读取当前身份不进 SQLite.
+struct Ledger::Database {
+    // 固定格式只在显式初始化时创建; SQL 原文同时用于拒绝未知 Schema 或额外对象.
+    static constexpr std::array<std::string_view, 3> schema{
+        "CREATE TABLE metadata (id INTEGER PRIMARY KEY CHECK(id=1), format INTEGER NOT NULL CHECK(format=1), galaxy TEXT NOT NULL, authority TEXT NOT NULL) STRICT",
+        "CREATE TABLE members (principal TEXT PRIMARY KEY CHECK(length(principal)=64), body BLOB NOT NULL CHECK(length(body) BETWEEN 1 AND 1024)) STRICT, WITHOUT ROWID",
+        "CREATE TABLE starts (request BLOB PRIMARY KEY CHECK(length(request)=32), principal TEXT NOT NULL REFERENCES members(principal), epoch BLOB NOT NULL CHECK(length(epoch)=8), UNIQUE(principal,epoch)) STRICT, WITHOUT ROWID"};
 
-// 同步普通文件内容, 被信号打断时重试.
-bool sync_file(int file) {
-
-    while (::fdatasync(file) != 0) {
-        if (errno != EINTR) {
-            return false;
+    // 固定错误不拼接 SQL, 路径或 SQLite 原始诊断, 避免泄露部署数据.
+    static void require(bool condition) {
+        if (!condition) {
+            throw std::runtime_error("Invalid or unavailable Pulsar SQLite database");
         }
     }
-    return true;
-}
 
-// 精确读入目标或到达 EOF; 抛错与末尾短读区分, 不把 I/O 错误当作可截断尾部.
-std::size_t read_into(int file, std::span<char> bytes) {
+    // 拥有单个文件描述符, 构造验证普通文件; 只用于打开已授权的库和独立服务锁.
+    struct File {
+        // value 为有效描述符, 不能复制其关闭责任.
+        int value;
 
-    // used 从零累计读入量, 始终不超过 bytes.size(), EOF 可返回不足长度.
-    std::size_t used = 0;
-    while (used < bytes.size()) {
-        // count 为当前读取结果, 负数区分 EINTR 与设施失败, 零只代表 EOF.
-        const auto count = ::read(file, bytes.data() + used, bytes.size() - used);
-        if (count < 0 && errno == EINTR) {
-            continue;
+        // path 必须位于部署拥有的目录, flags 由调用点明确选择是否排他创建.
+        File(const std::filesystem::path& path, int flags) : value(::open(path.c_str(), flags | O_CLOEXEC | O_NOFOLLOW, 0600)) {
+
+            // info 检查实际打开的 inode, 不把 FIFO/目录/符号链接当成状态文件.
+            struct stat info{};
+            if (value < 0 || ::fstat(value, &info) != 0 || !S_ISREG(info.st_mode)) {
+                if (value >= 0) {
+                    ::close(value);
+                }
+                require(false);
+            }
         }
-        if (count < 0) {
-            throw std::runtime_error("Cannot read registration journal");
+
+        // 释放文件和附着的 flock, 不删除锁文件以免产生两个不同 inode 的锁域.
+        ~File() {
+            ::close(value);
         }
-        if (count == 0) {
-            break;
+
+        // 禁止复制唯一文件所有者.
+        File(const File&) = delete;
+        // 禁止赋值覆盖描述符.
+        File& operator=(const File&) = delete;
+    };
+
+    // 连接句柄即使构造后续阶段抛异常也会关闭; 所有语句须先于连接释放.
+    struct Connection {
+        // value 由 sqlite3_open_v2 填入, 失败也可能返回需关闭的句柄.
+        sqlite3* value{};
+        // 唯一连接拥有者, 默认空; 打开动作在 Database 内统一进行.
+        Connection() = default;
+
+        // close_v2 容忍空句柄, 所有正常路径不留下悬空语句.
+        ~Connection() {
+            sqlite3_close_v2(value);
         }
-        used += static_cast<std::size_t>(count);
+
+        // 禁止复制连接关闭责任.
+        Connection(const Connection&) = delete;
+        // 禁止覆盖活动连接.
+        Connection& operator=(const Connection&) = delete;
+    };
+
+    // 一条固定 SQL 的 RAII 预编译语句, 参数类型明确, 不进行动态 SQL 拼接.
+    class Query {
+    public:
+        // database 借用唯一连接, sql 必须静态且以 NUL 结尾, 构造失败无残留语句.
+        Query(sqlite3* database, const char* sql) {
+            // code 保存预编译结果; SQLite 错误路径也显式清理可能返回的句柄.
+            const auto code = sqlite3_prepare_v3(database, sql, -1, 0, &statement_, nullptr);
+            if (code != SQLITE_OK) {
+                sqlite3_finalize(statement_);
+                require(false);
+            }
+        }
+
+        // finalize 不抛异常, 未完成的语句不能越过连接生命周期.
+        ~Query() {
+            sqlite3_finalize(statement_);
+        }
+
+        // 禁止复制语句所有权.
+        Query(const Query&) = delete;
+        // 禁止覆盖未完成语句.
+        Query& operator=(const Query&) = delete;
+
+        // 借用 value 到本条语句销毁, 参数不用于 SQL 文本, 位次从 1 开始.
+        void text(int index, std::string_view value) {
+            require(value.size() <= 2048 && sqlite3_bind_text(statement_, index, value.data(), static_cast<int>(value.size()), SQLITE_STATIC) == SQLITE_OK);
+        }
+
+        // 借用明确长度的原始字节, 包含 NUL 的启动随机数不会被截短.
+        void blob(int index, std::string_view value) {
+            require(value.size() <= 2048 && sqlite3_bind_blob(statement_, index, value.data(), static_cast<int>(value.size()), SQLITE_STATIC) == SQLITE_OK);
+        }
+
+        // 返回是否得到一行, DONE 是正常结束, 其他状态均抛固定诊断.
+        bool next() {
+            // code 区分 ROW 与 DONE, 不把 BUSY/损坏/磁盘错误误判成空表.
+            const auto code = sqlite3_step(statement_);
+            require(code == SQLITE_ROW || code == SQLITE_DONE);
+            return code == SQLITE_ROW;
+        }
+
+        // 读取当前列的 UTF-8 文本视图, 只在下一次 step/finalize 前有效.
+        std::string_view text(int column) const {
+            return bytes(column, SQLITE_TEXT);
+        }
+
+        // 读取当前列的 BLOB 视图, 调用者在推进语句前完成解析或复制.
+        std::string_view blob(int column) const {
+            return bytes(column, SQLITE_BLOB);
+        }
+
+        // 小型 PRAGMA/元信息使用 INTEGER, 身份代次禁止通过此方法窄化.
+        sqlite3_int64 integer(int column) const {
+            require(sqlite3_column_type(statement_, column) == SQLITE_INTEGER);
+            return sqlite3_column_int64(statement_, column);
+        }
+
+    private:
+        // column 为零基列号, type 为唯一允许存储类型; 失败不进行隐式类型转换.
+        std::string_view bytes(int column, int type) const {
+            require(sqlite3_column_type(statement_, column) == type);
+            // data 借用 SQLite 本行字节, size 已受连接 LENGTH 上限约束.
+            const auto data = static_cast<const char*>(sqlite3_column_blob(statement_, column));
+            const auto size = sqlite3_column_bytes(statement_, column);
+            require(size >= 0 && (data || size == 0));
+            return {data ? data : "", static_cast<std::size_t>(size)};
+        }
+
+        // statement_ 由构造接管, 每条语句只在登记锁或启动恢复期间访问.
+        sqlite3_stmt* statement_{};
+    };
+
+    // 单个固定 SQL, 包括事务控制和 PRAGMA; 不允许包含业务正文或凭据.
+    void execute(const char* sql) {
+        require(sqlite3_exec(connection.value, sql, nullptr, nullptr, nullptr) == SQLITE_OK);
     }
-    return used;
-}
 
-// 用前一记录摘要绑定追加顺序, 防止静默删除或重排中间记录.
-std::array<std::uint8_t, 32> digest(const std::array<std::uint8_t, 32>& previous, std::string_view payload) {
+    // 对错误事务只做显式回滚, 返回值用于调用方诊断, 不假设 COMMIT 错误已经回滚.
+    bool rollback() noexcept {
+        return sqlite3_get_autocommit(connection.value) != 0 || sqlite3_exec(connection.value, "ROLLBACK", nullptr, nullptr, nullptr) == SQLITE_OK;
+    }
 
-    // context 为本次链式摘要状态, Init 后依次加入前序摘要和当前载荷.
-    SHA256_CTX context;
-    // hash 拥有固定 32 字节 SHA-256 结果, 不借用输入数据.
-    std::array<std::uint8_t, 32> hash{};
-    SHA256_Init(&context);
-    SHA256_Update(&context, previous.data(), previous.size());
-    SHA256_Update(&context, payload.data(), payload.size());
-    SHA256_Final(hash.data(), &context);
-    return hash;
-}
+    // 固定宽度大端字节无有符号转换, 可保留 UINT64_MAX, 不落为 SQLite REAL.
+    static std::array<char, 8> epoch(std::uint64_t value) {
+        // result 的各字节按高位到低位排列, 便于 SQLite BLOB 索引按 unsigned 顺序比较.
+        std::array<char, 8> result{};
+        for (unsigned index = 0; index < result.size(); ++index) {
+            result[index] = static_cast<char>((value >> (56 - index * 8)) & 255);
+        }
+        return result;
+    }
 
-// 填充唯一的 Member 编码, 供日志与应答共用字段语义.
-void encode(const Member& member, proto::orbit::v1::Member& output) {
+    // 恢复八字节大端代次, 非法宽度或零值均拒绝.
+    static std::uint64_t epoch(std::string_view value) {
+        require(value.size() == 8);
+        // result 从零累计, 固定八步不产生超出 uint64 的位移.
+        std::uint64_t result{};
+        for (const char byte : value) {
+            result = (result << 8) | static_cast<unsigned char>(byte);
+        }
+        require(result != 0);
+        return result;
+    }
 
-    output.set_galaxy(member.galaxy);
-    output.set_id(member.id);
-    output.set_principal(member.principal.text());
-    output.set_advertise(member.address.text());
-    output.set_epoch(member.epoch.value);
-    output.set_role(member.role == Member::Role::star ? proto::orbit::v1::ROLE_STAR : proto::orbit::v1::ROLE_PLANET);
-    output.set_group(member.group);
-}
-} // namespace
+    // 严格打开或初始化, 不自动创建父目录, 不覆盖文件或导入 journal/bbolt.
+    Database(const std::filesystem::path& path, std::string_view galaxy, std::string_view authority, bool initialize) : lock(path.string() + ".lock", O_RDWR | O_CREAT) {
 
-Ledger::Ledger(const std::filesystem::path& path, std::string galaxy, std::string authority, std::size_t maximum, std::size_t starts) : galaxy_(std::move(galaxy)), header_("ASTRA-PULSAR-JOURNAL-1\n" + galaxy_ + "\n" + authority + "\n"), maximum_(maximum), maximum_starts_(starts) {
+        require(::flock(lock.value, LOCK_EX | LOCK_NB) == 0);
+        // 初始化目标包括潜在 sidecar, 不在残留恢复材料旁新建一个空数据库.
+        if (initialize) {
+            for (const auto suffix : {"-journal", "-wal", "-shm"}) {
+                require(std::filesystem::symlink_status(path.string() + suffix).type() == std::filesystem::file_type::not_found);
+            }
+        }
+        // file 固定实际目标, initialize 使用 O_EXCL; 正常启动不创建缺失状态文件.
+        const File file(path, O_RDWR | (initialize ? O_CREAT | O_EXCL : 0));
+        // info 用于排除正常启动的空文件, 并在 SQLite 打开后再次核对路径未被替换.
+        struct stat info{};
+        require(::fstat(file.value, &info) == 0 && (initialize || info.st_size > 0));
+        require(sqlite3_libversion_number() == 3053004 && sqlite3_threadsafe() != 0);
+        require(sqlite3_open_v2(path.c_str(), &connection.value, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX | SQLITE_OPEN_NOFOLLOW, nullptr) == SQLITE_OK);
+        // actual 来自路径末端且不跟随符号链接, 所有状态文件要求位于受信任部署目录.
+        struct stat actual{};
+        require(::lstat(path.c_str(), &actual) == 0 && S_ISREG(actual.st_mode) && actual.st_dev == info.st_dev && actual.st_ino == info.st_ino);
+        require(sqlite3_busy_timeout(connection.value, 1000) == SQLITE_OK);
+        sqlite3_limit(connection.value, SQLITE_LIMIT_LENGTH, 4096);
+        sqlite3_limit(connection.value, SQLITE_LIMIT_SQL_LENGTH, 16384);
+        // defensive 为 SQLite 实际返回的设置, 不能只发出配置而不确认是否生效.
+        int defensive{};
+        require(sqlite3_db_config(connection.value, SQLITE_DBCONFIG_DEFENSIVE, 1, &defensive) == SQLITE_OK && defensive == 1);
+        execute("PRAGMA trusted_schema=OFF");
+        execute("PRAGMA foreign_keys=ON");
+        if (initialize) {
+            execute("PRAGMA journal_mode=DELETE");
+        }
+        execute("PRAGMA synchronous=EXTRA");
+        {
+            // mode 检查已有库也是 DELETE, 不悄悄把其他模式改写后宣称已恢复.
+            Query mode(connection.value, "PRAGMA journal_mode");
+            require(mode.next() && mode.text(0) == "delete" && !mode.next());
+        }
+        // sql/expected 分别为连接配置查询和唯一接受的整数值.
+        for (const auto& [sql, expected] : std::array<std::pair<const char*, int>, 3>{{{"PRAGMA synchronous", 3}, {"PRAGMA foreign_keys", 1}, {"PRAGMA trusted_schema", 0}}}) {
+            Query setting(connection.value, sql);
+            require(setting.next() && setting.integer(0) == expected && !setting.next());
+        }
+
+        if (initialize) {
+            execute("BEGIN IMMEDIATE");
+            try {
+                for (const auto sql : schema) {
+                    execute(sql.data());
+                }
+                // metadata 的绑定与 Schema 同事务, 半次初始化不会被正常恢复接受.
+                Query metadata(connection.value, "INSERT INTO metadata VALUES(1,1,?,?)");
+                metadata.text(1, galaxy);
+                metadata.text(2, authority);
+                require(!metadata.next());
+                execute("COMMIT");
+            } catch (...) {
+                static_cast<void>(rollback());
+                throw;
+            }
+            // 新建数据库自身和父目录都显式同步. 失败保留文件供人工检查, 不自动重建.
+            const auto parent = path.has_parent_path() ? path.parent_path() : std::filesystem::path(".");
+            const int directory = ::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+            const bool synced = ::fsync(file.value) == 0 && directory >= 0 && ::fsync(directory) == 0;
+            if (directory >= 0) {
+                ::close(directory);
+            }
+            require(synced);
+        }
+
+        // 读取物理一致性, 已知格式和身份边界. 不使用 AutoMigrate 或错误修复删除.
+        Query check(connection.value, "PRAGMA quick_check");
+        require(check.next() && check.text(0) == "ok" && !check.next());
+        Query foreign(connection.value, "PRAGMA foreign_key_check");
+        require(!foreign.next());
+        Query objects(connection.value, "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name");
+        for (const auto index : {1U, 0U, 2U}) {
+            require(objects.next() && objects.text(0) == schema[index]);
+        }
+        require(!objects.next());
+        Query metadata(connection.value, "SELECT id,format,galaxy,authority FROM metadata");
+        require(metadata.next() && metadata.integer(0) == 1 && metadata.integer(1) == 1 && metadata.text(2) == galaxy && metadata.text(3) == authority && !metadata.next());
+    }
+
+    // 锁先构造后析构, 数据库连接完全关闭前不允许另一签发者接管.
+    File lock;
+    // 唯一写连接. NOMUTEX 只关闭连接内部互斥, Ledger 外层仍串行化所有 SQL.
+    Connection connection;
+};
+
+Ledger::Ledger(const std::filesystem::path& path, std::string galaxy, std::string authority, std::size_t maximum, std::size_t starts, bool initialize) : galaxy_(std::move(galaxy)), maximum_(maximum), maximum_starts_(starts) {
 
     if (!Member::valid_name(galaxy_) || !Principal::parse(authority) || maximum == 0 || maximum > 4096 || starts == 0 || starts > 1'000'000) {
-        throw std::runtime_error("Invalid registration journal configuration");
+        throw std::runtime_error("Invalid registration database configuration");
     }
-
-    // parent 为日志所在目录, 无显式父路径时使用当前目录, 后续同步目录项.
-    const auto parent = path.has_parent_path() ? path.parent_path() : std::filesystem::path(".");
-    std::filesystem::create_directories(parent);
-    file_ = ::open(path.c_str(), O_RDWR | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (file_ < 0) {
-        throw std::runtime_error("Cannot open registration journal");
-    }
-    try {
-        // info 接收实际已打开文件的元数据, 不仅依赖打开之前的路径检查.
-        struct stat info{};
-        if (::fstat(file_, &info) != 0 || !S_ISREG(info.st_mode) || ::flock(file_, LOCK_EX | LOCK_NB) != 0) {
-            throw std::runtime_error("Registration journal must be regular and exclusively owned");
-        }
-        if (info.st_size == 0 && (!write_all(file_, header_) || !sync_file(file_))) {
-            throw std::runtime_error("Cannot initialize registration journal");
-        }
-
-        // 确保目录项在服务开始确认写入前持久化, 不替换用户已有的其他文件.
-        const auto directory = ::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-        // synced 记录目录项是否成功持久化, 无论成功与否都先关闭目录描述符.
-        const auto synced = directory >= 0 && ::fsync(directory) == 0;
-        if (directory >= 0) {
-            ::close(directory);
-        }
-        if (!synced || ::lseek(file_, 0, SEEK_SET) < 0) {
-            throw std::runtime_error("Cannot prepare registration journal");
-        }
-        restore();
-    } catch (...) {
-        ::close(file_);
-        file_ = -1;
-        throw;
-    }
+    database_ = std::make_unique<Database>(path, galaxy_, authority, initialize);
+    restore();
 }
 
-Ledger::~Ledger() {
-
-    if (file_ >= 0) {
-        ::close(file_);
-    }
-}
+// Database 的完整类型已可见, 默认析构按 RAII 顺序关闭连接和进程锁.
+Ledger::~Ledger() = default;
 
 Result<void> Ledger::validate(const Member& member, std::string_view request_id, const Members& view) const {
 
@@ -178,10 +319,10 @@ Result<void> Ledger::validate(const Member& member, std::string_view request_id,
 
 Result<void> Ledger::register_member(Member candidate, std::string_view request_id, const std::function<void(const Member&, const Members&)>& prepare) {
 
-    // lock 串行化登记校验与日志提交, 只读当前凭证使用独立不可变视图.
+    // lock 串行化登记校验与数据库提交, 只读当前凭证使用独立不可变视图.
     std::lock_guard lock(mutex_);
     if (!writable_) {
-        return Status::transport("Registration journal requires recovery");
+        return Status::transport("Registration database requires recovery");
     }
     if (request_id.size() != 32 || candidate.epoch.value != 0 || candidate.galaxy != galaxy_) {
         return Status::configuration("Invalid registration input");
@@ -218,14 +359,12 @@ Result<void> Ledger::register_member(Member candidate, std::string_view request_
     pending.emplace(std::string(request_id), Start{principal, candidate.epoch.value});
     // node 持有提前分配的启动记录节点, 持久确认后的 map 插入无需再分配.
     auto node = pending.extract(pending.begin());
-    // record 拥有日志记录的协议字段, 序列化或解析失败不得推进已提交的链尾.
-    proto::pulsar::v1::RegistrationRecord record;
-    encode(candidate, *record.mutable_member());
-    record.set_request_id(request_id);
-    // payload 为准备完整的日志正文, 仅在应答也准备好之后进入 append.
+    // record 只保存当前身份正文, 启动请求作为独立索引在同一 SQLite 事务提交.
+    const auto record = Identity::encode(candidate);
+    // payload 在应答准备前序列化, COMMIT 成功之后不再分配或序列化成员正文.
     const auto payload = record.SerializeAsString();
     prepare(candidate, *replacement);
-    if (!append(payload)) {
+    if (!commit(candidate, request_id, payload)) {
         return Status::transport("Registration durability is uncertain; restart required");
     }
     starts_.insert(std::move(node));
@@ -234,108 +373,101 @@ Result<void> Ledger::register_member(Member candidate, std::string_view request_
 }
 
 bool Ledger::current(const Member& member) const {
+    return static_cast<bool>(snapshot(member));
+}
+
+std::shared_ptr<const Ledger::Members> Ledger::snapshot(const Member& member) const {
 
     // snapshot 保持当前名单存活, 整次只读身份检查使用同一版本.
     const auto snapshot = members_.load();
     // found 按部署摘要查找, 随后完整比较身份字段以拒绝旧进程凭证.
     const auto found = snapshot->find(member.principal.text());
-    return found != snapshot->end() && found->second == member;
+    return found != snapshot->end() && found->second == member ? snapshot : nullptr;
 }
 
-bool Ledger::append(std::string_view payload) {
+bool Ledger::commit(const Member& member, std::string_view request, std::string_view payload) {
 
-    if (payload.empty() || payload.size() > 2048) {
-        throw std::runtime_error("Registration record exceeds fixed bounds");
-    }
+    // 先准备语句和全部绑定, 不在成功 COMMIT 与内存发布之间做可失败的准备工作.
+    Database::require(!payload.empty() && payload.size() <= 1024);
+    const auto principal = member.principal.text();
+    const auto epoch = Database::epoch(member.epoch.value);
+    try {
+        Database::Query current(database_->connection.value, "INSERT INTO members(principal,body) VALUES(?,?) ON CONFLICT(principal) DO UPDATE SET body=excluded.body");
+        current.text(1, principal);
+        current.blob(2, payload);
+        Database::Query startup(database_->connection.value, "INSERT INTO starts(request,principal,epoch) VALUES(?,?,?)");
+        startup.blob(1, request);
+        startup.text(2, principal);
+        startup.blob(3, {epoch.data(), epoch.size()});
 
-    // hash 将本条载荷绑定到当前 chain_, 只有完整写入并同步后才成为新链尾.
-    const auto hash = digest(chain_, payload);
-    // bytes 先容纳四字节大端长度, 随后拼接摘要和载荷, 全部准备后才写文件.
-    std::string bytes(4, '\0');
-    // size 已受 2048 字节上限约束, 可安全编码到四字节长度头.
-    const auto size = static_cast<std::uint32_t>(payload.size());
-    for (unsigned i = 0; i < 4; ++i) {
-        bytes[i] = static_cast<char>((size >> (24 - i * 8)) & 255);
-    }
-    bytes.append(reinterpret_cast<const char*>(hash.data()), hash.size());
-    bytes += payload;
-    if (!write_all(file_, bytes) || !sync_file(file_)) {
+        // 两张表要么一起提交, 要么保留旧状态. 回调应答和容器节点已经在调用前准备好.
+        database_->execute("BEGIN IMMEDIATE");
+        Database::require(!current.next());
+        Database::require(!startup.next());
+        database_->execute("COMMIT");
+        return true;
+    } catch (...) {
+        // 即使回滚成功也保守停止登记, 不由同一连接猜测 COMMIT 的持久结果.
+        // catch 进入前两条语句均已析构, 不让活动语句阻碍事务回滚或重启恢复.
         writable_ = false;
+        static_cast<void>(database_->rollback());
         return false;
     }
-    chain_ = hash;
-    return true;
 }
 
 void Ledger::restore() {
 
-    // 启动尚未对外发布, 原地构建一次快照, 不为每条历史记录复制整张成员表.
-    auto recovered = std::make_shared<Members>();
-    // header 为与期望长度一致的读取缓冲, 必须逐字节匹配 Galaxy 和签发权威.
-    std::string header(header_.size(), '\0');
-    if (read_into(file_, header) != header.size() || header != header_) {
-        throw std::runtime_error("Registration journal header mismatch");
+    // 恢复事务覆盖整次读取, 不将不同磁盘时刻的成员与启动记录拼为一个身份视图.
+    database_->execute("BEGIN");
+    try {
+        // recovered 为尚未发布的当前成员; ids/addresses 排除跨部署身份和端点别名.
+        auto recovered = std::make_shared<Members>();
+        std::set<Id> ids;
+        std::set<Endpoint> addresses;
+        // counts 分角色累计, Role 已经由 decode_member 完整校验, 下标为 0..3.
+        std::array<std::size_t, 4> counts{};
+        Database::Query members(database_->connection.value, "SELECT principal,body FROM members ORDER BY principal");
+        while (members.next()) {
+            // principal/body 仅借用本行, 解析与拥有值复制都在下次 step 前完成.
+            const auto principal = members.text(0);
+            const auto body = members.blob(1);
+            Database::require(principal.size() == 64 && !body.empty() && body.size() <= 1024);
+            proto::orbit::v1::Member record;
+            Database::require(record.ParseFromArray(body.data(), static_cast<int>(body.size())));
+            const auto member = decode_member(record);
+            Database::require(member && member->galaxy == galaxy_ && member->principal.text() == principal);
+            Database::require(++counts[static_cast<std::size_t>(member->role)] <= maximum_ && ids.insert(member->id).second && addresses.insert(member->address).second);
+            Database::require(recovered->emplace(principal, *member).second);
+        }
+
+        // 每个部署保留从 1 到当前代次的完整启动证据. 递增前显式检查溢出, 不把八字节 BLOB 转为有符号 INTEGER.
+        std::string previous;
+        std::uint64_t sequence{};
+        std::size_t deployments{};
+        Database::Query starts(database_->connection.value, "SELECT request,principal,epoch FROM starts ORDER BY principal,epoch");
+        while (starts.next()) {
+            // request 为固定 32 字节随机幂等键, principal 对应当前成员, epoch 为该请求持久代次.
+            const auto request = starts.blob(0);
+            const auto principal = starts.text(1);
+            const auto epoch = Database::epoch(starts.blob(2));
+            const auto member = recovered->find(principal);
+            Database::require(request.size() == 32 && member != recovered->end() && starts_.size() < maximum_starts_);
+            if (previous != principal) {
+                Database::require(previous.empty() || sequence == recovered->at(previous).epoch.value);
+                previous = principal;
+                sequence = 0;
+                ++deployments;
+            }
+            Database::require(sequence != std::numeric_limits<std::uint64_t>::max() && epoch == sequence + 1 && epoch <= member->second.epoch.value);
+            sequence = epoch;
+            Database::require(starts_.emplace(std::string(request), Start{std::string(principal), epoch}).second);
+        }
+        Database::require(deployments == recovered->size() && (previous.empty() || sequence == recovered->at(previous).epoch.value));
+        database_->execute("COMMIT");
+        members_.store(std::move(recovered));
+    } catch (...) {
+        static_cast<void>(database_->rollback());
+        throw;
     }
-    SHA256(reinterpret_cast<const std::uint8_t*>(header.data()), header.size(), chain_.data());
-    // boundary 记录最后一条完整记录的文件位置, 只允许截断这个位置之后的不完整尾部.
-    auto boundary = ::lseek(file_, 0, SEEK_CUR);
-    for (;;) {
-        // prefix 接收四字节长度和 32 字节链摘要, 短读只允许作为末尾不完整记录.
-        std::array<char, 36> prefix{};
-        // count 是头部实际读入量, 零为正常 EOF, 中途设施错误由 read_into 抛出.
-        const auto count = read_into(file_, prefix);
-        if (count == 0) {
-            break;
-        }
-        if (count != prefix.size()) {
-            break;
-        }
-
-        // size 从零按大端解码四字节长度, 通过非零和 2048 上限后才分配载荷.
-        std::uint32_t size = 0;
-        for (unsigned i = 0; i < 4; ++i) {
-            size = (size << 8) | static_cast<unsigned char>(prefix[i]);
-        }
-        if (size == 0 || size > 2048) {
-            throw std::runtime_error("Registration journal record length invalid");
-        }
-
-        // payload 独立拥有当前记录正文, 必须完整读入,验摘要及验证状态转换.
-        std::string payload(size, '\0');
-        if (read_into(file_, payload) != payload.size()) {
-            break;
-        }
-
-        // hash 将本条载荷绑定到当前 chain_, 只有完整写入并同步后才成为新链尾.
-        const auto hash = digest(chain_, payload);
-        if (!std::equal(hash.begin(), hash.end(), reinterpret_cast<const std::uint8_t*>(prefix.data() + 4))) {
-            throw std::runtime_error("Registration journal checksum mismatch");
-        }
-
-        // record 拥有日志记录的协议字段, 序列化或解析失败不得推进已提交的链尾.
-        proto::pulsar::v1::RegistrationRecord record;
-        if (!record.ParseFromString(payload)) {
-            throw std::runtime_error("Invalid registration journal encoding");
-        }
-
-        // member 为解码并校验后的拥有值, 未通过转换检查不能写入恢复名单.
-        auto member = decode_member(record.member());
-        if (!member) {
-            throw std::runtime_error("Invalid registration journal member");
-        }
-        if (!validate(*member, record.request_id(), *recovered)) {
-            throw std::runtime_error("Invalid registration journal transition");
-        }
-        starts_.emplace(record.request_id(), Start{member->principal.text(), member->epoch.value});
-        recovered->insert_or_assign(member->principal.text(), std::move(*member));
-        chain_ = hash;
-        boundary = ::lseek(file_, 0, SEEK_CUR);
-    }
-
-    // 完整的末条记录可能来自丢失应答, 必须保留; 只丢弃尚未形成完整记录的尾巴.
-    if (boundary < 0 || ::ftruncate(file_, boundary) != 0 || !sync_file(file_)) {
-        throw std::runtime_error("Cannot recover registration journal tail");
-    }
-    members_.store(std::move(recovered));
 }
 } // namespace astra

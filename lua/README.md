@@ -1,5 +1,7 @@
 # Redis Lua programs
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../legacy-sdk.md).
+
 Verdandi requires Redis Open Source 8.0.0 or later. The canonical executable
 scripts in this directory are generated protocol artifacts: every SDK embeds
 the same bytes, loads the Registration and Catalog operations during Client
@@ -242,7 +244,7 @@ this implementation, not a protocol throughput promise. Its fixture disables
 subscribers and Redis persistence so script-body effects are not confused with
 Pub/Sub fan-out or disk work.
 
-The separate [line-optimization review](../registration/lua-optimization.md) records both
+The separate [line-optimization review](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/registration/lua-optimization.md) records both
 line-audit passes, accepted/rejected candidates, and the final result. With the
 optimized source present, its executable benchmark measures current Register
 as one regression baseline for small and default-maximum payload shapes. A

@@ -29,6 +29,12 @@ namespace _fl = ::google::protobuf::internal::field_layout;
 namespace {
 PROTOBUF_CONSTINIT ::google::protobuf::internal::ReflectionData
     file_reflection_data[] = {
+        // ::proto::orbit::v1::DirectoryRequest
+        {&::_pbi::kDescriptorMethods, &::descriptor_table_orbit_2eproto, /* tracker*/ nullptr,},
+        // ::proto::orbit::v1::DirectoryResponse
+        {&::_pbi::kDescriptorMethods, &::descriptor_table_orbit_2eproto, /* tracker*/ nullptr,},
+        // ::proto::orbit::v1::Credential
+        {&::_pbi::kDescriptorMethods, &::descriptor_table_orbit_2eproto, /* tracker*/ nullptr,},
         // ::proto::orbit::v1::RegistrationRequest
         {&::_pbi::kDescriptorMethods, &::descriptor_table_orbit_2eproto, /* tracker*/ nullptr,},
         // ::proto::orbit::v1::RegistrationResponse
@@ -206,7 +212,7 @@ constexpr auto RegistrationRequest::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[0],
+      &file_reflection_data[3],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_orbit_2eproto,
@@ -406,7 +412,7 @@ constexpr auto Member::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[2],
+      &file_reflection_data[5],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_orbit_2eproto,
@@ -453,6 +459,272 @@ const ::_pbi::ClassData* Member_get_class_data() {
   return Member_globals_.GetClassData();
 #else
   return Member_class_data_.base();
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+}
+}  // namespace
+#endif  // PROTOBUF_CUSTOM_VTABLE
+class DirectoryRequest::_Internal {
+ public:
+};
+
+constexpr DirectoryRequest::ParseTableT_ DirectoryRequest::InternalGenerateParseTable_(const ::_pbi::ClassData* class_data) {
+  return ParseTableT_{
+    {
+      PROTOBUF_FIELD_OFFSET(DirectoryRequest,
+                            _impl_._cached_size_),  // no hasbits
+      0, // no _extensions_
+      0, 0,  // max_field_number, fast_idx_mask
+      offsetof(ParseTableT_, field_lookup_table),
+      4294967295,  // skipmap
+      offsetof(ParseTableT_, field_names),  // no field_entries
+      0,  // num_field_entries
+      0,  // num_aux_entries
+      offsetof(ParseTableT_, field_names),  // no aux_entries
+      class_data,
+      nullptr,  // post_loop_handler
+      ::_pbi::TcParser::MpUnknownFields,  // fallback
+      #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+      ::_pbi::TcParser::GetTable<::proto::orbit::v1::DirectoryRequest>(),  // to_prefetch
+      #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+    }, {{
+      {::_pbi::TcParser::MiniParse, {}},
+    }}, {{
+      65535, 65535
+    }}, // no field_entries, or aux_entries
+    {{
+    }},
+  };
+}
+
+template <typename>
+constexpr DirectoryRequest::DirectoryRequest(::_pbi::ConstantInitialized,
+                       const ::_pbi::ClassData* PROTOBUF_NONNULL class_data)
+    : Super_(
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          class_data
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      ) {
+}
+inline void* PROTOBUF_NONNULL DirectoryRequest::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) DirectoryRequest(arena);
+}
+constexpr auto DirectoryRequest::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::ZeroInit(sizeof(DirectoryRequest), alignof(DirectoryRequest));
+}
+constexpr auto DirectoryRequest::InternalGenerateClassData_(
+    const MessageLite& prototype,
+    const ::google::protobuf::internal::TcParseTableBase* tc_table) {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &prototype,
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+          &_table_.header,
+#else
+          tc_table,
+#endif
+          nullptr,  // IsInitialized
+          &DirectoryRequest::MergeImpl,
+          Super_::GetNewImpl<DirectoryRequest>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &DirectoryRequest::SharedDtor,
+          Super_::GetClearImpl<DirectoryRequest>(), &DirectoryRequest::ByteSizeLong,
+              &DirectoryRequest::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(DirectoryRequest, _impl_._cached_size_),
+          false,
+      },
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+      &file_reflection_data[0],
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+      &::_pbi::kDescriptorMethods,
+      &descriptor_table_orbit_2eproto,
+      nullptr,  // tracker
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  };
+}
+struct DirectoryRequestGlobalsTypeInternal : ::_pbi::MessageGlobalsBase {
+  constexpr DirectoryRequestGlobalsTypeInternal()
+      :
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+        _default(::_pbi::ConstantInitialized{},
+                 DirectoryRequest_class_data_.base())
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+        MessageGlobalsBase(DirectoryRequest::InternalGenerateClassData_(
+            _default, &DirectoryRequest_globals_._table.header)),
+        _default(::_pbi::ConstantInitialized{}, GetClassData()),
+        _table(::_pbi::PrivateAccess::GenerateParseTable<DirectoryRequest>(
+            GetClassData()))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  {
+  }
+  ~DirectoryRequestGlobalsTypeInternal() {}
+  union {
+    alignas(::_pbi::kMaxMessageAlignment) DirectoryRequest _default;
+  };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  decltype(::_pbi::PrivateAccess::GenerateParseTable<DirectoryRequest>(
+      ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
+};
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+static_assert(PROTOBUF_FIELD_OFFSET(DirectoryRequestGlobalsTypeInternal, _default) ==
+              ::_pbi::MessageGlobalsBase::OffsetToDefault());
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PROTOBUF_MESSAGE_GLOBALS_CONST DirectoryRequestGlobalsTypeInternal DirectoryRequest_globals_
+        PROTOBUF_MESSAGE_GLOBALS_SECTION(.data.rel.ro);
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+namespace {
+const ::_pbi::ClassData* DirectoryRequest_get_class_data() {
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  return DirectoryRequest_globals_.GetClassData();
+#else
+  return DirectoryRequest_class_data_.base();
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+}
+}  // namespace
+#endif  // PROTOBUF_CUSTOM_VTABLE
+class Credential::_Internal {
+ public:
+  using HasBits = decltype(::std::declval<Credential>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(Credential, _impl_._has_bits_);
+};
+
+constexpr Credential::ParseTableT_ Credential::InternalGenerateParseTable_(const ::_pbi::ClassData* class_data) {
+  return ParseTableT_{
+    {
+      PROTOBUF_FIELD_OFFSET(Credential, _impl_._has_bits_),
+      0, // no _extensions_
+      1, 0,  // max_field_number, fast_idx_mask
+      offsetof(ParseTableT_, field_lookup_table),
+      4294967294,  // skipmap
+      offsetof(ParseTableT_, field_entries),
+      1,  // num_field_entries
+      0,  // num_aux_entries
+      offsetof(ParseTableT_, field_names),  // no aux_entries
+      class_data,
+      nullptr,  // post_loop_handler
+      ::_pbi::TcParser::MpUnknownFields,  // fallback
+      #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+      ::_pbi::TcParser::GetTable<::proto::orbit::v1::Credential>(),  // to_prefetch
+      #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+    }, {{
+      // bytes secret = 1;
+      {::_pbi::TcParser::FastBS1,
+       {10, 0, 0,
+        PROTOBUF_FIELD_OFFSET(Credential, _impl_.secret_)}},
+    }}, {{
+      65535, 65535
+    }}, {{
+      // bytes secret = 1;
+      {PROTOBUF_FIELD_OFFSET(Credential, _impl_.secret_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
+    }},
+    // no aux_entries
+    {{
+    }},
+  };
+}
+
+
+inline constexpr Credential::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    ::_pbi::ConstantInitialized) noexcept
+      : secret_(
+            &::google::protobuf::internal::fixed_address_empty_string,
+            ::_pbi::ConstantInitialized()) {}
+
+template <typename>
+constexpr Credential::Credential(::_pbi::ConstantInitialized,
+                       const ::_pbi::ClassData* PROTOBUF_NONNULL class_data)
+    : Super_(
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          class_data
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          ),
+      _impl_(internal_visibility(), ::_pbi::ConstantInitialized()) {
+}
+inline void* PROTOBUF_NONNULL Credential::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) Credential(arena);
+}
+constexpr auto Credential::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(Credential), alignof(Credential));
+}
+constexpr auto Credential::InternalGenerateClassData_(
+    const MessageLite& prototype,
+    const ::google::protobuf::internal::TcParseTableBase* tc_table) {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &prototype,
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+          &_table_.header,
+#else
+          tc_table,
+#endif
+          nullptr,  // IsInitialized
+          &Credential::MergeImpl,
+          Super_::GetNewImpl<Credential>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &Credential::SharedDtor,
+          Super_::GetClearImpl<Credential>(), &Credential::ByteSizeLong,
+              &Credential::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(Credential, _impl_._cached_size_),
+          false,
+      },
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+      &file_reflection_data[2],
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+      &::_pbi::kDescriptorMethods,
+      &descriptor_table_orbit_2eproto,
+      nullptr,  // tracker
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  };
+}
+struct CredentialGlobalsTypeInternal : ::_pbi::MessageGlobalsBase {
+  constexpr CredentialGlobalsTypeInternal()
+      :
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+        _default(::_pbi::ConstantInitialized{},
+                 Credential_class_data_.base())
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+        MessageGlobalsBase(Credential::InternalGenerateClassData_(
+            _default, &Credential_globals_._table.header)),
+        _default(::_pbi::ConstantInitialized{}, GetClassData()),
+        _table(::_pbi::PrivateAccess::GenerateParseTable<Credential>(
+            GetClassData()))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  {
+  }
+  ~CredentialGlobalsTypeInternal() {}
+  union {
+    alignas(::_pbi::kMaxMessageAlignment) Credential _default;
+  };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  decltype(::_pbi::PrivateAccess::GenerateParseTable<Credential>(
+      ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
+};
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+static_assert(PROTOBUF_FIELD_OFFSET(CredentialGlobalsTypeInternal, _default) ==
+              ::_pbi::MessageGlobalsBase::OffsetToDefault());
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PROTOBUF_MESSAGE_GLOBALS_CONST CredentialGlobalsTypeInternal Credential_globals_
+        PROTOBUF_MESSAGE_GLOBALS_SECTION(.data.rel.ro);
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+namespace {
+const ::_pbi::ClassData* Credential_get_class_data() {
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  return Credential_globals_.GetClassData();
+#else
+  return Credential_class_data_.base();
 #endif  // PROTOBUF_MESSAGE_GLOBALS
 }
 }  // namespace
@@ -586,7 +858,7 @@ constexpr auto RegistrationResponse::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[1],
+      &file_reflection_data[4],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_orbit_2eproto,
@@ -637,6 +909,156 @@ const ::_pbi::ClassData* RegistrationResponse_get_class_data() {
 }
 }  // namespace
 #endif  // PROTOBUF_CUSTOM_VTABLE
+class DirectoryResponse::_Internal {
+ public:
+  using HasBits = decltype(::std::declval<DirectoryResponse>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(DirectoryResponse, _impl_._has_bits_);
+};
+
+constexpr DirectoryResponse::ParseTableT_ DirectoryResponse::InternalGenerateParseTable_(const ::_pbi::ClassData* class_data) {
+  return ParseTableT_{
+    {
+      PROTOBUF_FIELD_OFFSET(DirectoryResponse, _impl_._has_bits_),
+      0, // no _extensions_
+      1, 0,  // max_field_number, fast_idx_mask
+      offsetof(ParseTableT_, field_lookup_table),
+      4294967294,  // skipmap
+      offsetof(ParseTableT_, field_entries),
+      1,  // num_field_entries
+      1,  // num_aux_entries
+      offsetof(ParseTableT_, aux_entries),
+      class_data,
+      nullptr,  // post_loop_handler
+      ::_pbi::TcParser::MpUnknownFields,  // fallback
+      #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+      ::_pbi::TcParser::GetTable<::proto::orbit::v1::DirectoryResponse>(),  // to_prefetch
+      #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+    }, {{
+      // repeated .proto.orbit.v1.Member members = 1;
+      {::_pbi::TcParser::FastMtR1,
+       {10, 0, 0,
+        PROTOBUF_FIELD_OFFSET(DirectoryResponse, _impl_.members_)}},
+    }}, {{
+      65535, 65535
+    }}, {{
+      // repeated .proto.orbit.v1.Member members = 1;
+      {PROTOBUF_FIELD_OFFSET(DirectoryResponse, _impl_.members_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
+    }},
+    {{
+        #ifndef PROTOBUF_MESSAGE_GLOBALS
+        {::_pbi::TcParser::GetTable<::proto::orbit::v1::Member>()},
+        #else
+        {::_pbi::FieldAuxMessageGlobals(), &::proto::orbit::v1::Member_globals_},
+        #endif
+    }},
+    {{
+    }},
+  };
+}
+
+
+inline constexpr DirectoryResponse::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    ::_pbi::ConstantInitialized) noexcept
+      : members_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::orbit::v1::DirectoryResponse,
+            PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::DirectoryResponse, _impl_.members_)>()
+         }
+     {}
+
+template <typename>
+constexpr DirectoryResponse::DirectoryResponse(::_pbi::ConstantInitialized,
+                       const ::_pbi::ClassData* PROTOBUF_NONNULL class_data)
+    : Super_(
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          class_data
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          ),
+      _impl_(internal_visibility(), ::_pbi::ConstantInitialized()) {
+}
+inline void* PROTOBUF_NONNULL DirectoryResponse::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) DirectoryResponse(arena);
+}
+constexpr auto DirectoryResponse::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(DirectoryResponse), alignof(DirectoryResponse));
+}
+constexpr auto DirectoryResponse::InternalGenerateClassData_(
+    const MessageLite& prototype,
+    const ::google::protobuf::internal::TcParseTableBase* tc_table) {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &prototype,
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+          &_table_.header,
+#else
+          tc_table,
+#endif
+          nullptr,  // IsInitialized
+          &DirectoryResponse::MergeImpl,
+          Super_::GetNewImpl<DirectoryResponse>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &DirectoryResponse::SharedDtor,
+          Super_::GetClearImpl<DirectoryResponse>(), &DirectoryResponse::ByteSizeLong,
+              &DirectoryResponse::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(DirectoryResponse, _impl_._cached_size_),
+          false,
+      },
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+      &file_reflection_data[1],
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+      &::_pbi::kDescriptorMethods,
+      &descriptor_table_orbit_2eproto,
+      nullptr,  // tracker
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  };
+}
+struct DirectoryResponseGlobalsTypeInternal : ::_pbi::MessageGlobalsBase {
+  constexpr DirectoryResponseGlobalsTypeInternal()
+      :
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+        _default(::_pbi::ConstantInitialized{},
+                 DirectoryResponse_class_data_.base())
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+        MessageGlobalsBase(DirectoryResponse::InternalGenerateClassData_(
+            _default, &DirectoryResponse_globals_._table.header)),
+        _default(::_pbi::ConstantInitialized{}, GetClassData()),
+        _table(::_pbi::PrivateAccess::GenerateParseTable<DirectoryResponse>(
+            GetClassData()))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  {
+  }
+  ~DirectoryResponseGlobalsTypeInternal() {}
+  union {
+    alignas(::_pbi::kMaxMessageAlignment) DirectoryResponse _default;
+  };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  decltype(::_pbi::PrivateAccess::GenerateParseTable<DirectoryResponse>(
+      ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
+};
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+static_assert(PROTOBUF_FIELD_OFFSET(DirectoryResponseGlobalsTypeInternal, _default) ==
+              ::_pbi::MessageGlobalsBase::OffsetToDefault());
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PROTOBUF_MESSAGE_GLOBALS_CONST DirectoryResponseGlobalsTypeInternal DirectoryResponse_globals_
+        PROTOBUF_MESSAGE_GLOBALS_SECTION(.data.rel.ro);
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+namespace {
+const ::_pbi::ClassData* DirectoryResponse_get_class_data() {
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  return DirectoryResponse_globals_.GetClassData();
+#else
+  return DirectoryResponse_class_data_.base();
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+}
+}  // namespace
+#endif  // PROTOBUF_CUSTOM_VTABLE
 }  // namespace v1
 }  // namespace orbit
 }  // namespace proto
@@ -647,6 +1069,17 @@ static constexpr const ::_pb::ServiceDescriptor* PROTOBUF_NONNULL* PROTOBUF_NULL
 const ::uint32_t
     TableStruct_orbit_2eproto::offsets[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
         protodesc_cold) = {
+        0x000, // bitmap
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::DirectoryResponse, _impl_._has_bits_),
+        4, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::DirectoryResponse, _impl_.members_),
+        0,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Credential, _impl_._has_bits_),
+        4, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::Credential, _impl_.secret_),
+        0,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::RegistrationRequest, _impl_._has_bits_),
         11, // hasbit index offset
@@ -698,51 +1131,63 @@ const ::uint32_t
 
 static const ::_pbi::MigrationSchema
     schemas[] ABSL_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
-        {0, sizeof(::proto::orbit::v1::RegistrationRequest)},
-        {19, sizeof(::proto::orbit::v1::RegistrationResponse)},
-        {30, sizeof(::proto::orbit::v1::Member)},
+        {0, sizeof(::proto::orbit::v1::DirectoryRequest)},
+        {1, sizeof(::proto::orbit::v1::DirectoryResponse)},
+        {6, sizeof(::proto::orbit::v1::Credential)},
+        {11, sizeof(::proto::orbit::v1::RegistrationRequest)},
+        {30, sizeof(::proto::orbit::v1::RegistrationResponse)},
+        {41, sizeof(::proto::orbit::v1::Member)},
 };
 static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
     file_message_globals[] = {
+        &::proto::orbit::v1::DirectoryRequest_globals_,
+        &::proto::orbit::v1::DirectoryResponse_globals_,
+        &::proto::orbit::v1::Credential_globals_,
         &::proto::orbit::v1::RegistrationRequest_globals_,
         &::proto::orbit::v1::RegistrationResponse_globals_,
         &::proto::orbit::v1::Member_globals_,
 };
 const char descriptor_table_protodef_orbit_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
-    "\n\013orbit.proto\022\016proto.orbit.v1\"\224\002\n\023Regist"
-    "rationRequest\022\016\n\006galaxy\030\001 \001(\t\022\021\n\tadverti"
-    "se\030\003 \001(\t\022\"\n\004role\030\006 \001(\0162\024.proto.orbit.v1."
-    "Role\022\r\n\005group\030\007 \001(\t\022\027\n\017candidate_round\030\010"
-    " \001(\r\022\020\n\010username\030\t \001(\t\022\020\n\010password\030\n \001(\t"
-    "\022\022\n\nrequest_id\030\r \001(\014J\004\010\002\020\003J\004\010\005\020\006J\004\010\013\020\014J\004"
-    "\010\014\020\rJ\004\010\004\020\005R\002idR\016expected_epochR\006ticketR\020"
-    "ticket_signatureR\npublic_key\"}\n\024Registra"
-    "tionResponse\022\'\n\007members\030\001 \003(\0132\026.proto.or"
-    "bit.v1.Member\022\021\n\tadmission\030\002 \001(\014\022\021\n\tsign"
-    "ature\030\003 \001(\014\022\026\n\016pulse_endpoint\030\004 \001(\t\"\236\001\n\006"
-    "Member\022\016\n\006galaxy\030\001 \001(\t\022\n\n\002id\030\002 \001(\t\022\021\n\tpr"
-    "incipal\030\003 \001(\t\022\021\n\tadvertise\030\004 \001(\t\022\r\n\005epoc"
-    "h\030\005 \001(\004\022\"\n\004role\030\007 \001(\0162\024.proto.orbit.v1.R"
-    "ole\022\r\n\005group\030\010 \001(\tJ\004\010\006\020\007R\npublic_key*<\n\004"
-    "Role\022\024\n\020ROLE_UNSPECIFIED\020\000\022\r\n\tROLE_STAR\020"
-    "\001\022\017\n\013ROLE_PLANET\020\0022b\n\tAdmission\022U\n\010Regis"
-    "ter\022#.proto.orbit.v1.RegistrationRequest"
-    "\032$.proto.orbit.v1.RegistrationResponseBA"
-    "Z\?github.com/eosforge/verdandi/superviso"
-    "r/internal/generated;wireb\006proto3"
+    "\n\013orbit.proto\022\016proto.orbit.v1\"\022\n\020Directo"
+    "ryRequest\"<\n\021DirectoryResponse\022\'\n\007member"
+    "s\030\001 \003(\0132\026.proto.orbit.v1.Member\"\034\n\nCrede"
+    "ntial\022\016\n\006secret\030\001 \001(\014\"\224\002\n\023RegistrationRe"
+    "quest\022\016\n\006galaxy\030\001 \001(\t\022\021\n\tadvertise\030\003 \001(\t"
+    "\022\"\n\004role\030\006 \001(\0162\024.proto.orbit.v1.Role\022\r\n\005"
+    "group\030\007 \001(\t\022\027\n\017candidate_round\030\010 \001(\r\022\020\n\010"
+    "username\030\t \001(\t\022\020\n\010password\030\n \001(\t\022\022\n\nrequ"
+    "est_id\030\r \001(\014J\004\010\002\020\003J\004\010\005\020\006J\004\010\013\020\014J\004\010\014\020\rJ\004\010\004"
+    "\020\005R\002idR\016expected_epochR\006ticketR\020ticket_s"
+    "ignatureR\npublic_key\"}\n\024RegistrationResp"
+    "onse\022\'\n\007members\030\001 \003(\0132\026.proto.orbit.v1.M"
+    "ember\022\021\n\tadmission\030\002 \001(\014\022\021\n\tsignature\030\003 "
+    "\001(\014\022\026\n\016pulse_endpoint\030\004 \001(\t\"\236\001\n\006Member\022\016"
+    "\n\006galaxy\030\001 \001(\t\022\n\n\002id\030\002 \001(\t\022\021\n\tprincipal\030"
+    "\003 \001(\t\022\021\n\tadvertise\030\004 \001(\t\022\r\n\005epoch\030\005 \001(\004\022"
+    "\"\n\004role\030\007 \001(\0162\024.proto.orbit.v1.Role\022\r\n\005g"
+    "roup\030\010 \001(\tJ\004\010\006\020\007R\npublic_key*b\n\004Role\022\024\n\020"
+    "ROLE_UNSPECIFIED\020\000\022\r\n\tROLE_STAR\020\001\022\017\n\013ROL"
+    "E_PLANET\020\002\022\020\n\014ROLE_POLARIS\020\003\022\022\n\016ROLE_AST"
+    "ROLABE\020\0042\257\001\n\tAdmission\022U\n\010Register\022#.pro"
+    "to.orbit.v1.RegistrationRequest\032$.proto."
+    "orbit.v1.RegistrationResponse\022K\n\004List\022 ."
+    "proto.orbit.v1.DirectoryRequest\032!.proto."
+    "orbit.v1.DirectoryResponseBAZ\?github.com"
+    "/eosforge/verdandi/supervisor/internal/g"
+    "enerated;wireb\006proto3"
 };
 static ::absl::once_flag descriptor_table_orbit_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_orbit_2eproto = {
     false,
     false,
-    833,
+    1061,
     descriptor_table_protodef_orbit_2eproto,
     "orbit.proto",
     &descriptor_table_orbit_2eproto_once,
     nullptr,
     0,
-    3,
+    6,
     schemas,
     file_message_globals,
     TableStruct_orbit_2eproto::offsets,
@@ -758,7 +1203,493 @@ Role_descriptor() {
   return file_level_enum_descriptors_orbit_2eproto[0];
 }
 PROTOBUF_CONSTINIT const uint32_t Role_internal_data_[] = {
-    196608u, 0u, };
+    327680u, 0u, };
+// ===================================================================
+
+DirectoryRequest::DirectoryRequest(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, DirectoryRequest_get_class_data()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(arena_constructor:proto.orbit.v1.DirectoryRequest)
+}
+DirectoryRequest::DirectoryRequest(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const DirectoryRequest& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, DirectoryRequest_get_class_data()) {
+
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  DirectoryRequest* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+
+  // @@protoc_insertion_point(copy_constructor:proto.orbit.v1.DirectoryRequest)
+}
+
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull DirectoryRequest_class_data_ =
+        DirectoryRequest::InternalGenerateClassData_(DirectoryRequest_globals_._default);
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+DirectoryRequest::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&DirectoryRequest_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(DirectoryRequest_class_data_.tc_table);
+  return DirectoryRequest_class_data_.base();
+}
+#else
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+DirectoryRequest::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&DirectoryRequest_globals_);
+  ::google::protobuf::internal::PrefetchToLocalCache(
+      ::google::protobuf::internal::MessageGlobalsBase::ToParseTableBase(&DirectoryRequest_globals_));
+  return DirectoryRequest_globals_.GetClassData();
+}
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT
+PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const DirectoryRequest::ParseTableT_
+    DirectoryRequest::_table_ =
+        DirectoryRequest::InternalGenerateParseTable_(DirectoryRequest_class_data_.base());
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+
+
+
+
+
+
+
+::google::protobuf::Metadata DirectoryRequest::GetMetadata() const {
+  return Super_::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+DirectoryResponse::DirectoryResponse(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, DirectoryResponse_get_class_data()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:proto.orbit.v1.DirectoryResponse)
+}
+PROTOBUF_NDEBUG_INLINE DirectoryResponse::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    [[maybe_unused]] const ::proto::orbit::v1::DirectoryResponse& from_msg)
+      : _has_bits_{from._has_bits_},
+        members_ {
+          visibility, ::_pbi::InternalMetadataOffset::Build<
+              ::proto::orbit::v1::DirectoryResponse,
+              PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::DirectoryResponse, _impl_.members_)>()
+          , arena, from.members_
+        }
+     {}
+
+DirectoryResponse::DirectoryResponse(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const DirectoryResponse& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, DirectoryResponse_get_class_data()) {
+
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  DirectoryResponse* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+
+  // @@protoc_insertion_point(copy_constructor:proto.orbit.v1.DirectoryResponse)
+}
+PROTOBUF_NDEBUG_INLINE DirectoryResponse::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : members_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::orbit::v1::DirectoryResponse,
+            PROTOBUF_FIELD_OFFSET(::proto::orbit::v1::DirectoryResponse, _impl_.members_)>()
+         }
+     {}
+
+inline void DirectoryResponse::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+}
+DirectoryResponse::~DirectoryResponse() {
+  // @@protoc_insertion_point(destructor:proto.orbit.v1.DirectoryResponse)
+  SharedDtor(*this);
+}
+inline void DirectoryResponse::SharedDtor(MessageLite& self) {
+  DirectoryResponse& this_ = static_cast<DirectoryResponse&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.~Impl_();
+}
+
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull DirectoryResponse_class_data_ =
+        DirectoryResponse::InternalGenerateClassData_(DirectoryResponse_globals_._default);
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+DirectoryResponse::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&DirectoryResponse_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(DirectoryResponse_class_data_.tc_table);
+  return DirectoryResponse_class_data_.base();
+}
+#else
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+DirectoryResponse::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&DirectoryResponse_globals_);
+  ::google::protobuf::internal::PrefetchToLocalCache(
+      ::google::protobuf::internal::MessageGlobalsBase::ToParseTableBase(&DirectoryResponse_globals_));
+  return DirectoryResponse_globals_.GetClassData();
+}
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT
+PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const DirectoryResponse::ParseTableT_
+    DirectoryResponse::_table_ =
+        DirectoryResponse::InternalGenerateParseTable_(DirectoryResponse_class_data_.base());
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_NOINLINE void DirectoryResponse::Clear() {
+  auto& this_ [[maybe_unused]] = *this;
+  // @@protoc_insertion_point(message_clear_start:proto.orbit.v1.DirectoryResponse)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    _impl_.members_.Clear();
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL DirectoryResponse::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const DirectoryResponse& this_ = static_cast<const DirectoryResponse&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL DirectoryResponse::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const DirectoryResponse& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:proto.orbit.v1.DirectoryResponse)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // repeated .proto.orbit.v1.Member members = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    for (unsigned i = 0, n = static_cast<unsigned>(
+                             this_._internal_members_size());
+         i < n; i++) {
+      const auto& repfield = this_._internal_members().Get(i);
+      target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+          1, repfield, repfield.GetCachedSize(), target,
+          stream);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:proto.orbit.v1.DirectoryResponse)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t DirectoryResponse::ByteSizeLong(const MessageLite& base) {
+  const DirectoryResponse& this_ = static_cast<const DirectoryResponse&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t DirectoryResponse::ByteSizeLong() const {
+  const DirectoryResponse& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:proto.orbit.v1.DirectoryResponse)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+   {
+    // repeated .proto.orbit.v1.Member members = 1;
+    cached_has_bits = this_._impl_._has_bits_[0];
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      total_size += 1UL * this_._internal_members_size();
+      for (const auto& msg : this_._internal_members()) {
+        total_size += ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void DirectoryResponse::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                      const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this = static_cast<DirectoryResponse*>(&to_msg);
+  auto& from = static_cast<const DirectoryResponse&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  ::google::protobuf::Arena* arena = _this->GetArena();
+  // @@protoc_insertion_point(class_specific_merge_from_start:proto.orbit.v1.DirectoryResponse)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    _this->_internal_mutable_members()->InternalMergeFromWithArena(
+        ::google::protobuf::MessageLite::internal_visibility(), arena,
+        from._internal_members());
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void DirectoryResponse::CopyFrom(const DirectoryResponse& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:proto.orbit.v1.DirectoryResponse)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void DirectoryResponse::InternalSwap(DirectoryResponse* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  _impl_.members_.InternalSwap(&other->_impl_.members_);
+}
+
+::google::protobuf::Metadata DirectoryResponse::GetMetadata() const {
+  return Super_::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+Credential::Credential(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, Credential_get_class_data()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:proto.orbit.v1.Credential)
+}
+PROTOBUF_NDEBUG_INLINE Credential::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    [[maybe_unused]] const ::proto::orbit::v1::Credential& from_msg)
+      : _has_bits_{from._has_bits_},
+        secret_(arena, from.secret_) {}
+
+Credential::Credential(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const Credential& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, Credential_get_class_data()) {
+
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  Credential* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+
+  // @@protoc_insertion_point(copy_constructor:proto.orbit.v1.Credential)
+}
+PROTOBUF_NDEBUG_INLINE Credential::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : secret_(arena) {}
+
+inline void Credential::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+}
+Credential::~Credential() {
+  // @@protoc_insertion_point(destructor:proto.orbit.v1.Credential)
+  SharedDtor(*this);
+}
+inline void Credential::SharedDtor(MessageLite& self) {
+  Credential& this_ = static_cast<Credential&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.secret_.Destroy();
+  this_._impl_.~Impl_();
+}
+
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull Credential_class_data_ =
+        Credential::InternalGenerateClassData_(Credential_globals_._default);
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+Credential::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&Credential_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(Credential_class_data_.tc_table);
+  return Credential_class_data_.base();
+}
+#else
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+Credential::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&Credential_globals_);
+  ::google::protobuf::internal::PrefetchToLocalCache(
+      ::google::protobuf::internal::MessageGlobalsBase::ToParseTableBase(&Credential_globals_));
+  return Credential_globals_.GetClassData();
+}
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT
+PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const Credential::ParseTableT_
+    Credential::_table_ =
+        Credential::InternalGenerateParseTable_(Credential_class_data_.base());
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_NOINLINE void Credential::Clear() {
+  auto& this_ [[maybe_unused]] = *this;
+  // @@protoc_insertion_point(message_clear_start:proto.orbit.v1.Credential)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    this_._impl_.secret_.ClearNonDefaultToEmpty();
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL Credential::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const Credential& this_ = static_cast<const Credential&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL Credential::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const Credential& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:proto.orbit.v1.Credential)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // bytes secret = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (!this_._internal_secret().empty()) {
+      const ::std::string& _s = this_._internal_secret();
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:proto.orbit.v1.Credential)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t Credential::ByteSizeLong(const MessageLite& base) {
+  const Credential& this_ = static_cast<const Credential&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t Credential::ByteSizeLong() const {
+  const Credential& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:proto.orbit.v1.Credential)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
+
+   {
+    // bytes secret = 1;
+    cached_has_bits = this_._impl_._has_bits_[0];
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (!this_._internal_secret().empty()) {
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
+                                        this_._internal_secret());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void Credential::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                      const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this = static_cast<Credential*>(&to_msg);
+  auto& from = static_cast<const Credential&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(class_specific_merge_from_start:proto.orbit.v1.Credential)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (!from._internal_secret().empty()) {
+      _this->_internal_set_secret(from._internal_secret());
+    } else {
+      if (_this->_impl_.secret_.IsDefault()) {
+        _this->_internal_set_secret("");
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void Credential::CopyFrom(const Credential& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:proto.orbit.v1.Credential)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void Credential::InternalSwap(Credential* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  auto* arena = GetArena();
+  ABSL_DCHECK_EQ(arena, other->GetArena());
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.secret_, &other->_impl_.secret_, arena);
+}
+
+::google::protobuf::Metadata Credential::GetMetadata() const {
+  return Super_::GetMetadataImpl(GetClassData()->full());
+}
 // ===================================================================
 
 RegistrationRequest::RegistrationRequest(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)

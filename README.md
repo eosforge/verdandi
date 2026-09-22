@@ -1,45 +1,38 @@
 # Astra
 
-Astra 是正在开发的分布式服务发现与状态同步项目. 系统以星图组织: Star 构成 Galaxy,
-Supervisor 管理准入与成员信息, Admin 展示拓扑. Planet 的业务推进暂缓, 优先完成 Star 与第一版 SDK.
+Astra 是开发中的分布式服务发现与状态同步项目. Star 构成 Galaxy, 控制服务管理准入, Pulsar 提供连续纪元时间, Admin 展示星图.
 
-当前是 `0.1.0` Alpha 连接骨架, 尚未开放 Catalog/Registry 业务接口, 不宣称生产就绪.
-已有内部 Store 和同步协议草案, 不等于业务同步已接入网络.
+当前已实现 C++26 连接骨架、Pulsar 和内部 Store/Wheel. **Catalog/Registry 业务接口、Star 间业务复制、业务持久化及 Comet SDK 尚未完成**, 不宣称生产就绪.
 
-## 活动代码
+## 阅读入口
 
-| 目录 | 职责 |
+| 需要了解什么 | 唯一入口 |
 | --- | --- |
-| [astra/](astra/README.md) | C++26 Star/Planet, Linux x64 / GCC 16.2 |
-| [supervisor/](supervisor/README.md) | Go Supervisor, 账号准入及持久成员表 |
-| [proto/](proto/README.md) | `proto.astra.v1 / proto.orbit.v1 / proto.comet.v1` gRPC 服务协议与生成器 |
-| [admin/](admin/README.md) | Astra 星图管理界面 |
-| [testkit/](testkit/README.md) | 服务回归、故障测试及资源清理 |
+| 当前文档与维护规则 | [文档导航](docs/README.md) |
+| 角色、已实现边界、业务约束与下一阶段 | [当前架构](docs/architecture.md) |
+| gRPC 命名、准入身份和同步草案 | [协议契约](proto/README.md) |
+| C++ 构建与启动 | [Astra 服务](astra/README.md) |
+| 物理参考、四时间戳与连续 Unix 时间 | [Pulsar](astra/pulsar/README.md) |
+| 存储、快照、历史、TTL | [Store](astra/common/README.md) |
+| 测试入口与最新结果 | [Testkit](testkit/README.md), [验证记录](testkit/validation.md) |
+| 修改与贡献 | [贡献指南](CONTRIBUTING.md), [通用规范](coding.md), [C++ 规范](cpp-coding.md) |
 
-先读 [服务基础说明](service-foundation.md)、[身份契约](cluster/identity-contract.md) 和 [贡献指南](CONTRIBUTING.md).
-代码注释与格式遵循 [coding.md](coding.md).
+## 活动目录
 
-## 构建与验证
+`astra/` 为 Linux/GCC 16.2 的 C++26 服务; `supervisor/` 保留 Go 准入服务; `proto/` 为协议与生成工具; `admin/` 为管理界面; `testkit/` 为测试工具.
+Go Supervisor 与 C++ Pulsar 均可提供现有 Orbit 登记接口, 持久文件不互换. 需要 Pulse 对时的 Star 使用 Pulsar 的登记入口.
 
-只使用已准备的项目工具和依赖. 构建不会隐式下载; 缺失时按各组件 README 单独准备.
+构建仅消费已经准备的工具和依赖:
 
 ```bash
 bash astra/build.sh build --profile debug
-bash scripts/test-services.sh
 ```
 
-Windows 可运行 `./scripts/check-services.ps1 -Service supervisor`; C++26 服务在 Linux 验证.
-长时测试需显式指定, 默认回归不会无限运行.
+测试及其前置构建须获得当轮授权, 下载另行授权, 见 [AGENTS.md](AGENTS.md). 工具在 `build/tools`, 依赖在 `build/deps`, 产物和原始报告在 `build/`; 不提交缓存、部署凭据或运行日志.
 
-工具放 `build/tools`, Go/Rust/C++ 依赖缓存放 `build/deps`, 产物与报告放 `build/`.
-项目脚本仅为子进程设置缓存位置, 不改变用户或系统配置. 这些目录不提交到 Git.
+## 名称与冻结边界
 
-## 更名与历史版本
+产品名为 Astra. 外层目录 `D:\projects\verdandi`, `/home/ubuntu/verdandi` 及仓库地址 `git@github.com:eosforge/verdandi.git` 暂留原名, Go module/import/go_package 同步保留现有仓库路径.
+Linux 继续复用原项目目录及编译缓存, 不因文档整理移动或重建依赖.
 
-当前代号为 Astra. 最外层目录 `D:\projects\verdandi`、`/home/ubuntu/verdandi` 和
-仓库地址 `git@github.com:eosforge/verdandi.git` 暂时保留. Go module、import 和 `go_package`
-随仓库地址保持不变. [更名说明](astra-migration.md) 记录协议边界和 Linux 编译缓存复用方式.
-
-`sdk/`、Lua、Redis 协议及旧版测试是冻结的 Verdandi 历史版本, 不迁移为 Astra SDK, 不用于新的上层实现.
-旧 Rust 服务 `cluster/{common,star,planet}` 和 `testkit/transport` 实验也已退休.
-保留 [旧 SDK 文档](legacy-sdk.md) 与历史测试证据, 不将其成绩算作 Astra 验收.
+旧 Redis SDK、Lua 和 Rust 服务不作为 Astra 新功能基础, 见 [冻结组件](legacy-sdk.md). 历史报告和旧方案只从 Git 历史查阅, 不作为当前能力或测试通过的依据.

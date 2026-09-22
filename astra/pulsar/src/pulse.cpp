@@ -75,9 +75,9 @@ private:
             return;
         }
         try {
-            // t1 是接收处理起点的公共时间与质量, 未就绪时不生成可用响应.
+            // t1 是接收处理起点的公共时间与质量, 本地走时可用不等于可以向其他节点提供可信新样本.
             const auto t1 = clock_.now();
-            if (!t1 || !t1->ready) {
+            if (!t1 || !t1->synchronized) {
                 Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE, "Physical time not synchronized"));
                 return;
             }
@@ -93,7 +93,7 @@ private:
             pong_.set_precision_ns(clock_.precision());
             // t2 是填充完成后的公共时间, 与 t1 同域, 两者差覆盖本次处理耗时.
             const auto t2 = clock_.now();
-            if (!t2 || !t2->ready || t2->time < t1->time || pong_.precision_ns() == 0) {
+            if (!t2 || !t2->synchronized || t2->time < t1->time || pong_.precision_ns() == 0) {
                 Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE, "Physical time not synchronized"));
                 return;
             }

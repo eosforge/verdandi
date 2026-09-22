@@ -9,13 +9,13 @@
 namespace astra {
 std::string_view Server::Config::help() {
 
-    return "Usage: pulsar --listen=IP:PORT --pulse-listen=IP:PORT --galaxy=ID [options]\n" "  --identity=DIR       TLS, admission.key/pub and accounts.json; default=identity\n" "  --state=FILE         Exclusive durable journal; default=state/pulsar.journal\n" "  --max-members=N      Capacity per role, 1..4096; default=64\n" "  --max-starts=N       Retained startup records, 1..1000000; default=65536\n" "  --help / --version   Do not load credentials or start services\n" "Listeners require concrete IPs authorized by the TLS certificate. Stop with SIGINT or SIGTERM.\n";
+    return "Usage: pulsar --listen=IP:PORT --pulse-listen=IP:PORT --galaxy=ID [options]\n" "  --identity=DIR       TLS, admission.key/pub and accounts.json; default=identity\n" "  --state=FILE         Exclusive SQLite database; default=state/pulsar.db\n" "  --init=true|false    Initialize a new database; default=false\n" "  --max-members=N      Capacity per role, 1..4096; default=64\n" "  --max-starts=N       Retained startup records, 1..1000000; default=65536\n" "  --help / --version   Do not load credentials or start services\n" "Listeners require concrete IPs authorized by the TLS certificate. Stop with SIGINT or SIGTERM.\n";
 }
 
 Result<Server::Config> Server::Config::parse(std::span<const std::string_view> arguments) {
 
     // names 定义此解析器支持的固定选项顺序, seen 使用相同索引识别重复.
-    constexpr std::array names{"listen", "pulse-listen", "galaxy", "identity", "state", "max-members", "max-starts"};
+    constexpr std::array names{"listen", "pulse-listen", "galaxy", "identity", "state", "max-members", "max-starts", "init"};
     // seen 初始全零, 记录实际出现过的选项, 默认值不能代替必填项.
     std::bitset<names.size()> seen;
     // result 从配置默认值开始, 完成所有跨字段检查后才返回.
@@ -62,6 +62,11 @@ Result<Server::Config> Server::Config::parse(std::span<const std::string_view> a
             result.identity = value;
         } else if (index == 4) {
             result.state = value;
+        } else if (index == 7) {
+            if (value != "true" && value != "false") {
+                return Status::configuration("Pulsar init must be true or false");
+            }
+            result.initialize = value == "true";
         } else {
             // count 暂存容量输入, 不接受零值,尾随字符或超过各自上限的值.
             std::size_t count{};
@@ -87,7 +92,7 @@ Server::Server(Server::Config config, Source::Provider provider) : config_(std::
         throw std::runtime_error("Cannot load Pulsar authority");
     }
     authority_ = std::move(*authority);
-    ledger_ = std::make_unique<Ledger>(config_.state, config_.galaxy, authority_->key_id(), config_.maximum, config_.starts);
+    ledger_ = std::make_unique<Ledger>(config_.state, config_.galaxy, authority_->key_id(), config_.maximum, config_.starts, config_.initialize);
     clock_ = std::make_unique<Source>(std::move(provider));
     pulse_ = std::make_unique<Pulse>(*authority_, *ledger_, *clock_);
 }
@@ -110,7 +115,8 @@ void Server::start() {
         builder.AddChannelArgument("grpc.so_reuseport", 0);
         builder.RegisterService(&service);
         builder.SetMaxReceiveMessageSize(pulse ? 128 : 4096);
-        builder.SetMaxSendMessageSize(pulse ? 128 : 2 * 1024 * 1024);
+        // 四种角色每种最多 4096 条, 完整目录预算独立于只返回 Star/Polaris 的节点读取预算.
+        builder.SetMaxSendMessageSize(pulse ? 128 : 8 * 1024 * 1024);
         builder.AddChannelArgument("grpc.server_handshake_timeout_ms", 3000);
         builder.AddChannelArgument("grpc.max_connection_idle_ms", 30000);
         builder.AddChannelArgument("grpc.max_concurrent_streams", pulse ? 1 : 4);

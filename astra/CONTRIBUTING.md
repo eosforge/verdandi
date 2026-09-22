@@ -1,13 +1,13 @@
-# 维护 C++26 Star / Planet
+# 维护 Astra 核心服务
 
 开始 C++ 工作前先阅读 [C++ 编码规范](../cpp-coding.md), 命名、作用域、性能取舍、注释和排版以该文为准.
 
 从仓库根目录操作. 项目约定见 [coding.md](../coding.md), 协议与范围见
-[骨架设计](../cluster/cpp26-skeleton-design.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
-原有 Supervisor 使用 Go, 新增 C++ Pulsar 提供独立登记与对时服务; 两者数据库不互换.
-旧 Rust Star 已废弃; 当前准入见[身份契约](../cluster/identity-contract.md),
-新实现及尚未验证的范围见 [Pulsar 与 Star 对时](pulsar/design.md).
-时间模型已按 [连续纪元时钟设计](pulsar/epoch-clock-design.md) 迁移源码, 当前构建与测试结果见 [500 ms 回归记录](pulsar/regression-20260918-500ms.md).
+[当前架构](../docs/architecture.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
+Pulsar 使用 C++ 提供独立登记与对时, Polaris/Astrolabe 使用 Go. 旧 Supervisor 冻结, 数据库不互换.
+旧 Rust Star 已废弃; 当前准入见[协议契约](../proto/README.md#admission),
+当前实现与部署边界见 [Pulsar](pulsar/README.md).
+时间模型与单一期限规则见 [Store](common/README.md), 最新执行结果见 [验证记录](../testkit/validation.md).
 物理时间质量由宿主对时服务提供, 程序只读校验, 不自动安装/配置服务.
 
 ## 代码归属
@@ -17,13 +17,18 @@
 | `common/include/astra` | 配置、成员值、角色接口、进程入口 | 仅标准库和 Astra 类型, 不暴露 gRPC 或密码材料 |
 | `common/src/options.hpp`, `config.cpp` | C++26 配置注解、解析、帮助与跨字段校验 | 一个选项声明生成解析和帮助, 外部输入仍显式验证 |
 | `common/src/identity.*` | TLS 材料和准入验签 | 启动后只读, 原始凭证字节验签后才转换为成员值 |
-| `common/src/admission.*` | Supervisor 登录和登记 | 持有上下文、请求和响应, 不修改角色索引 |
+| `common/src/admission.*` | Pulsar 登录和登记 | 持有上下文、请求和响应, 不修改角色索引 |
 | `common/src/grpc_session.*` | 逻辑流、读写交接、Hello 与 Ping/Pong | 回调发布完成, 控制循环推进协议 |
 | `common/src/rpc_status.hpp` | 稳定 gRPC 错误分类 | 只依据状态码, 不把远端 message/details 写入日志 |
 | `common/src/process.*` | 信号、唤醒和 JSON 日志 | 私有进程设施, 有明确所有者和恢复路径 |
 | `common/src/runtime.cpp` | 生命周期协调 | 按会话、准入、拨号、诊断的次序推进, 退出时等待完成 |
 | `common/src/store.*` | 内部状态、批次历史、只读快照和 TTL 驱动 | 先准备分配再提交, 在同一把状态锁内补拍和处理续租 |
-| `common/src/snapshot_index.hpp` | Store 私有的固定页写时复制视图 | 锁内捕获根与版本, 锁外构建 Map; 读完成与页复用通过状态锁同步, 时间轮节点不复制 |
+| `common/src/snapshot_index.hpp` | 内部 KV 的固定页写时复制索引 | Store/Almanac 在各自状态锁内捕获根与版本, 读完成与页复用通过同一状态锁同步; 不复制时间轮节点 |
+| `star/src/almanac.*`, `library.*`, `receiver.*`, `readout.*` | Almanac 权威副本、两级路由、Polaris 接收和 Comet 下行 | 权威 +1, 全量私有准备及完整替换, View 独立同步寿命 |
+| `star/src/catalog*`, `ephemeris*` | 各自原生状态、来源副本与公开投影 | 业务版本/TTL 与连续来源位置分离, 不广播副本本地到期删除 |
+| `star/src/exchange.*`, `dispatch.hpp`, `landing.hpp` | 双域对等恢复、冻结根分页与完整 ACK | 只发自身来源, 有界预算/超时, 精确回补不能跨过其他 Key |
+| `comet/cpp` | 原生 Client、Reader、Subscriber、Observer、Publisher、Beacon | 不把 gRPC 类型暴露给用户, 取消后等 OnDone 再释放 |
+| `polaris`, `astrolabe`, `internal` | Go 权威持久、管理后端和共用准入 | 离线 Go 构建, 修改协议同时检查 C++ 消费者 |
 | `common/src/clock.*`, `pulse_client.*` | 连续 Unix 时间、四时间戳和质量 | BOOTTIME 外推, 失联继续走时; Store 只存一个 deadline |
 | `pulsar/src` | 独立登记服务、持久成员表与 Pulse | 对时和登记使用独立资源预算, 不引入业务数据存储 |
 | `pulsar/tests` | 日志故障和真实 TLS/RPC 用例 | 临时状态由本例独占, 本轮修改后的用例需授权后执行 |
@@ -33,7 +38,7 @@
 | `bench` | 隔离的推流对照与存储微基准 | 不链接进服务, 不用实验消息扩充生产协议 |
 | `build.py`, `test_*.py` | 离线构建及分层验证 | shell 仅选择已有 Python, 共享进程清理由 `testkit` 持有 |
 
-保持角色与服务的目录边界. `astrolabe` 仍是显式返回未实现的占位入口.
+保持角色与服务的目录边界. Moon/Planet 保持冻结, 不因共用库编译恢复其业务推进.
 通用代码只因两个真实使用者共享行为而抽取, 不为未来数据层预建类层次.
 测试夹具不进入生产 include 目录; 生成源码不手工编辑.
 
@@ -61,26 +66,9 @@ flowchart TD
     P --> V[Config / Member 值类型]
 ```
 
-## 文件职责与注释
+## 注释与排版
 
-手写源码的文件头说明当前功能、职责与边界, 不逐文件重复仓库许可证声明.
-根目录 `LICENSE`、分发授权文本和第三方原有版权/许可证声明继续保留, 生成文件不手工修改.
-
-- 每个配置字段分别说明用途、单位、默认值、有效范围、零值或空值的含义以及相关字段的约束.
-  明确哪些由 CLI 校验, 哪些是内部预算或调用方必须满足的前置条件, 不把注释写成不存在的校验.
-- 每个枚举元素上方都写注释, 包括私有状态和测试场景. 说明含义、触发条件或处理边界;
-  若数值用于协议、数组下标或位标志, 必须注明依赖, 不因排版修改数值或顺序.
-- 每个函数声明说明参数、返回值、错误、所有权和适用的线程/生命周期约束.
-  默认、删除、构造、析构和重载函数也说明其具体约束. 公共契约写在头文件, 局部函数写在定义前.
-- 函数内部在校验、状态提交、资源交接、锁与回调边界、重试和关闭等逻辑块前解释原因及不变量.
-  简单转发或取值由声明契约覆盖, 不逐行复述语句, 不在实现处复制整段头文件说明.
-- 按维护者的阅读偏好, 新增和整理的成员变量、局部变量也注明用途、含义及必要的生命周期约束.
-  循环变量和 lambda 借用对象在所在代码块说明. 函数签名与左花括号保持同一行,
-  遵循现有 `BreakBeforeBraces: Attach`; 不使用 Allman 排版或把非空函数体压成一行.
-
-当前使用中文和 ASCII 标点, 注释放在对应声明或逻辑块上方, 不堆成长行尾注释.
-可参考 [Config](common/include/astra/config.hpp)、[基础枚举](common/include/astra/types.hpp)
-和 [准入阶段](common/src/admission.hpp). 这些注释描述当前实现, 未实施的设计提案放在设计文档中.
+仅引用根目录 [C++ 编码规范](../cpp-coding.md), 不在本指南复制命名、枚举、变量和代码块规则. 文件职责、线程交接与生命周期的具体约束见下文及所属源码.
 
 ## 生命周期审查
 
@@ -95,9 +83,9 @@ flowchart TD
 `completed` 发布 done 之后不能再访问成员, 回调只使用独立持有的 `Wakeup`.
 `Admission` 禁止搬移, 因为 gRPC 借用了它的请求地址. 退出先停止接纳、取消并排空 RPC, 再关闭服务器.
 
-控制流只承载 Hello/Ping/Pong. 保持读取以接收心跳, 四槽发送队列超限时显式关闭;
-不要将尚未实现的业务流背压套用到此控制流. 存储的分配失败测试为独立可执行文件,
-其替换型 new 不得链接到服务或其他测试进程.
+会话中 Hello/Ping/Pong 优先, 双域数据由 Exchange 有界准备, 保持读取以接收心跳;
+慢读/恢复超时必须关闭并归还冻结根预算. 存储的分配失败测试为独立可执行文件,
+其故障注入替换型 new 不得链接到服务或其他测试进程; 显式分配测量目标是独立配置.
 
 `Signals` 和 `Logger` 由入口/Runtime 唯一持有, 禁止复制, 析构恢复处理器或描述符状态.
 日志管道背压丢弃诊断, 不阻塞协议推进. 这些设施保持私有, 不形成公开平台适配框架.
@@ -128,13 +116,13 @@ bash astra/build.sh regression --profile debug
 | `bench` 调度或采样 | 历史实验当前缺少可用比较接收器, 恢复前不以它作为生产性能门槛 |
 | 准备或发布二进制 | 核对锁定来源、许可证、实际动态运行库和安装树, 在目标环境运行 |
 
-`test`, `regression`, `soak`, `scale` 先运行 CTest. 入口重新启用
+`test` 与 `regression` 先构建 C++/Go 再执行 Go 和 CTest. 旧 `soak`/`scale` 当前明确拒绝, 不替代新链路验收. 入口重新启用
 `BUILD_TESTING` 并拒绝零测试成功. 直接用 CMake 时仍可设置 `BUILD_TESTING=OFF` 构建纯服务,
 但这种产物不能作为通过回归的证据. 不兼容的 core-only、分配测量和 sanitizer 组合直接失败.
 
-发现缺陷时检查 C++ Star/Planet、Go Supervisor 及相关共享夹具的同类路径,
-记录适用性; SDK 只有受共享问题影响时才扩展检查. 历史报告保留原始代码指纹和失败样本,
-修改后的结果另记, 不把此前的一小时长测或性能排名自动转记给新产物.
+发现缺陷时检查 C++ Star/Pulsar/Comet、Go Polaris/Astrolabe 及相关共享夹具的同类路径,
+记录适用性; 冻结组件只有实际受共享问题影响时才扩展检查. 原始证据记录代码指纹和失败样本,
+最新结果维护在固定 validation.md, 更早记录由 Git 保存, 不把旧长测或性能排名自动转记给新产物.
 
 ## 依赖和交付
 
@@ -142,7 +130,7 @@ bash astra/build.sh regression --profile debug
 依赖准备需要针对具体项目的授权, 不因缺少包而自动运行 fetch/install.
 子进程工具路径和缓存留在项目下, 不修改用户或系统配置.
 
-安装目标复制 `star`, `planet`, `pulsar`, `astrolabe` 占位入口, 根许可证和第三方授权文本.
+CMake 安装复制既有 C++ `star`, `planet`, `pulsar`、Comet SDK、根许可证和第三方授权文本. Go `polaris`/`astrolabe` 由 build.py 显式构建, 不再以占位入口代替.
 开发构建的 GCC RPATH 不进入安装树.
 交付时仍需提供匹配的 libstdc++ 与其他实际动态依赖, 并在目标发行版验收. 本连接骨架的源码组织
 和测试门槛不等同于数据层或生产部署已经完成.

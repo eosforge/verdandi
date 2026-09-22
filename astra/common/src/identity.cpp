@@ -112,6 +112,48 @@ Result<void> validate_certificate(const std::string& ca, const std::string& cert
 }
 } // namespace
 
+Result<Member::Role> Identity::role(proto::orbit::v1::Role value) {
+    switch (value) {
+    case proto::orbit::v1::ROLE_STAR:
+        return Member::Role::star;
+    case proto::orbit::v1::ROLE_PLANET:
+        return Member::Role::planet;
+    case proto::orbit::v1::ROLE_POLARIS:
+        return Member::Role::polaris;
+    case proto::orbit::v1::ROLE_ASTROLABE:
+        return Member::Role::astrolabe;
+    default:
+        return Status::identity("Unknown infrastructure role");
+    }
+}
+
+proto::orbit::v1::Role Identity::role(Member::Role value) {
+    switch (value) {
+    case Member::Role::star:
+        return proto::orbit::v1::ROLE_STAR;
+    case Member::Role::planet:
+        return proto::orbit::v1::ROLE_PLANET;
+    case Member::Role::polaris:
+        return proto::orbit::v1::ROLE_POLARIS;
+    case Member::Role::astrolabe:
+        return proto::orbit::v1::ROLE_ASTROLABE;
+    }
+    return proto::orbit::v1::ROLE_UNSPECIFIED;
+}
+
+proto::orbit::v1::Member Identity::encode(const Member& member) {
+    // result 独立拥有完整成员字段, 名单、签名和持久层共用相同的角色映射.
+    proto::orbit::v1::Member result;
+    result.set_galaxy(member.galaxy);
+    result.set_id(member.id);
+    result.set_principal(member.principal.text());
+    result.set_advertise(member.address.text());
+    result.set_epoch(member.epoch.value);
+    result.set_role(role(member.role));
+    result.set_group(member.group);
+    return result;
+}
+
 // decode_member 方法实现
 // 详细说明: 尝试把传输层的 proto 类型转换为内存中的强类型 `Member`, 并执行范围以及逻辑检查.
 Result<Member> decode_member(const proto::orbit::v1::Member& value) {
@@ -123,13 +165,14 @@ Result<Member> decode_member(const proto::orbit::v1::Member& value) {
     // address 为可连接的规范数值端点, 不允许零端口和通配地址.
     auto address = Endpoint::parse(value.advertise());
 
-    // 各种边界与合法性检查
-    if (!Member::valid_id(id) || !principal || !address || address->text() != value.advertise() || (value.role() != proto::orbit::v1::ROLE_STAR && value.role() != proto::orbit::v1::ROLE_PLANET)) {
+    // role 是明确角色转换结果, 失败时不产生任何默认角色的半初始化成员.
+    const auto role = Identity::role(value.role());
+    if (!Member::valid_id(id) || !principal || !address || address->text() != value.advertise() || !role) {
         return Status::identity("Invalid encoded member");
     }
 
     // 初始化 Member 数据结构
-    Member result{value.galaxy(), id, *principal, *address, Member::Epoch{value.epoch()}, value.role() == proto::orbit::v1::ROLE_STAR ? Member::Role::star : Member::Role::planet, value.group()};
+    Member result{value.galaxy(), id, *principal, *address, Member::Epoch{value.epoch()}, *role, value.group()};
 
     // 再次调用验证函数校验结构整体的合理性
     if (auto valid = result.validate(); !valid) {
@@ -312,6 +355,63 @@ std::shared_ptr<grpc::ServerCredentials> Identity::server_credentials() const {
     // 指定不要主动索求客户端的 TLS 证书.
     result->set_cert_request_type(GRPC_SSL_DONT_REQUEST_CLIENT_CERTIFICATE);
     return grpc::experimental::TlsServerCredentials(*result);
+}
+
+Result<std::shared_ptr<grpc::ServerCredentials>> Identity::external(const std::filesystem::path& directory) {
+
+    auto certificate = read_identity(directory / "cert.pem"); // 有界完整公钥链, 不需要服务端保有客户端 CA.
+    auto key = read_identity(directory / "key.pem");          // 私钥只进入本监听器 provider, 不导出或记录.
+    if (!certificate || !key) {
+        return Status::identity("Cannot read public TLS material");
+    }
+    bssl::UniquePtr<BIO> certificates(BIO_new_mem_buf(certificate->data(), static_cast<int>(certificate->size())));
+    bssl::UniquePtr<BIO> keys(BIO_new_mem_buf(key->data(), static_cast<int>(key->size())));
+    if (!certificates || !keys) {
+        return Status::internal("Cannot prepare public TLS material");
+    }
+    bssl::UniquePtr<X509> leaf(PEM_read_bio_X509(certificates.get(), nullptr, nullptr, nullptr));
+    bssl::UniquePtr<EVP_PKEY> private_key(PEM_read_bio_PrivateKey(keys.get(), nullptr, nullptr, nullptr));
+    if (!leaf || !private_key || X509_check_private_key(leaf.get(), private_key.get()) != 1 || X509_check_purpose(leaf.get(), X509_PURPOSE_SSL_SERVER, 0) != 1 || X509_cmp_current_time(X509_get0_notBefore(leaf.get())) >= 0 || X509_cmp_current_time(X509_get0_notAfter(leaf.get())) <= 0) {
+        return Status::identity("Invalid public TLS certificate or private key");
+    }
+
+    // 逐块检查剩余中间证书, 不让首张有效证书掩盖截断/损坏的后续 PEM; 不在服务端建立客户端信任根.
+    while (BIO_ctrl_pending(certificates.get()) != 0) {
+        char* bytes{}; // 借用 BIO 尚未消费的内存, 只在本轮解析之前使用.
+        const auto length = BIO_get_mem_data(certificates.get(), &bytes);
+        const auto tail = std::string_view(bytes, static_cast<std::size_t>(length));
+        const auto first = tail.find_first_not_of(" \t\r\n"); // 允许 PEM 之间及末尾的空白, 不允许任意非证书正文.
+        if (first == std::string_view::npos) {
+            break;
+        }
+        if (!tail.substr(first).starts_with("-----BEGIN CERTIFICATE-----")) {
+            return Status::identity("Invalid public TLS certificate chain");
+        }
+        const bssl::UniquePtr<X509> intermediate(PEM_read_bio_X509(certificates.get(), nullptr, nullptr, nullptr));
+        if (!intermediate) {
+            return Status::identity("Invalid public TLS certificate chain");
+        }
+    }
+
+    std::vector<grpc::experimental::IdentityKeyOrSignerCertPair> pair{{std::move(*key), std::move(*certificate)}}; // 独立证书链所有权转交 provider.
+    auto provider = std::make_shared<grpc::experimental::InMemoryCertificateProvider>();
+    // 已在上方校验完整身份材料. gRPC 1.84 的整体 ValidateCredentials 要求根集合已初始化,
+    // 但 UpdateRoot 禁止空集合; 公共单向 TLS 只安装身份, 不伪造未使用的客户端信任根.
+    if (!provider->UpdateIdentityKeyCertPair(std::move(pair)).ok()) {
+        return Status::identity("Cannot load public TLS certificate chain");
+    }
+    auto options = grpc::experimental::TlsServerCredentialsOptions::Create(provider);
+    if (!options.ok()) {
+        return Status::identity("Cannot initialize public TLS");
+    }
+    options->set_min_tls_version(TLS1_3);
+    options->set_max_tls_version(TLS1_3);
+    options->set_cert_request_type(GRPC_SSL_DONT_REQUEST_CLIENT_CERTIFICATE);
+    auto credentials = grpc::experimental::TlsServerCredentials(*options); // 内部持有 provider, 不依赖局部变量寿命.
+    if (!credentials) {
+        return Status::identity("Cannot initialize public TLS credentials");
+    }
+    return credentials;
 }
 
 // username 方法实现

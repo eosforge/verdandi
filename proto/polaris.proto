@@ -1,0 +1,80 @@
+// Polaris 内部权威提交与 Almanac 同步, 仅在受保护的内部入口注册.
+syntax = "proto3";
+package proto.polaris.v1;
+option go_package = "github.com/eosforge/verdandi/astra/internal/generated/polaris;polaris";
+
+import "astra.proto";
+import "comet.proto";
+
+// Astrolabe 管理调用必须带有效基础设施准入 metadata, 不接受 Comet Session.
+service Authority {
+    rpc Commit(CommitRequest) returns (Position);
+    rpc List(proto.comet.v1.Empty) returns (Inventory);
+    rpc Load(proto.comet.v1.Scope) returns (stream Snapshot);
+}
+
+// Star 主动建立一条双向流承载全部分组, 首帧双方 Hello, 不逐 Scope 建流.
+service Almanac {
+    rpc Open(stream Packet) returns (stream Packet);
+}
+
+// 单 Key 修改, 版本要求当前 +1; 已保留相同提交证据的旧请求可确认原结果.
+message CommitRequest {
+    proto.comet.v1.Scope scope = 1;
+    uint64 version = 2;
+    proto.comet.v1.AlmanacChange change = 3;
+}
+
+// 只表达完整安装/持久提交版本; 未报告的 Scope 是无基线, 显式 0 是完整空基线.
+message Position {
+    proto.comet.v1.Scope scope = 1;
+    uint64 version = 2;
+}
+
+// 分页目录只包含元数据; complete 前暂存, 必须完整取得才能作为本轮清单.
+message Inventory {
+    repeated Position positions = 1;
+    bool complete = 2;
+}
+
+// 单 Scope 不可变快照, entries 仅有 value; 每页携带同一 version, 仅 complete 才能安装并确认.
+message Snapshot {
+    proto.comet.v1.Scope scope = 1;
+    repeated proto.comet.v1.AlmanacChange entries = 2;
+    bool complete = 3;
+    optional uint64 version = 4;
+}
+
+// 有序权威补丁, 不按 Key 合并中间提交, 包含合法同值 Set 或缺失 Delete.
+message Patch {
+    uint64 version = 1;
+    proto.comet.v1.AlmanacChange change = 2;
+}
+
+// 一个批次只属于同一 Scope, 每项必须严格连续, 重放不成为新提交.
+message Updates {
+    proto.comet.v1.Scope scope = 1;
+    repeated Patch patches = 2;
+}
+
+// 单条类型化流的互斥消息. 首轮 plan 固定最低版本, ready 不扩大原清单.
+message Packet {
+    oneof body {
+        // 双方只在首帧发送, 复用已有签名格式和协议主版本.
+        proto.astra.v1.Hello hello = 1;
+        // Star 提交完整保有位置, 初始及 probe 后使用; 缺项不等于版本 0.
+        Inventory inventory = 2;
+        // Polaris 声明首轮范围及最低版本, 一次完整清单后不再扩张.
+        Inventory plan = 3;
+        // Polaris 向 Star 准备完整范围, 失败不替换旧状态.
+        Snapshot snapshot = 4;
+        // Polaris 发送连续 +1 补丁, 可一次携带多条.
+        Updates updates = 5;
+        // Star 仅确认真正完成安装的位置, 不确认暂存或发送入队.
+        Position acknowledged = 6;
+        // Polaris 低频请求完整实际位置, 同时最多一次核对在途.
+        proto.comet.v1.Empty probe = 7;
+        // Polaris 确认本轮 plan 的所有范围已安装, 合法空清单也需要此标志.
+        proto.comet.v1.Empty ready = 8;
+    }
+}

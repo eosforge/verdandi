@@ -121,7 +121,7 @@ void Sampler::run(std::stop_token stop) noexcept {
         // failures 统计连续失败批次, 饱和于七, 成功后归零以恢复一秒采样周期.
         unsigned failures = 0;
         while (!stop.stop_requested()) {
-            // 标定属于专用工作线程. 失败撤销可用性并退避重试, 不通过构造异常终止 Star 控制循环.
+            // 标定属于专用工作线程. 失败降低同步质量并退避重试, 不撤销已建立的本地走时能力.
             grpc::Status status;
             try {
                 if (precision_ns_ == 0) {
@@ -145,12 +145,12 @@ void Sampler::run(std::stop_token stop) noexcept {
                 }
             }
 
-            // 失联只使观测过期, Clock 继续走时; 读取者自行判断质量, 不依赖采样线程准时醒来.
+            // 失联只使观测过期, Clock 继续走时和生成期限; 质量判断不依赖采样线程准时醒来.
             const auto delay = failures == 0 ? 1000U : std::min(100U << (failures - 1), 5000U);
             static_cast<void>(wait(stop, Milliseconds(delay + jitter_ % 201)));
         }
     } catch (...) {
-        // 后台异常不能 terminate 进程或留下一份永久有效的旧时钟.
+        // 后台异常不能 terminate 进程或把旧观测永久标为已同步; 已校准的本地时间仍然有效.
         output_.revoke();
     }
     output_.revoke();

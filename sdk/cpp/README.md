@@ -1,5 +1,7 @@
 # Verdandi C++23 SDK
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+
 ## Status
 
 This directory contains the C++23 implementation of the Verdandi `0.1.0`
@@ -141,7 +143,7 @@ configuration into language-native `redis_configuration`,
 `registration_configuration`, and `catalog_configuration` values. Every
 configuration structure owns a `check()` method with the same defaults, ranges,
 zero semantics, and relationship checks documented in
-[`../../configuration.md`](../../configuration.md).
+[`../../configuration.md`](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/configuration.md).
 
 The JSON implementation binds literal member names as C++23 non-type template
 parameters. A variadic short-circuit fold expands the strict dispatch table at
@@ -340,5 +342,5 @@ The following release gates remain open:
 macOS is intentionally unsupported and is not a deferred release gate.
 
 The complete evidence and scoring are recorded in
-[`../../cpp-review-20260831.md`](../../cpp-review-20260831.md) and
-[`../../test-results.md`](../../test-results.md).
+[`../../cpp-review-20260831.md`](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/cpp-review-20260831.md) and
+[`../../test-results.md`](https://github.com/eosforge/verdandi/blob/4ff60942f12f2214cf8f3641144a4215a1d4367c/test-results.md).

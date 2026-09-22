@@ -1,4 +1,4 @@
-"""Pulsar + two real Stars: discovery, clock recovery and owned SIGTERM cleanup."""
+"""Pulsar + Polaris + two real Stars: initialization, clock recovery and owned cleanup."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from functools import partial
 import json
 from pathlib import Path
 import signal
+import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -44,28 +46,54 @@ def events(path):
 
 
 def verify_clock_log(path, *, require_holdover=False):
-    """A process must preserve its epoch timeline through loss and recovery of the reference."""
+    """参考失联只降低同步质量; 已初始化进程必须保持本地计时能力与纪元连续性."""
     previous = None
+    calibrated = False
     holdover = False
     recovered = False
     for value in events(path):
         if value.get("event") != "clock_status":
             continue
         fields = value["fields"]
+        ready = fields.get("ready")
+        synchronized = fields.get("synchronized")
+        if type(ready) is not bool or type(synchronized) is not bool:
+            raise RuntimeError(
+                "Clock log lacks explicit readiness or synchronization quality"
+            )
         current = fields.get("nanoseconds")
         if current is None:
+            if ready or synchronized:
+                raise RuntimeError("Clock claims readiness without an epoch anchor")
             if previous is not None:
                 raise RuntimeError("Initialized clock lost its epoch anchor")
             continue
-        if type(current) is not int or current < 0 or (previous is not None and current < previous):
-            raise RuntimeError("Public epoch clock moved backwards or emitted an invalid timestamp")
-        if fields.get("ready") is False and previous is not None and current > previous:
+        if (
+            type(current) is not int
+            or current < 0
+            or (previous is not None and current < previous)
+        ):
+            raise RuntimeError(
+                "Public epoch clock moved backwards or emitted an invalid timestamp"
+            )
+        if not ready:
+            raise RuntimeError("Initialized clock lost local deadline capability")
+        if (
+            not synchronized
+            and calibrated
+            and previous is not None
+            and current > previous
+        ):
             holdover = True
-        elif holdover and fields.get("ready") is True:
-            recovered = True
+        elif synchronized:
+            calibrated = True
+            if holdover:
+                recovered = True
         previous = current
     if previous is None or (require_holdover and not (holdover and recovered)):
-        raise RuntimeError("Clock log lacks required initialization, holdover or recovery evidence")
+        raise RuntimeError(
+            "Clock log lacks required initialization, holdover or recovery evidence"
+        )
 
 
 def wait(process, log, predicate, seconds=20, *, overall_deadline, after=0):
@@ -73,7 +101,9 @@ def wait(process, log, predicate, seconds=20, *, overall_deadline, after=0):
     deadline = min(time.monotonic() + seconds, overall_deadline)
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError(f"Owned service exited unexpectedly: {process.returncode}; log={log}")
+            raise RuntimeError(
+                f"Owned service exited unexpectedly: {process.returncode}; log={log}"
+            )
         for value in reversed(events(log)[after:]):
             if predicate(value):
                 return value
@@ -98,8 +128,12 @@ def failure_logs(directory):
         raise
 
 
-def run(binaries):
+def run(binaries, polaris):
     """Each process group and temporary file belongs to this test and is released on every exit."""
+    if not polaris.is_file():
+        raise RuntimeError(
+            "Missing explicitly built Polaris executable; process regression cannot run without its authority baseline"
+        )
     root = ROOT / "build/tmp"
     root.mkdir(parents=True, exist_ok=True)
     wait_for = partial(wait, overall_deadline=time.monotonic() + 90)
@@ -110,6 +144,14 @@ def run(binaries):
     ):
         directory = Path(temporary)
         sequence = 0
+        # 只扩充本次独占夹具的账号角色, 不修改仓库公开夹具或部署账号.
+        identity = directory / "pulsar-identity"
+        shutil.copytree(ROOT / "cluster/tests/fixtures/supervisor", identity)
+        accounts = json.loads((identity / "accounts.json").read_text(encoding="utf-8"))
+        for account in accounts:
+            if account["username"] == "stars":
+                account["roles"] = ["star", "polaris", "astrolabe"]
+        (identity / "accounts.json").write_text(json.dumps(accounts), encoding="utf-8")
 
         def start(name, command):
             nonlocal sequence
@@ -120,7 +162,7 @@ def run(binaries):
             stack.callback(stop_process, process)
             return process, log
 
-        def pulsar(admission="127.0.0.1:0", pulse="127.0.0.1:0"):
+        def pulsar(admission="127.0.0.1:0", pulse="127.0.0.1:0", *, initialize=False):
             process, log = start(
                 "pulsar",
                 [
@@ -128,20 +170,43 @@ def run(binaries):
                     f"--listen={admission}",
                     f"--pulse-listen={pulse}",
                     "--galaxy=alpha",
-                    f"--identity={ROOT / 'cluster/tests/fixtures/supervisor'}",
-                    f"--state={directory / 'membership.journal'}",
+                    f"--identity={identity}",
+                    f"--state={directory / 'membership.db'}",
+                    f"--init={'true' if initialize else 'false'}",
                 ],
             )
-            value = wait_for(process, log, lambda value: value.get("event") == "started")
+            value = wait_for(
+                process, log, lambda value: value.get("event") == "started"
+            )
             # 真实进程用例要求宿主已完成物理对时, 不通过生产开关伪造同步资格.
             wait_for(
                 process,
                 log,
-                lambda value: value.get("event") == "clock_status" and value["fields"].get("ready") is True,
+                lambda value: value.get("event") == "clock_status"
+                and value["fields"].get("synchronized") is True,
             )
             return process, log, value["fields"]
 
-        authority, authority_log, addresses = pulsar()
+        authority, authority_log, addresses = pulsar(initialize=True)
+        # 测试为固定部署选择一个暂未占用的回环端口, 若启动争用则明确失败, 不重写已登记端点.
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            polaris_port = reservation.getsockname()[1]
+        publisher, publisher_log = start(
+            "polaris",
+            [
+                polaris,
+                f"--listen=127.0.0.1:{polaris_port}",
+                f"--super={addresses['admission']}",
+                "--galaxy=alpha",
+                f"--identity={ROOT / 'cluster/tests/fixtures/star-a'}",
+                f"--state={directory / 'polaris.db'}",
+                "--init=true",
+            ],
+        )
+        wait_for(
+            publisher, publisher_log, lambda value: value.get("msg") == "Polaris ready"
+        )
         stars = []
         for fixture in ("star-a", "star-b"):
             process, log = start(
@@ -157,9 +222,13 @@ def run(binaries):
             )
             wait_for(process, log, lambda value: value.get("event") == "initialized")
             wait_for(
+                process, log, lambda value: value.get("event") == "almanac_initialized"
+            )
+            wait_for(
                 process,
                 log,
-                lambda value: value.get("event") == "clock_status" and value["fields"].get("ready") is True,
+                lambda value: value.get("event") == "clock_status"
+                and value["fields"].get("synchronized") is True,
             )
             stars.append((process, log))
         for process, log in stars:
@@ -168,8 +237,9 @@ def run(binaries):
                 log,
                 lambda value: value.get("event") == "status"
                 and value["fields"].get("members") == 2
-                and value["fields"].get("inbound") == 1
-                and value["fields"].get("outbound") == 1,
+                and value["fields"].get("inbound", 0)
+                + value["fields"].get("outbound", 0)
+                == 1,
             )
 
         # 失联与恢复都只接受本阶段的新事件, 不复用停机前偶发的质量下降日志.
@@ -181,25 +251,38 @@ def run(binaries):
             wait_for(
                 process,
                 log,
-                lambda value: value.get("event") == "clock_status" and value["fields"].get("ready") is False and "nanoseconds" in value["fields"],
+                lambda value: value.get("event") == "clock_status"
+                and value["fields"].get("ready") is True
+                and value["fields"].get("synchronized") is False
+                and "nanoseconds" in value["fields"],
                 after=mark,
             )
-        # 后续判断只读取本阶段新事件, 不让旧 ready 日志误报重连成功.
+        # 后续判断只读取本阶段新事件, 本地 ready 持续为 true 不能冒充参考质量恢复.
         marks = [(process, log, len(events(log))) for process, log in stars]
         authority, authority_log, _ = pulsar(addresses["admission"], addresses["pulse"])
         for process, log, mark in marks:
             wait_for(
                 process,
                 log,
-                lambda value: value.get("event") == "clock_status" and value["fields"].get("ready") is True,
+                lambda value: value.get("event") == "clock_status"
+                and value["fields"].get("synchronized") is True,
                 after=mark,
             )
         for process, log in [*stars, (authority, authority_log)]:
             process.terminate()
-            if process.wait(timeout=10) != 0 or not any(value.get("event") == "stopped" for value in events(log)):
+            if process.wait(timeout=10) != 0 or not any(
+                value.get("event") == "stopped" for value in events(log)
+            ):
                 raise RuntimeError("Service shutdown was incomplete")
-            verify_clock_log(log, require_holdover=process in [star for star, _ in stars])
-        print("PASS Pulsar + two Stars: topology, calibration, outage, fixed-Unix reconnect and clean SIGTERM")
+            verify_clock_log(
+                log, require_holdover=process in [star for star, _ in stars]
+            )
+        publisher.terminate()
+        if publisher.wait(timeout=10) != 0:
+            raise RuntimeError("Polaris did not shut down cleanly")
+        print(
+            "PASS Pulsar + Polaris + two Stars: authority baseline, topology, clock outage/recovery and clean SIGTERM"
+        )
 
 
 def terminate(signum, _frame):
@@ -211,9 +294,10 @@ def terminate(signum, _frame):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binaries", type=Path, required=True)
+    parser.add_argument("--polaris", type=Path, required=True)
     args = parser.parse_args()
     previous = signal.signal(signal.SIGTERM, terminate)
     try:
-        run(args.binaries.resolve())
+        run(args.binaries.resolve(), args.polaris.resolve())
     finally:
         signal.signal(signal.SIGTERM, previous)

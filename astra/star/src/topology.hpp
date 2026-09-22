@@ -8,7 +8,7 @@
 
 namespace astra {
 // Star 类继承自 Policy 接口.作为 Star 节点的核心网络拓扑策略.
-// 该类独占持有所有的已知合法网络成员名单, 并且维护出站(outbound)和入站(inbound)两个方向的会话索引.
+// 该类独占持有所有的已知合法网络成员名单, 并且记录唯一活动 Star 流的方向与代次. 同时握手的候选在鉴权后收敛.
 // 内部使用了互斥锁(mutex_)保护, 该锁仅覆盖内存状态的修改.
 // 所有实际的网络 I/O 资源取消或关闭操作, 均由调用方在锁外执行以避免死锁.
 class Star final : public Policy {
@@ -28,11 +28,13 @@ public:
     // - 如果名单内容(如顺序/去重)存在问题, 返回 Status::Code::identity.
     // - 如果尝试多次初始化, 返回 Status::Code::conflict.任何失败都会保留原有的旧状态不变.
     Result<void> initialize(const Member& local, std::span<const Member> members) override;
+    // 合并完整受信 Star 名单, 缺项不删除, 迟到低代次不覆盖, 同代次冲突拒绝整批.
+    Result<std::vector<Generation>> refresh(const Member& local, std::span<const Member> members) override;
 
     // 接受连接请求: 按照 Policy 的统一契约接纳已经完成验签的对端节点 remote.
     // 约束: 如果是主动出站连接(outbound), 那么 remote 必须精确匹配传入的 expected 目标;
     // 如果对方角色是 Planet, 那么只允许入站连接(inbound).
-    // 会将会话的唯一标识 generation 安装到成员对应方向的槽位(slot)中.
+    // 会将会话的唯一标识 generation 安装到成员唯一活动槽位中, 相反方向竞争时返回败选流供锁外取消.
     // 如果检测到是同节点合法的代次(epoch)提升, 策略会通过返回值给出一组待断开(取消)的旧版本会话.
     // - remote: 对端节点的身份信息.
     // - direction: 连接方向(出站或入站).
@@ -43,7 +45,7 @@ public:
     Result<std::vector<Generation>> accept(const Member& remote, Policy::Direction direction, Generation generation, const std::optional<Member>& expected) override;
 
     // 处理会话关闭事件: 仅当传入的 generation 与当前槽位内保存的代次匹配时, 才将该槽位释放(清空).
-    // 如果是出站(outbound)连接断开, 会根据 now 当前时间和稳定连接阈值来动态更新重试退避时间.
+    // 任一方向的当前流断开, 会根据 now 当前时间和稳定连接阈值来动态更新重试退避时间.
     // 不同于 Planet, Star 节点不会依据发生的具体 error 类型来"隔离(quarantine)"集群内正式成员,
     // 已获准成员在断线后继续按退避重连, 这里不实现共识或自动删除成员.
     // - generation: 宣告关闭的会话代次.
@@ -51,7 +53,7 @@ public:
     // - now: 当前系统时钟时间.
     void closed(Generation generation, std::optional<Status::Code> error, Steady::time_point now) override;
 
-    // 调度出站拨号: 当系统时钟到达 now 且存在退避到期且其出站连接槽位未被占用的 Star 成员时,
+    // 调度出站拨号: 当系统时钟到达 now 且存在退避到期且没有任一方向活动流的 Star 成员时,
     // 策略会选择一个成员快照返回以供外层发起拨号.
     // 同时同步将该成员置为 pending 状态, 防止被后续调用重复选中.
     // - now: 当前时钟时间.
@@ -70,7 +72,7 @@ public:
     // 所以在此方法中忽略 now 并始终固定返回 false.
     bool needs_refresh(Steady::time_point now) override;
 
-    // 获取当前网络状态: 在互斥锁内部安全地读取成员总数以及各种已安装完成的会话统计数目.
+    // 获取当前网络状态: Star 入站与出站之和至多为成员数减一, 在互斥锁内部安全地读取成员总数以及各种已安装完成的会话统计数目.
     // 构造并返回一个独立的 Policy::State 状态快照.请注意, 该统计结果不包含处于前期握手 RPC 阶段的半开连接.
     Policy::State status() const override;
 
@@ -79,7 +81,7 @@ private:
     struct Entry {
         Member member; // 节点的身份, 地址等元数据.
 
-        // 记录节点会话代次槽位.
+        // 记录唯一活动流的代次与方向, 两个槽至多一个非空; 暂存候选由 Runtime 持有.
         // std::array 的大小固定为 2.
         // 根据约定: 槽位 0 代表出站方向 (outbound), 槽位 1 代表入站方向 (inbound).
         // 这一布局必须与 Policy::Direction 枚举的值及其顺序保持严格一致.
@@ -88,7 +90,7 @@ private:
         bool pending{};                 // 默认值为 false.是否正在向该节点发起出站拨号(等待握手结果).
         std::uint32_t failures{};       // 默认值为 0.累计的出站连接连续失败次数.
         Steady::time_point next{};      // 默认值为纪元 0.下一次允许向其发起出站重试的到期时间.
-        Steady::time_point connected{}; // 默认值为纪元 0.当前出站连接成功建立的时间, 用于判定连接稳定性.
+        Steady::time_point connected{}; // 默认值为纪元 0.当前任一方向连接成功建立的时间, 用于判定连接稳定性.
     };
 
     Config config_;               // Star 的运行时配置信息(包含最大节点数, 重连退避参数等).

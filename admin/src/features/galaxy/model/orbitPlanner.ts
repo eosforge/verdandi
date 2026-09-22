@@ -35,7 +35,9 @@ export function planPlanetOrbits(requests: readonly OrbitRequest[], planetRadius
     systems.map((system) => {
       if (!Number.isFinite(system.radius) || system.radius < 0) throw new RangeError("Invalid stellar radius");
       extents.set(system.id, system.radius);
-      return [system.id, { plane: createSystemPlane(system.id), nextPeriapsis: system.radius + planetRadius + orbitSpacing.surfaceGap }] as const;
+      // 元组固定键和值的对应关系, band 是此规划调用独占的可变进度, 不做深层只读推断.
+      const band = { plane: createSystemPlane(system.id), nextPeriapsis: system.radius + planetRadius + orbitSpacing.surfaceGap };
+      return [system.id, band] as const;
     }),
   );
   for (const request of ordered) {

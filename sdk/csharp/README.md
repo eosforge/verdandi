@@ -1,5 +1,7 @@
 # Verdandi C# SDK
 
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+
 ## Status
 
 The C# SDK is an idiomatic managed facade over Verdandi C ABI v1 and the same

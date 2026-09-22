@@ -25,7 +25,7 @@ private:
     // 禁止调用者跳过完整材料校验构造可用签发者.
     Authority() = default;
 
-    // 只保存盐与摘要, 角色位 1=Star, 2=Planet; 不保留明文密码.
+    // 只保存盐与摘要, 角色位 1=Star,2=Planet,4=Polaris,8=Astrolabe; 不保留明文密码.
     struct Account {
         // 大小写敏感的安全 ASCII 账号名.
         std::string username;

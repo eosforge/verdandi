@@ -68,7 +68,7 @@ test("flow phase is instance-local, shared by its emitters and continuous under 
     assert.ok(Math.abs(phase.value) < 1e-12);
     for (const delta of [NaN, Infinity, -1, 0]) first.update(delta);
     assert.equal(phase.value, 0);
-    assert.deepEqual(first.rotor.quaternion, second.rotor.quaternion, "flow must not take ownership of spin");
+    assert.deepEqual(first.rotor.quaternion.toArray(), second.rotor.quaternion.toArray(), "flow must not take ownership of spin");
     const field = first.group.getObjectByName("PulsarField").geometry;
     assert.equal(new Set(field.getAttribute("fieldSeed").array).size, 24, "three differently sized field bands survive merging");
   } finally {
