@@ -1,5 +1,6 @@
 #include "catalog_state.hpp"
 #include "check.hpp"
+#include "coverage.hpp"
 #include <iostream>
 
 namespace {
@@ -138,7 +139,7 @@ void repair() {
     CHECK(state.apply("a", 8, one, "key", record(4), State::Source::Form::record).error() == State::Error::history);
 }
 
-// 完整来源合并跨 Scope 原子失败, 新目录/水位/调度器都不能提前进入可见状态.
+// 完整来源按 Scope 原子安装, 后续范围容量失败保留先前成果, 来源确认不提前.
 void rollback() {
 
     auto now = 1s;
@@ -154,12 +155,12 @@ void rollback() {
     auto draft = target.prepare("source", 3);
     CHECK(draft && draft->set(one, "key", record(9)) && draft->set(two, "key", record(9)) && draft->set(two, "extra", record(1)));
     CHECK(target.replace("source", std::move(*draft)).error() == State::Error::capacity);
-    CHECK(target.received("source") == 2 && target.find(one, "key")->record->version == 1 && target.find(two, "key")->record->version == 1);
+    CHECK(target.received("source") == 2 && target.find(one, "key")->record->version == 9 && target.find(two, "key")->record->version == 1);
     CHECK(!target.find(two, "extra")->record);
-    CHECK(target.publish(one, "key", bytes("local"), 2, 1000)); // 失败候选的水位 9 没有泄漏.
+    CHECK(target.publish(one, "key", bytes("local"), 2, 1000).error() == State::Error::version); // 首个范围水位 9 已正式发布.
     now = 3s;
     target.tick();
-    CHECK(!target.find(one, "key")->record && !target.find(two, "key")->record); // 失败候选的 10 s 期限也没有泄漏.
+    CHECK(target.find(one, "key")->record && !target.find(two, "key")->record); // 首个范围新期限有效, 失败范围仍按旧期限清理.
 }
 
 // 同版本冲突拒绝整次安装, 可信退役禁止旧任务, 组回收仍保留本进程防回退水位.
@@ -187,6 +188,35 @@ void retired() {
     CHECK(!state.find(scope, "key")->record);
     CHECK(state.publish(scope, "key", bytes("old"), 9, 1000).error() == State::Error::version);
 }
+
+// 中断恢复保留范围覆盖, 缺失 Key 的旧增量也不能复活; 其他 Scope/本机写入可在两步间执行.
+void interrupted() {
+
+    auto now = 1s; // 固定纪元读数, 排除真实睡眠造成的偶然边界.
+    State state([&] { return std::optional(Clock::Reading{.time = Clock::Time(now), .ready = true}); }, {});
+    const Scope one{"a", "main"}, two{"b", "main"}; // 字典序确保先安装 a, 在 b 前取消任务.
+    CHECK(state.admit("a"));
+    CHECK(state.apply("a", 1, one, "key", record(1), State::Source::Form::record));
+    CHECK(state.apply("a", 2, two, "key", record(1), State::Source::Form::record));
+    {
+        auto draft = state.prepare("a", 5);
+        CHECK(draft && draft->set(one, "key", record(5)) && draft->set(two, "key", record(5)));
+        auto task = state.restore("a", std::move(*draft));
+        CHECK(task && task->step() == false);
+        CHECK(state.received("a") == 2 && state.find(one, "key")->record->version == 5 && state.find(two, "key")->record->version == 1);
+        CHECK(state.publish(two, "own", bytes("local"), 1, 1000)); // 不被恢复任务持锁跨步骤阻塞.
+    }
+    CHECK(state.prepare("a", 4).error() == State::Error::version);
+    CHECK(state.apply("a", 3, one, "missing", record(2), State::Source::Form::record));
+    CHECK(!state.find(one, "missing")->record && state.received("a") == 3);
+    CHECK(state.repair("a", 6, one, "key", record(6))); // 精确补项可以超过范围覆盖, 两种标记独立回收.
+    CHECK(state.apply("a", 4, one, "key", record(4), State::Source::Form::record));
+    CHECK(state.apply("a", 5, two, "key", record(5), State::Source::Form::record));
+    CHECK(state.apply("a", 6, one, "key", record(6), State::Source::Form::record));
+    CHECK(state.received("a") == 6 && state.find(one, "key")->record->version == 6);
+    CHECK(state.source().position() == 1); // 接收方只广播自己的本机写入.
+}
+
 } // namespace
 
 // 组件恢复用例不代替实际双向流和进程故障回归, 本轮须另获运行授权.
@@ -198,6 +228,8 @@ int main() {
         watermarks();
         repair();
         rollback();
+        interrupted();
+        coverage<Catalog>({1, bytes("old"), Clock::Time(4s)}, {2, bytes("new"), Clock::Time(5s)}, {"first", "second", "third"});
         retired();
         std::cout << "catalog replicas: ok\n";
         return 0;

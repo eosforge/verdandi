@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
@@ -22,7 +23,8 @@
 namespace astra {
 // 一个来源 Star/动态域的连续事实, position 覆盖全部 Sector/Spectrum. 不作为 Almanac 或三域统一 Store.
 // Item 是 Catalog/Ephemeris 原生记录; 本类不解释 TTL/order/业务版本, 不决定广播内容或本地投影.
-// 除已返回 View 外, 所有调用及 Edit 寿命均由传入的同一 gate 串行保护. 同时至多一个准备事务.
+// 除已返回 View 外, 写入及 Edit 寿命由外层串行保护, const 读取同样不得与准备交错. 同时至多一个准备事务.
+// 远端 Batch 可在来源独占锁下准备私有根/目录, 发布原根之前仍取得 gate, 与已有 View 的读完成屏障配对.
 // 提交只移交不可变字节引用和原生标量, Item 的复制/移动必须无异常, 在模板使用边界拒绝不合格类型.
 template <typename Item>
     requires(std::is_nothrow_copy_constructible_v<Item> && std::is_nothrow_copy_assignable_v<Item> && std::is_nothrow_move_constructible_v<Item> && std::is_nothrow_move_assignable_v<Item>)
@@ -148,21 +150,21 @@ public:
 
         // 最后一次读取后经过与写者相同的同步域, use_count 本身不是内存屏障.
         struct Fence {
-            std::shared_ptr<std::mutex> gate; // 可独立存活的原提交锁.
+            std::shared_ptr<std::shared_mutex> gate; // 可独立存活的原提交锁.
 
             ~Fence() {
-                const std::lock_guard lock(*gate);
+                const std::shared_lock lock(*gate);
             } // 根临时引用释放前完成同步.
         };
 
         // 只在所属 gate 内构造, 不遍历或分配; 参数分别固定根、版本及同步域.
-        View(typename Tree::View root, std::uint64_t position, std::size_t bytes, std::shared_ptr<std::mutex> gate) : root_(std::move(root)), position_(position), bytes_(bytes), size_(root_.size()), gate_(std::move(gate)) {}
+        View(typename Tree::View root, std::uint64_t position, std::size_t bytes, std::shared_ptr<std::shared_mutex> gate) : root_(std::move(root)), position_(position), bytes_(bytes), size_(root_.size()), gate_(std::move(gate)) {}
 
-        typename Tree::View root_;         // 捕获时的完整页树.
-        std::uint64_t position_{};         // 与 root 同边界的来源位置.
-        std::size_t bytes_{};              // 捕获时原生行/目录计费, 不随后续来源变化改变.
-        std::size_t size_{};               // 捕获时计数, 查询不再读取可复用页.
-        std::shared_ptr<std::mutex> gate_; // 不延长来源或网络对象寿命.
+        typename Tree::View root_;                // 捕获时的完整页树.
+        std::uint64_t position_{};                // 与 root 同边界的来源位置.
+        std::size_t bytes_{};                     // 捕获时原生行/目录计费, 不随后续来源变化改变.
+        std::size_t size_{};                      // 捕获时计数, 查询不再读取可复用页.
+        std::shared_ptr<std::shared_mutex> gate_; // 不延长来源或网络对象寿命.
     };
 
     // 一次发送准备, 完整根或连续历史前缀二选一; head 与结果在同一 gate 内捕获.
@@ -308,7 +310,7 @@ public:
         }
 
         // 唯一回滚责任可以移动, 禁止复制多个拥有者.
-        Batch(Batch&& other) noexcept : owner_(std::exchange(other.owner_, nullptr)), tree_(std::move(other.tree_)), added_(std::move(other.added_)), created_(std::move(other.created_)), seen_(std::move(other.seen_)), bytes_(other.bytes_), records_(other.records_), failed_(other.failed_) {}
+        Batch(Batch&& other) noexcept : owner_(std::exchange(other.owner_, nullptr)), tree_(std::move(other.tree_)), added_(std::move(other.added_)), removed_(std::move(other.removed_)), created_(std::move(other.created_)), seen_(std::move(other.seen_)), bytes_(other.bytes_), records_(other.records_), failed_(other.failed_) {}
 
         // 不覆盖未结束事务.
         Batch& operator=(Batch&&) = delete;
@@ -317,14 +319,15 @@ public:
         // 不复制赋值.
         Batch& operator=(const Batch&) = delete;
 
-        // 候选点查, 调用方持有同一域锁; 复制不可变记录, 不借用后续 COW 可能替换的页.
+        // 候选点查, 调用方独占此来源; 复制不可变记录, 不借用后续 COW 可能替换的页.
         std::optional<Item> find(const Scope& scope, std::string_view key) const {
             const auto* group = owner_->locate(scope);
             if (!group) {
                 return std::nullopt;
             }
             const auto found = group->entries.find(key);
-            return found == group->entries.end() ? std::nullopt : std::optional<Item>(*tree_.at(found->second));
+            const auto row = found == group->entries.end() ? std::pair<const typename Tree::Key*, const Item*>{} : tree_.find(found->second);
+            return row.first && (*row.first)->key == key && *(*row.first)->scope == scope ? std::optional<Item>(*row.second) : std::nullopt;
         }
 
         // 一个候选中每个 Scope/Key 至多修改一次. 任意失败后只能放弃整批, 不提交先前准备的子集.
@@ -340,6 +343,9 @@ public:
             const bool exists = group && found != group->entries.end();
             const auto slot = exists ? found->second : tree_.next();
             auto row = exists ? tree_.find(slot) : std::pair<const typename Tree::Key*, const Item*>{};
+            if (exists && (!row.first || (*row.first)->key != key || *(*row.first)->scope != scope)) {
+                return std::unexpected(Error::duplicate); // 同批已删除的目录项尚未摘除, 不解引用空候选页.
+            }
             typename Tree::Key name = exists ? *row.first : nullptr;
             if (exists && seen_.contains(name.get())) {
                 return std::unexpected(Error::duplicate);
@@ -379,6 +385,12 @@ public:
             owner_->tree_ = std::move(tree_);
             owner_->bytes_ = bytes_;
             owner_->records_ = records_;
+            for (const auto& item : removed_) {
+                item.group->entries.erase(item.name->key);
+            }
+            for (const auto& item : removed_) {
+                owner_->prune(*item.name->scope); // 先摘完全部条目, 再回收 Group, 不留下悬空的 group 指针访问.
+            }
             owner_->editing_ = false;
             owner_ = nullptr;
             return old;
@@ -387,6 +399,30 @@ public:
         // 外层统一核对原生候选计费, 不把共享正文当成只有指针大小.
         std::size_t bytes() const noexcept {
             return bytes_ + owner_->directory_;
+        }
+
+        // 仅用于来源 Scope 的完整替换, 删除候选中旧有项; 同一目标仍只能修改一次.
+        std::expected<void, Error> erase(const Scope& scope, std::string_view key) {
+
+            if (failed_ || !owner_)
+                return std::unexpected(Error::input);
+            failed_ = true;                      // 分配失败必须保留整个 Scope 的回滚责任.
+            auto* group = owner_->locate(scope); // 借用到本批提交/放弃, 在提交前不删除真实目录.
+            const auto found = group ? group->entries.find(key) : typename Table::iterator{};
+            if (!group || found == group->entries.end())
+                return std::unexpected(Error::input);
+            const auto row = owner_->tree_.find(found->second); // 原树保持不变, 名称/记录都属于本 Scope 旧基线.
+            if (!row.first || (*row.first)->key != key || *(*row.first)->scope != scope)
+                return std::unexpected(Error::duplicate); // 同批新加入的键不属于原树, 不能当成旧项删除.
+            if (!seen_.insert(row.first->get()).second)
+                return std::unexpected(Error::duplicate);
+            removed_.push_back({group, *row.first});
+            tree_.prepare(found->second);
+            tree_.erase(found->second);
+            bytes_ -= *owner_->weight(key, *row.second);
+            --records_;
+            failed_ = false;
+            return {};
         }
 
     private:
@@ -418,8 +454,9 @@ public:
         }
 
         Origin* owner_{};                                   // 唯一准备责任, 移动/提交后置空.
-        Tree tree_;                                         // 候选 COW 根, 与真实来源共用 gate 同步域.
+        Tree tree_;                                         // 候选先共享原根以强制 COW, 最终发布仍在真实来源的 gate 同步域.
         std::vector<Added> added_;                          // 新查找项回滚列表.
+        std::vector<Added> removed_;                        // 仅提交时摘除的旧项, 失败保留真实目录及名称.
         std::vector<std::shared_ptr<const Scope>> created_; // 新空组回滚列表.
         std::unordered_set<const Name*> seen_;              // 固定名称去重, 不复制 Key 文本.
         std::size_t bytes_{};                               // 候选记录计费, 目录在 owner 暂存但被 editing_ 隔离.
@@ -483,11 +520,22 @@ public:
             }
         }
 
+        // 只枚举一个 Scope, 不为每个范围重新扫描全部候选记录.
+        void each(const Scope& scope, auto&& reader) const {
+            if (candidate_)
+                candidate_->each(scope, std::forward<decltype(reader)>(reader));
+        }
+
+        // 有序且有界的范围清单, 只复制地址, 不复制载荷或创建第二套来源游标.
+        std::vector<Scope> scopes() const {
+            return candidate_ ? candidate_->scopes() : std::vector<Scope>{};
+        }
+
     private:
         friend class Origin;
 
         // position 为完整快照声称的来源位置, measure/limits 固定使用接收目标的预算.
-        Draft(std::uint64_t position, Measure measure, Limits limits) : candidate_(std::make_unique<Origin>(std::make_shared<std::mutex>(), measure, false, limits)), position_(position) {}
+        Draft(std::uint64_t position, Measure measure, Limits limits) : candidate_(std::make_unique<Origin>(std::make_shared<std::shared_mutex>(), measure, false, limits)), position_(position) {}
 
         std::unique_ptr<Origin> candidate_; // 独立候选及目录, 从不暴露 View 或裸节点给异步读者.
         std::uint64_t position_{};          // complete 之前不得发布或 ACK 的来源位置.
@@ -516,14 +564,14 @@ public:
     };
 
     // local 决定是否保留发送历史, 远端组不转播收到的数据. gate/measure 均必需, 构造不持锁或启动线程.
-    Origin(std::shared_ptr<std::mutex> gate, Measure measure, bool local, Limits limits) : gate_(std::move(gate)), measure_(measure), local_(local), limits_(limits) {
+    Origin(std::shared_ptr<std::shared_mutex> gate, Measure measure, bool local, Limits limits) : gate_(std::move(gate)), measure_(measure), local_(local), limits_(limits) {
         if (!gate_ || !measure_ || limits_.retention < decltype(limits_.retention)::zero()) {
             throw std::invalid_argument("Invalid source configuration");
         }
     }
 
     // 使用默认组级预算, 不按 Scope 创建多份历史.
-    Origin(std::shared_ptr<std::mutex> gate, Measure measure, bool local) : Origin(std::move(gate), measure, local, Limits{}) {}
+    Origin(std::shared_ptr<std::shared_mutex> gate, Measure measure, bool local) : Origin(std::move(gate), measure, local, Limits{}) {}
 
     // Edit 和外部裸引用不得越过来源寿命, 已返回 View/Item 则独立保持自己的存储.
     ~Origin() = default;
@@ -568,7 +616,7 @@ public:
         return View(tree_.capture(), position_, bytes_ + directory_, gate_);
     }
 
-    // 域提交锁内的内部枚举, 不另建带 Fence 的 View, 避免回调结束重锁同一个 mutex.
+    // 来源独占边界内的内部枚举, 不另建带 Fence 的 View; 可在远端私有准备锁内遍历稳定原根.
     // reader 借用共享名称和完整记录, 不得重入修改本来源或执行用户/网络回调.
     void each(auto&& reader) const {
 
@@ -581,6 +629,39 @@ public:
                 }
             }
         }
+    }
+
+    // 枚举一个来源范围, 复杂度只与该 Scope 的行数有关; caller 持 gate, 不得重入修改.
+    void each(const Scope& scope, auto&& reader) const {
+
+        idle();
+        if (const auto* group = locate(scope)) {
+            for (const auto& [key, slot] : group->entries) {
+                const auto row = tree_.find(slot); // key 借用目录, row 借用当前不可变条目.
+                reader(*row.first, *row.second);
+            }
+        }
+    }
+
+    // 只捕获地址清单, 可以在释放 gate 后按 Scope 逐份准备恢复.
+    std::vector<Scope> scopes() const {
+
+        idle();
+        std::vector<Scope> result; // 拥有地址副本, 不在锁外借用 Group.
+        result.reserve(scopes_);
+        for (const auto& [sector, spectra] : groups_) {
+            for (const auto& [spectrum, group] : spectra)
+                result.push_back(*group.scope);
+        }
+        return result;
+    }
+
+    // 外层确认全部 Scope 已安装后才推进连续边界. 局部安装不调用, 不给本机发送来源任意改号.
+    bool confirm(std::uint64_t position) noexcept {
+        if (local_ || editing_ || position < position_)
+            return false;
+        position_ = position;
+        return true;
     }
 
     // 准备一次单目标事实. position 非空必须是严格 +1; nullopt 仅供 Catalog/副本本地 TTL 维护, 不写来源历史.
@@ -679,7 +760,7 @@ public:
 
     // 仅远端来源接收完整基线, 允许同位置修复但不回退. 调用者先准备关联投影/水位/调度, 确认 complete 后一起发布.
     // 新旧根交换不遍历、不分配, 返回对象须在 gate 外回收. 不给自有来源引入任意改号入口.
-    std::expected<Replaced, Error> reset(Draft&& draft) {
+    std::expected<void, Error> validate(const Draft& draft) const {
 
         idle();
         if (local_ || !draft.candidate_ || draft.candidate_->measure_ != measure_) {
@@ -688,11 +769,22 @@ public:
         if (draft.position_ < position_ || (draft.position_ == 0 && draft.candidate_->records_ != 0)) {
             return std::unexpected(Error::version);
         }
-        auto& candidate = *draft.candidate_; // 不存在对其页面的逃逸读者, 可安全移入目标同步域.
-        static_assert(std::is_nothrow_swappable_v<Tree> && noexcept(groups_.swap(candidate.groups_)) && noexcept(history_.swap(candidate.history_)));
+        const auto& candidate = *draft.candidate_;
         if (candidate.records_ > limits_.records || candidate.scopes_ > limits_.scopes || candidate.directory_ > limits_.bytes || candidate.bytes_ > limits_.bytes - candidate.directory_) {
             return std::unexpected(Error::capacity);
         }
+        return {};
+    }
+
+    // 完整候选一次交换, 用于仍要求整个容器原子的内部调用; 分步恢复只复用 validate.
+    std::expected<Replaced, Error> reset(Draft&& draft) {
+
+        const auto valid = validate(draft);
+        if (!valid) {
+            return std::unexpected(valid.error());
+        }
+        auto& candidate = *draft.candidate_; // 不存在对其页面的逃逸读者, 可安全移入目标同步域.
+        static_assert(std::is_nothrow_swappable_v<Tree> && noexcept(groups_.swap(candidate.groups_)) && noexcept(history_.swap(candidate.history_)));
         groups_.swap(candidate.groups_);
         std::swap(tree_, candidate.tree_);
         history_.swap(candidate.history_);
@@ -841,19 +933,19 @@ private:
         }
     }
 
-    std::size_t directory_{};                // 两级目录保守计费, 与当前行计费共同受总 bytes 约束.
-    const std::shared_ptr<std::mutex> gate_; // 外层统一提交锁, View 独立保持同步寿命.
-    const Measure measure_;                  // 固定的原生计费函数, 构造后不改变规则.
-    const bool local_;                       // 仅自有来源保留发送历史.
-    const Limits limits_;                    // 来源级静态预算.
-    Tree tree_;                              // 原生记录的完整来源根.
-    Groups groups_;                          // 两级目录先析构, 借用的键文本由后析构的 tree_ 保持有效.
-    std::deque<Event> history_;              // 有界连续本机来源历史, 远端组为空.
-    std::uint64_t position_{};               // 全 Scope 共享的唯一来源位置.
-    std::size_t records_{};                  // 当前原生行数, 初始零.
-    std::size_t scopes_{};                   // 当前非空或本次准备的 Scope 数.
-    std::size_t bytes_{};                    // 当前行的保守计费, 初始零.
-    std::size_t backlog_{};                  // 保留历史的保守计费, 包含尚未提交尾项时由 editing_ 阻止观察.
-    bool editing_{};                         // 一次只允许一个 prepare/commit, 不是跨线程原子标记.
+    std::size_t directory_{};                       // 两级目录保守计费, 与当前行计费共同受总 bytes 约束.
+    const std::shared_ptr<std::shared_mutex> gate_; // 外层统一提交锁, View 独立保持同步寿命.
+    const Measure measure_;                         // 固定的原生计费函数, 构造后不改变规则.
+    const bool local_;                              // 仅自有来源保留发送历史.
+    const Limits limits_;                           // 来源级静态预算.
+    Tree tree_;                                     // 原生记录的完整来源根.
+    Groups groups_;                                 // 两级目录先析构, 借用的键文本由后析构的 tree_ 保持有效.
+    std::deque<Event> history_;                     // 有界连续本机来源历史, 远端组为空.
+    std::uint64_t position_{};                      // 全 Scope 共享的唯一来源位置.
+    std::size_t records_{};                         // 当前原生行数, 初始零.
+    std::size_t scopes_{};                          // 当前非空或本次准备的 Scope 数.
+    std::size_t bytes_{};                           // 当前行的保守计费, 初始零.
+    std::size_t backlog_{};                         // 保留历史的保守计费, 包含尚未提交尾项时由 editing_ 阻止观察.
+    bool editing_{};                                // 一次只允许一个 prepare/commit, 不是跨线程原子标记.
 };
 } // namespace astra

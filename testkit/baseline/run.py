@@ -133,6 +133,37 @@ def command(binary, endpoint, case):
     ]
 
 
+def topology(case):
+    """标准基线从三 Star 开始; 小拓扑必须明确标为诊断, 所有节点都须有写入和订阅."""
+    count = case.get("stars", 3)
+    if type(count) is not int or not 1 <= count <= 8:
+        raise ValueError("stars must be an integer in 1..8")
+    if count < 3 and case.get("diagnostic") is not True:
+        raise ValueError("Standard baseline requires at least three Stars")
+    if (
+        case["clients"] < count
+        or case["clients"] % count
+        or case["writers"] < count
+        or case["writers"] % count
+        or case["records"] < case["clients"]
+        or case["records"] % case["clients"]
+        or case["fanout"] < count
+    ):
+        raise ValueError("Every Star must receive writes and every Scope must be watched across all Stars")
+    return dict(case, stars=count)
+
+
+def comet(arguments, case, directory):
+    """把全部真实 Star 地址传给探针, 不把多节点夹具退化为首节点写入."""
+    fixture = dict(case, tls=False, watchers=case["fanout"])
+    return measure.cluster(
+        arguments.binaries,
+        fixture,
+        directory,
+        lambda endpoints: command(arguments.binaries / "baseline_comet", ",".join(endpoints), case),
+    )
+
+
 def redis(arguments, case, directory):
     """只允许操作者显式指定的本轮独占 Redis; 清空前校验回环地址和拥有进程仍存活."""
     host, port = arguments.redis.rsplit(":", 1)
@@ -176,6 +207,8 @@ def redis(arguments, case, directory):
 
 def run(arguments):
     """每个场景交替先后次序, 独立顺序运行, 不让双方争用同一 VM 的 CPU/内存."""
+    # 在创建输出和拉起 Star 之前拒绝拓扑空载, 结果显式记录标准/诊断节点数.
+    cases = [topology(case) for case in json.loads(arguments.cases.read_text())]
     arguments.output.mkdir(parents=True, exist_ok=False)
     identity = {
         "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -192,7 +225,6 @@ def run(arguments):
         },
     }
     (arguments.output / "identity.json").write_text(json.dumps(identity, indent=2))
-    cases = json.loads(arguments.cases.read_text())
     results = []
     try:
         for number, case in enumerate(cases):
@@ -216,17 +248,7 @@ def run(arguments):
                         if implementation == "redis":
                             values = redis(arguments, case, directory)
                         else:
-                            fixture = dict(case, stars=1, tls=False, watchers=case["fanout"])
-                            values = measure.cluster(
-                                arguments.binaries,
-                                fixture,
-                                directory,
-                                lambda endpoints: command(
-                                    arguments.binaries / "baseline_comet",
-                                    endpoints[0],
-                                    case,
-                                ),
-                            )
+                            values = comet(arguments, case, directory)
                         result["measurements"] = values
                         if {value["metric"] for value in values} != ({"commit", "visible", "sampler"} if case["mode"] == "visible" else {"commit", "sampler"}):
                             raise RuntimeError("Incomplete probe output")

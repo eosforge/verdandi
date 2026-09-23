@@ -16,6 +16,8 @@ python3 -B astra/bench/run.py --binaries build/astra/release --cases astra/bench
 python3 -B astra/bench/run.py --binaries build/astra/release --cases astra/bench/concurrency.json --output build/performance/concurrency
 ```
 
+`star_restore_bench <每远端记录数> <Scope数量> <0或1>` 单独诊断六个本机写者与两个远端全量恢复的竞争, `0` 为无恢复对照, `1` 为并发恢复. 例如 `4096 1 1` 与 `4096 64 1` 保持总记录量相同, 仅改变恢复的 Scope 分布. 使用真实 Catalog/Origin/Scene, 业务时间固定, 不含网络、Pulsar 或 SDK, 不将此成绩冒充三 Star 系统吞吐. 普通 CTest 不自动运行性能探针.
+
 构建并发应按当次实际资源调整, 示例的一任务不覆盖项目的自适应并行规则. 网络场景还需要先通过统一构建入口生成当前的 `star`、`pulsar`、`polaris`、`astrolabe`; 运行器不会替用户构建. 输出目录必须不存在, 不覆盖已有证据. `--repeat=1..5` 控制有限轮次, 默认三轮, 不启动长期后台任务.
 
 Polaris 使用真实 SQLite 文件、生产 WAL/FULL 配置和已填满的历史, 建库/预填不计入提交耗时. 在本项目的离线 Go 环境中运行:

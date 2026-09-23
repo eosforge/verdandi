@@ -14,6 +14,10 @@
 
 `records` 是全场景记录总数, 均匀分布到 `groups` 个范围. 每个范围有 `fanout` 个真正独立的 Selector/Subscriber/Observer, 总订阅数为 `groups * fanout`. 生产侧和消费侧各有 `clients` 个共享 Client, 记录/订阅轮流分配. `writers` 个线程拥有互不重叠的记录序列, 轮转更新全部记录, 每线程最多一个在途请求.
 
+标准矩阵从 **3 台 Star 同时写入** 开始. `stars` 缺省为 3, 每个生产 Client 只持有一个固定 Star 地址, 按 Client 序号轮转; 消费 Client 再错开一个节点. `clients`、`writers` 必须覆盖并整除 Star 数, 每 Scope 的 `fanout` 至少等于 Star 数, 保证全部来源都有写入且每个 Scope 在全部节点上验收. 不把多个地址传给同一个 Client 后依赖故障转移来制造负载分布. 单 Scope 测三来源合并, 多 Scope 测独立范围的同时更新. Ephemeris 始终向注册它的 Star 更新/续租, Catalog 不同来源使用互不冲突的 Key.
+
+`cases.json` 为三 Star 标准矩阵, 共 36 个配置, 包含两个动态域各 24 写者/6 Client 和 24 写者/3 Client 的提交场景. Catalog 另包含 2048 字节正文的普通/高扇出, 两种完成模式各一项; 与相同拓扑的 128 字节场景比较, 2K 明确为 2 KiB, 不是总 RPC 线长. 当前探针最多支持 32 个写者, 不将参数拒绝记为性能失败或零吞吐. 单/双 Star 必须显式配置 `stars` 和 `diagnostic: true`, 只用于定位串行成本或协议边界. 测试参数变化后不得与旧单 Star 数字直接计算代码提速比例; 前后代码必须重新使用相同拓扑、参数和总资源测量.
+
 逻辑 Data 前十六字节为记录编号和递增版本, 剩余为固定内容; 两个适配器使用相同正文和 Attr. 旧 SDK 为满足 Fields 接口多包一个 `body` 字段, 编码、复制和解码成本保留. 不对真实接口成本做估算扣减.
 
 | 模式 | 下一次写入条件 | 延迟 | 吞吐含义 |
@@ -27,9 +31,9 @@
 
 ## 明确的差异
 
-- 两边均为回环网络、关闭业务认证/TLS、单数据节点、纯内存提交. Astra 仍真实启动 Pulsar/Polaris/Star, 内部链路保留 TLS/准入; Redis 的 AOF 与 RDB 关闭. 没有多 Star 复制成本混入单 Redis 比较.
+- 两边均为回环网络、关闭业务认证/TLS、纯内存业务提交. 标准 Astra 模型真实启动 Pulsar/Polaris/三台 Star, 内部链路保留 TLS/准入和全网复制; 冻结 Redis SDK 仍使用一台 Redis, AOF 与 RDB 关闭. 比较是固定总 VM 资源下的应用方案成本, 不是相同复制保证的数据库引擎排名; 报告须明确节点数、每节点及合计资源, 不将三台吞吐相加后称作单台提速.
 - 旧 Selector 的 `view_publish_interval` 显式设为 0, 去掉默认 10 ms 合并等待; Redis 根连接池上限为每 Client 32, Comet 每 Client 允许 128 个 reader. 逻辑 Client 数相同不代表实际 TCP、HTTP/2 流和线程数相同, 资源轨迹如实记录.
-- `coalesced.json` 单独恢复旧 Selector 默认 10 ms 合并窗口, 对照 256 条注册/8 个 Selector 的提交与可见完成率. 不与零合并主矩阵混合, 不把 10 ms 配置当作实际可见延迟上限. Comet 对照侧不改变生产配置.
+- `coalesced.json` 显式保留单 Star 诊断, 恢复旧 Selector 默认 10 ms 合并窗口, 对照 256 条注册/8 个 Selector 的提交与可见完成率. 不与三 Star 零合并主矩阵混合, 不把 10 ms 配置当作实际可见延迟上限. Comet 对照侧不改变生产配置.
 - 旧 Registration 更新刷新 TTL, Comet 的 Data 更新和续租独立. 旧 Catalog 没有动态 Catalog 的租约. 短 TTL 场景刻意包含实际自动续租差异, 不宣称协议工作量完全相同.
 - 旧 Catalog 的 Entry 读取执行 Fields 解码, 旧 Selector 的候选事务执行其公开投影步骤; Comet 遍历不可变 View. 这是应用接口的实际成本, 不是纯网络带宽测量.
 

@@ -191,13 +191,23 @@ export function observation(input: unknown): Observation {
   return { nodes, observed: value.observed, stale: value.stale };
 }
 
-/** 有界指标投影, 陈旧时仍展示其明确观测时间, 不冒充实时成功. */
+/** 指标覆盖完整准入目录, 使用与目录相同的响应预算; 陈旧/未采集不冒充实时成功. */
 export function samples(input: unknown): readonly Sample[] {
   const value = object(input);
-  if (!Array.isArray(value.samples) || value.samples.length > 64) throw new Error("指标观察无效");
+  if (!Array.isArray(value.samples) || value.samples.length > 16384) throw new Error("指标观察无效");
+  const ids = new Set<string>();
   return value.samples.map((raw: unknown): Sample => {
     const sample = object(raw);
-    if (typeof sample.id !== "string" || typeof sample.observed !== "string" || typeof sample.stale !== "boolean") throw new Error("指标字段无效");
+    if (
+      typeof sample.id !== "string" ||
+      sample.id.length === 0 ||
+      sample.id.length > 256 ||
+      typeof sample.observed !== "string" ||
+      typeof sample.stale !== "boolean"
+    )
+      throw new Error("指标字段无效");
+    if (ids.has(sample.id)) throw new Error("指标身份重复");
+    ids.add(sample.id);
     const values: Record<string, string> = {};
     const entries = sample.values === null ? [] : Object.entries(object(sample.values));
     if (entries.length > 32) throw new Error("指标项过多");

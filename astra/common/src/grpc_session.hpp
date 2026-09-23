@@ -25,6 +25,11 @@ public:
         virtual proto::astra::v1::SessionPacket take() = 0;
         // 对端两个来源初始前缀已经完整安装, 不表示其余集群来源都就绪.
         virtual bool ready() const noexcept = 0;
+
+        // 已有无需等待网络的有界本地工作; 默认无任务, 控制器仍每轮公平访问其他会话.
+        virtual bool pending() const noexcept {
+            return false;
+        }
     };
 
     // Runtime 在 Hello 接纳后安装唯一协作者, 借用数据状态的寿命必须覆盖 Session.

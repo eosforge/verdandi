@@ -1,5 +1,6 @@
 #include "catalog_state.hpp"
 #include "check.hpp"
+#include "exports.hpp"
 #include <iostream>
 #include <new>
 #include <string>
@@ -102,8 +103,8 @@ void reads() {
     CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
     CHECK(state.find(pending, "key") == std::unexpected(State::Error::clock));
     CHECK(state.changes(pending, 0) == std::unexpected(State::Error::clock));
-    CHECK(state.events(0) == std::unexpected(State::Error::clock));
-    CHECK(state.deliver(0, 8, 4096) == std::unexpected(State::Error::clock));
+    CHECK(state.events(0) && state.events(0)->empty()); // 无时钟也可导出已有空来源, 不隐式清理.
+    CHECK(state.deliver(0, 8, 4096));                   // 来源恢复不依赖公共读取的时钟资格.
 
     ready = fail = true;
     bool caught{}; // 只有实际捕获取时异常才接受后续恢复检查.
@@ -193,6 +194,7 @@ void capacity() {
 // 原生状态用例不创建网络/数据库, 所有时间边界由测试明确控制.
 int main() {
     try {
+        exports<State>([](State& state, const Scope& scope) { CHECK(state.publish(scope, "key", bytes("value"), 1, 1000)); return std::string("key"); });
         lifecycle();
         boundary();
         reads();

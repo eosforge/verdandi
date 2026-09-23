@@ -68,6 +68,7 @@ public:
     static bool valid(const Record& record) noexcept;
 
 private:
+    class Encoding; // 公开分页的字段策略, 不向原生存储引入 Protobuf 类型.
     // 验证已建立的非负时间, 不要求仍与 Pulsar 同步.
     static std::expected<void, Error> ready(const Clock::Reading& reading) noexcept;
     // 统一验证两份可选旧记录, 不借机建立不存在的索引节点.

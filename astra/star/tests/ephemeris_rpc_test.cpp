@@ -213,6 +213,46 @@ void resume() {
     CHECK(known.next().changes(0).has_erase());
 }
 
+// 同范围多流可复用旧前缀, 其间追加的新 Data 必须继续送达; 取消一个流不释放其他在途页.
+void fanout() {
+
+    Fixture fixture(false); // 普通历史关闭, 只能依靠每条活动流自己的连续后缀和共享冻结批次.
+    const astra::Scope scope{"service", "main"};
+    const auto attr = std::make_shared<const Ephemeris::Buffer>(8, 1);
+    const auto created = fixture.state.create(scope, attr, std::make_shared<const Ephemeris::Buffer>(8, 2), 1000);
+    CHECK(created);
+    std::array<std::unique_ptr<Watching>, 4> watches; // 三条相同全范围, 一条精确目标, 不能错误共用过滤结果.
+    for (std::size_t index = 0; index < watches.size(); ++index) {
+        watches[index] = std::make_unique<Watching>(fixture, index == 3 ? created->uuid : "");
+        CHECK(watches[index]->next().version() == 1);
+    }
+    {
+        const std::lock_guard pause(fixture.control); // 第一批完全合并, 解锁后至少形成一个可复用前缀.
+        for (std::uint64_t order = 1; order <= 20; ++order)
+            CHECK(fixture.state.update(scope, created->uuid, std::make_shared<const Ephemeris::Buffer>(8, static_cast<std::uint8_t>(order)), order));
+    }
+    const auto first = watches[0]->next();
+    CHECK(first.version() == 21 && first.changes(0).data() == std::string(8, 20));
+    watches[1].reset(); // 其他慢读者未消费旧页, 此流取消不得影响它们所持的共享消息.
+    {
+        const std::lock_guard pause(fixture.control);
+        for (std::uint64_t order = 21; order <= 40; ++order)
+            CHECK(fixture.state.update(scope, created->uuid, std::make_shared<const Ephemeris::Buffer>(8, static_cast<std::uint8_t>(order)), order));
+    }
+    for (const auto index : {0U, 2U, 3U}) {
+        std::uint64_t version = index == 0 ? 21 : 1; // 每条网络流自己的已完成位置, 不借别人的确认.
+        while (version < 41) {
+            const auto page = watches[index]->next();
+            CHECK(page.version() > version && page.version() <= 41 && page.changes_size() == 1);
+            version = page.version();
+            const auto& change = page.changes(0);
+            CHECK(change.uuid() == created->uuid && change.has_data());
+            if (version == 41)
+                CHECK(change.data() == std::string(8, 40));
+        }
+    }
+}
+
 // 实际创建/更新/续租/重复确认/注销, 检查来源位置与下游内容游标没有重新混成一个版本.
 void lifecycle() {
 
@@ -335,8 +375,22 @@ void editions() {
         const auto first = singles.next("star-test");
         CHECK(first.complete() && first.changes_size() == 3 && first.changes(0).key() == "a" && first.changes(1).key() == "b" && first.changes(2).key() == "c");
 
+        auto captured = state.capture(scope); // 移交捕获根后, 版本、计费和旧正文必须由 Edition 自己拥有.
+        auto point = state.find(scope, "a");  // 精确点查同样移交 Record, 不保留对 Point 的借用.
+        CHECK(captured && point);
+        const auto retained = captured->bytes();
+        astra::Catalog::Edition frozen(std::move(*captured));
+        astra::Catalog::Edition exact("a", std::move(*point));
         CHECK(state.publish(scope, "a", buffer(7), 2, 1000));
         CHECK(state.publish(scope, "b", buffer(8), 2, 1000));
+        const auto snapshot = frozen.next("star-test"); // 当前已到版本 5, 冻结根仍只能发布版本 3 的三条旧记录.
+        const auto single = exact.next("star-test");
+        CHECK(snapshot.complete() && snapshot.version() == 3 && snapshot.changes_size() == 3 && frozen.bytes() == retained);
+        for (const auto& change : snapshot.changes()) {
+            CHECK(change.version() == 1 && change.value() == std::string(1, static_cast<char>(change.key()[0] - 'a' + 1)));
+        }
+        CHECK(single.complete() && single.version() == 3 && single.changes_size() == 1 && single.changes(0).key() == "a" && single.changes(0).value() == std::string(1, '\1'));
+
         auto history = state.changes(scope, 0); // 两组重复项后跟唯一尾项, 覆盖连续前移压缩.
         CHECK(history);
         astra::Catalog::Edition merged(5, std::move(*history));
@@ -353,10 +407,26 @@ void editions() {
         const auto two = state.create(scope, buffer(9), buffer(2), 1000);
         const auto three = state.create(scope, buffer(9), buffer(3), 1000);
         CHECK(one && two && three);
+        auto captured = state.capture(scope); // 捕获完整 Attr/Data 后移交, 随后的更新和删除不得穿透旧根.
+        auto point = state.find(scope, one->uuid);
+        CHECK(captured && point);
+        const auto retained = captured->bytes();
+        Ephemeris::Edition frozen(std::move(*captured));
+        Ephemeris::Edition exact(one->uuid, std::move(*point));
         CHECK(state.update(scope, one->uuid, buffer(4), 1));
         CHECK(state.update(scope, one->uuid, buffer(5), 2));
         CHECK(state.remove(scope, two->uuid));
         CHECK(state.update(scope, three->uuid, buffer(6), 1));
+
+        const auto snapshot = frozen.next("star-test"); // 当前已到版本 7, 旧根仍包含后来删除的第二条注册.
+        const auto single = exact.next("star-test");
+        const std::map<std::string, char> expected{{one->uuid, '\1'}, {two->uuid, '\2'}, {three->uuid, '\3'}}; // UUID 无排序假设.
+        CHECK(snapshot.complete() && snapshot.version() == 3 && snapshot.changes_size() == 3 && frozen.bytes() == retained);
+        for (const auto& change : snapshot.changes()) {
+            CHECK(change.has_record() && change.record().attr() == std::string(1, '\11') && change.record().data() == std::string(1, expected.at(change.uuid())));
+        }
+        CHECK(single.complete() && single.version() == 3 && single.changes_size() == 1 && single.changes(0).uuid() == one->uuid && single.changes(0).record().data() == std::string(1, '\1'));
+
         for (const auto since : {0U, 3U}) {
             auto history = state.changes(scope, since); // 零游标须保留 Attr, 已有基线则允许只推 Data.
             CHECK(history);
@@ -389,6 +459,7 @@ int main() {
         rejection();
         streaming();
         resume();
+        fanout();
         std::cout << "Ephemeris RPC tests passed\n";
         return 0;
     } catch (const std::exception& error) {

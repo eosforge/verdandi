@@ -26,6 +26,7 @@ public:
     Result<const Packet*> prepare(Steady::time_point now) override;              // 控制消息优先, 两域公平取尾部.
     Packet take() override;                                                      // 紧接 StartWrite 移交唯一包, 不建立第二份发送队列.
     bool ready() const noexcept override;                                        // 两个域的首轮来源目标都已安装.
+    bool pending() const noexcept override;                                      // 完整候选尚有 Scope 待安装, 可立即再执行一轮.
 
 private:
     // 两种来源的公共恢复机制, 原生字段合并仍由 State 各自实现, 不混成统一 KV 模型.
@@ -52,6 +53,10 @@ private:
         bool ready() const noexcept;                                                            // 已到达首次声明的源头, 后续新写入不撤销启动完成事实.
         bool expired(Steady::time_point now) const noexcept;                                    // 优先响应对端也不能跳过本域恢复截止.
 
+        bool pending() const noexcept {
+            return recovery_.has_value();
+        } // 只报告可本地推进的任务, 网络等待不触发忙循环.
+
     private:
         // 队列只有正在等待精确回补时才累积, 持有包及处理偏移, 不复制成逐 Key 工作流.
         struct Pending {
@@ -69,25 +74,26 @@ private:
         void clear() noexcept;                                            // 放弃私有接收工作, 不改变已确认来源根.
         void acknowledge();                                               // 合并最新 ACK, 不为每条事实排一条回执.
 
-        State& state_;                                   // 真实原生提交器, 不持有网络对象.
-        const std::string& peer_;                        // 已鉴权来源 ID, 外层保证固定寿命.
-        Budget& budget_;                                 // 全 Runtime 共用的恢复空间预算.
-        Dispatch<Domain> dispatch_;                      // 只发送自身事实, 不转发已接收副本.
-        std::deque<Pending> pending_;                    // 最大 64 包且计费不超过 8 MiB.
-        std::size_t bytes_{};                            // 本队列已计费字节.
-        std::optional<Landing<Domain>> landing_;         // 私有全量候选, 每域至多一个.
-        std::size_t workspace_{};                        // 全量候选预留 64 MiB, 防止多流同时准备失控.
-        std::optional<proto::astra::v1::Repair> repair_; // 当前阻塞目标及触发位置, 不是全局任务 ID.
-        std::optional<Packet> packet_;                   // 本域至多一个控制包; 数据包留在 Dispatch 内.
-        std::optional<std::uint64_t> acknowledgement_;   // 最新已安装连续位置, 重复通知合并.
-        std::optional<std::uint64_t> target_;            // 首个数据包声明的来源目标, 用于启动屏障.
-        std::uint64_t received_{};                       // 已安装连续位置, 与目标回补 R 明确分开.
-        std::uint64_t seen_{};                           // 收到的完整前缀/完整基线, 包积压时可以领先 received_.
-        Steady::time_point deadline_;                    // 首轮、半份快照或回补的 30 s 无进展期限.
-        bool resume_ = true;                             // 首次发出本域恢复请求后归零.
-        bool opened_{};                                  // 已收到对端恢复请求, Dispatch 才可发送数据.
-        bool requested_{};                               // 当前 repair 已交给 gRPC, 不每轮重复发请求.
-        bool dispatched_{};                              // prepare 当前借用来自 Dispatch, take 按此归还.
+        State& state_;                                     // 真实原生提交器, 不持有网络对象.
+        const std::string& peer_;                          // 已鉴权来源 ID, 外层保证固定寿命.
+        Budget& budget_;                                   // 全 Runtime 共用的恢复空间预算.
+        Dispatch<Domain> dispatch_;                        // 只发送自身事实, 不转发已接收副本.
+        std::deque<Pending> pending_;                      // 最大 64 包且计费不超过 8 MiB.
+        std::size_t bytes_{};                              // 本队列已计费字节.
+        std::optional<Landing<Domain>> landing_;           // 私有全量候选, 每域至多一个.
+        std::optional<typename State::Recovery> recovery_; // 完整接收后的逐 Scope 安装任务, 每控制轮最多一个范围.
+        std::size_t workspace_{};                          // 全量候选预留 64 MiB, 防止多流同时准备失控.
+        std::optional<proto::astra::v1::Repair> repair_;   // 当前阻塞目标及触发位置, 不是全局任务 ID.
+        std::optional<Packet> packet_;                     // 本域至多一个控制包; 数据包留在 Dispatch 内.
+        std::optional<std::uint64_t> acknowledgement_;     // 最新已安装连续位置, 重复通知合并.
+        std::optional<std::uint64_t> target_;              // 首个数据包声明的来源目标, 用于启动屏障.
+        std::uint64_t received_{};                         // 已安装连续位置, 与目标回补 R 明确分开.
+        std::uint64_t seen_{};                             // 收到的完整前缀/完整基线, 包积压时可以领先 received_.
+        Steady::time_point deadline_;                      // 首轮、半份快照或回补的 30 s 无进展期限.
+        bool resume_ = true;                               // 首次发出本域恢复请求后归零.
+        bool opened_{};                                    // 已收到对端恢复请求, Dispatch 才可发送数据.
+        bool requested_{};                                 // 当前 repair 已交给 gRPC, 不每轮重复发请求.
+        bool dispatched_{};                                // prepare 当前借用来自 Dispatch, take 按此归还.
     };
 
     // 回补响应数量及字节双重有界, 高优先级控制包仍遵守唯一在途写.

@@ -1,4 +1,5 @@
 #include "check.hpp"
+#include "duplicates.hpp"
 #include "subscription.hpp"
 #include <iostream>
 
@@ -103,6 +104,7 @@ int main() {
     try {
         lifecycle();
         malformed();
+        comet::test::duplicates<Subscription>([](auto& change, std::string_view key) { change.set_key(key); change.mutable_erase(); }); // Catalog Delete 不携带业务版本.
         std::cout << "Catalog subscription tests passed\n";
         return 0;
     } catch (const std::exception& error) {

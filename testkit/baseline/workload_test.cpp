@@ -83,6 +83,24 @@ int main() {
         Workload::check(Workload::number("0") == 0 && Workload::number("4294967295") == 4294967295U, "Unsigned boundary rejected");
         rejected([] { static_cast<void>(Measure::number("4294967301", 2, 30)); });                   // 防止先截断为 5 再通过秒数校验.
         rejected([] { static_cast<void>(Measure::number("18446744073709551616", 0, UINT64_MAX)); }); // 底层 uint64 本身溢出.
+        // 三台 Star 必须同时拥有写者, 消费侧按环错开; 每范围订阅实际覆盖所有节点.
+        Workload::Options cluster{"a,b,c", true, true, 96, 3, 3, 6, 6, 32, 32, 2, 30000, 100, 1000}; // 与下方八记录内存夹具独立, 不运行服务.
+        const Workload::Route route(cluster);                                                        // 六个 Client, 每台 Star 两个生产核心及两个消费核心.
+        for (std::size_t client = 0; client < cluster.clients; ++client) {
+            Workload::check(route.producer(client) == std::array{"a", "b", "c"}[client % 3], "Producer did not cover every Star");
+            Workload::check(route.consumer(client) == std::array{"b", "c", "a"}[client % 3], "Consumer was not routed across Stars");
+        }
+        for (const auto endpoints : {"", "a,", ",a", "a,,b", "a,a"}) {
+            auto invalid = cluster; // 配置副本只用于拒绝路径, 不改变合法模型.
+            invalid.endpoint = endpoints;
+            rejected([&] { static_cast<void>(Workload::Route(invalid)); });
+        }
+        // 分别缺少 Client、并发写者或每范围订阅时都必须拒绝, 不能让第三节点空载.
+        for (const auto field : {&Workload::Options::clients, &Workload::Options::writers, &Workload::Options::fanout}) {
+            auto invalid = cluster; // field 指定唯一被破坏的覆盖约束, 其余字段保持合法.
+            invalid.*field = 2;
+            rejected([&] { static_cast<void>(Workload::Route(invalid)); });
+        }
         Workload::Options options{"memory", true, true, 8, 2, 2, 2, 4, 32, 32, 2, 30000, 100, 1000}; // 两组各两个订阅, 四写者均匀操作八条记录.
         Workload::run<Adapter>(options);
         options.visible = false;

@@ -5,7 +5,7 @@
 namespace astra {
 Catalog::State::State(Clock& clock) : State([&clock] { return clock.now(); }, Limits{}) {}
 
-Catalog::State::State(Time time, Limits limits) : time_(std::move(time)), limits_(limits), source_(gate_, static_cast<Source::Measure>(&State::measure), true, limits.source), merged_(gate_, static_cast<Source::Measure>(&State::measure), false, limits.source) {
+Catalog::State::State(Time time, Limits limits) : time_(std::move(time)), limits_(limits), source_(export_, static_cast<Source::Measure>(&State::measure), true, limits.source), merged_(gate_, static_cast<Source::Measure>(&State::measure), false, limits.source) {
     if (!time_) {
         throw std::invalid_argument("Catalog requires a clock");
     }
@@ -98,7 +98,8 @@ void Catalog::State::notify(Notify notify, void* context) {
 
 std::expected<Clock::Reading, Catalog::State::Error> Catalog::State::reading() {
 
-    auto value = time_(); // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
+    const std::lock_guard timing(timing_); // 共享读者仍按调用顺序验证注入时钟, 不并发修改 observed_.
+    auto value = time_();                  // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
     if (!value || !value->ready || value->time.time_since_epoch().count() < 0 || (observed_ && value->time < *observed_)) {
         return std::unexpected(Error::clock);
     }
@@ -166,6 +167,7 @@ std::expected<void, Catalog::State::Error> Catalog::State::change(const Scope& s
         return std::unexpected(stamp.error());
     }
     advance(stamp->time, expired);
+    const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
     const auto old = source_.find(scope, key), known = merged_.find(scope, key);
     const auto* current = old ? &*old : nullptr;
     const auto* highest = known ? &*known : nullptr;
@@ -209,9 +211,11 @@ std::expected<void, Catalog::State::Error> Catalog::State::change(const Scope& s
     }
     if (!agenda_) {
         agenda_ = std::make_unique<Agenda>(stamp->time);
+        due_ = std::min(due_, agenda_->next()); // 首次创建的轮立即纳入统一下次边界.
     }
     if (!outlook_) {
         outlook_ = std::make_unique<Agenda>(stamp->time);
+        due_ = std::min(due_, outlook_->next()); // 首次创建的轮立即纳入统一下次边界.
     }
     auto found = timers_.find(origin->name().get());
     if (found == timers_.end()) {
@@ -228,7 +232,7 @@ std::expected<void, Catalog::State::Error> Catalog::State::change(const Scope& s
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    candidate = renewal ? Catalog::renew(current, highest, version, ttl, *stamp) : Catalog::publish(current, highest, value, version, ttl, *stamp);
+    candidate = renewal ? Catalog::renew(current, highest, version, ttl, *stamp) : Catalog::publish(current, highest, candidate->value, version, ttl, *stamp); // 首次校验已复用相同正文, 最终复核沿用该引用以命中指针快速路径.
     if (!candidate) {
         return std::unexpected(error(candidate.error()));
     }
@@ -300,8 +304,11 @@ std::expected<Catalog::State::Retired, Catalog::State::Error> Catalog::State::ex
     return retired;
 }
 
-void Catalog::State::advance(Clock::Time now, std::vector<Retired>& retired) {
+std::shared_ptr<Catalog::State::Replica> Catalog::State::advance(Clock::Time now, std::vector<Retired>& retired, Replica* held) {
 
+    std::shared_ptr<Replica> blocked; // 返回仍有到期/退役责任的忙来源, 公开读取稍后在域锁外等待.
+    if (now < due_)
+        return {}; // 本轮无任何时间轮能前进, 不再逐来源遍历; 不是 max_ticks 或时间截断.
     const auto advance = [&](Source& source, Agenda* agenda, bool projected) {
         if (!agenda) {
             return;
@@ -324,10 +331,26 @@ void Catalog::State::advance(Clock::Time now, std::vector<Retired>& retired) {
             retired.back() = std::move(*removed);
         });
     };
-    advance(source_, agenda_.get(), false);
+    {
+        const std::unique_lock origin_lock(*export_);
+        advance(source_, agenda_.get(), false);
+    } // 本机维护结束立即释放导出锁, 不覆盖下方远端维护.
+
     advance(merged_, outlook_.get(), true);
     for (auto current = replicas_.begin(); current != replicas_.end();) {
-        auto& replica = *current->second; // 正在受理的来源不能 retired, 回收不会使 receive 的引用悬空.
+        const auto owner = current->second; // 保活到 preparing 解锁后, 回收目录不能先销毁仍被锁住的 mutex.
+        auto& replica = *owner;             // 身份可在准备期间退役, 但最后一个守卫释放前对象仍存在.
+        if (&replica == held) {
+            ++current;
+            continue; // 已持非递归来源锁, 不能再次 try_lock, 更不能访问正在编辑的原生目录.
+        }
+        const std::unique_lock preparing(replica.mutex, std::try_to_lock); // 持域锁时只尝试, 禁止等待形成反向锁序.
+        if (!preparing.owns_lock()) {
+            if (!blocked && (replica.retired || (replica.agenda && replica.agenda->next() <= now)))
+                blocked = current->second;
+            ++current;
+            continue;
+        }
         this->advance(replica, now, retired);
         if (replica.retired && replica.timers.empty()) {
             replica_bytes_ -= replica.source.bytes();
@@ -336,30 +359,40 @@ void Catalog::State::advance(Clock::Time now, std::vector<Retired>& retired) {
             ++current;
         }
     }
+    // 忙碌来源仍以其旧边界参加最小值, 不能把未完成维护伪装成时间已追平; 异常保持旧 due_.
+    due_ = Clock::Time::max();
+    const auto include = [&](const Agenda* agenda) {
+        if (agenda)
+            due_ = std::min(due_, agenda->next());
+    };
+    include(agenda_.get());
+    include(outlook_.get());
+    for (const auto& [id, replica] : replicas_)
+        include(replica->agenda.get());
+    if (blocked)
+        due_ = std::min(due_, now); // 空退役来源也有待回收责任, 不能因没有轮而丢失下次检查.
+    return blocked;
 }
 
 void Catalog::State::tick() {
 
-    std::vector<Retired> retired;
-    const std::lock_guard lock(*gate_);
-    if (!agenda_ && !outlook_ && replicas_.empty()) {
-        return;
-    } // 未受理过有限租约时无清理责任, 首次校准前不反复抛出空轮错误.
-    const auto stamp = reading();
-    if (!stamp) {
-        throw std::runtime_error("Catalog clock is unavailable");
+    std::vector<Retired> retired; // 等待/回收不持域锁, 失败仍保留之前已经完成的到期删除.
+    std::unique_lock lock(*gate_);
+    if (!agenda_ && !outlook_ && replicas_.empty())
+        return; // 尚无任何清理责任时允许 Clock 尚未初始化.
+    for (;;) {
+        const auto stamp = reading(); // 每次等待后重新采样, 不拿先前读数作为完成证据.
+        if (!stamp)
+            throw std::runtime_error("Catalog clock is unavailable");
+        auto blocked = advance(stamp->time, retired);
+        if (!blocked)
+            return;
+        Guard waiting(std::move(blocked), lock); // 等待期间其他来源/本地写入仍可取得域锁.
     }
-    advance(stamp->time, retired);
 }
 
 auto Catalog::State::execute(auto&& action) {
-
-    std::vector<Retired> retired;       // 必须先于 lock 构造, 正常返回及异常退出都在解锁后析构旧载荷.
-    const std::lock_guard lock(*gate_); // 覆盖取时、到期提交与完整结果捕获, 不把同步责任交给回调调用方.
-    return reading().and_then([&](const Clock::Reading& stamp) {
-        advance(stamp.time, retired);                    // 与 action 使用同一域边界; 取时失败时两者都不执行.
-        return std::forward<decltype(action)>(action)(); // 直接调用内部闭包, 不分配执行器或擦除类型.
-    });
+    return Reading<State>::execute(*this, std::forward<decltype(action)>(action));
 }
 
 std::expected<Catalog::State::Projection::View, Catalog::State::Error> Catalog::State::capture(const Scope& scope) {
@@ -407,23 +440,18 @@ std::expected<std::vector<Catalog::State::Projection::Event>, Catalog::State::Er
 }
 
 Catalog::State::Source::View Catalog::State::source() {
-
-    std::vector<Retired> retired;
-    const std::lock_guard lock(*gate_);
-    const auto stamp = reading();
-    if (!stamp) {
-        throw std::runtime_error("Catalog clock is unavailable");
-    }
-    advance(stamp->time, retired);
+    const std::shared_lock lock(*export_); // 来源事实自带 deadline, 接收端自行过期; 导出不触发任何域 GC.
     return source_.capture();
 }
 
 std::expected<std::vector<Catalog::State::Source::Event>, Catalog::State::Error> Catalog::State::events(std::uint64_t since) {
-    return execute([&] { return source_.replay(since).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); }); });
+    const std::shared_lock lock(*export_);
+    return source_.replay(since).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 
 std::expected<Catalog::State::Source::Delivery, Catalog::State::Error> Catalog::State::deliver(std::uint64_t since, std::size_t count, std::size_t bytes) {
-    return execute([&] { return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); }); });
+    const std::shared_lock lock(*export_); // 快照/后缀捕获不等待远端安装、公开投影准备或其他来源 GC.
+    return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 
 } // namespace astra

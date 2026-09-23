@@ -1,7 +1,16 @@
 #include "catalog_state.hpp"
-#include <list>
 
 namespace astra {
+Catalog::State::Guard Catalog::State::acquire(std::string_view id, std::unique_lock<std::shared_mutex>& domain) const {
+
+    const auto found = replicas_.find(id); // 只在域锁内使用迭代器, 守卫自行保持来源寿命.
+    Guard result(found == replicas_.end() ? nullptr : found->second, domain);
+    const auto current = replicas_.find(id); // 等待期间可能退役并回收, 不能把旧对象当成新准入来源.
+    if (current == replicas_.end() || current->second.get() != result.get())
+        return Guard(nullptr, domain);
+    return result;
+}
+
 Catalog::State::Hooks::~Hooks() {
     if (!committed) {
         for (const auto* name : added) {
@@ -38,7 +47,7 @@ std::expected<void, Catalog::State::Error> Catalog::State::admit(std::string_vie
     if (replicas_.size() == limits_.replicas) {
         return std::unexpected(Error::capacity);
     }
-    replicas_.emplace(std::string(id), std::make_unique<Replica>(gate_, limits_.source));
+    replicas_.emplace(std::string(id), std::make_shared<Replica>(gate_, limits_.source));
     return {};
 }
 
@@ -47,24 +56,25 @@ void Catalog::State::retire(std::string_view id) {
     const auto found = replicas_.find(id);
     if (found != replicas_.end()) {
         found->second->retired = true;
+        due_ = Clock::Time{};
         found->second->coverage.clear(); // 不再处理此旧身份后缀, 但不更改任何记录的既有期限.
     }
 }
 
 std::expected<std::uint64_t, Catalog::State::Error> Catalog::State::received(std::string_view id) const {
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    return found == replicas_.end() ? std::expected<std::uint64_t, Error>(std::unexpected(Error::input)) : found->second->source.position();
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    return !borrowed.get() ? std::expected<std::uint64_t, Error>(std::unexpected(Error::input)) : borrowed.get()->source.position();
 }
 
 std::expected<Catalog::State::Source::Draft, Catalog::State::Error> Catalog::State::prepare(std::string_view id, std::uint64_t position) {
 
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    const auto& replica = *found->second;
+    const auto& replica = *borrowed.get();
     if (replica.retired || position < replica.source.position() || std::ranges::any_of(replica.coverage, [position](const Replica::Coverage& value) { return value.position > position; })) {
         return std::unexpected(Error::version);
     }
@@ -76,12 +86,12 @@ std::expected<std::optional<Catalog::Record>, Catalog::State::Error> Catalog::St
     if (!scope.valid() || !Scope::text(key, 1024)) {
         return std::unexpected(Error::input);
     }
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    return found->second->source.find(scope, key); // 仅返回来源事实, 不从 merged_ 借正文或较晚截止.
+    return borrowed.get()->source.find(scope, key); // 仅返回来源事实, 不从 merged_ 借正文或较晚截止.
 }
 
 std::expected<Catalog::State::Point, Catalog::State::Error> Catalog::State::resolve(const Scope& scope, std::string_view key) {
@@ -89,13 +99,7 @@ std::expected<Catalog::State::Point, Catalog::State::Error> Catalog::State::reso
     if (!scope.valid() || !Scope::text(key, 1024)) {
         return std::unexpected(Error::input);
     }
-    std::vector<Retired> retired; // 到期清理产生的旧引用在 gate 外释放.
-    const std::lock_guard lock(*gate_);
-    const auto stamp = reading();
-    if (!stamp) {
-        return std::unexpected(stamp.error());
-    }
-    advance(stamp->time, retired);
+    const std::shared_lock lock(*export_); // 只读取自有来源事实及连续位置, 已过期正文由接收端验证绝对截止.
     return Point{source_.position(), source_.find(scope, key)};
 }
 
@@ -105,12 +109,12 @@ std::expected<bool, Catalog::State::Error> Catalog::State::covered(std::string_v
         return std::unexpected(Error::input);
     }
     Source::Retired retired;
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    auto& replica = *found->second;
+    auto& replica = *borrowed.get();
     if (replica.retired) {
         return std::unexpected(Error::version);
     }
@@ -120,7 +124,7 @@ std::expected<bool, Catalog::State::Error> Catalog::State::covered(std::string_v
     if (replica.source.position() == UINT64_MAX || position != replica.source.position() + 1) {
         return std::unexpected(Error::history);
     }
-    if (std::ranges::none_of(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && value.name->key == key && value.position >= position; })) {
+    if (std::ranges::none_of(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && (value.name->key.empty() || value.name->key == key) && value.position >= position; })) {
         return false;
     }
     // 编码适配层先询问覆盖, 避免在原生正文已到期时又为被覆盖的 Data/Renew 发起回补.
@@ -148,12 +152,12 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
     }
     std::vector<Retired> expired; // 所有大块旧引用在 gate 之后析构.
     Retired retired;
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    auto& replica = *found->second;
+    auto& replica = *borrowed.get();
     if (replica.retired) {
         return std::unexpected(Error::version);
     }
@@ -164,7 +168,12 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
         return std::unexpected(Error::history);
     }
     const auto coverage = std::ranges::find_if(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && value.name->key == key; });
-    const auto covered = coverage == replica.coverage.end() ? 0 : coverage->position;
+    auto covered = coverage == replica.coverage.end() ? 0 : coverage->position; // 精确补项可晚于范围基线, 取两者最大覆盖位置.
+    for (const auto& value : replica.coverage) {
+        if (*value.name->scope == scope && value.name->key.empty())
+            covered = std::max(covered, value.position);
+    }
+    const bool precise = coverage != replica.coverage.end();
     const auto index = static_cast<std::size_t>(coverage - replica.coverage.begin()); // reserve 前只保留索引.
     if (covered >= position) {
         if (!repair) {
@@ -177,14 +186,15 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
         }
         return {};
     }
-    if (repair && covered == 0 && replica.coverage.size() == 128) {
+    if (repair && !precise && std::ranges::count_if(replica.coverage, [](const Replica::Coverage& value) { return !value.name->key.empty(); }) >= 128) {
         return std::unexpected(Error::capacity);
     }
     auto stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    advance(stamp->time, expired);
+    advance(replica, stamp->time, expired); // 已持来源锁, 先处理旧期限, 再准备新事实.
+    advance(stamp->time, expired, &replica);
     const auto old = replica.source.find(scope, key);
     if (form == Source::Form::renew && (!old || !old->value || !record->value || old->version != record->version)) {
         return std::unexpected(Error::ended); // 仅期限不能创建本来源缺失或不同版本的正文.
@@ -245,6 +255,7 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
     if (record && record->value && !hook) {
         if (!replica.agenda) {
             replica.agenda = std::make_unique<Agenda>(stamp->time);
+            due_ = std::min(due_, replica.agenda->next()); // 首次创建的轮立即纳入统一下次边界.
         }
         prepared = std::make_unique<Timer>(origin->name());
         replica.timers.reserve(replica.timers.size() + 1);
@@ -252,12 +263,13 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
     if (combined && combined->record.value && !deadlines_.contains(merged->name().get())) {
         if (!outlook_) {
             outlook_ = std::make_unique<Agenda>(stamp->time);
+            due_ = std::min(due_, outlook_->next()); // 首次创建的轮立即纳入统一下次边界.
         }
         pending.deadline = merged->name().get();
         deadlines_.emplace(pending.deadline, std::make_unique<Timer>(merged->name()));
     }
     std::optional<Replica::Coverage> prepared_coverage;
-    if (repair && covered == 0) {
+    if (repair && !precise) {
         replica.coverage.reserve(replica.coverage.size() + 1);
         prepared_coverage.emplace(origin->name(), position);
     }
@@ -313,22 +325,70 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
     return {};
 }
 
+std::expected<Catalog::State::Recovery, Catalog::State::Error> Catalog::State::restore(std::string_view id, Source::Draft&& draft) {
+
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get())
+        return std::unexpected(Error::input);
+    auto& replica = *borrowed.get();
+    if (replica.retired || std::ranges::any_of(replica.coverage, [&](const Replica::Coverage& value) { return value.position > draft.position(); }))
+        return std::unexpected(Error::version);
+    const auto valid = replica.source.validate(draft);
+    if (!valid)
+        return std::unexpected(error(valid.error()));
+    auto scopes = replica.source.scopes(); // 旧范围缺失也要安装空基线, 防止只处理新范围而遗留旧事实.
+    auto incoming = draft.scopes();
+    scopes.insert(scopes.end(), std::make_move_iterator(incoming.begin()), std::make_move_iterator(incoming.end()));
+    std::ranges::sort(scopes);
+    scopes.erase(std::unique(scopes.begin(), scopes.end()), scopes.end());
+    return Recovery(*this, std::string(id), std::move(draft), std::move(scopes));
+}
+
 std::expected<void, Catalog::State::Error> Catalog::State::replace(std::string_view id, Source::Draft&& draft) {
 
+    auto task = restore(id, std::move(draft));
+    if (!task)
+        return std::unexpected(task.error());
+    for (;;) {
+        const auto result = task->step(); // 每一步释放锁并回收旧页后, 再开始下一个 Scope.
+        if (!result)
+            return std::unexpected(result.error());
+        if (*result)
+            return {};
+    }
+}
+
+std::expected<void, Catalog::State::Error> Catalog::State::finish(std::string_view id, std::uint64_t position) {
+
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get())
+        return std::unexpected(Error::input);
+    auto& replica = *borrowed.get();
+    if (replica.retired || std::ranges::any_of(replica.coverage, [position](const Replica::Coverage& value) { return value.position > position; }) || !replica.source.confirm(position))
+        return std::unexpected(Error::version);
+    replica.coverage.clear(); // 全部范围完成后, 连续前缀接管范围覆盖证据.
+    return {};
+}
+
+std::expected<void, Catalog::State::Error> Catalog::State::install(std::string_view id, const Source::Draft& draft, const Scope& scope) {
+
     // 所有旧根/旧轮/旧节点保持到释放提交锁后, 候选失败则保持已经安装的三个根不变.
-    std::optional<Source::Replaced> old_source;
+    std::optional<Source::Tree> old_source;
+    std::vector<std::unique_ptr<Timer>> old_timers; // 本范围被替换的钩子在锁外析构.
     std::optional<Source::Tree> old_merged;
-    std::vector<Projection::Batch::Retired> old_scenes;
+    std::optional<Projection::Batch::Retired> old_scene; // 本范围旧投影及通知事件, 解锁后释放.
     std::vector<std::unique_ptr<Timer>> old_deadlines;
-    std::unique_ptr<Agenda> agenda;
+
     std::unordered_map<const Source::Name*, std::unique_ptr<Timer>> timers;
     std::vector<Retired> expired;
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    auto& replica = *found->second;
+    auto& replica = *borrowed.get();
     if (replica.retired || draft.position() < replica.source.position() || std::ranges::any_of(replica.coverage, [&](const Replica::Coverage& value) { return value.position > draft.position(); })) {
         return std::unexpected(Error::version);
     }
@@ -336,11 +396,73 @@ std::expected<void, Catalog::State::Error> Catalog::State::replace(std::string_v
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    advance(stamp->time, expired);
+    advance(replica, stamp->time, expired); // 已持来源锁, 先处理旧期限, 再准备新事实.
+    advance(stamp->time, expired, &replica);
     const auto bytes = replica.source.bytes();
-    if (draft.bytes() > limits_.replica_bytes || replica_bytes_ - bytes > limits_.replica_bytes - draft.bytes()) {
-        return std::unexpected(Error::capacity);
+
+    // 来源独占准备与公共投影提交分离. rows 只拥有名称/不可变正文, 不复制业务字节.
+    struct Native {
+        Source::Tree::Key name; // 原生候选中的稳定名称, 不是临时请求的 string_view.
+        Record record;          // 完整原生事实, 截止保持发送者原值, 不续一个新的 TTL.
+    };
+
+    std::vector<Source::Tree::Key> previous; // 本范围旧项, 在来源锁内枚举, 不占域锁.
+    std::vector<Native> rows;                // 与候选一起拥有, 最终合并不重新查询/验证输入正文.
+    std::optional<Source::Batch> origin;     // 先于锁外准备建立寿命, 恢复域锁后才回滚或发布.
+    std::optional<Error> failure;            // 回调失败只终止私有准备, 不发布此前已经准备的行.
+    Guard::outside(lock, [&] {
+        replica.source.each(scope, [&](const Source::Tree::Key& name, const Record&) { previous.push_back(name); });
+        origin.emplace(replica.source.prepare());
+        for (const auto& name : previous) {
+            if (!draft.find(scope, name->key)) {
+                const auto erased = origin->erase(scope, name->key);
+                if (!erased) {
+                    failure = error(erased.error());
+                    return;
+                }
+            }
+        }
+        draft.each(scope, [&](const Source::Tree::Key& name, Record incoming) {
+            if (failure)
+                return;
+            if (!Catalog::valid(incoming)) {
+                failure = Error::input;
+                return;
+            }
+            const auto old = origin->find(scope, name->key);
+            if (old && (incoming.version < old->version || (incoming.version == old->version && old->value && incoming.value && ((old->value != incoming.value && *old->value != *incoming.value) || *incoming.deadline < *old->deadline)))) {
+                failure = Error::conflict;
+                return;
+            }
+            if (old && old->version == incoming.version && old->value && incoming.value)
+                incoming.value = old->value; // 完整字节相等已在锁外证明, 后续合并复用既有正文.
+            auto native = origin->set(scope, name->key, incoming);
+            if (!native) {
+                failure = error(native.error());
+                return;
+            }
+            if (incoming.value)
+                timers.emplace(native->get(), std::make_unique<Timer>(*native));
+            rows.push_back({*native, std::move(incoming)});
+        });
+    });
+    if (failure)
+        return std::unexpected(*failure);
+    if (replica.retired)
+        return std::unexpected(Error::version); // 准备期间的身份撤销优先于最终发布.
+    stamp = reading();                          // 本地写入可能已经推进水位/投影/时间, 必须以当前状态重新合并.
+    if (!stamp)
+        return std::unexpected(stamp.error());
+    advance(stamp->time, expired, &replica); // 本来源由 borrowed 排他保护, 其他来源/合并投影仍正常到期.
+    if (!timers.empty() && !replica.agenda) {
+        replica.agenda = std::make_unique<Agenda>(stamp->time);
+        due_ = std::min(due_, replica.agenda->next());
     }
+    const auto scope_coverage = std::ranges::find_if(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && value.name->key.empty(); });
+    if (scope_coverage == replica.coverage.end() && std::ranges::count_if(replica.coverage, [](const Replica::Coverage& value) { return value.name->key.empty(); }) >= static_cast<std::ptrdiff_t>(limits_.source.scopes * 2))
+        return std::unexpected(Error::capacity);
+    auto marker = std::make_shared<const Source::Name>(std::make_shared<const Scope>(scope), std::string{}); // 空 Key 仅为内部整个范围覆盖标记.
+    replica.coverage.reserve(replica.coverage.size() + 1);                                                   // 提交后登记覆盖不能分配失败.
 
     // 合并根只 upsert 已知水位, 完整来源缺项和同版本水位都不撤销本机仍有效的正文.
     struct Change {
@@ -350,93 +472,58 @@ std::expected<void, Catalog::State::Error> Catalog::State::replace(std::string_v
     };
 
     auto merged = merged_.prepare();
-    std::map<Scope, std::vector<Change>> changes;
+    std::vector<Change> changes; // 当前范围唯一修改列表, 不再分配范围到计划的第二层目录.
     Hooks hooks{*this, {}, false};
-    std::optional<Error> failure;
     std::optional<Clock::Time> earliest; // 所有候选活内容的最低截止, 末次取时必须仍有效.
-    draft.each([&](const Source::Tree::Key& name, const Record& incoming) {
-        if (failure) {
-            return;
-        }
-        if (!Catalog::valid(incoming)) {
-            failure = Error::input;
-            return;
-        }
-        const auto old = replica.source.find(*name->scope, name->key);
-        if (old && (incoming.version < old->version || (incoming.version == old->version && old->value && incoming.value && (*old->value != *incoming.value || *incoming.deadline < *old->deadline)))) {
-            failure = Error::conflict;
-            return;
-        }
-        if (incoming.value) {
-            if (!agenda) {
-                agenda = std::make_unique<Agenda>(stamp->time);
-            }
-            auto timer = std::make_unique<Timer>(name); // 已过期来源正文也安排下一拍清理成水位.
-            agenda->set(*timer, *incoming.deadline);
-            timers.emplace(name.get(), std::move(timer));
-        }
+    for (const auto& row : rows) {
+        const auto& name = row.name; // 私有准备已经校验的原生名称与正文.
+        const auto& incoming = row.record;
         const auto known = merged.find(*name->scope, name->key);
         auto combined = Catalog::merge(known ? &*known : nullptr, incoming, stamp->time);
         if (!combined) {
-            failure = error(combined.error());
-            return;
+            return std::unexpected(error(combined.error()));
         }
         auto prepared = merged.set(*name->scope, name->key, combined->record);
         if (!prepared) {
-            failure = error(prepared.error());
-            return;
+            return std::unexpected(error(prepared.error()));
         }
         if (combined->record.value) {
             if (!outlook_) {
                 outlook_ = std::make_unique<Agenda>(stamp->time);
+                due_ = std::min(due_, outlook_->next()); // 首次创建的轮立即纳入统一下次边界.
             }
             hooks.add(*prepared);
             earliest = earliest ? std::min(*earliest, *combined->record.deadline) : combined->record.deadline;
         }
-        changes[*name->scope].push_back({*prepared, combined->record, combined->visible});
-    });
-    if (failure) {
-        return std::unexpected(*failure);
+        changes.push_back({*prepared, combined->record, combined->visible});
     }
 
-    struct Plan {
-        Projection::Batch batch; // 每个真实内容发生变化的范围一个候选, 不复制未变范围.
-    };
-
-    std::list<Pending> pending; // 稳定的回滚责任必须比 plans 活得更久.
-    std::vector<Plan> plans;
-    plans.reserve(changes.size());
-    auto history = history_;
-    std::size_t removal{};
-    for (const auto& [scope, rows] : changes) {
-        removal += static_cast<std::size_t>(std::ranges::count_if(rows, [](const Change& row) { return !row.record.value; }));
-        if (std::ranges::none_of(rows, [](const Change& row) { return row.visible; })) {
-            continue;
-        }
-        pending.emplace_back(*this, scope);
+    Pending pending{*this, scope}; // 先有目录回滚责任, 后有批候选, 析构顺序不可倒置.
+    std::optional<Projection::Batch> projection;
+    auto history = history_; // 当前 Scope 使用全域剩余额度, 不改变其他范围历史.
+    if (std::ranges::any_of(changes, [](const Change& row) { return row.visible; })) {
         const auto count = scopes_;
         auto located = obtain(scope);
-        if (!located) {
+        if (!located)
             return std::unexpected(located.error());
-        }
-        pending.back().created = scopes_ != count;
+        pending.created = scopes_ != count;
         auto& scene = **located;
         const auto before = scene.history();
-        auto batch = scene.prepare(limits_.history - (history - before));
-        for (const auto& row : rows) {
-            if (!row.visible) {
+        projection.emplace(scene.prepare(allowance(scene)));
+        for (const auto& row : changes) {
+            if (!row.visible)
                 continue;
-            }
-            auto prepared = batch.set(row.name, row.record.value ? std::optional(Content{row.record.version, row.record.value}) : std::nullopt, std::chrono::steady_clock::now());
-            if (!prepared) {
+            auto prepared = projection->set(row.name, row.record.value ? std::optional(Content{row.record.version, row.record.value}) : std::nullopt, std::chrono::steady_clock::now());
+            if (!prepared)
                 return std::unexpected(error(prepared.error()));
-            }
         }
-        history = history - before + batch.history();
-        plans.push_back({std::move(batch)});
+        history = history - before + projection->history();
     }
-    old_scenes.reserve(plans.size());
-    old_deadlines.reserve(removal);
+    old_deadlines.reserve(changes.size()); // 删除节点容量在提交前准备, 不在通知/提交路径分配.
+    if (origin->bytes() > limits_.replica_bytes || replica_bytes_ - bytes > limits_.replica_bytes - origin->bytes())
+        return std::unexpected(Error::capacity);
+    old_timers.reserve(previous.size());
+    replica.timers.reserve(replica.timers.size() + timers.size()); // merge 转移节点, 提交阶段不创建新节点或扩桶.
     stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
@@ -444,44 +531,43 @@ std::expected<void, Catalog::State::Error> Catalog::State::replace(std::string_v
     if (earliest && *earliest <= stamp->time) {
         return std::unexpected(Error::ended);
     }
-    auto installed = replica.source.reset(std::move(draft)); // 仍可拒绝来源候选, 在此之前没有公开半份安装.
-    if (!installed) {
-        return std::unexpected(error(installed.error()));
-    }
+    old_source.emplace(origin->commit()); // 仅发布此范围, 来源位置保持原完整前缀.
 
-    old_source.emplace(std::move(*installed));
     old_merged.emplace(merged.commit());
-    for (auto& plan : plans) {
-        old_scenes.push_back(plan.batch.commit());
-    }
-    for (const auto& [scope, rows] : changes) {
-        (void)scope; // 此阶段按稳定名称调度, 不再查找范围.
-        for (const auto& row : rows) {
-            const auto timer = deadlines_.find(row.name.get());
-            if (row.record.value) {
-                outlook_->set(*timer->second, *row.record.deadline);
-            } else if (timer != deadlines_.end()) {
-                Agenda::erase(*timer->second);
-                old_deadlines.push_back(std::move(timer->second));
-                deadlines_.erase(timer);
-            }
+    if (projection)
+        old_scene.emplace(projection->commit());
+    for (const auto& row : changes) {
+        const auto timer = deadlines_.find(row.name.get());
+        if (row.record.value) {
+            outlook_->set(*timer->second, *row.record.deadline);
+        } else if (timer != deadlines_.end()) {
+            Agenda::erase(*timer->second);
+            old_deadlines.push_back(std::move(timer->second));
+            deadlines_.erase(timer);
         }
     }
-    replica.timers.swap(timers);
-    replica.agenda.swap(agenda);
-    replica.coverage.clear();
+    for (const auto& name : previous) {
+        const auto node = replica.timers.find(name.get());
+        if (node != replica.timers.end()) {
+            Agenda::erase(*node->second);
+            old_timers.push_back(std::move(node->second));
+            replica.timers.erase(node);
+        }
+    }
+    for (auto& [name, timer] : timers) {
+        const auto record = replica.source.find(scope, name->key); // 此时原生批已提交, 定时器指向其稳定名称.
+        replica.agenda->set(*timer, *record->deadline);
+    }
+    replica.timers.merge(timers);
+    std::erase_if(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope; });
+    replica.coverage.push_back({std::move(marker), draft.position()});
     replica_bytes_ = replica_bytes_ - bytes + replica.source.bytes();
     history_ = history;
     hooks.committed = true;
-    for (auto& item : pending) {
-        item.committed = true;
-    }
-    if (notify_) {
-        for (const auto& batch : old_scenes) {
-            for (const auto& event : batch.events) {
-                notify_(context_, *event.name->scope, event);
-            }
-        }
+    pending.committed = true;
+    if (notify_ && old_scene) {
+        for (const auto& event : old_scene->events)
+            notify_(context_, scope, event);
     }
     return {};
 }

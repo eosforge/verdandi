@@ -5,7 +5,7 @@
 namespace astra {
 Ephemeris::State::State(Clock& clock) : State([&clock] { return clock.now(); }, Limits{}) {}
 
-Ephemeris::State::State(Time time, Limits limits) : time_(std::move(time)), limits_(limits), source_(gate_, static_cast<Source::Measure>(&State::measure), true, limits.source) {
+Ephemeris::State::State(Time time, Limits limits) : time_(std::move(time)), limits_(limits), source_(export_, static_cast<Source::Measure>(&State::measure), true, limits.source) {
     if (!time_) {
         throw std::invalid_argument("Ephemeris requires a clock");
     }
@@ -95,7 +95,8 @@ void Ephemeris::State::notify(Notify notify, void* context) {
 
 std::expected<Clock::Reading, Ephemeris::State::Error> Ephemeris::State::reading() {
 
-    auto value = time_(); // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
+    const std::lock_guard timing(timing_); // 共享读者仍按调用顺序验证注入时钟, 不并发修改 observed_.
+    auto value = time_();                  // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
     if (!value || !value->ready || value->time.time_since_epoch().count() < 0 || (observed_ && value->time < *observed_)) {
         return std::unexpected(Error::clock);
     }
@@ -160,6 +161,7 @@ std::expected<Ephemeris::State::Receipt, Ephemeris::State::Error> Ephemeris::Sta
         return std::unexpected(error(record.error()));
     }
     advance(stamp->time, expired);
+    const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
     if (source_.find(scope, uuid)) {
         return std::unexpected(Error::conflict);
     } // 碰撞明确拒绝, 不在锁内重复读取随机源.
@@ -191,6 +193,7 @@ std::expected<Ephemeris::State::Receipt, Ephemeris::State::Error> Ephemeris::Sta
     }
     if (!agenda_) {
         agenda_ = std::make_unique<Agenda>(stamp->time);
+        due_ = std::min(due_, agenda_->next()); // 首次创建的轮立即纳入统一下次边界.
     }
     auto timer = std::make_unique<Timer>(origin->name()); // 稳定钩子准备完成后才允许发布.
     auto* node = timer.get();
@@ -237,7 +240,8 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scop
         return std::unexpected(stamp.error());
     }
     advance(stamp->time, expired);
-    const auto old = source_.find(scope, uuid); // 只查询自有来源, 副本不能成为可续租本机注册.
+    const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
+    const auto old = source_.find(scope, uuid);   // 只查询自有来源, 副本不能成为可续租本机注册.
     if (!old) {
         return std::unexpected(Error::ended);
     }
@@ -288,10 +292,14 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scop
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    candidate = renewal ? Ephemeris::renew(*old, order, *stamp) : Ephemeris::update(*old, data, order, *stamp);
-    if (!candidate) {
-        return std::unexpected(error(candidate.error()));
-    }
+    if (renewal) {
+        candidate = Ephemeris::renew(*old, order, *stamp); // 续租必须从最终受理时间重算期限.
+        if (!candidate) {
+            return std::unexpected(error(candidate.error()));
+        }
+    } else if (const auto active = Ephemeris::active(*old, *stamp); !active) {
+        return std::unexpected(error(active.error()));
+    } // 同一域锁下正文和 order 未变, Update 只需重验旧租约, 不再扫描相同 Data.
     if (!origin->revise(candidate->record)) {
         throw std::logic_error("Ephemeris final check changed prepared payload cost");
     }
@@ -369,6 +377,7 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::remove(const Scop
         return std::unexpected(stamp.error());
     }
     advance(stamp->time, expired);
+    const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
     auto removed = erase(scope, uuid, std::chrono::steady_clock::now(), true);
     if (!removed) {
         return std::unexpected(removed.error());
@@ -377,10 +386,25 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::remove(const Scop
     return {};
 }
 
-void Ephemeris::State::advance(Clock::Time now, std::vector<Retired>& retired) {
+std::shared_ptr<Ephemeris::State::Replica> Ephemeris::State::advance(Clock::Time now, std::vector<Retired>& retired, Replica* held) {
 
+    std::shared_ptr<Replica> blocked; // 返回仍有到期/退役责任的忙来源, 公开读取稍后在域锁外等待.
+    if (now < due_)
+        return {}; // 本轮无任何时间轮能前进, 不再逐来源遍历; 不是 max_ticks 或时间截断.
     for (auto item = replicas_.begin(); item != replicas_.end();) {
-        auto& replica = *item->second; // 保持当前组地址直到本轮到期处理完成.
+        const auto owner = item->second; // 保活到 preparing 解锁后, 回收目录不能先销毁仍被锁住的 mutex.
+        auto& replica = *owner;          // 保持当前组地址直到本轮到期处理完成.
+        if (&replica == held) {
+            ++item;
+            continue; // 已持非递归来源锁, 不能再次 try_lock, 更不能访问正在编辑的原生目录.
+        }
+        const std::unique_lock preparing(replica.mutex, std::try_to_lock); // 持域锁时只尝试, 禁止等待形成反向锁序.
+        if (!preparing.owns_lock()) {
+            if (!blocked && (replica.retired || (replica.agenda && replica.agenda->next() <= now)))
+                blocked = item->second;
+            ++item;
+            continue;
+        }
         advance(replica, now, retired);
         if (replica.retired && replica.timers.empty()) {
             item = replicas_.erase(item); // 无原生行/活动调度/所有权索引, 不永久保留每个旧进程的空轮.
@@ -388,50 +412,58 @@ void Ephemeris::State::advance(Clock::Time now, std::vector<Retired>& retired) {
             ++item;
         }
     }
-    if (!agenda_) {
-        return;
-    }
-    agenda_->advance(now, [&](Agenda::Node* hook, Clock::Time boundary) {
-        auto& timer = *static_cast<Timer*>(hook); // 钩子仅由本 State 分配, 不接受外部任意节点.
-        const auto record = source_.find(*timer.name->scope, timer.name->key);
-        if (!record) {
-            throw std::logic_error("Scheduled Ephemeris lacks its native record");
-        }
-        if (record->deadline > boundary) {
-            agenda_->set(timer, record->deadline); // 长期限分段唤醒不能提前删除.
-            return;
-        }
-        retired.emplace_back(); // 先准备锁外回收空间, 分配失败由 Agenda 重排当前钩子.
-        auto removed = erase(*timer.name->scope, timer.name->key, std::chrono::steady_clock::now());
-        if (!removed) {
-            throw std::runtime_error("Ephemeris expiry could not commit");
-        }
-        retired.back() = std::move(*removed); // 本机到期为权威结束, 与下游删除一起发布.
-    });
+    const std::unique_lock origin_lock(*export_); // 远端清理已经结束, 只为本机来源维护获取导出锁.
+    if (agenda_)
+        agenda_->advance(now, [&](Agenda::Node* hook, Clock::Time boundary) {
+            auto& timer = *static_cast<Timer*>(hook); // 钩子仅由本 State 分配, 不接受外部任意节点.
+            const auto record = source_.find(*timer.name->scope, timer.name->key);
+            if (!record) {
+                throw std::logic_error("Scheduled Ephemeris lacks its native record");
+            }
+            if (record->deadline > boundary) {
+                agenda_->set(timer, record->deadline); // 长期限分段唤醒不能提前删除.
+                return;
+            }
+            retired.emplace_back(); // 先准备锁外回收空间, 分配失败由 Agenda 重排当前钩子.
+            auto removed = erase(*timer.name->scope, timer.name->key, std::chrono::steady_clock::now());
+            if (!removed) {
+                throw std::runtime_error("Ephemeris expiry could not commit");
+            }
+            retired.back() = std::move(*removed); // 本机到期为权威结束, 与下游删除一起发布.
+        });
+    // 忙碌来源仍以其旧边界参加最小值, 不能把未完成维护伪装成时间已追平; 异常保持旧 due_.
+    due_ = Clock::Time::max();
+    const auto include = [&](const Agenda* agenda) {
+        if (agenda)
+            due_ = std::min(due_, agenda->next());
+    };
+    include(agenda_.get());
+    for (const auto& [id, replica] : replicas_)
+        include(replica->agenda.get());
+    if (blocked)
+        due_ = std::min(due_, now); // 空退役来源也有待回收责任, 不能因没有轮而丢失下次检查.
+    return blocked;
 }
 
 void Ephemeris::State::tick() {
 
-    std::vector<Retired> retired;
-    const std::lock_guard lock(*gate_);
-    if (!agenda_ && replicas_.empty()) {
-        return;
-    } // 未受理过有限租约时无清理责任, 首次校准前不反复抛出空轮错误.
-    const auto stamp = reading();
-    if (!stamp) {
-        throw std::runtime_error("Ephemeris clock is unavailable");
+    std::vector<Retired> retired; // 等待/回收不持域锁, 失败仍保留之前已经完成的到期删除.
+    std::unique_lock lock(*gate_);
+    if (!agenda_ && replicas_.empty())
+        return; // 尚无任何清理责任时允许 Clock 尚未初始化.
+    for (;;) {
+        const auto stamp = reading(); // 每次等待后重新采样, 不拿先前读数作为完成证据.
+        if (!stamp)
+            throw std::runtime_error("Ephemeris clock is unavailable");
+        auto blocked = advance(stamp->time, retired);
+        if (!blocked)
+            return;
+        Guard waiting(std::move(blocked), lock); // 等待期间其他来源/本地写入仍可取得域锁.
     }
-    advance(stamp->time, retired);
 }
 
 auto Ephemeris::State::execute(auto&& action) {
-
-    std::vector<Retired> retired;       // 必须先于 lock 构造, 正常返回及异常退出都在解锁后析构旧载荷.
-    const std::lock_guard lock(*gate_); // 覆盖取时、到期提交与完整结果捕获, 不把同步责任交给回调调用方.
-    return reading().and_then([&](const Clock::Reading& stamp) {
-        advance(stamp.time, retired);                    // 与 action 使用同一域边界; 取时失败时两者都不执行.
-        return std::forward<decltype(action)>(action)(); // 直接调用内部闭包, 不分配执行器或擦除类型.
-    });
+    return Reading<State>::execute(*this, std::forward<decltype(action)>(action));
 }
 
 std::expected<Ephemeris::State::Projection::View, Ephemeris::State::Error> Ephemeris::State::capture(const Scope& scope) {
@@ -479,23 +511,18 @@ std::expected<std::vector<Ephemeris::State::Projection::Event>, Ephemeris::State
 }
 
 Ephemeris::State::Source::View Ephemeris::State::source() {
-
-    std::vector<Retired> retired;
-    const std::lock_guard lock(*gate_);
-    const auto stamp = reading();
-    if (!stamp) {
-        throw std::runtime_error("Ephemeris clock is unavailable");
-    }
-    advance(stamp->time, retired);
+    const std::shared_lock lock(*export_); // 来源事实自带 deadline, 接收端自行过期; 导出不触发任何域 GC.
     return source_.capture();
 }
 
 std::expected<std::vector<Ephemeris::State::Source::Event>, Ephemeris::State::Error> Ephemeris::State::events(std::uint64_t since) {
-    return execute([&] { return source_.replay(since).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); }); });
+    const std::shared_lock lock(*export_);
+    return source_.replay(since).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 
 std::expected<Ephemeris::State::Source::Delivery, Ephemeris::State::Error> Ephemeris::State::deliver(std::uint64_t since, std::size_t count, std::size_t bytes) {
-    return execute([&] { return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); }); });
+    const std::shared_lock lock(*export_); // 快照/后缀捕获不等待远端安装、公开投影准备或其他来源 GC.
+    return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 
 } // namespace astra

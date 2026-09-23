@@ -46,17 +46,13 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
         astrolabe,
     ):
         if not executable.is_file():
-            raise RuntimeError(
-                f"Missing explicitly built process executable: {executable.name}"
-            )
+            raise RuntimeError(f"Missing explicitly built process executable: {executable.name}")
     root = ROOT / "build/tmp"
     root.mkdir(parents=True, exist_ok=True)
     deadline = time.monotonic() + 390
     wait_for = partial(wait, overall_deadline=deadline)
     fixtures = ROOT / "cluster/tests/fixtures"
-    with tempfile.TemporaryDirectory(
-        prefix="comet-process-", dir=root
-    ) as temporary, failure_logs(Path(temporary)), ExitStack() as stack:
+    with tempfile.TemporaryDirectory(prefix="comet-process-", dir=root) as temporary, failure_logs(Path(temporary)), ExitStack() as stack:
         directory = Path(temporary)
         identity = directory / "pulsar-identity"
         shutil.copytree(fixtures / "supervisor", identity)
@@ -73,9 +69,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
                 {
                     "username": "admin",
                     "salt": salt.hex(),
-                    "hash": hashlib.pbkdf2_hmac(
-                        "sha256", password.encode(), salt, 600000, 32
-                    ).hex(),
+                    "hash": hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 600000, 32).hex(),
                 }
             ),
             encoding="utf-8",
@@ -112,14 +106,11 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
                 "--init=true",
             ],
         )
-        addresses = wait_for(
-            pulse, pulse_log, lambda value: value.get("event") == "started"
-        )["fields"]
+        addresses = wait_for(pulse, pulse_log, lambda value: value.get("event") == "started")["fields"]
         wait_for(
             pulse,
             pulse_log,
-            lambda value: value.get("event") == "clock_status"
-            and value["fields"].get("synchronized") is True,
+            lambda value: value.get("event") == "clock_status" and value["fields"].get("synchronized") is True,
         )
         authority_port = port()
 
@@ -145,9 +136,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
             raise RuntimeError("Fixture selected duplicate Star ports")
         metrics_file = directory / "metrics.json"
         metrics_file.write_text(
-            json.dumps(
-                {f"127.0.0.1:{star_port}": f"http://127.0.0.1:{metrics_port}/metrics"}
-            ),
+            json.dumps({f"127.0.0.1:{star_port}": f"http://127.0.0.1:{metrics_port}/metrics"}),
             encoding="utf-8",
         )
         admin_port = port()
@@ -198,9 +187,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
             except urllib.error.HTTPError as failure:
                 return failure.code, failure.read(4096)
 
-        status, _ = request(
-            "POST", "/api/session", {"username": "admin", "password": password}
-        )
+        status, _ = request("POST", "/api/session", {"username": "admin", "password": password})
         if status != 200:
             raise RuntimeError("Management login failed")
 
@@ -212,13 +199,8 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
                     return body
                 if status not in (200, 502, 503, 504):
                     raise RuntimeError(f"Unexpected management read status: {status}")
-                if any(
-                    process.poll() is not None
-                    for process in (management, pulse, authority)
-                ):
-                    raise RuntimeError(
-                        "Control process exited during availability wait"
-                    )
+                if any(process.poll() is not None for process in (management, pulse, authority)):
+                    raise RuntimeError("Control process exited during availability wait")
                 time.sleep(0.1)
             raise TimeoutError("Management authority did not recover")
 
@@ -228,9 +210,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
             # 写入恰好一次. 失败即终止用例, 不用重试掩盖 COMMIT 不确定或控制面错误.
             status, body = request("POST", path, value)
             if status != 200 or json.loads(body).get("effect") != "committed":
-                raise RuntimeError(
-                    f"Management commit did not confirm persistence: HTTP {status}"
-                )
+                raise RuntimeError(f"Management commit did not confirm persistence: HTTP {status}")
 
         write(
             "/api/credentials",
@@ -240,14 +220,8 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
                 "version": "1",
             },
         )
-        redacted = available(
-            "/api/credentials", lambda data: b'"complete":true' in data
-        )
-        if (
-            b'"redacted":true' not in redacted
-            or base64.b64encode(secret) in redacted
-            or secret in redacted
-        ):
+        redacted = available("/api/credentials", lambda data: b'"complete":true' in data)
+        if b'"redacted":true' not in redacted or base64.b64encode(secret) in redacted or secret in redacted:
             raise RuntimeError("Credential management did not preserve redaction")
 
         def update(version, value):
@@ -257,11 +231,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
                 "key": "key",
                 "version": str(version),
             }
-            data.update(
-                {"erase": True}
-                if value is None
-                else {"value": base64.b64encode(value).decode()}
-            )
+            data.update({"erase": True} if value is None else {"value": base64.b64encode(value).decode()})
             write("/api/almanac", data)
 
         update(1, b"one")
@@ -283,9 +253,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
                     "--status-interval-seconds=1",
                 ],
             )
-            endpoint = wait_for(
-                process, log, lambda value: value.get("event") == "comet_listening"
-            )["fields"]["endpoint"]
+            endpoint = wait_for(process, log, lambda value: value.get("event") == "comet_listening")["fields"]["endpoint"]
             return process, log, endpoint
 
         star, star_log, endpoint = node("star-a", star_port, comet_port)
@@ -320,11 +288,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
         view(1, b"one")
         observed = available(
             "/api/metrics",
-            lambda data: any(
-                not sample["stale"]
-                and sample.get("values", {}).get("astra_ready") == "1"
-                for sample in json.loads(data)["samples"]
-            ),
+            lambda data: any(not sample["stale"] and sample.get("values", {}).get("astra_ready") == "1" for sample in json.loads(data)["samples"]),
         )
         if secret in observed or base64.b64encode(secret) in observed:
             raise RuntimeError("Metrics exposed credential material")
@@ -333,14 +297,9 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
         stop(authority)
         cached, cached_log = probe(2)
         if cached.wait(timeout=15) != 0 or not any(
-            event.get("event") == "view"
-            and event.get("version") == 2
-            and event.get("value") == b"two".hex()
-            for event in events(cached_log)
+            event.get("event") == "view" and event.get("version") == 2 and event.get("value") == b"two".hex() for event in events(cached_log)
         ):
-            raise RuntimeError(
-                "Star could not serve its complete cache during authority outage"
-            )
+            raise RuntimeError("Star could not serve its complete cache during authority outage")
         authority = publisher(False)
 
         def persisted(data):
@@ -349,11 +308,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
                 bool(rows)
                 and rows[-1].get("complete") is True
                 and rows[-1].get("position", {}).get("version") == "2"
-                and any(
-                    row.get("key") == "key"
-                    and row.get("value") == base64.b64encode(b"two").decode()
-                    for row in rows
-                )
+                and any(row.get("key") == "key" and row.get("value") == base64.b64encode(b"two").decode() for row in rows)
             )
 
         available("/api/almanac?sector=integration&spectrum=main", persisted)
@@ -362,44 +317,38 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
         update(4, b"")
         # 最后一帧可以先被进程写出再正常退出, 不用只允许存活进程的 wait 错判成功退出.
         if reader.wait(timeout=20) != 0 or not any(
-            event.get("event") == "view"
-            and event.get("version") == 4
-            and event.get("present") is True
-            and event.get("value") == ""
+            event.get("event") == "view" and event.get("version") == 4 and event.get("present") is True and event.get("value") == ""
             for event in events(reader_log)
         ):
-            raise RuntimeError(
-                "Native Reader did not install empty-value final commit or clean up"
-            )
-        # 两台 Star 都是真实进程和独立端口. 原生探针只访问公共 TLS, 不使用内部 Stub 代替 SDK.
+            raise RuntimeError("Native Reader did not install empty-value final commit or clean up")
+        # 三台 Star 都是真实进程和独立端口. 原生探针只访问公共 TLS, 不使用内部 Stub 代替 SDK.
         second_port, second_comet_port = port(), port()
-        if (
-            len({star_port, comet_port, metrics_port, second_port, second_comet_port})
-            != 5
-        ):
+        if len({star_port, comet_port, metrics_port, second_port, second_comet_port}) != 5:
             raise RuntimeError("Fixture selected duplicate mesh ports")
-        second, second_log, second_endpoint = node(
-            "star-b", second_port, second_comet_port
-        )
+        second, second_log, second_endpoint = node("star-b", second_port, second_comet_port)
         wait_for(
             second,
             second_log,
             lambda value: value.get("event") == "business_ready",
             seconds=45,
         )
+        third_port, third_comet_port = port(), port()
+        if len({star_port, comet_port, metrics_port, second_port, second_comet_port, third_port, third_comet_port}) != 7:
+            raise RuntimeError("Fixture selected duplicate third Star ports")
+        third, third_log, third_endpoint = node("star-c", third_port, third_comet_port)
+        wait_for(third, third_log, lambda value: value.get("event") == "business_ready", seconds=45)
         mesh, mesh_log = start(
             "mesh",
             [
                 binaries / "comet_mesh_probe",
                 endpoint,
                 second_endpoint,
+                third_endpoint,
                 fixtures / "star-b/ca.pem",
                 secret_file,
             ],
         )
-        wait_for(
-            mesh, mesh_log, lambda value: value.get("event") == "mesh_ready", seconds=60
-        )
+        wait_for(mesh, mesh_log, lambda value: value.get("event") == "mesh_ready", seconds=60)
         star.kill()  # 此项特意测试权威突然消失, 不经过正常注销/服务关闭补偿.
         if star.wait(timeout=10) == 0:
             raise RuntimeError("Crash fixture unexpectedly reported clean shutdown")
@@ -409,25 +358,19 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
             lambda value: value.get("event") == "mesh_failover",
             seconds=80,
         )
-        star, star_log, recovered_endpoint = node(
-            "star-a-restarted", star_port, comet_port
-        )
+        star, star_log, recovered_endpoint = node("star-a-restarted", star_port, comet_port)
         if recovered_endpoint != endpoint:
             raise RuntimeError("Restart did not preserve the deployment endpoint")
-        if mesh.wait(
-            timeout=min(100, max(1, deadline - time.monotonic()))
-        ) != 0 or not any(
+        if mesh.wait(timeout=min(100, max(1, deadline - time.monotonic()))) != 0 or not any(
             event.get("event") == "mesh_recovered" for event in events(mesh_log)
         ):
             raise RuntimeError("Multi-Star native recovery or resource cleanup failed")
 
-        for process in (star, second, management, authority, pulse):
+        for process in (star, second, third, management, authority, pulse):
             stop(process)
         for _, log in owned:
             events(log)  # 同时检查所有完整进程日志中的 Sanitizer 诊断, 不只读成功标记.
-        print(
-            "PASS real Almanac persistence and native multi-Star replication, crash, failover, trusted restart, TTL and owned cleanup"
-        )
+        print("PASS real Almanac persistence and native multi-Star replication, crash, failover, trusted restart, TTL and owned cleanup")
 
 
 if __name__ == "__main__":

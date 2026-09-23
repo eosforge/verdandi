@@ -1,10 +1,14 @@
 #pragma once
 #include "agenda.hpp"
+#include "borrowing.hpp"
 #include "ephemeris.hpp"
 #include "origin.hpp"
+#include "reading.hpp"
+#include "restore.hpp"
 #include "scene.hpp"
 #include <functional>
 #include <map>
+#include <shared_mutex>
 
 namespace astra {
 // 单 Star 自有 Ephemeris 的实际提交器. 统一定序原生状态、来源历史、内容投影和一个来源级时间轮.
@@ -82,7 +86,7 @@ public:
     std::expected<void, Error> remove(const Scope& scope, std::string_view uuid);
     // 完整推进真实经过的拍数, 失败传播且不声称已经追平; 已完整提交的先前到期不会回滚.
     void tick();
-    // 推进到期后捕获一个公开范围, 未出现范围为游标零; 创建空游标受总 Scope 限制.
+    // 推进到期后捕获一个公开范围, 未出现范围返回游标零空根, 不创建目录或消耗 Scope 额度.
     std::expected<Projection::View, Error> capture(const Scope& scope);
     // 精确查找不生成整表快照, 同样先推进到期, 明确返回缺项及范围游标.
     std::expected<Projection::Point, Error> find(const Scope& scope, std::string_view uuid);
@@ -111,7 +115,10 @@ public:
     std::expected<std::uint64_t, Error> received(std::string_view id) const;
     // 私有来源基线, 最终 replace 仍核对位置/当前期限, 准备本身不安装记录.
     std::expected<Source::Draft, Error> prepare(std::string_view id, std::uint64_t position);
-    // 原子替换一个远端来源及其下游投影, 不改变其他来源, 失败不发布半份基线.
+    using Recovery = Restore<State>; // 每次推进至多安装一个 Scope, 不跨调用持有域锁.
+    // 完整候选转换为分步恢复任务, 来源确认仍等待全部 Scope 成功.
+    std::expected<Recovery, Error> restore(std::string_view id, Source::Draft&& draft);
+    // 同步完成分步恢复; 失败保留已安装 Scope 的覆盖证据, 不回滚已公开数据.
     std::expected<void, Error> replace(std::string_view id, Source::Draft&& draft);
     // 复制适配器构造 Data/Renew 前点查完整副本, 缺失需回补, 不获得本机写权限.
     std::expected<std::optional<Record>, Error> replica(std::string_view id, const Scope& scope, std::string_view uuid) const;
@@ -121,6 +128,13 @@ public:
     std::expected<void, Error> repair(std::string_view id, std::uint64_t position, const Scope& scope, std::string_view uuid, std::optional<Record> record);
 
 private:
+    friend class Reading<State>; // 共用读取同步边界, 不公开私有锁或回收类型.
+    friend class Restore<State>;
+    // 同一范围的原生状态/可见投影/定时器原子安装, 不提前确认完整来源.
+    std::expected<void, Error> install(std::string_view id, const Source::Draft& draft, const Scope& scope);
+    // 所有范围已完成后推进来源位置并回收临时覆盖证据.
+    std::expected<void, Error> finish(std::string_view id, std::uint64_t position);
+
     // 稳定钩子与来源名称共享, 不再保存第二份 deadline/Attr/Data.
     struct Timer : Agenda::Node {
         explicit Timer(Source::Tree::Key name) : name(std::move(name)) {} // 名称由已准备的来源持有.
@@ -130,20 +144,25 @@ private:
 
     // 一个远端 Star 的独立来源/调度器, 不保留向第三方再次广播的历史.
     struct Replica {
-        // 仅为正在追赶的少量回补目标保留覆盖标记, 连续位置追平后回收, 不是所有 UUID 的永久副表.
+        // 为正在追赶的精确目标或 Scope 安装保留覆盖标记, 连续位置追平后回收, 不是所有 UUID 的永久副表.
         struct Coverage {
-            Source::Tree::Key name;   // 共享地址/UUID, 即使原生正文到期删除也保持关联.
-            std::uint64_t position{}; // 已安装精确回补位置, 不能冒充本组连续位置.
+            Source::Tree::Key name;   // 共享地址/UUID, 空 Key 代表整个 Scope; 正文到期删除后仍保持关联.
+            std::uint64_t position{}; // 已安装目标或 Scope 的位置, 不能冒充本组连续位置.
         };
 
-        Replica(std::shared_ptr<std::mutex> gate, Source::Limits limits) : source(std::move(gate), static_cast<Source::Measure>(&State::measure), false, limits) {} // 来源位置初始零.
+        Replica(std::shared_ptr<std::shared_mutex> gate, Source::Limits limits) : source(std::move(gate), static_cast<Source::Measure>(&State::measure), false, limits) {} // 来源位置初始零.
 
+        std::mutex mutex;                                                       // 原生候选独占锁, 等待时必须释放域锁; 私有准备不持域锁.
         Source source;                                                          // 该 Star 的全部 Scope, 不与其他来源共用编号.
         std::unique_ptr<Agenda> agenda;                                         // 断流后仍独立推进原截止.
         std::unordered_map<const Source::Name*, std::unique_ptr<Timer>> timers; // 名称共享的稳定钩子.
-        std::vector<Coverage> coverage;                                         // 至多 128 个同时生效的目标, 与正文同边界提交.
+        std::vector<Coverage> coverage;                                         // 至多 128 个精确目标加 2 * source.scopes 个 Scope 标记, 与正文同边界提交.
         bool retired{};                                                         // 可信替换后拒绝新事实, 清空后可回收组; 旧身份拒绝依据由控制器保留.
     };
+
+    using Guard = Borrowing<Replica>; // 同来源准备互斥, 本地来源不取得远端锁.
+    // 持有域锁查找, 等待来源锁时释放域锁, 返回后重新核对目录身份; 空 get 表示未知来源.
+    Guard acquire(std::string_view id, std::unique_lock<std::shared_mutex>& domain) const;
 
     // 远端提交准备的可见所有权索引, 失败只撤销本次新增项, 不删除已安装身份.
     struct Ownership {
@@ -180,7 +199,7 @@ private:
     static Error error(Projection::Error error) noexcept;
     // 最终时钟必须已建立且不倒退, reading 缺失返回明确 clock.
     std::expected<Clock::Reading, Error> reading();
-    // 同步执行返回 expected<T, Error> 的内部读取, 先推进到期; action 不重入本 State, 不返回受锁保护对象的裸借用.
+    // 同步执行返回 expected<T, Error> 的内部读取, 整拍边界前共享读取, 越界才独占推进; action 不重入本 State, 不返回受锁保护对象的裸借用.
     // 准备、读取和异常展开均先释放域锁再回收旧资源; 模板仅在本实现文件实例化, 不封装写入的最终取时.
     auto execute(auto&& action);
     // 只在真实写入/副本安装时建立有界范围, 持续保留已提交游标; 只读访问使用 locate.
@@ -189,8 +208,9 @@ private:
     std::size_t allowance(const Projection& scene) const;
     // 已准备的可见提交计费/通知, 不在这里执行网络或应用回调.
     void publish(Projection& scene, std::size_t before, const Projection::Event& event) noexcept;
+    // held 是调用方已经独占的来源, 由其自行推进, 不重复 try_lock; 返回尚有到期/退役责任的忙来源供读者在域锁外等待.
     // tick 回调只处理已经到期的真实记录; 未到真实 deadline 时按当前拍重新安排.
-    void advance(Clock::Time now, std::vector<Retired>& retired);
+    std::shared_ptr<Replica> advance(Clock::Time now, std::vector<Retired>& retired, Replica* held = nullptr);
     // 副本到期不推进来源位置/自有广播, 只清理对应可见注册.
     void advance(Replica& replica, Clock::Time now, std::vector<Retired>& retired);
     // 不创建范围的内部查找, 供来源安装/本地过期判定可见状态.
@@ -202,11 +222,14 @@ private:
     // Update/Renew 共用两阶段提交, renew 为 true 时不接受 data, 两种业务 order 仍独立.
     std::expected<void, Error> change(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, bool renewal);
 
-    const std::shared_ptr<std::mutex> gate_ = std::make_shared<std::mutex>();                   // 与来源和全部投影视图共用的域提交锁.
+    const std::shared_ptr<std::shared_mutex> gate_ = std::make_shared<std::shared_mutex>();     // 写入/合并提交独占, 没有到期维护责任的公开读取共享.
+    const std::shared_ptr<std::shared_mutex> export_ = std::make_shared<std::shared_mutex>();   // 本机原生根/日志独立同步域; 只按 gate_ -> export_ 获取, 来源导出不取得 gate_.
+    std::mutex timing_;                                                                         // 仅串行调用注入时钟及单调检查, 共享读者不竞争其他读者的正文捕获.
+    Clock::Time due_{};                                                                         // 下一次任意轮可能推进的边界; 零强制复核, 无轮时为 max, 不是逐记录第二期限.
     Time time_;                                                                                 // 最后受理边界采样函数, 不允许从外部传入过时 Reading.
     const Limits limits_;                                                                       // 固定的来源/范围/下游容量约束.
     Source source_;                                                                             // 本 Star 自有 Ephemeris, 一个位置覆盖所有 Scope.
-    std::map<std::string, std::unique_ptr<Replica>, std::less<>> replicas_;                     // 受数量/总字节约束的远端组.
+    std::map<std::string, std::shared_ptr<Replica>, std::less<>> replicas_;                     // 受数量/总字节约束的远端组.
     std::unordered_map<const Source::Name*, Replica*> owners_;                                  // 仅索引可见远端条目, 本机条目不在此表.
     std::size_t replica_bytes_{};                                                               // 所有远端当前行/目录计费, 无第三方发送历史.
     std::unique_ptr<Agenda> agenda_;                                                            // 首个有限期限前不分配来源轮, 地址不移动.

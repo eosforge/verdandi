@@ -33,7 +33,7 @@ Content record(std::uint64_t version) {
 // 多目标投影只用于原子来源替换, 失败/放弃不发布根、游标、删除或目录容量.
 void atomic() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Scene scene(gate, measure, {.records = 2});
     const auto now = std::chrono::steady_clock::now();
     const auto one = name("one"), two = name("two"), three = name("three");
@@ -79,7 +79,7 @@ void atomic() {
 // 重复目标、容量及历史零预算分别覆盖, 都不依赖断言在失败后自动补偿已发布部分.
 void limits() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Scene scene(gate, measure, {.records = 1, .history = 0});
     const auto now = std::chrono::steady_clock::now();
     const auto one = name("one"), two = name("two");
@@ -113,10 +113,10 @@ void limits() {
 // 超龄历史未裁剪时仍可恢复, 单项和内部批次写入在同一时间边界淘汰, 不遗漏删除事件.
 void history(bool batch) {
 
-    const auto gate = std::make_shared<std::mutex>();  // 所有准备与读取共用同一域锁.
-    Scene scene(gate, measure, {});                    // 默认历史保留时间为 10 分钟, 条数和字节足够本用例.
-    const auto now = std::chrono::steady_clock::now(); // 当前维护时间, 不通过休眠等待历史变老.
-    const auto stored = now - std::chrono::hours(1);   // 初始事件已超龄, 写入间隔为零, 尚无后续写入触发淘汰.
+    const auto gate = std::make_shared<std::shared_mutex>(); // 所有准备与读取共用同一域锁.
+    Scene scene(gate, measure, {});                          // 默认历史保留时间为 10 分钟, 条数和字节足够本用例.
+    const auto now = std::chrono::steady_clock::now();       // 当前维护时间, 不通过休眠等待历史变老.
+    const auto stored = now - std::chrono::hours(1);         // 初始事件已超龄, 写入间隔为零, 尚无后续写入触发淘汰.
     const auto change = [&](std::uint64_t version, std::chrono::steady_clock::time_point stamp) {
         // version=0 表示删除, 其余值为公开内容版本; stamp 只控制历史裁剪, 不引入业务 TTL.
         Scene::Retired retired;                        // 单项通知和旧内容在解锁后释放.
@@ -164,7 +164,7 @@ void history(bool batch) {
 void ownership(const std::string& key, Scene::Limits limits) {
 
     // gate 串行保护事务; limits 分别禁用历史条数、字节或保留时间; now 固定, 不依赖真实等待.
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Scene scene(gate, measure, limits);
     const auto now = std::chrono::steady_clock::now();
     std::weak_ptr<const Source::Name> observed; // 只观察最初 Name 的寿命, 不替生产树延长所有权.
@@ -210,7 +210,7 @@ void rollback() {
 
     // batch 分别检查单目标 Edit 和内部 Batch, 每轮用新 Scene 隔离目录容量及游标.
     for (const bool batch : {false, true}) {
-        const auto gate = std::make_shared<std::mutex>();         // 外层域锁, 必须晚于事务释放.
+        const auto gate = std::make_shared<std::shared_mutex>();  // 外层域锁, 必须晚于事务释放.
         Scene scene(gate, measure, {.records = 1, .history = 0}); // 只允许一个 Key, 暂存目录未撤销时后续新增会失败.
         const auto now = std::chrono::steady_clock::now();        // 同轮所有操作使用同一单调采样.
         std::weak_ptr<const Source::Name> observed;               // 失败事务不能泄漏未发布名称.

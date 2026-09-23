@@ -92,19 +92,17 @@ public:
     // 一个完整 Read 的结果只发布给 Core, 不在 gRPC 线程解码安装或调用用户观察者.
     void OnReadDone(bool ok) override {
         const std::lock_guard lock(mutex_);
+        stage_ = ok ? Stage::ready : Stage::ended;
         if (ok) {
             const auto bytes = page_.SpaceUsedLong(); // 消息解码后才可观察真实拥有空间, 不把它遗漏在所有 Reader 的全局预算之外.
             if (!owner_->core_->resize(0, bytes)) {
-                overflow_ = true;
+                stage_ = Stage::overflow;
                 Reply{}.Swap(&page_);
             } else {
                 bytes_ = bytes;
             }
         }
-        available_ = ok;
-        consumed_ = false;
-        ended_ = !ok;
-        owner_->core_->wake();
+        owner_->core_->wake(owner_.get());
     }
 
     // context 是本 Stream 自己拥有的客户端对象, 可在 OnDone 后读取其 trailing metadata.
@@ -112,17 +110,30 @@ public:
         const std::lock_guard lock(mutex_);
         code_ = status.error_code(); // 不复制可能含任意远端正文的 message/details.
         done_ = true;
-        owner_->core_->wake();
+        owner_->core_->wake(owner_.get());
     }
 
 private:
     friend class Watching;
+    // 单页接收顺序只有一种, 用互斥阶段代替可组合的 available/consumed/ended/overflow 标志.
+    enum class Stage {
+        // 默认阶段, 唯一 StartRead 已发起或将在 start 中发起, page_ 由 gRPC 写入.
+        reading,
+        // 成功读取且已取得解码预算, page_ 交给控制轮独占消费.
+        ready,
+        // 控制轮已移走页面, 通知返回后才允许再次 StartRead.
+        consumed,
+        // 读取到 EOF, 控制轮归还 hold 后等待真实 OnDone.
+        ended,
+        // 解码预算被拒绝, 页面已释放, 控制轮报告容量不足并取消.
+        overflow
+    };
+
+    Stage stage_ = Stage::reading;            // 只在 mutex_ 内转换; 每次 OnReadDone 结束一个 reading 阶段.
     Core::Time deadline_ = Core::Time::max(); // 首批/半批无进展期限, 完整就绪的空闲流没有总 deadline.
     bool timed_{};                            // 本地无进展取消, 不能误报为凭据撤销.
-    bool consumed_{};                         // 当前完整页已消费, 且下一 Read 尚未发起; 只有控制线程在 mutex_ 内修改.
     bool repair_{};                           // 本流由一次缺 Attr 回退主动取消, OnDone 不误判共享 Session 失效.
     bool recovered_{};                        // 本流是否已经完整安装过一批, 只在首次恢复时更新共享 Core 的退避.
-    bool overflow_{};                         // 已解码消息不能纳入全局预算, 控制轮明确报告容量并停止该订阅.
     std::size_t bytes_{};                     // 当前唯一已接收页的拥有空间, 页面释放/实际 OnDone 后才归还.
 
     // 已持 mutex_, 在收到 EOF 或取消后精确归还一次 hold, 使 OnDone 能够发生.
@@ -141,8 +152,6 @@ private:
     std::mutex mutex_;                                  // 控制路径与两个 gRPC 回调的缓冲所有权边界.
     Reply page_;                                        // 每次最多一份未消费页, 再 StartRead 前先归还它.
     bool held_{};                                       // 唯一控制路径 hold 尚未归还.
-    bool available_{};                                  // 有完整页等待消费, 未再次 StartRead 前不可被写入.
-    bool ended_{};                                      // 已读 EOF, 等控制路径 RemoveHold.
     bool done_{};                                       // gRPC 最终完成, 可以清除父级 Stream 引用和实际 RPC 额度.
     grpc::StatusCode code_ = grpc::StatusCode::UNKNOWN; // OnDone 前没有真实最终状态.
 };
@@ -193,7 +202,7 @@ void Watching<Policy>::close() noexcept {
     }
     if (first) {
         core_->release(); // 内部 RPC 持有的 shared_ptr 不延长应用自动订阅意图.
-        core_->wake();
+        core_->wake(this);
     }
 }
 
@@ -297,24 +306,23 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
                     core_->lost(binding_, failure);
                 }
             }
-        } else if (!stopped && !stream->timed_ && !stream->available_ && now >= stream->deadline_) {
+        } else if (!stopped && !stream->timed_ && stream->stage_ == Stream::Stage::reading && now >= stream->deadline_) {
             stream->timed_ = true;
             io.unlock();
             projection_->discard();
             publish(view_.version() ? State::stale : State::waiting, Error{Error::Code::timeout, Error::Effect::unapplied, {}, {}, {}});
             stream->cancel(); // 同一目标在确认期限内不给首批/下一页, 不永远占住 Watch 名额.
-        } else if (stream->overflow_ && !stopped && !failed_) {
+        } else if (stream->stage_ == Stream::Stage::overflow && !stopped && !failed_) {
             io.unlock();
             projection_->discard();
             failed_ = true;
             publish(State::failed, Error{Error::Code::limit, Error::Effect::unapplied, {}, {}, {}});
             stream->cancel();
-        } else if (stream->ended_) {
+        } else if (stream->stage_ == Stream::Stage::ended) {
             stream->release();
-        } else if (stream->available_ && !stopped && binding_ == binding && !failed_) {
+        } else if (stream->stage_ == Stream::Stage::ready && !stopped && binding_ == binding && !failed_) {
             auto page = std::move(stream->page_); // 独占当前完整页, 解析期间不继续读入下一页.
-            stream->available_ = false;
-            stream->consumed_ = true;
+            stream->stage_ = Stream::Stage::consumed;
             io.unlock();
             try {
                 auto accepted = projection_->accept(page);
@@ -379,13 +387,11 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
     }
     if (stream_ && !closed() && !failed_ && binding_ == binding && !core_->stopped()) {
         const std::lock_guard io(stream_->mutex_);
-        if (!stream_->available_ && !stream_->ended_ && !stream_->done_ && stream_->held_) {
-            // 下一个读取由单独标志防止每次 timer pump 都对同一缓冲重复 StartRead.
-            if (stream_->consumed_) {
-                stream_->consumed_ = false;
-                stream_->page_.Clear();
-                stream_->StartRead(&stream_->page_);
-            }
+        if (stream_->stage_ == Stream::Stage::consumed && !stream_->done_ && stream_->held_) {
+            // 只有已消费页能回到 reading, 其他控制唤醒不能对同一缓冲重复 StartRead.
+            stream_->stage_ = Stream::Stage::reading;
+            stream_->page_.Clear();
+            stream_->StartRead(&stream_->page_);
         }
     }
     if (!stream_ && !closed() && !failed_ && binding && now >= retry_ && !core_->stopped()) {

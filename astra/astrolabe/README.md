@@ -104,7 +104,7 @@ Star 已编写独立只读 HTTP GET /metrics, 使用 Prometheus 文本格式, As
 
 指标入口默认关闭, 显式配置监听后启用; 本机绑定回环地址, 跨机使用明确受保护的网络或代理. 它与业务/内部 gRPC 的服务注册和资源预算分开, 不因 Comet 关闭认证/TLS 而扩大暴露范围, 也不承载管理写入或敏感转储.
 
-首版实际暴露八个固定状态 gauge, 不声称已有请求计数或固定桶直方图; 标签只使用有限方法、状态和角色集合, 不使用 APIKEY、UUID、Key 或任意 Sector/Spectrum. 指标随事件维护, 不为每次抓取遍历全部分组或保留逐请求样本. 抓取并发、缓冲、等待、缓存条数和采样频率均有界, 慢节点不阻塞整个观测轮次; 不将业务估算字节冒充 RSS.
+首版实际暴露八个固定状态 gauge, 不声称已有请求计数或固定桶直方图; 标签只使用有限方法、状态和角色集合, 不使用 APIKEY、UUID、Key 或任意 Sector/Spectrum. 指标随事件维护, 不为每次抓取遍历全部分组或保留逐请求样本. 抓取并发、缓冲和单次等待有界, 覆盖范围是可信目录中的全部 Star; 单个结果完成即发布, 整轮耗时仍随节点数量和延迟变化. 不将业务估算字节冒充 RSS.
 
 Admin 经适配层消费这些结果, Three.js 渲染器不持有基础设施凭据或参与恢复. 真实后端与演示模式显式分开, 后端不可达或数据陈旧时不静默回退为演示成功. 必要管理 API 与完整星图界面分别交付.
 
@@ -137,6 +137,10 @@ Admin 经适配层消费这些结果, Three.js 渲染器不持有基础设施凭
 
 凭据管理使用 POST `/api/credentials`, JSON 为 `key`, 正十进制字符串 `version`, 以及 Base64 `secret` 或 `erase: true` 二选一. 编码内部 Credential 由 Astrolabe 负责, 不要求浏览器维护 Protobuf. GET `/api/credentials` 返回分行的 APIKEY 与 `redacted: true`, 最后仍需完整标记和范围版本; 通用 Almanac 对 `__auth/comet` 的读取同样脱敏, 不通过另一 URL 返回已存储的 SECRET. 普通配置范围仍返回 Base64 value.
 
-指标目标通过可选 `--metrics=metrics.json` 明确部署, 文件为 `{ "Star内部IP:端口": "http://指标IP:端口/metrics" }`, 最多 64 项. 允许 HTTPS 受保护代理, 使用部署 CA; 不跟随重定向、不读取环境代理、不向指标端发送节点 bearer. 四个工作者、单请求两秒、正文 64 KiB, 每轮完成后按五秒周期继续; 慢目标可能延长实际轮次. 未配置时不采样. 响应实例头须与可信目录相符, 失败保留旧值并标陈旧, 超过 15 秒未成功抓取也标陈旧.
+指标目标通过可选 `--metrics=metrics.json` 明确部署, 文件为 `{ "Star内部IP:端口": "http://指标IP:端口/metrics" }`. 不设置独立的 64 节点采集上限; 配置文件整体以 8 MiB 限制异常输入, 已配置且位于可信目录的 Star 全部参与采样. 管理响应覆盖目录中的全部 Star, 未配置、尚未成功采集或刚替换的实例返回空数值并显示“未采集”; 不因缺少采样而隐去节点. 前端沿用完整目录的响应容量, 不另截断为 64 项.
+
+允许 HTTPS 受保护代理, 使用部署 CA; 不跟随重定向、不读取环境代理、不向指标端发送节点 bearer. 四个工作者、单请求两秒、单端正文 64 KiB; 空闲连接池按部署目标数量保留, 不将池容量与同时发起的请求数混淆. 每轮完成后按五秒定时器继续, 不承诺任意规模都在五秒内完成一轮. 结果安装时通过与目录同边界发布的端点/实例索引拒绝迟到旧实例. 失败保留同一实例的旧值并标陈旧, 超过 15 秒未成功抓取也标陈旧.
+
+当前 Orbit Member 仅公布内部 gRPC 端点, 没有指标地址字段. 指标自动发现尚未接入, 仍需上述部署映射; 不按相邻端口猜测, 不扫描未知地址. Pulsar/Polaris 等角色当前只有目录观察, 不伪造其尚未提供的 Star 指标.
 
 Star 每秒至多生成一次固定快照, 抓取不访问业务锁; 控制循环超过十秒未更新时拒绝提供旧成功响应. 当前指标为 astra_ready、astra_almanac_ready、astra_clock_ready、astra_clock_synchronized、astra_clock_uncertainty_nanoseconds、astra_members、astra_sessions、astra_recovery_bytes. 最后一项是复制恢复的逻辑计费, 不是 RSS; 全局 Almanac ready 也不是每 Scope 已安装版本.

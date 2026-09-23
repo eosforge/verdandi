@@ -4,6 +4,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <span>
 #include <thread>
 
@@ -14,7 +15,7 @@ public:
 
     // 配置在启动时完整验证; endpoint 只能由隔离测试运行器提供.
     struct Options {
-        std::string endpoint;  // 当前受测服务的单个地址.
+        std::string endpoint;  // Redis 为单地址, Comet 为逗号分隔的固定 Star 地址列表, 不作为故障转移名单.
         bool catalog{};        // true 为动态数据, false 为服务注册.
         bool visible{};        // true 每次等待所有目标可见; false 只等待写回执,
                                // 结束后验收最终视图.
@@ -30,6 +31,39 @@ public:
         unsigned rate{};       // 合计计划每秒写次数; 零表示闭环最大受理负载.
         unsigned poll{};       // 两次完整观察扫描之间的最小间隔, 100..10000 微秒.
         unsigned legacy{};     // 旧 Selector 的视图合并间隔毫秒, 默认零; 对照可设置 10, 不改变 Comet.
+    };
+
+    // 基线的固定路由, 每个 Client 只连接一台 Star; 消费侧错开一个节点, 不依赖 SDK 的端点选择策略.
+    class Route {
+    public:
+        // 启动时解析一次; 多节点要求写者、客户端和每范围订阅覆盖全部节点, 不允许空跑的陪衬 Star.
+        explicit Route(const Options& options) {
+
+            // 每个 address 借用配置后立即复制, endpoints_ 独立持有; 空项及重复地址均拒绝.
+            for (const auto part : options.endpoint | std::views::split(',')) {
+                const std::string address(part.begin(), part.end()); // 一个固定目标, 不解析传输层地址格式.
+                check(!address.empty() && std::ranges::find(endpoints_, address) == endpoints_.end(), "Empty or duplicate Star endpoint");
+                endpoints_.push_back(address);
+            }
+            check(!endpoints_.empty(), "Missing Star endpoint");
+
+            // 单节点只作诊断对照; 多节点保证所有生产端有记录, 每个 Scope 的 fanout 能覆盖全部节点.
+            const auto count = endpoints_.size(); // 当前基线节点数, 由独占运行器创建.
+            check(count <= 8 && options.clients >= count && options.clients % count == 0 && options.writers >= count && options.writers % count == 0 && options.records >= options.clients && options.records % options.clients == 0 && options.fanout >= count, "Workload does not cover every Star");
+        }
+
+        // 零基生产 Client 轮转固定节点, 对象生命周期内不会变更自身来源 Star.
+        const std::string& producer(std::size_t client) const {
+            return endpoints_[client % endpoints_.size()];
+        }
+
+        // 对应消费者错开一台; fanout 覆盖所有节点, 每条记录同时验证本地与远端视图.
+        const std::string& consumer(std::size_t client) const {
+            return endpoints_[(client % endpoints_.size() + 1) % endpoints_.size()];
+        }
+
+    private:
+        std::vector<std::string> endpoints_; // 顺序等于运行器的 star-0..star-N, 仅在构造中写入.
     };
 
     // 严格解析十进制无符号参数, 拒绝负号、尾部垃圾和截断溢出.

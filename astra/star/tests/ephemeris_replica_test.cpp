@@ -1,4 +1,5 @@
 #include "check.hpp"
+#include "coverage.hpp"
 #include "ephemeris_state.hpp"
 #include <iostream>
 
@@ -238,6 +239,40 @@ void replacement() {
     CHECK(state.admit("new"));
     CHECK(state.source().position() == 0);
 }
+
+// 已安装范围在取消/TTL 清理后仍覆盖旧删除和旧创建, 全来源确认直到剩余范围重放完成才前进.
+void interrupted() {
+
+    auto now = 1s; // 原期限 2 s, 恢复后 a 范围续期到 4 s.
+    State state([&] { return std::optional(Clock::Reading{.time = Clock::Time(now), .ready = true}); }, {});
+    const Scope one{"a", "main"}, two{"b", "main"};
+    const auto first = Ephemeris::uuid(), second = Ephemeris::uuid(), absent = Ephemeris::uuid();
+    const Ephemeris::Record old{bytes("attr"), bytes("old"), Clock::Time(2s), 0, 0, 1000};
+    auto newer = old; // 同 UUID 的固定 Attr/TTL 不变, 两个 order 与期限均向前.
+    newer.data = bytes("new");
+    newer.update = newer.renewal = 1;
+    newer.deadline = Clock::Time(4s);
+    CHECK(state.admit("a"));
+    CHECK(state.apply("a", 1, one, first, old, State::Source::Form::record));
+    CHECK(state.apply("a", 2, two, second, old, State::Source::Form::record));
+    {
+        auto draft = state.prepare("a", 5);
+        CHECK(draft && draft->set(one, first, newer) && draft->set(two, second, newer));
+        auto task = state.restore("a", std::move(*draft));
+        CHECK(task && task->step() == false);
+        CHECK(state.received("a") == 2 && *state.find(one, first)->record->data == *newer.data && *state.find(two, second)->record->data == *old.data);
+        CHECK(state.create(two, bytes("own"), bytes("data"), 1000));
+    }
+    now = 5s;
+    state.tick(); // 原生记录已经清理, 但不能丢掉范围覆盖标记.
+    CHECK(state.covered("a", 3, one, absent) == true);
+    CHECK(state.apply("a", 4, one, first, {}, State::Source::Form::erase));
+    newer.deadline = Clock::Time(10s);
+    CHECK(state.apply("a", 5, two, second, newer, State::Source::Form::record));
+    CHECK(state.received("a") == 5 && !state.find(one, first)->record && !state.find(one, absent)->record);
+    CHECK(state.find(two, second)->record);
+}
+
 } // namespace
 
 // 原生两端/多来源用例与独立的真实网络复制验收互补, 不相互替代.
@@ -248,6 +283,8 @@ int main() {
         expiry();
         ordering();
         atomic();
+        interrupted();
+        coverage<Ephemeris>({bytes("attr"), bytes("old"), Clock::Time(4s), 0, 0, 1000}, {bytes("attr"), bytes("new"), Clock::Time(5s), 1, 1, 1000}, {Ephemeris::uuid(), Ephemeris::uuid(), Ephemeris::uuid()});
         repair();
         replacement();
         std::cout << "Ephemeris replicas: ok\n";

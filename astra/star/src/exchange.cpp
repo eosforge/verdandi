@@ -31,6 +31,7 @@ Exchange::Pipe<Domain>::~Pipe() {
 
 template <typename Domain>
 void Exchange::Pipe<Domain>::clear() noexcept {
+    recovery_.reset(); // 已装范围的覆盖证据留在 State, 未完成的来源不确认.
     landing_.reset();
     pending_.clear();
     repair_.reset();
@@ -86,13 +87,13 @@ void Exchange::Pipe<Domain>::acknowledge() {
 
 template <typename Domain>
 bool Exchange::Pipe<Domain>::ready() const noexcept {
-    return target_ && received_ >= *target_ && !landing_;
+    return target_ && received_ >= *target_ && !landing_ && !recovery_;
 }
 
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::changes(const Changes& message, Steady::time_point now) {
 
-    if (landing_ || !Parcel::valid(message) || (message.entries().empty() ? message.head() != seen_ : (seen_ == UINT64_MAX || message.entries(0).position() != seen_ + 1))) {
+    if (landing_ || recovery_ || !Parcel::valid(message) || (message.entries().empty() ? message.head() != seen_ : (seen_ == UINT64_MAX || message.entries(0).position() != seen_ + 1))) {
         return Status::protocol("Non-contiguous peer changes");
     }
     if (!target_) {
@@ -120,6 +121,8 @@ Result<void> Exchange::Pipe<Domain>::changes(const Changes& message, Steady::tim
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::snapshot(const Snapshot& page, Steady::time_point now) {
 
+    if (recovery_)
+        return Status::protocol("Peer snapshot installation is still in progress");
     if (!landing_) {
         if (page.position() < seen_) {
             return Status::protocol("Peer snapshot regresses received prefix");
@@ -152,15 +155,13 @@ Result<void> Exchange::Pipe<Domain>::snapshot(const Snapshot& page, Steady::time
     if (!complete) {
         return Status::protocol("Peer snapshot lacks a complete boundary");
     }
-    const auto installed = state_.replace(peer_, std::move(*complete));
+    auto installed = state_.restore(peer_, std::move(*complete));
     if (!installed) {
         return std::unexpected(failure(installed.error()));
     }
+    recovery_.emplace(std::move(*installed));
     landing_.reset();
-    budget_.release(workspace_);
-    workspace_ = 0;
-    seen_ = page.position();
-    acknowledge();
+    seen_ = page.position(); // 仅已接收完整目标, ACK 仍等待所有 Scope 安装完成.
     return {};
 }
 
@@ -362,7 +363,7 @@ Result<void> Exchange::Pipe<Domain>::repair(const proto::astra::v1::Repair& requ
 
 template <typename Domain>
 bool Exchange::Pipe<Domain>::expired(Steady::time_point now) const noexcept {
-    return (!ready() || landing_ || repair_ || !pending_.empty()) && now >= deadline_;
+    return (!ready() || landing_ || recovery_ || repair_ || !pending_.empty()) && now >= deadline_;
 }
 
 template <typename Domain>
@@ -373,6 +374,18 @@ Result<const Exchange::Packet*> Exchange::Pipe<Domain>::prepare(Steady::time_poi
     }
     if (packet_) {
         return &*packet_;
+    }
+    if (recovery_) {
+        const auto installed = recovery_->step(); // 不跨控制轮持锁, 为其他来源和 SDK 留出执行机会.
+        if (!installed)
+            return std::unexpected(failure(installed.error()));
+        deadline_ = now + std::chrono::seconds(30);
+        if (*installed) {
+            recovery_.reset();
+            budget_.release(workspace_);
+            workspace_ = 0;
+            acknowledge(); // 只有 finish 成功才返回整个来源的新位置.
+        }
     }
     const auto drained = drain(now);
     if (!drained) {
@@ -465,8 +478,9 @@ Result<void> Exchange::receive(const Packet& packet, Steady::time_point now) {
         if (!prepared) {
             return prepared;
         }
-        const auto bytes = response.ByteSizeLong() + sizeof(Response);
-        if (response.ByteSizeLong() > capacity_ || bytes > 16 * 1024 * 1024 - response_bytes_ || !budget_.acquire(bytes)) {
+        const auto encoded = response.ByteSizeLong();  // 当前响应未再修改, 线长和持有预算共用一次遍历结果.
+        const auto bytes = encoded + sizeof(Response); // 额外计入回补队列节点, 与线帧容量分别约束.
+        if (encoded > capacity_ || bytes > 16 * 1024 * 1024 - response_bytes_ || !budget_.acquire(bytes)) {
             return Status::capacity("Peer repair response budget exceeded");
         }
         try {
@@ -526,5 +540,9 @@ Exchange::Packet Exchange::take() {
 
 bool Exchange::ready() const noexcept {
     return catalog_.ready() && ephemeris_.ready();
+}
+
+bool Exchange::pending() const noexcept {
+    return catalog_.pending() || ephemeris_.pending();
 }
 } // namespace astra

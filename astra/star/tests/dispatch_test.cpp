@@ -166,7 +166,7 @@ void boundaries() {
 void landing() {
 
     using Source = astra::Origin<Catalog::Record>;
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Source source(gate, [](const Catalog::Record& value) noexcept { return value.value ? value.value->size() : 0; }, false);
     astra::Landing<Catalog> receiver(source);
     proto::astra::v1::CatalogSnapshot page;

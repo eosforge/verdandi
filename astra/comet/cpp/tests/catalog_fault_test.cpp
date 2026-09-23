@@ -16,7 +16,7 @@ using namespace std::chrono_literals;
 class Faults final : public proto::comet::v1::Catalog::CallbackService {
 public:
     std::atomic_bool lost{};         // 下一次 Publish 已提交但回执丢失.
-    std::atomic_int stalled{};       // 0 为正常, 1 为不发首帧, 2 为只发不完整首批.
+    std::atomic_int stalled{};       // 0 正常, 1 首帧停滞, 2 半批停滞, 3 半批 EOF, 4 首帧前 EOF.
     std::atomic_uint writes{};       // 实际 Publish 到达次数, 不是业务版本.
     std::atomic_uint watches{};      // 实际 Watch 次数, 用于确认停止旧流后才恢复.
     std::atomic_bool valid{true};    // 注入路径的真实准入/原生提交仍须成功.
@@ -49,16 +49,16 @@ public:
     grpc::ServerWriteReactor<proto::comet::v1::CatalogWatchReply>* Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) override {
         ++watches;
         const auto mode = stalled.exchange(0); // 只注入一次, 后续恢复使用完整生产管线.
-        return mode == 0 ? service.Watch(context, request) : new Frozen(mode == 2);
+        return mode == 0 ? service.Watch(context, request) : new Frozen(mode);
     }
 
 private:
     // 被取消时先等唯一在途 Write 完成再 Finish, OnDone 是唯一释放点.
     class Frozen final : public grpc::ServerWriteReactor<proto::comet::v1::CatalogWatchReply> {
     public:
-        // partial=true 仅推一条未完成 reset, 此条绝不应进入用户完整视图.
-        explicit Frozen(bool partial) : writing_(partial) {
-            if (partial) {
+        // mode 取上述四种注入方式; 半批绝不进入完整视图, EOF 必须排空后才重开 Watch.
+        explicit Frozen(int mode) : writing_(mode == 2 || mode == 3), cancelled_(mode >= 3) {
+            if (writing_) {
                 page_.set_mode(proto::comet::v1::MODE_RESET);
                 // 实例和完整游标只允许出现在尾页; 此处仅模拟合法半批停滞, 不注入另一种协议错误.
                 auto* change = page_.add_changes(); // 页面寿命一直保持到 OnDone.
@@ -66,6 +66,8 @@ private:
                 change->set_value("not-installed");
                 change->set_version(1);
                 StartWrite(&page_);
+            } else {
+                finish(); // mode=4 没有在途 Write, 直接产生 EOF; mode=1 保持首帧停滞.
             }
         }
 
@@ -203,7 +205,8 @@ void lost() {
 }
 
 void stalled() {
-    for (const int mode : {1, 2}) {
+    // 同时覆盖 reading 超时、consumed 后继续读取、首帧/半批 EOF 的 hold 归还与重连.
+    for (const int mode : {1, 2, 3, 4}) {
         Fixture fixture;
         fixture.faults.stalled.store(mode);
         auto subscriber = fixture.client.subscriber({"source", "main"});
@@ -214,6 +217,21 @@ void stalled() {
         CHECK(subscriber->wait(3s));
     }
 }
+
+// 关闭发生在等待首帧或下一页时, 无需等待无进展超时, 旧流也不能在关闭后发起恢复.
+void cancelled() {
+    for (const int mode : {1, 2}) {
+        Fixture fixture; // 每轮自有端口/Client, 不干扰其他故障用例.
+        fixture.faults.stalled.store(mode);
+        auto subscriber = fixture.client.subscriber({"source", "main"}); // 首个请求进入停滞夹具.
+        CHECK(subscriber);
+        eventually([&] { return fixture.faults.watches.load() != 0; });
+        subscriber->close();
+        CHECK(subscriber->wait(3s));
+        CHECK(subscriber->watch().state() == comet::Subscriber::State::closed && subscriber->watch().size() == 0);
+        CHECK(fixture.client.exceptions() == 0); // wait 已确认真实流结束, 不按机器调度速度断言关闭前绝不发生一次超时重连.
+    }
+}
 } // namespace
 
 // 真实 gRPC/TLS 故障测试, 由获准的 CTest 入口显式执行.
@@ -221,6 +239,7 @@ int main() {
     try {
         lost();
         stalled();
+        cancelled();
         std::cout << "Catalog confirmation and Watch stall cases passed\n";
         return 0;
     } catch (const std::exception& error) {

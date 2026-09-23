@@ -74,9 +74,118 @@ func TestMetricScrape(t *testing.T) {
 			t.Fatal("untrusted or incomplete observation accepted")
 		}
 	}
-	backend := &Backend{nodes: []node{{ID: "current", Endpoint: "endpoint"}}, metrics: map[string]metric{"endpoint": {ID: "old", Observed: time.Now()}}}
+	backend := &Backend{nodes: []node{{ID: "current", Role: "ROLE_STAR", Endpoint: "endpoint"}}, metrics: map[string]metric{"endpoint": {ID: "old", Observed: time.Now()}}}
 	if value := fmt.Sprint(backend.Metrics()); strings.Contains(value, "old") {
 		t.Fatal("old identity observation leaked into replacement")
+	}
+}
+
+// 部署文件和实际采样都覆盖完整目录, 第 65 个节点不能被配置上限或返回投影截断.
+func TestMetricDirectory(t *testing.T) {
+	const count = 128
+	targets := make(map[string]string, count)
+	for index := range count {
+		targets[fmt.Sprintf("127.0.0.1:%d", 10000+index)] = fmt.Sprintf("http://127.0.0.1:%d/metrics", 20000+index)
+	}
+	data, err := json.Marshal(targets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 大目录允许正常格式化空白, 不再沿用单端响应的 64 KiB 配置限制.
+	data = append([]byte(strings.Repeat(" ", 65536)), data...)
+	path := filepath.Join(t.TempDir(), "metrics.json")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if loaded, err := Targets(path); err != nil || len(loaded) != count {
+		t.Fatal("deployment truncated the directory", err)
+	}
+
+	// 一个本地 HTTP 夹具模拟不同实例; 这里只核验 sample 覆盖范围, 不替代部署 URL 校验.
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("X-Astra-Instance", strings.TrimPrefix(request.URL.Path, "/"))
+		_, _ = response.Write([]byte(complete()))
+	}))
+	defer server.Close()
+	backend := &Backend{members: make(map[string]string, count)}
+	for index := range count {
+		endpoint := fmt.Sprintf("127.0.0.1:%d", 10000+index)
+		id := fmt.Sprintf("star-%d", index)
+		backend.nodes = append(backend.nodes, node{ID: id, Role: "ROLE_STAR", Endpoint: endpoint})
+		backend.members[endpoint] = id
+		targets[endpoint] = server.URL + "/" + id
+	}
+	backend.nodes = append(backend.nodes, node{ID: "unconfigured", Role: "ROLE_STAR", Endpoint: "127.0.0.1:30000"}, node{ID: "polaris", Role: "ROLE_POLARIS"})
+	backend.sample(t.Context(), server.Client(), targets)
+	if len(backend.metrics) != count {
+		t.Fatal("not all configured Stars were sampled")
+	}
+	encoded, err := json.Marshal(backend.Metrics())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output struct {
+		Samples []metric `json:"samples"`
+	}
+	if err := json.Unmarshal(encoded, &output); err != nil || len(output.Samples) != count+1 {
+		t.Fatal("metrics projection omitted part of the Star directory", err)
+	}
+	for _, value := range output.Samples {
+		if value.ID == "unconfigured" {
+			if !value.Stale || !value.Observed.IsZero() || len(value.Values) != 0 {
+				t.Fatal("unconfigured Star claimed a successful observation")
+			}
+		} else if value.Stale || value.Observed.IsZero() || len(value.Values) != len(gauges) {
+			t.Fatal("configured Star lacks its complete observation", value.ID)
+		}
+	}
+}
+
+// 网络结果可以晚于目录换代返回, 使用最新目录索引拒绝旧实例, 新实例仍必须明确显示为未采集.
+func TestMetricReplacement(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		close(started)
+		select {
+		case <-release:
+		case <-request.Context().Done():
+			return
+		}
+		response.Header().Set("X-Astra-Instance", "old")
+		_, _ = response.Write([]byte(complete()))
+	}))
+	defer server.Close()
+	defer close(release)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel() // 错误退出时先取消 HTTP, 不让夹具等待被阻塞的处理器.
+	backend := &Backend{nodes: []node{{ID: "old", Role: "ROLE_STAR", Endpoint: "endpoint"}}, members: map[string]string{"endpoint": "old"}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		backend.sample(ctx, server.Client(), map[string]string{"endpoint": server.URL})
+	}()
+	select {
+	case <-started:
+	case <-ctx.Done():
+		t.Fatal("scrape never started")
+	}
+	backend.mutex.Lock()
+	backend.nodes = []node{{ID: "new", Role: "ROLE_STAR", Endpoint: "endpoint"}}
+	backend.members = map[string]string{"endpoint": "new"}
+	backend.mutex.Unlock()
+	release <- struct{}{}
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("replaced scrape did not stop")
+	}
+	if len(backend.metrics) != 0 {
+		t.Fatal("late response was installed for a replaced instance")
+	}
+	encoded, err := json.Marshal(backend.Metrics())
+	if err != nil || !strings.Contains(string(encoded), `"id":"new"`) || !strings.Contains(string(encoded), `"stale":true`) || strings.Contains(string(encoded), `"id":"old"`) {
+		t.Fatal("replacement was omitted or given the old observation", err)
 	}
 }
 
@@ -87,7 +196,7 @@ func TestMetricFreshness(t *testing.T) {
 		_, _ = response.Write([]byte(complete()))
 	}))
 	defer server.Close()
-	backend := &Backend{nodes: []node{{ID: "current", Role: "ROLE_STAR", Endpoint: "endpoint"}}}
+	backend := &Backend{nodes: []node{{ID: "current", Role: "ROLE_STAR", Endpoint: "endpoint"}}, members: map[string]string{"endpoint": "current"}}
 	backend.sample(t.Context(), server.Client(), map[string]string{"endpoint": server.URL})
 	observed := backend.metrics["endpoint"]
 	if observed.Stale || observed.Observed.IsZero() || observed.Observed == observed.Observed.Round(0) {

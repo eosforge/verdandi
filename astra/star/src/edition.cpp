@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <ranges>
 #include <stdexcept>
+#include <tuple>
 
 namespace astra {
 Edition::Edition() = default;
@@ -27,9 +28,9 @@ Edition::Edition(Almanac::Replay replay, std::string_view target) : mode_(proto:
     }
 
     // 连续历史已在原生状态中确认; 按 Key/版本排序后原位保留最终 action, 不另建散列表或复制 Buffer.
-    const auto order = [](const Almanac::Change& left, const Almanac::Change& right) { return *left.key < *right.key || (*left.key == *right.key && left.version < right.version); }; // 同 Key 仍按版本选择最后一次提交.
-    if (!std::ranges::is_sorted(replay.changes, order)) {
-        std::ranges::sort(replay.changes, order); // 活动收集器的有序唯一后缀跳过排序, 历史回放仍允许交错 Key.
+    const auto order = [](const Almanac::Change& change) { return std::tie(*change.key, change.version); }; // 引用投影按 Key/版本比较, 不复制字符串, 不对相等 Key 再作一次独立等号比较.
+    if (!std::ranges::is_sorted(replay.changes, {}, order)) {
+        std::ranges::sort(replay.changes, {}, order); // 活动收集器的有序唯一后缀跳过排序, 历史回放仍允许交错 Key.
     }
     std::size_t kept{}; // 压缩后有效前缀长度, 原顺序只用于选择同 Key 的最高版本.
     for (std::size_t first = 0; first < replay.changes.size();) {

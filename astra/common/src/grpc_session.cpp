@@ -342,6 +342,9 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
                     prepared = true;
                 }
             }
+            if (!error_ && data_->pending()) {
+                wake_(); // 下一 Scope 已在内存中, 无需等待兜底定时器或新的网络包; 每轮仍只安装一个 Scope.
+            }
         } catch (const std::bad_alloc&) {
             cancel(Status::Code::capacity);
         } catch (...) {

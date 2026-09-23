@@ -14,7 +14,9 @@
     "ttl": 30000,
     "rate": 0,
     "poll": 1000,
-    "legacy_view_ms": 10
+    "legacy_view_ms": 10,
+    "stars": 1,
+    "diagnostic": true
   },
   {
     "name": "coalesced",
@@ -31,6 +33,8 @@
     "ttl": 30000,
     "rate": 0,
     "poll": 1000,
-    "legacy_view_ms": 10
+    "legacy_view_ms": 10,
+    "stars": 1,
+    "diagnostic": true
   }
 ]

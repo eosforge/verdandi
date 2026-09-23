@@ -33,6 +33,40 @@ class RunnerTest(unittest.TestCase):
         with self.assertRaises(ValueError), baseline.server(arguments):
             self.fail("Missing owner accepted")
 
+    def test_standard_topology(self):
+        """默认三节点, 单/双节点仅允许显式诊断, 不静默修改客户端和负载数量."""
+        case = dict(clients=6, writers=6, records=96, fanout=3)
+        self.assertEqual(baseline.topology(case)["stars"], 3)
+        for count in (1, 2):
+            with self.subTest(stars=count), self.assertRaises(ValueError):
+                baseline.topology(dict(case, stars=count))
+            self.assertEqual(baseline.topology(dict(case, stars=count, diagnostic=True))["stars"], count)
+        for changes in (dict(clients=1), dict(clients=4), dict(writers=2), dict(writers=4), dict(fanout=2), dict(records=95), dict(stars=0), dict(stars=True)):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                baseline.topology(dict(case, **changes))
+
+    def test_comet_routes_every_endpoint(self):
+        """夹具必须拉起三台 Star, 探针拿到全部地址而非仅第一台; 不实际启动服务."""
+        case = baseline.topology(json.loads(Path(__file__).with_name("cases.json").read_text())[0])
+        arguments = SimpleNamespace(binaries=Path("binaries"))
+        with patch.object(baseline.measure, "cluster", return_value=[]) as cluster:
+            self.assertEqual(baseline.comet(arguments, case, Path("output")), [])
+        self.assertEqual(cluster.call_args.args[1]["stars"], 3)
+        command = cluster.call_args.args[3](["127.0.0.1:1", "127.0.0.1:2", "127.0.0.1:3"])
+        self.assertEqual(command[1], "127.0.0.1:1,127.0.0.1:2,127.0.0.1:3")
+
+    def test_standard_matrix(self):
+        """标准矩阵全部覆盖三节点, 单 Scope 合并与多 Scope 并行都须存在."""
+        cases = [baseline.topology(case) for case in json.loads(Path(__file__).with_name("cases.json").read_text())]
+        self.assertTrue(all(case["stars"] >= 3 and not case.get("diagnostic", False) for case in cases))
+        for domain in ("catalog", "ephemeris"):
+            self.assertTrue(any(case["domain"] == domain and case["groups"] == 1 for case in cases))
+            self.assertTrue(any(case["domain"] == domain and case["groups"] >= 3 for case in cases))
+            for clients in (3, 6):
+                self.assertTrue(
+                    any(case["domain"] == domain and case["writers"] == 24 and case["clients"] == clients and case["mode"] == "receipt" for case in cases)
+                )
+
     def test_external_lifecycle(self):
         """外层所有者模式不触碰 Docker, 由外层负责清理."""
         arguments = SimpleNamespace(redis="127.0.0.1:1", redis_pid=100)

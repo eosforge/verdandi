@@ -1,4 +1,5 @@
 #include "check.hpp"
+#include "duplicates.hpp"
 #include "projection.hpp"
 #include <atomic>
 #include <iostream>
@@ -217,6 +218,7 @@ int main() {
         malformed();
         versions();
         capacity();
+        comet::test::duplicates<Projection>([](auto& change, std::string_view key) { change.set_key(key); change.mutable_erase(); }); // Almanac 错误优先级与跨页原子性.
         shared_budget();
         concurrent();
         std::cout << "Comet projection tests passed\n";

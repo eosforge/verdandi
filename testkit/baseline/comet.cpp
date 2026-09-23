@@ -9,9 +9,10 @@ public:
     // 内部数据.
     explicit Adapter(const Workload::Options& options) : options_(options) {
 
+        const Workload::Route route(options); // 固定每个 Client 的唯一端点, 三台以上 Star 同时拥有本地写者.
         for (std::size_t index = 0; index < options.clients * 2; ++index) {
             comet::Client::Options settings; // 前半生产客户端, 后半消费客户端; 两侧无业务 TLS/认证.
-            settings.endpoints = {options.endpoint};
+            settings.endpoints = {index < options.clients ? route.producer(index) : route.consumer(index - options.clients)};
             settings.auth = false;
             settings.tls = false;
             settings.readers = 128;

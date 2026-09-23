@@ -31,6 +31,12 @@ public:
         return time_ + (timer_.now() == tick_ ? std::chrono::milliseconds::zero() : interval);
     }
 
+    // 下一次可能完成整拍的绝对边界, 供外层跳过尚不能推进的全部轮; 极值饱和, 不溢出时间类型.
+    Clock::Time next() const noexcept {
+        const auto current = time(); // 当前轮的真实相位, 不假定全部来源都对齐整十毫秒.
+        return Clock::Time::max() - current < interval ? Clock::Time::max() : current + interval;
+    }
+
     // 按当前边界安排有限 deadline, 已过期记录安排下一拍, 不在写入中同步调用业务.
     // 无分配且不抛错; 调用者先推进到最终受理时间, 再提交原生 deadline 和此钩子.
     void set(Node& node, Clock::Time deadline) noexcept {

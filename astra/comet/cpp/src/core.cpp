@@ -197,8 +197,19 @@ void Core::start() {
     schedule(std::chrono::steady_clock::now());
 }
 
-void Core::wake() noexcept {
+void Core::wake(Activity* activity) noexcept {
+
     const std::lock_guard lock(mutex_);
+    if (activity) {
+        // 调用者只保证本次调用期间存活. 队列持弱引用, 重复事件合并, 不保存裸指针或建立拥有环.
+        if (!activity->ready_ && !activity->self_.expired()) {
+            ready_.push_back(activity->self_); // accept 已预留每个目录对象一个槽, 此处不会重新分配.
+            activity->ready_ = true;
+        }
+    } else {
+        refresh_ = true;
+    }
+
     awakened_ = true;
     if (scheduled_) {
         alarm_.Cancel();
@@ -209,6 +220,7 @@ void Core::release() noexcept {
     const std::lock_guard lock(mutex_);
     if (owners_ != 0 && --owners_ == 0) {
         closing_ = true;
+        refresh_ = true;
         stopped_.store(true, std::memory_order_release);
     }
     awakened_ = true;
@@ -221,6 +233,7 @@ void Core::close() noexcept {
     const std::lock_guard lock(mutex_);
     stopped_.store(true, std::memory_order_release);
     closing_ = true;
+    refresh_ = true;
     awakened_ = true;
     if (scheduled_) {
         alarm_.Cancel();
@@ -294,6 +307,7 @@ Core::Time Core::session(Time now) {
                     login->binding_->instance = reply.instance();
                     login->binding_->session = reply.session();
                     login->confirmed_ = true;
+                    refresh_ = true;
                     binding_ = login->binding_; // 两个完整字符串写入后才公开不可变绑定.
                     blocked_.reset();
                 } else {
@@ -326,6 +340,7 @@ Core::Time Core::session(Time now) {
     }
     login_.reset();
     if (binding_ == login->binding_) {
+        refresh_ = true;
         binding_.reset();
     }
     if (closing_ || secret_ != login->secret_ || detached || blocked_) {
@@ -394,6 +409,7 @@ Core::Time Core::dial(Time now) {
             return Time::max();
         }
         if (!options_.auth) {
+            refresh_ = true; // 重连截止唤醒也必须让原本无限期等待的对象发现新绑定.
             binding_ = connecting;
             return Time::max();
         }
@@ -417,48 +433,97 @@ void Core::tick() {
     auto next = std::chrono::steady_clock::now() + std::chrono::seconds(1); // 空闲兜底, 实际网络事件会立即取消 Alarm 唤醒.
     bool finished = false;
     try {
-        const auto now = std::chrono::steady_clock::now(); // 本轮统一单调时间, 不读 Pulsar 或系统墙钟.
-        next = std::min(next, session(now));
-        next = std::min(next, dial(now));
-        std::vector<std::shared_ptr<Activity>> readers; // 最多两倍配置对象数, 防止已关闭但未清理对象无界积累.
-        {
-            const std::lock_guard lock(mutex_);
-            std::erase_if(readers_, [](const auto& weak) { const auto reader = weak.lock(); return !reader || reader->finished(); });
-            readers.reserve(readers_.size());
-            for (const auto& weak : readers_) {
-                if (auto reader = weak.lock()) {
-                    readers.push_back(std::move(reader));
-                }
-            }
-        }
-        // 清理/自动保活先推进, 再处理可能触发用户回调的 Watch; 不创建另一套线程池或任务队列.
-        std::ranges::partition(readers, [](const auto& object) { return !object->streaming(); });
-        for (const auto& reader : readers) {
-            std::shared_ptr<const Binding> binding;
-            std::optional<Error> error;
-            bool closing;
+        // gRPC Alarm 重新排程会增加队列跳转. 已在处理期间到达的完成事件直接继续,
+        // 至多八轮后交还 callback 线程; 没有新事件立即休眠, 不用空轮制造低延迟假象.
+        for (unsigned round = 0; round < 8; ++round) {
             {
                 const std::lock_guard lock(mutex_);
-                // 前一个 Reader 可能已经报告全局会话失效, 后续对象不能使用轮首的陈旧绑定.
-                binding = binding_;
-                error = blocked_;
-                closing = closing_;
+                awakened_ = false; // 本轮会消费已标记的对象, 后到事件重新置位.
             }
-            next = std::min(next, reader->poll(now, binding, error, closing));
-        }
-        {
+
+            // 临时强引用只覆盖本轮推进; 正常/异常退出都在 Core 锁外清空, 保留有界数组容量.
+            struct Release {
+                std::vector<std::shared_ptr<Activity>>& objects; // 仅借用 Core 的工作空间, 不访问应用目录.
+
+                ~Release() {
+                    objects.clear();
+                } // 释放可触发业务析构和 Core::release, 因此不能放到 Core 锁内.
+            } release{polling_};
+
+            const auto now = std::chrono::steady_clock::now(); // 本轮统一单调时间, 不读 Pulsar 或系统墙钟.
+            next = now + std::chrono::seconds(1);              // 每轮重算, 不沿用上一轮已消费的过期期限.
+            next = std::min(next, session(now));
+            next = std::min(next, dial(now));
+            {
+                const std::lock_guard lock(mutex_);
+                polling_.reserve(readers_.size());                   // 应用目录已有数量上限, 稳态复用容量而非每次网络唤醒重新分配.
+                const bool refresh = std::exchange(refresh_, false); // 只有共享状态变更才广播到整个活动集.
+                if (refresh || now >= due_) {
+                    // 到期或共享状态变化才遍历目录. 同轮就绪对象由目录一并捕获, 不重复推进.
+                    ready_.clear();
+                    due_ = Time::max();
+                    std::erase_if(readers_, [this, now, refresh](const auto& weak) {
+                        auto reader = weak.lock(); // 只在维护轮解析目录中的全部弱引用.
+                        if (!reader)
+                            return true;
+                        const bool ready = std::exchange(reader->ready_, false); // 解锁前消费, poll 中的新事件仍可再次入队.
+                        if (reader->finished()) {
+                            reader->self_.reset(); // 已退役对象的迟到回调不能重新占队列槽.
+                            return true;
+                        }
+                        if (refresh || ready || now >= reader->next_)
+                            polling_.push_back(std::move(reader));
+                        else
+                            due_ = std::min(due_, reader->next_);
+                        return false;
+                    });
+                } else {
+                    // 普通网络完成只解析实际入队的 K 个对象, 不为一个事件扫描 N 个空闲订阅.
+                    for (const auto& weak : ready_) {
+                        if (auto reader = weak.lock()) {
+                            reader->ready_ = false;
+                            if (!reader->finished())
+                                polling_.push_back(std::move(reader));
+                        }
+                    }
+                    ready_.clear();
+                }
+            }
+            // 清理/自动保活先推进, 再处理可能触发用户回调的 Watch; 不创建另一套线程池或任务队列.
+            std::ranges::partition(polling_, [](const auto& object) { return !object->streaming(); });
+            for (const auto& reader : polling_) {
+                std::shared_ptr<const Binding> binding;
+                std::optional<Error> error;
+                bool closing;
+                {
+                    const std::lock_guard lock(mutex_);
+                    // 前一个 Reader 可能已经报告全局会话失效, 后续对象不能使用轮首的陈旧绑定.
+                    binding = binding_;
+                    error = blocked_;
+                    closing = closing_;
+                }
+                reader->next_ = reader->poll(now, binding, error, closing);
+                due_ = std::min(due_, reader->next_); // 定向推进可提前期限; 旧最小值只会多唤醒一次, 不延迟自动续租.
+            }
+            next = std::min(next, due_); // 即使本轮没有到期对象, 仍按原期限调度, 不退化成每秒检查.
+            {
+                const std::lock_guard lock(mutex_);
+                // 回调期间工厂可能接纳了本轮快照之外的新对象. 必须检查实际目录, 否则 close
+                // 可能在这些对象尚未清理时错误地完成, 使它们的 wait 永久等不到通知.
+                const bool cleaned = closing_ && std::ranges::all_of(readers_, [](const auto& weak) { const auto reader = weak.lock(); return !reader || reader->finished(); });
+                finished = closing_ && !login_ && calls_.load(std::memory_order_relaxed) == 0 && unary_.load(std::memory_order_relaxed) == 0 && maintenance_.load(std::memory_order_relaxed) == 0 && recovery_.load(std::memory_order_relaxed) == 0 && admitted_.load(std::memory_order_relaxed) == 0 && cleaned;
+                if (finished) {
+                    connecting_.reset();
+                    binding_.reset();
+                    readers_.clear();
+                    ready_.clear();
+                    complete_ = true;
+                    condition_.notify_all();
+                }
+            }
             const std::lock_guard lock(mutex_);
-            // 回调期间工厂可能接纳了本轮快照之外的新对象. 必须检查实际目录, 否则 close
-            // 可能在这些对象尚未清理时错误地完成, 使它们的 wait 永久等不到通知.
-            const bool cleaned = std::ranges::all_of(readers_, [](const auto& weak) { const auto reader = weak.lock(); return !reader || reader->finished(); });
-            finished = closing_ && !login_ && calls_.load(std::memory_order_relaxed) == 0 && unary_.load(std::memory_order_relaxed) == 0 && maintenance_.load(std::memory_order_relaxed) == 0 && recovery_.load(std::memory_order_relaxed) == 0 && admitted_.load(std::memory_order_relaxed) == 0 && cleaned;
-            if (finished) {
-                connecting_.reset();
-                binding_.reset();
-                readers_.clear();
-                complete_ = true;
-                condition_.notify_all();
-            }
+            if (finished || !awakened_)
+                break; // 截止仍保留在 next, 不为没有工作的新轮继续扫描目录.
         }
     } catch (...) {
         // 内部准备失败不能越过 gRPC callback 边界. 停止接纳并在后续控制轮继续取消和归还,
@@ -486,12 +551,9 @@ Result<std::shared_ptr<Reading>> Core::reader(Scope scope, std::string target, R
     if (!address.valid() || address.internal() || (!target.empty() && !astra::Scope::text(target, 1024)) || options.bytes < 16384 || options.bytes > 1024ULL * 1024 * 1024 || options.records == 0 || options.records > 65536) {
         return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
     }
-    auto reading = std::make_shared<Reading>(shared_from_this(), std::move(scope), std::move(target), std::move(options));
-    auto accepted = accept(reading); // 未接纳对象不发 RPC, 失败析构只释放准备资源.
-    if (!accepted) {
-        return std::unexpected(accepted.error());
-    }
-    return reading;
+
+    auto reading = std::make_shared<Reading>(shared_from_this(), std::move(scope), std::move(target), std::move(options)); // 未接纳对象只准备资源, 不发 RPC.
+    return accept(reading).transform([&reading] { return std::move(reading); });                                           // 同步成功分支移交所有权, 失败自动析构未接纳对象.
 }
 
 Result<std::shared_ptr<Subscribing>> Core::subscriber(Scope scope, std::string target, Subscriber::Options options) {
@@ -500,12 +562,9 @@ Result<std::shared_ptr<Subscribing>> Core::subscriber(Scope scope, std::string t
     if (!address.valid() || address.internal() || (!target.empty() && !astra::Scope::text(target, 1024)) || options.bytes < 16384 || options.bytes > 1024ULL * 1024 * 1024 || options.records == 0 || options.records > 65536) {
         return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
     }
-    auto reading = std::make_shared<Subscribing>(shared_from_this(), std::move(scope), std::move(target), std::move(options));
-    auto accepted = accept(reading); // 未接纳对象不发 RPC, 失败析构只释放准备资源.
-    if (!accepted) {
-        return std::unexpected(accepted.error());
-    }
-    return reading;
+
+    auto reading = std::make_shared<Subscribing>(shared_from_this(), std::move(scope), std::move(target), std::move(options)); // 未接纳对象只准备资源, 不发 RPC.
+    return accept(reading).transform([&reading] { return std::move(reading); });                                               // 与 Reader 使用同一所有权/失败边界.
 }
 
 Result<std::shared_ptr<Observing>> Core::observer(Scope scope, std::string target, Observer::Options options) {
@@ -514,12 +573,9 @@ Result<std::shared_ptr<Observing>> Core::observer(Scope scope, std::string targe
     if (!address.valid() || address.internal() || (!target.empty() && !Selection::valid(target)) || options.bytes < 16384 || options.bytes > 1024ULL * 1024 * 1024 || options.records == 0 || options.records > 65536) {
         return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
     }
-    auto reading = std::make_shared<Observing>(shared_from_this(), std::move(scope), std::move(target), std::move(options));
-    auto accepted = accept(reading); // 未接纳对象不发 RPC, 失败析构只释放准备资源.
-    if (!accepted) {
-        return std::unexpected(accepted.error());
-    }
-    return reading;
+
+    auto reading = std::make_shared<Observing>(shared_from_this(), std::move(scope), std::move(target), std::move(options)); // 未接纳对象只准备资源, 不发 RPC.
+    return accept(reading).transform([&reading] { return std::move(reading); });                                             // 同步消费 expected, 不创建回调队列或增加引用副本.
 }
 
 Result<std::shared_ptr<Beaming>> Core::beacon(Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, Beacon::Options options) {
@@ -534,11 +590,8 @@ Result<std::shared_ptr<Beaming>> Core::beacon(Scope scope, Value attr, Value dat
     } catch (const std::length_error&) {
         return std::unexpected(Error{Error::Code::busy, Error::Effect::unapplied, {}, {}, {}});
     }
-    auto accepted = accept(object);
-    if (!accepted) {
-        return std::unexpected(accepted.error());
-    }
-    return object;
+
+    return accept(object).transform([&object] { return std::move(object); }); // 失败仍在本作用域归还构造时预留的共享预算.
 }
 
 Result<std::shared_ptr<Publishing>> Core::publisher(Scope scope, std::string key, std::chrono::milliseconds ttl, Publisher::Options options) {
@@ -547,12 +600,9 @@ Result<std::shared_ptr<Publishing>> Core::publisher(Scope scope, std::string key
     if (!address.valid() || address.internal() || !astra::Scope::text(key, 1024) || ttl < std::chrono::seconds(1) || ttl > std::chrono::minutes(10)) {
         return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
     }
-    auto object = std::make_shared<Publishing>(shared_from_this(), std::move(scope), std::move(key), ttl, std::move(options));
-    auto accepted = accept(object);
-    if (!accepted) {
-        return std::unexpected(accepted.error());
-    }
-    return object;
+
+    auto object = std::make_shared<Publishing>(shared_from_this(), std::move(scope), std::move(key), ttl, std::move(options)); // 仅成功接纳后移交发布责任.
+    return accept(object).transform([&object] { return std::move(object); });
 }
 
 bool Core::outgoing(bool priority, bool automatic) noexcept {
@@ -570,10 +620,12 @@ bool Core::outgoing(bool priority, bool automatic) noexcept {
 }
 
 void Core::returning(bool priority, bool automatic) noexcept {
-    (priority ? maintenance_ : automatic ? recovery_
-                                         : unary_)
-        .fetch_sub(1, std::memory_order_relaxed);
-    wake(); // 真正 callback 释放时才归还, 取消不提前释放容量.
+    const auto previous = (priority ? maintenance_ : automatic ? recovery_
+                                                               : unary_)
+                              .fetch_sub(1, std::memory_order_relaxed); // 真实 callback 释放才归还, 取消不提前释放容量.
+    if (previous == (priority ? 16 : automatic ? 48
+                                               : 256))
+        wake(); // 只有从满额变为可用才广播给等待者, 普通完成由所属 Activity 独立唤醒.
 }
 
 bool Core::admitting() noexcept {
@@ -596,9 +648,21 @@ Result<void> Core::accept(const std::shared_ptr<Activity>& activity) {
     if (closing_) {
         return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
     }
-    std::erase_if(readers_, [](const auto& weak) { const auto reader = weak.lock(); return !reader || reader->finished(); });
-    std::size_t count{};    // 关闭尚未清理对象不占应用额度, 其实际 RPC 仍由 calls_ 计费.
-    std::size_t retained{}; // 本类已关闭但实际尚未清理对象同样有独立上限.
+    // 接纳属于低频目录维护. 同时清理队列中的失效弱引用, 避免反复创建/销毁但未推进时累积空槽.
+    const auto retired = [](const auto& weak) {
+        const auto reader = weak.lock(); // 临时检查已有对象, 不持有到锁外.
+        if (!reader)
+            return true;
+        if (!reader->finished())
+            return false;
+        reader->self_.reset();
+        reader->ready_ = false;
+        return true;
+    };
+    std::erase_if(readers_, retired);
+    std::erase_if(ready_, retired); // 先移目录再清队列, finished 并发变为 true 时不遗留已移除对象的就绪槽.
+    std::size_t count{};            // 关闭尚未清理对象不占应用额度, 其实际 RPC 仍由 calls_ 计费.
+    std::size_t retained{};         // 本类已关闭但实际尚未清理对象同样有独立上限.
     for (const auto& reader : readers_) {
         if (const auto owned = reader.lock(); owned && owned->streaming() == activity->streaming()) {
             ++retained;
@@ -608,7 +672,14 @@ Result<void> Core::accept(const std::shared_ptr<Activity>& activity) {
     if (count >= (activity->streaming() ? options_.readers : options_.beacons) || retained >= 2 * (activity->streaming() ? options_.readers : options_.beacons)) {
         return std::unexpected(Error{Error::Code::busy, Error::Effect::unapplied, {}, {}, {}});
     }
+
+    // 在发布新对象前保证所有目录对象都可同时就绪. 几何增长避免逐对象 reserve 形成平方复制.
+    if (ready_.capacity() < readers_.size() + 1)
+        ready_.reserve(std::max(readers_.size() + 1, ready_.capacity() * 2));
     readers_.push_back(activity);
+    activity->self_ = activity;
+    activity->ready_ = true;
+    ready_.push_back(activity);
     ++owners_;
     awakened_ = true;
     if (scheduled_) {
@@ -654,7 +725,8 @@ bool Core::claim() noexcept {
 }
 
 void Core::relinquish() noexcept {
-    calls_.fetch_sub(1, std::memory_order_relaxed);
+    if (calls_.fetch_sub(1, std::memory_order_relaxed) == options_.readers)
+        wake(); // 实际 OnDone 归还满额 Watch 名额后, 唤醒尚未建流的对象.
 }
 
 bool Core::resize(std::size_t previous, std::size_t requested) noexcept {

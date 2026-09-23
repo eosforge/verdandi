@@ -85,37 +85,39 @@ bool visible(const comet::Subscriber& subscriber, const comet::Observer& observe
 int main(int count, char** arguments) {
 
     try {
-        if (count != 5) {
-            throw std::runtime_error("Expected two endpoints, CA and secret file");
+        if (count != 6) {
+            throw std::runtime_error("Expected three endpoints, CA and secret file");
         }
-        const auto credential = secret(arguments[4]);
-        auto producer = open({arguments[1], arguments[2]}, arguments[3], credential);
+        const auto credential = secret(arguments[5]);
+        auto producer = open({arguments[1], arguments[2]}, arguments[4], credential);
         const Cleanup producer_cleanup{producer};
-        auto first = open({arguments[1]}, arguments[3], credential);
+        auto first = open({arguments[1]}, arguments[4], credential);
         const Cleanup first_cleanup{first};
-        auto second = open({arguments[2]}, arguments[3], credential);
+        auto second = open({arguments[2]}, arguments[4], credential);
         const Cleanup second_cleanup{second};
+        auto third = open({arguments[3]}, arguments[4], credential); // 第三个固定观察节点, 不能退避到正在写入的节点冒充复制.
+        const Cleanup third_cleanup{third};
         const comet::Scope scope{"mesh", "main"};
-        auto first_catalog = first.subscriber(scope), second_catalog = second.subscriber(scope);
-        auto first_services = first.observer(scope), second_services = second.observer(scope);
+        auto first_catalog = first.subscriber(scope), second_catalog = second.subscriber(scope), third_catalog = third.subscriber(scope);
+        auto first_services = first.observer(scope), second_services = second.observer(scope), third_services = third.observer(scope);
         auto first_almanac = first.reader({"integration", "main"}), second_almanac = second.reader({"integration", "main"});
         auto publisher = producer.publisher(scope, "key", 3000ms);
         auto beacon = producer.beacon(scope, {'a', 't', 't', 'r'}, {'o', 'n', 'e'}, 3000ms);
-        if (!first_catalog || !second_catalog || !first_services || !second_services || !first_almanac || !second_almanac || !publisher || !beacon) {
+        if (!first_catalog || !second_catalog || !third_catalog || !first_services || !second_services || !third_services || !first_almanac || !second_almanac || !publisher || !beacon) {
             throw std::runtime_error("Cannot create native mesh objects");
         }
         const std::vector<std::uint8_t> one{'o', 'n', 'e'}, two{'t', 'w', 'o'};
         static_cast<void>(completed(publisher->publish(1, one, 10s)));
         until([&] { const auto state = beacon->state(); return state.phase == comet::Beacon::Phase::ready && state.identity.has_value(); });
         const auto original = *beacon->state().identity;
-        until([&] { return visible(*first_catalog, *first_services, original.uuid, 1, one, one) && visible(*second_catalog, *second_services, original.uuid, 1, one, one); });
+        until([&] { return visible(*first_catalog, *first_services, original.uuid, 1, one, one) && visible(*second_catalog, *second_services, original.uuid, 1, one, one) && visible(*third_catalog, *third_services, original.uuid, 1, one, one); });
         std::cout << "{\"event\":\"mesh_ready\"}" << std::endl; // 外层在此强杀原权威 Star, 不先注销注册.
 
         until([&] { const auto state = beacon->state(); return state.phase == comet::Beacon::Phase::ready && state.identity && state.identity->instance != original.instance && state.identity->uuid != original.uuid; }, 60s);
         const auto replacement = *beacon->state().identity;
         static_cast<void>(completed(publisher->publish(2, two, 10s)));
         static_cast<void>(completed(beacon->update(two, 10s)));
-        until([&] { return visible(*second_catalog, *second_services, replacement.uuid, 2, two, two) && !second_services->select().find(original.uuid); });
+        until([&] { return visible(*second_catalog, *second_services, replacement.uuid, 2, two, two) && visible(*third_catalog, *third_services, replacement.uuid, 2, two, two) && !second_services->select().find(original.uuid) && !third_services->select().find(original.uuid); });
         std::cout << "{\"event\":\"mesh_failover\"}" << std::endl; // 外层用原部署端口重启 Star A, 由 Pulsar 签发较新身份.
 
         until([&] {
@@ -128,14 +130,14 @@ int main(int count, char** arguments) {
             throw std::runtime_error("Almanac authority baseline was not retained");
         }
         static_cast<void>(completed(publisher->publish(3, std::vector<std::uint8_t>{}, 10s)));
-        until([&] { return visible(*first_catalog, *first_services, replacement.uuid, 3, {}, two) && visible(*second_catalog, *second_services, replacement.uuid, 3, {}, two); });
+        until([&] { return visible(*first_catalog, *first_services, replacement.uuid, 3, {}, two) && visible(*second_catalog, *second_services, replacement.uuid, 3, {}, two) && visible(*third_catalog, *third_services, replacement.uuid, 3, {}, two); });
         publisher->close();
         beacon->close();
         if (!publisher->wait(5s) || !beacon->wait(5s)) {
             throw std::runtime_error("Native mesh writers did not clean up");
         }
-        until([&] { return !first_catalog->watch().find("key") && !second_catalog->watch().find("key") && !first_services->select().find(replacement.uuid) && !second_services->select().find(replacement.uuid); }, 15s);
-        if (producer.exceptions() != 0 || first.exceptions() != 0 || second.exceptions() != 0) {
+        until([&] { return !first_catalog->watch().find("key") && !second_catalog->watch().find("key") && !first_services->select().find(replacement.uuid) && !second_services->select().find(replacement.uuid) && !third_services->select().find(replacement.uuid) && !third_catalog->watch().find("key"); }, 15s);
+        if (producer.exceptions() != 0 || first.exceptions() != 0 || second.exceptions() != 0 || third.exceptions() != 0) {
             throw std::runtime_error("Native mesh callback failed");
         }
         std::cout << "{\"event\":\"mesh_recovered\"}" << std::endl;

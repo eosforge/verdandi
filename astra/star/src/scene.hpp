@@ -8,6 +8,7 @@
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
@@ -16,7 +17,7 @@
 
 namespace astra {
 // 单 Scope 的公开内容投影, 不拥有业务版本规则、期限或来源位置. Item 不含隐藏 TTL/order.
-// Name 复用 Origin 的共享地址/Key, 不复制键或载荷; 所有非 View 方法和 Edit 寿命由同一个域 gate 保护.
+// Name 复用 Origin 的共享地址/Key, 不复制键或载荷; 写入和 Edit 寿命持同一个域 gate 独占锁, const 读取持共享锁.
 // 两阶段提交要求 Item 复制构造和移动赋值无异常, 在模板使用边界拒绝可能中断发布的类型.
 template <typename Item, typename Name>
     requires(std::is_nothrow_copy_constructible_v<Item> && std::is_nothrow_move_assignable_v<Item>)
@@ -103,21 +104,21 @@ public:
 
         // 写者共用的读完成同步, shared_ptr::use_count 本身不能建立内存屏障.
         struct Fence {
-            std::shared_ptr<std::mutex> gate; // 独立延长原同步域寿命.
+            std::shared_ptr<std::shared_mutex> gate; // 独立延长原同步域寿命.
 
             ~Fence() {
-                const std::lock_guard lock(*gate);
+                const std::shared_lock lock(*gate);
             } // 最后一次读取后经过写者锁.
         };
 
         // 只在域锁内捕获, 不分配或遍历; size 同根固定.
-        View(typename Tree::View root, std::uint64_t version, std::size_t bytes, std::shared_ptr<std::mutex> gate) : root_(std::move(root)), version_(version), size_(root_.size()), bytes_(bytes), gate_(std::move(gate)) {}
+        View(typename Tree::View root, std::uint64_t version, std::size_t bytes, std::shared_ptr<std::shared_mutex> gate) : root_(std::move(root)), version_(version), size_(root_.size()), bytes_(bytes), gate_(std::move(gate)) {}
 
-        typename Tree::View root_;         // 完整公开内容根.
-        std::uint64_t version_{};          // 与 root 同边界的视图游标.
-        std::size_t size_{};               // 捕获计数, 初始合法为零.
-        std::size_t bytes_{};              // 捕获计费, 不随当前写入改变.
-        std::shared_ptr<std::mutex> gate_; // 只保留同步对象, 不保持服务或 Scope 存活.
+        typename Tree::View root_;                // 完整公开内容根.
+        std::uint64_t version_{};                 // 与 root 同边界的视图游标.
+        std::size_t size_{};                      // 捕获计数, 初始合法为零.
+        std::size_t bytes_{};                     // 捕获计费, 不随当前写入改变.
+        std::shared_ptr<std::shared_mutex> gate_; // 只保留同步对象, 不保持服务或 Scope 存活.
     };
 
     // 原子提交返回通知与旧资源; 在域锁内使用 event 通知内部收集器, 锁外释放整体.
@@ -355,14 +356,14 @@ public:
     };
 
     // gate/measure 非空, limits 固定; 不读取 Clock、不启动线程或隐式建立来源身份.
-    Scene(std::shared_ptr<std::mutex> gate, Measure measure, Limits limits) : gate_(std::move(gate)), measure_(measure), limits_(limits) {
+    Scene(std::shared_ptr<std::shared_mutex> gate, Measure measure, Limits limits) : gate_(std::move(gate)), measure_(measure), limits_(limits) {
         if (!gate_ || !measure_ || limits_.retention < decltype(limits_.retention)::zero()) {
             throw std::invalid_argument("Invalid projection configuration");
         }
     }
 
     // 默认局部容量, 构造即为合法游标零的空本地投影.
-    Scene(std::shared_ptr<std::mutex> gate, Measure measure) : Scene(std::move(gate), measure, Limits{}) {}
+    Scene(std::shared_ptr<std::shared_mutex> gate, Measure measure) : Scene(std::move(gate), measure, Limits{}) {}
 
     // View 可越过本对象寿命, Edit 和直接借用不可以.
     ~Scene() = default;
@@ -372,7 +373,7 @@ public:
     Scene& operator=(const Scene&) = delete;
 
     // 未创建范围的零版本基线, 只保留同步域, 不分配页、历史或永久目录名额.
-    static View empty(std::shared_ptr<std::mutex> gate) {
+    static View empty(std::shared_ptr<std::shared_mutex> gate) {
 
         if (!gate) {
             throw std::invalid_argument("Empty projection requires a synchronization gate");
@@ -505,7 +506,7 @@ private:
         return payload > std::numeric_limits<std::size_t>::max() - metadata ? std::nullopt : std::optional<std::size_t>(metadata + payload);
     }
 
-    const std::shared_ptr<std::mutex> gate_;                      // 来源与投影统一的域提交锁.
+    const std::shared_ptr<std::shared_mutex> gate_;               // 来源与投影统一的域提交锁.
     const Measure measure_;                                       // 固定公开载荷计费函数.
     const Limits limits_;                                         // 不按客户端请求动态改变的局部预算.
     Tree tree_;                                                   // 持有名称, 析构晚于借用名称的 entries_.

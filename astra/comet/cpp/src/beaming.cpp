@@ -84,7 +84,7 @@ std::future<Result<Beacon::Receipt>> Beaming::update(Value data, std::chrono::mi
         rejected_ = false;
         data_at_ = Core::Time{};
     }
-    core_->wake();
+    core_->wake(this);
     return future;
 }
 
@@ -108,7 +108,7 @@ void Beaming::close() noexcept {
     }
     if (first) {
         core_->release();
-        core_->wake();
+        core_->wake(this);
     }
 }
 
@@ -159,7 +159,7 @@ template <class Call>
 void Beaming::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
     call->code = status.error_code(); // 不复制任意远端 message/details, 控制轮再解析白名单 metadata.
     call->done.store(true, std::memory_order_release);
-    call->owner->core_->wake();
+    call->owner->core_->wake(call->owner.get());
 }
 
 template <class Call>

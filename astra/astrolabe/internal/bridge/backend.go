@@ -29,6 +29,7 @@ type Backend struct {
 	stale    bool
 	closed   bool
 	nodes    []node            // 仅目录刷新时创建, 发布后不可变, HTTP 读取不再克隆完整 Member 消息.
+	members  map[string]string // 同一目录的端点 -> 实例 ID, 采样完成时 O(1) 拒绝旧实例结果, 不逐项扫描整个目录.
 	metrics  map[string]metric // 仅明确部署的端点保存最近一次观测, 不累计时序或业务标签.
 }
 
@@ -55,8 +56,10 @@ func (backend *Backend) Update(observation error) {
 	var member *orbit.Member
 	multiple := false
 	nodes := make([]node, 0, len(members))
+	index := make(map[string]string, len(members))
 	for _, candidate := range members {
 		nodes = append(nodes, describe(candidate))
+		index[candidate.Advertise] = candidate.Id
 		if candidate.Role == orbit.Role_ROLE_POLARIS {
 			multiple = multiple || member != nil
 			member = candidate
@@ -67,6 +70,7 @@ func (backend *Backend) Update(observation error) {
 	} // 新观察仍发布, 多个权威不任选一个作为提交目标.
 	backend.mutex.Lock()
 	backend.observed, backend.stale, backend.nodes = time.Now(), false, nodes
+	backend.members = index // 与目录在同一短锁内发布, 抓取仍在锁外, 不缓存一次请求开始时的旧身份.
 	unchanged := backend.target != nil && member != nil && backend.target.member.Id == member.Id
 	closed := backend.closed
 	backend.mutex.Unlock()

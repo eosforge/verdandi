@@ -27,6 +27,12 @@ public:
     virtual bool finished() const noexcept = 0;                                                                                                                                                        // 本地清理和实际 RPC 都已经完成.
     virtual bool streaming() const noexcept = 0;                                                                                                                                                       // Watch 与自动写对象分别计量应用和实际 RPC 容量.
     virtual std::chrono::steady_clock::time_point poll(std::chrono::steady_clock::time_point now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& error, bool closing) = 0; // 唯一控制轮在 Core 锁外调用.
+
+private:
+    friend class Core;
+    std::chrono::steady_clock::time_point next_{}; // 仅 Core 控制轮访问, 初始零确保首轮推进; 网络事件不改期限.
+    std::weak_ptr<Activity> self_;                 // 接纳后才设置, 就绪队列借用同一控制块; 目录移除时清空, 拒绝迟到唤醒.
+    bool ready_{};                                 // Core 锁下保证就绪队列每对象至多一项, 消费前清除, poll 中的新事件留到下一轮.
 };
 
 // Client 私有共享核心. 使用一个 gRPC Alarm 和现有 callback 线程, 不创建每对象定时线程或 Task 框架.
@@ -53,7 +59,7 @@ public:
     // 仅在外部线程等待所有本地工作完成, SDK 回调中调用抛 logic_error.
     bool wait(std::chrono::milliseconds timeout) const;
     // 网络或本地状态变化只唤醒当前 Alarm, 不并发启动第二个控制轮.
-    void wake() noexcept;
+    void wake(Activity* activity = nullptr) noexcept; // 指定对象只唤醒自身; 空指针用于共享身份/容量/关闭变化.
 
     // 显式 Client 关闭立即阻止新通知开始, 不等待控制轮逐对象处理.
     bool stopped() const noexcept {
@@ -112,10 +118,14 @@ private:
     bool scheduled_{};                                            // Alarm 已 Set, 触发/取消回调取得后清除.
     bool running_{};                                              // 已有控制轮执行, wake 只合并通知.
     bool awakened_{};                                             // 控制轮执行期间的新事件, 下一轮立即重新检查.
+    bool refresh_ = true;                                         // 共享绑定/额度变化要求全部对象复核, 普通单对象完成不设置它.
     bool closing_{};                                              // 单向停止接纳, 不由 secret 或晚到成功复活.
     bool complete_{};                                             // 所有真实 RPC 和本地通知结束, wait 的完成条件.
     std::size_t owners_ = 1;                                      // 初始 Client 应用 Owner, 内部 shared_ptr 不增加此数.
     std::vector<std::weak_ptr<Activity>> readers_;                // 不与具体业务对象 -> Core 形成引用环, 仅在控制轮作类型擦除.
+    std::vector<std::weak_ptr<Activity>> ready_;                  // 定向事件队列, 接纳时预留目录容量, noexcept wake 不分配; 不延长对象寿命.
+    Time due_ = Time::max();                                      // 仅控制轮访问的活动期限保守最小值, 只允许早醒; 到期或共享变化才扫描目录.
+    std::vector<std::shared_ptr<Activity>> polling_;              // 唯一控制轮复用容量, 每轮含异常退出均清空强引用, 不跨轮形成拥有环.
     std::shared_ptr<Login> login_;                                // 包括取消尚未 OnDone 的旧会话, 不提前开始第二次认证.
     std::shared_ptr<Binding> connecting_;                         // 当前端点的未确认传输, 不直接交给认证业务.
     std::shared_ptr<const Binding> binding_;                      // 最后完整认证的不可变绑定, 失效后立即撤销新请求使用.

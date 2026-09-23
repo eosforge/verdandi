@@ -1,4 +1,5 @@
 #include "check.hpp"
+#include "duplicates.hpp"
 #include "selection.hpp"
 #include <iostream>
 
@@ -183,6 +184,7 @@ int main() {
         repair();
         identity();
         malformed();
+        comet::test::duplicates<Selection>([](auto& change, std::string_view key) { change.set_uuid(key); change.mutable_erase(); }); // Ephemeris 使用 UUID, 不能只覆盖普通 Key 域.
         std::cout << "Ephemeris selection cases passed\n";
         return 0;
     } catch (const std::exception& error) {

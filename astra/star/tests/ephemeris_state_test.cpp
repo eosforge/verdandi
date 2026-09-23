@@ -1,5 +1,6 @@
 #include "check.hpp"
 #include "ephemeris_state.hpp"
+#include "exports.hpp"
 #include <array>
 #include <iostream>
 #include <new>
@@ -119,7 +120,9 @@ void boundary() {
     time.jump = 600ms;
     const auto rejected = state.renew(scope, first->uuid, 1);
     CHECK(!rejected && rejected.error() == State::Error::ended);
-    const auto end = state.events(0); // 下一次推进清除旧注册, 不存在成功续租事件.
+    CHECK(state.events(0)->size() == 1); // 原生导出不执行 TTL 清理, 也没有成功续租.
+    state.tick();                        // 明确推进才发布权威删除.
+    const auto end = state.events(0);
     CHECK(end && end->size() == 2 && end->back().form == State::Source::Form::erase && end->back().position == 2);
     CHECK(state.capture(scope)->size() == 0 && state.capture(scope)->version() == 2);
 
@@ -140,6 +143,32 @@ void boundary() {
     time.value += 1h;
     state.tick();
     CHECK(state.source().size() == 0 && state.capture(scope)->size() == 0);
+}
+
+// Data 更新的最终复核只检查活性, 仍必须拒绝准备期间到期, 同值新 order 也不能例外.
+void updates() {
+
+    for (const bool same : {true, false}) {
+        Time time; // 每个分支独立从 1 s 建立 1 s 租约.
+        State state([&] { return time.read(); }, {});
+        const Scope scope{"data", "boundary"};
+        const auto original = bytes(std::string(65536, 'a')); // 足够长且独立拥有, 可以覆盖内容比较路径.
+        const auto created = state.create(scope, original, original, 1000);
+        CHECK(created);
+        const auto held = state.capture(scope); // 失败后这份旧完整视图仍须保持原始 Data.
+        CHECK(held && held->version() == 1);
+
+        time.value = 1500ms;
+        time.jump = 500ms; // 第一次检查合法, 最终采样恰好到 2 s 截止边界.
+        const auto updated = state.update(scope, created->uuid, bytes(std::string(65536, same ? 'a' : 'b')), 1);
+        CHECK(!updated && updated.error() == State::Error::ended);
+        CHECK(state.events(0)->size() == 1); // 失败的 Data 更新没有制造来源提交.
+        state.tick();                        // 到期推进与历史导出分开, 仍只能看到 Create 和 Erase.
+        const auto history = state.events(0);
+        CHECK(history && history->size() == 2 && history->back().form == State::Source::Form::erase);
+        CHECK(state.capture(scope)->version() == 2 && state.capture(scope)->size() == 0 && held->version() == 1);
+        held->each([&](const std::string&, const State::Content& record) { CHECK(record.data == original); });
+    }
 }
 
 // 统一读取入口保留原错误映射, 取时失败不偷建范围, 异常展开后仍可正常注册.
@@ -163,8 +192,8 @@ void reads() {
     CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
     CHECK(state.find(pending, uuid) == std::unexpected(State::Error::clock));
     CHECK(state.changes(pending, 0) == std::unexpected(State::Error::clock));
-    CHECK(state.events(0) == std::unexpected(State::Error::clock));
-    CHECK(state.deliver(0, 8, 4096) == std::unexpected(State::Error::clock));
+    CHECK(state.events(0) && state.events(0)->empty()); // 无时钟也可导出已有空来源, 不隐式清理.
+    CHECK(state.deliver(0, 8, 4096));                   // 来源恢复不依赖公共读取的时钟资格.
 
     time.ready = fail = true;
     bool caught{}; // 确认经过异常展开后再检查锁/目录可用性.
@@ -293,8 +322,10 @@ void lifetime() {
 // 独立组合层用例, 不启动网络、Pulsar 或长期测试.
 int main() {
     try {
+        exports<State>([](State& state, const Scope& scope) { const auto receipt = state.create(scope, bytes("attr"), bytes("data"), 1000); CHECK(receipt); return receipt->uuid; });
         lifecycle();
         boundary();
+        updates();
         reads();
         reclaim();
         capacity();

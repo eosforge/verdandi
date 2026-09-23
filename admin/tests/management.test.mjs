@@ -100,3 +100,14 @@ test("observations retain stale/unknown and do not invent live topology", () => 
   assert.deepEqual(samples({ samples: [{ id: "one", observed: "", stale: true, values: null }] })[0].values, {});
   for (const origin of ["https://user:pass@admin.example", "https://admin.example/path", "file:///tmp/admin"]) assert.throws(() => new Api(origin));
 });
+
+// 指标与目录使用相同的节点容量, 不能在后端已采集后因超过 64 项整批拒绝展示.
+test("metrics cover the full directory and reject ambiguous identities", () => {
+  const entries = Array.from({ length: 128 }, (_, index) => ({ id: `star-${index}`, observed: "", stale: true, values: null }));
+  const result = samples({ samples: entries });
+  assert.equal(result.length, entries.length);
+  assert.equal(result.at(-1).id, "star-127");
+  assert.ok(result.every((sample) => sample.stale && Object.keys(sample.values).length === 0));
+  assert.throws(() => samples({ samples: [entries[0], entries[0]] }));
+  assert.throws(() => samples({ samples: [{ ...entries[0], id: "" }] }));
+});

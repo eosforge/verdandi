@@ -1,4 +1,5 @@
 #pragma once
+#include "broadcast.hpp"
 #include "gateway.hpp"
 #include <astra/scope.hpp>
 
@@ -16,6 +17,7 @@ class Downstream {
     using State = typename Domain::State;            // 领域提交边界, 保持各自独立业务规则.
     using Edition = typename Domain::Edition;        // 领域专属分页, 不使用跨域 oneof.
     using Reply = typename Edition::Reply;           // 此 RPC 唯一生成响应类型.
+    using Batch = Broadcast<Edition>;                // 相同订阅区间共享准备及同时在途的消息, 各流仍独立确认.
     using Event = typename State::Projection::Event; // 不可变公开变化.
 public:
     // 资源都是部署预算, 不固化为协议数字, 不等同于整个进程 RSS.
@@ -54,6 +56,15 @@ private:
     class Stream;
     // 立即拒绝的 reactor 不占活动索引, 由自身 OnDone 删除.
     class Rejected;
+
+    // 仅对本范围保留最近一个弱缓存, 不以目标组合/版本数无限增长缓存索引.
+    struct Group {
+        std::map<Stream*, std::shared_ptr<Stream>> streams; // 活动流拥有者, 等 OnDone 后回收.
+        std::weak_ptr<Batch> batch;                         // 无活动消费者时不保持正文/快照.
+    };
+
+    // 复用同目标、同基线版本与同起点的批次; 调用者不持 mutex_, 已完成领域准备.
+    std::shared_ptr<Batch> freeze(Stream& stream, Edition edition, std::optional<std::uint64_t> since);
     // 已持 mutex_ 时加入侵入式就绪队列, 每流至多一个位置, 不分配.
     void enqueue(Stream& stream) noexcept;
     // I/O 回调唤醒本流, 只取得 mutex_, 不访问 State/Access.
@@ -75,7 +86,7 @@ private:
     // 保护路由、就绪队列、计费及每流后缀; 不在此锁内编码或等待网络, 最终许可只跨非阻塞提交.
     mutable std::mutex mutex_;
     // 地址只保存有活动流的范围, 空范围在最后一条流退出后回收.
-    std::map<Scope, std::map<Stream*, std::shared_ptr<Stream>>> streams_;
+    std::map<Scope, Group> streams_;
     // 就绪链表首尾, 指向 streams_ 仍拥有的对象, 初始空.
     Stream* head_{};
     Stream* tail_{};
@@ -161,7 +172,9 @@ public:
     bool done{};                                        // OnDone 已到达, 此后禁止访问 context.
     std::atomic_bool busy{};                            // 仅供低频超时扫描选取正在写的流.
     std::chrono::steady_clock::time_point deadline{};   // 当前页的单调写截止, io 保护.
-    typename Downstream<Domain>::Reply page;            // gRPC 在 writing 时借用, 不提前 Clear/覆盖.
+    std::shared_ptr<const typename Batch::Page> page;   // gRPC 在 writing 时借用, 不提前 Clear/覆盖.
+    std::shared_ptr<Batch> batch;                       // 共享固定批次, 不共享 RPC 的完成状态.
+    std::size_t offset{};                               // 本流下一个页面序号, 每个新批次从零开始.
     std::optional<Edition> edition;                     // 唯一控制线程拥有的冻结批次, 不在回调改变.
     bool started{};                                     // 已捕获首批基线, 后续只生成 apply.
     std::uint64_t cursor{};                             // 最终完整页实际写成功的位置.
@@ -240,7 +253,7 @@ grpc::ServerWriteReactor<typename Downstream<Domain>::Reply>* Downstream<Domain>
             // 先观察提交再捕获根, 期间发生的提交稍后按版本剪去, 不丢失快照后的变化.
             const auto [group, created] = streams_.try_emplace(scope);
             try {
-                group->second.emplace(stream.get(), stream);
+                group->second.streams.emplace(stream.get(), stream);
             } catch (...) {
                 if (created) {
                     streams_.erase(group);
@@ -265,7 +278,7 @@ void Downstream<Domain>::changed(const Scope& scope, const Event& change) noexce
     if (group == streams_.end()) {
         return;
     }
-    for (const auto& [address, owner] : group->second) {
+    for (const auto& [address, owner] : group->second.streams) {
         auto& stream = *owner; // 索引持有共享所有权, 不读取 I/O 字段或取得流锁.
         static_cast<void>(address);
         if (stream.overflow) {
@@ -327,11 +340,24 @@ std::expected<typename Downstream<Domain>::Edition, grpc::Status> Downstream<Dom
 }
 
 template <class Domain>
+std::shared_ptr<typename Downstream<Domain>::Batch> Downstream<Domain>::freeze(Stream& stream, Edition edition, std::optional<std::uint64_t> since) {
+
+    const std::lock_guard lock(mutex_);
+    auto& group = streams_.find(stream.scope)->second; // 当前流在 OnDone 回收前始终拥有该范围入口.
+    if (auto batch = group.batch.lock(); batch && batch->matches(since, edition.version(), stream.target))
+        return batch;
+
+    auto batch = std::make_shared<Batch>(std::move(edition), since, stream.target);
+    group.batch = batch;
+    return batch;
+}
+
+template <class Domain>
 void Downstream<Domain>::retire(Stream& stream) {
     bytes_ -= stream.bytes + stream.held + stream.encoded;
     const auto group = streams_.find(stream.scope);
-    group->second.erase(&stream);
-    if (group->second.empty()) {
+    group->second.streams.erase(&stream);
+    if (group->second.streams.empty()) {
         streams_.erase(group);
     }
     --count_;
@@ -391,8 +417,10 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
                     stream.held = 0;
                 }
                 stream.edition.reset();
+                stream.batch.reset();
+                stream.offset = 0;
             }
-            typename Downstream<Domain>::Reply{}.Swap(&stream.page); // 回收实际页分配, 不让 Clear 保留大容量却计费为零.
+            stream.page.reset(); // 回收实际页分配, 不让 Clear 保留大容量却计费为零.
             {
                 const std::lock_guard lock(mutex_);
                 bytes_ -= stream.encoded;
@@ -406,7 +434,9 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
                 stream.Finish(edition.error());
                 return;
             }
-            stream.edition.emplace(std::move(*edition));
+            const auto since = edition->reset() ? std::nullopt : stream.requested; // reset 不借用请求旧游标作为缓存键.
+            stream.batch = freeze(stream, std::move(*edition), since);
+            stream.edition.emplace(stream.batch->begin());
             stream.started = true;
             const std::lock_guard lock(mutex_);
             // 已被捕获基线覆盖的通知不重复发出, 更高的全量替换则不能伪装为连续 apply.
@@ -429,6 +459,9 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
             }
         }
 
+        // 后缀只在索引锁内移交一次, 排序/合并等准备转到锁外, 不阻塞 State 的提交收集器.
+        std::map<std::string, Event, std::less<>> pending; // 私有旧后缀, 析构时不持 mutex_.
+        std::optional<std::uint64_t> preparing;            // 本次冻结的末游标, 后续通知可以继续追加到新后缀.
         {
             const std::lock_guard lock(mutex_);
             const auto baseline = stream.edition ? stream.edition->version() : stream.cursor;
@@ -438,38 +471,66 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
                 return;
             }
             if (!stream.edition) {
-                if (!stream.first || stream.latest <= stream.cursor) {
+                if (!stream.first || stream.latest <= stream.cursor)
                     return;
+                preparing = stream.latest;
+                auto cached = streams_.find(stream.scope)->second.batch.lock(); // 同区间命中时连事件向量也不重复构造.
+                if (cached && cached->prefix(stream.cursor, *preparing, stream.target)) {
+                    preparing = cached->version(); // 新事件不使公共前缀失效, 更高版本继续保留在当前流后缀.
+                    stream.batch = std::move(cached);
+                    stream.edition.emplace(stream.batch->begin());
                 }
-                std::vector<Event> replay; // 固定完整后缀, 不向已经裁剪的普通历史补查.
-                replay.reserve(stream.pending.size());
-                for (const auto& [key, change] : stream.pending) {
-                    static_cast<void>(key);
-                    if (change.version > stream.cursor) {
-                        replay.push_back(change);
+                pending.swap(stream.pending);
+                stream.held = std::exchange(stream.bytes, 0); // 私有准备仍计费, 不在锁外暂时归零绕过总预算.
+                if (stream.edition) {
+                    for (auto entry = pending.begin(); entry != pending.end();) {
+                        if (entry->second.version <= *preparing) {
+                            ++entry;
+                            continue;
+                        }
+                        const auto cost = entry->second.bytes + entry->first.size() + 64; // 缓存只确认旧前缀, 不丢弃合并后的较新事实.
+                        stream.pending.insert(pending.extract(entry++));                  // 节点移交不分配第二份键/容器节点.
+                        stream.bytes += cost;
+                        stream.held -= cost;
                     }
                 }
-                stream.edition.emplace(stream.latest, std::move(replay), stream.target);
-                bytes_ -= stream.bytes;
-                stream.bytes = 0;
-                stream.pending.clear();
+            }
+        }
+        if (preparing) {
+            if (!stream.edition) {
+                std::vector<Event> replay; // 只为未命中的固定区间构造一次连续后缀.
+                replay.reserve(pending.size());
+                for (auto& [key, change] : pending) {
+                    if (change.version > stream.cursor)
+                        replay.push_back(std::move(change));
+                }
+                stream.batch = freeze(stream, Edition(*preparing, std::move(replay), stream.target), stream.cursor);
+                stream.edition.emplace(stream.batch->begin());
+            }
+            pending.clear(); // 归还节点/键发生在事件索引锁外.
+            const std::lock_guard lock(mutex_);
+            bytes_ -= stream.held;
+            stream.held = 0;
+            if (stream.edition->bytes() > limits_.bytes - bytes_) {
+                stream.overflow = true;
+            } else {
                 stream.held = stream.edition->bytes();
-                bytes_ += stream.held;
+                bytes_ += stream.held; // 即使物理共享也逐流保守计费, 慢订阅不能免费无限积压.
             }
         }
         // 全局锁外编码单页, 每轮只准备这一份有界暂存. Permit 不跨任何网络等待.
-        stream.page = stream.edition->next(gateway_.instance());
-        const auto encoded = stream.page.ByteSizeLong(); // 单次完整大小计算, 同时计入在途与全局保有预算.
-        auto sending = gateway_.enter(stream.context);   // 只覆盖最终检查和非阻塞 StartWrite, 不跨编码或网络等待.
+        stream.page = stream.batch->next(*stream.edition, stream.offset++, gateway_.instance());
+        const auto encoded = stream.page->bytes;       // 单次完整大小计算, 同时计入在途与全局保有预算.
+        auto sending = gateway_.enter(stream.context); // 只覆盖最终检查和非阻塞 StartWrite, 不跨编码或网络等待.
         if (!sending) {
-            typename Downstream<Domain>::Reply{}.Swap(&stream.page);
+            stream.page.reset();
             stream.finished = true;
             stream.Finish(sending.error());
             return;
         }
         const std::lock_guard lock(mutex_);
         if (stream.overflow || stopped_ || (stream.reset && *stream.reset > stream.edition->version()) || encoded > limits_.bytes - bytes_ || encoded > limits_.pending - stream.bytes) {
-            typename Downstream<Domain>::Reply{}.Swap(&stream.page); // 此页尚未进入在途, 不保留未计费的大编码缓冲.
+            stream.page.reset(); // 此页尚未进入在途, 不保留未计费的大编码缓冲.
             stream.finished = true;
             stream.Finish(gateway_.error(stream.context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Dynamic send budget unavailable"));
             return;
@@ -479,7 +540,7 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
         stream.deadline = now + limits_.timeout;
         stream.writing = true;
         stream.busy.store(true, std::memory_order_release);
-        stream.StartWrite(&stream.page);
+        stream.StartWrite(&stream.page->message);
     } catch (...) {
         stream.finished = true;
         stream.Finish(gateway_.error(stream.context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Dynamic page preparation failed"));
@@ -494,7 +555,7 @@ void Downstream<Domain>::pump(std::chrono::steady_clock::time_point now, std::si
         // 只有在途 Write 需要检查 deadline, 空闲 Watch 的数据更新完全由提交通知触发.
         for (const auto& [scope, group] : streams_) {
             static_cast<void>(scope);
-            for (const auto& [address, stream] : group) {
+            for (const auto& [address, stream] : group.streams) {
                 static_cast<void>(address);
                 if (stream->busy.load(std::memory_order_acquire)) {
                     enqueue(*stream);
@@ -532,7 +593,7 @@ void Downstream<Domain>::stop() noexcept {
     stopped_ = true;
     for (const auto& [scope, group] : streams_) {
         static_cast<void>(scope);
-        for (const auto& [address, stream] : group) {
+        for (const auto& [address, stream] : group.streams) {
             static_cast<void>(address);
             enqueue(*stream);
         }
@@ -551,7 +612,7 @@ void Downstream<Domain>::invalidate() noexcept {
     const std::lock_guard lock(mutex_); // 不调用原生状态, 避免与提交回调反向加锁.
     for (const auto& [scope, group] : streams_) {
         static_cast<void>(scope);
-        for (const auto& [address, stream] : group) {
+        for (const auto& [address, stream] : group.streams) {
             static_cast<void>(address);
             stream->overflow = true;
             enqueue(*stream);

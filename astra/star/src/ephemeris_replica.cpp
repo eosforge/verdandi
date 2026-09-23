@@ -1,7 +1,16 @@
 #include "ephemeris_state.hpp"
-#include <list>
 
 namespace astra {
+Ephemeris::State::Guard Ephemeris::State::acquire(std::string_view id, std::unique_lock<std::shared_mutex>& domain) const {
+
+    const auto found = replicas_.find(id); // 只在域锁内使用迭代器, 守卫自行保持来源寿命.
+    Guard result(found == replicas_.end() ? nullptr : found->second, domain);
+    const auto current = replicas_.find(id); // 等待期间可能退役并回收, 不能把旧对象当成新准入来源.
+    if (current == replicas_.end() || current->second.get() != result.get())
+        return Guard(nullptr, domain);
+    return result;
+}
+
 Ephemeris::State::Ownership::~Ownership() {
     if (!committed) {
         for (const auto* name : added) {
@@ -36,7 +45,7 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::admit(std::string
     if (replicas_.size() == limits_.replicas) {
         return std::unexpected(Error::capacity);
     }
-    auto replica = std::make_unique<Replica>(gate_, limits_.source);
+    auto replica = std::make_shared<Replica>(gate_, limits_.source);
     replicas_.emplace(std::string(id), std::move(replica));
     return {};
 }
@@ -46,30 +55,31 @@ void Ephemeris::State::retire(std::string_view id) {
     const auto found = replicas_.find(id);
     if (found != replicas_.end()) {
         found->second->retired = true;
+        due_ = Clock::Time{};
         found->second->coverage.clear(); // 不再安装旧任务, 已确定身份退出时无需等待旧前缀追赶.
     }
 }
 
 std::expected<std::uint64_t, Ephemeris::State::Error> Ephemeris::State::received(std::string_view id) const {
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    return found == replicas_.end() ? std::expected<std::uint64_t, Error>(std::unexpected(Error::input)) : found->second->source.position();
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    return !borrowed.get() ? std::expected<std::uint64_t, Error>(std::unexpected(Error::input)) : borrowed.get()->source.position();
 }
 
 std::expected<Ephemeris::State::Source::Draft, Ephemeris::State::Error> Ephemeris::State::prepare(std::string_view id, std::uint64_t position) {
 
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    if (found->second->retired) {
+    if (borrowed.get()->retired) {
         return std::unexpected(Error::obsolete);
     }
-    if (position < found->second->source.position() || std::ranges::any_of(found->second->coverage, [position](const Replica::Coverage& value) { return value.position > position; })) {
+    if (position < borrowed.get()->source.position() || std::ranges::any_of(borrowed.get()->coverage, [position](const Replica::Coverage& value) { return value.position > position; })) {
         return std::unexpected(Error::obsolete);
     }
-    return found->second->source.prepare(position);
+    return borrowed.get()->source.prepare(position);
 }
 
 std::expected<std::optional<Ephemeris::Record>, Ephemeris::State::Error> Ephemeris::State::replica(std::string_view id, const Scope& scope, std::string_view uuid) const {
@@ -77,12 +87,12 @@ std::expected<std::optional<Ephemeris::Record>, Ephemeris::State::Error> Ephemer
     if (!scope.valid() || !Ephemeris::valid(uuid)) {
         return std::unexpected(Error::input);
     }
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    return found->second->source.find(scope, uuid); // 最终 apply 会先推进本地 TTL, 此读数不构成存活保证.
+    return borrowed.get()->source.find(scope, uuid); // 最终 apply 会先推进本地 TTL, 此读数不构成存活保证.
 }
 
 std::expected<Ephemeris::State::Point, Ephemeris::State::Error> Ephemeris::State::resolve(const Scope& scope, std::string_view key) {
@@ -90,13 +100,7 @@ std::expected<Ephemeris::State::Point, Ephemeris::State::Error> Ephemeris::State
     if (!scope.valid() || !Ephemeris::valid(key)) {
         return std::unexpected(Error::input);
     }
-    std::vector<Retired> retired; // 到期清理产生的旧引用在 gate 外释放.
-    const std::lock_guard lock(*gate_);
-    const auto stamp = reading();
-    if (!stamp) {
-        return std::unexpected(stamp.error());
-    }
-    advance(stamp->time, retired);
+    const std::shared_lock lock(*export_); // 只读取自有来源事实及连续位置, 已过期正文由接收端验证绝对截止.
     return Point{source_.position(), source_.find(scope, key)};
 }
 
@@ -106,12 +110,12 @@ std::expected<bool, Ephemeris::State::Error> Ephemeris::State::covered(std::stri
         return std::unexpected(Error::input);
     }
     Source::Retired retired;
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    auto& replica = *found->second;
+    auto& replica = *borrowed.get();
     if (replica.retired) {
         return std::unexpected(Error::obsolete);
     }
@@ -121,7 +125,7 @@ std::expected<bool, Ephemeris::State::Error> Ephemeris::State::covered(std::stri
     if (replica.source.position() == UINT64_MAX || position != replica.source.position() + 1) {
         return std::unexpected(Error::history);
     }
-    if (std::ranges::none_of(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && value.name->key == key && value.position >= position; })) {
+    if (std::ranges::none_of(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && (value.name->key.empty() || value.name->key == key) && value.position >= position; })) {
         return false;
     }
     // 编码适配层先询问覆盖, 避免在原生正文已到期时又为被覆盖的 Data/Renew 发起回补.
@@ -150,12 +154,12 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
     }
     std::vector<Retired> expired;
     Retired retired;
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    auto& replica = *found->second;
+    auto& replica = *borrowed.get();
     if (replica.retired) {
         return std::unexpected(Error::obsolete);
     }
@@ -166,7 +170,12 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
         return std::unexpected(Error::history);
     }
     const auto coverage = std::ranges::find_if(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && value.name->key == uuid; });
-    const auto covered = coverage == replica.coverage.end() ? 0 : coverage->position;
+    auto covered = coverage == replica.coverage.end() ? 0 : coverage->position; // 精确补项可晚于范围基线, 取两者最大覆盖位置.
+    for (const auto& value : replica.coverage) {
+        if (*value.name->scope == scope && value.name->key.empty())
+            covered = std::max(covered, value.position);
+    }
+    const bool precise = coverage != replica.coverage.end();
     const auto index = static_cast<std::size_t>(coverage - replica.coverage.begin()); // 后续 reserve 可移动 vector, 不跨它保留迭代器.
     if (covered >= position) {
         if (!repair) {
@@ -180,14 +189,15 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
         }
         return {};
     }
-    if (repair && covered == 0 && replica.coverage.size() == 128) {
+    if (repair && !precise && std::ranges::count_if(replica.coverage, [](const Replica::Coverage& value) { return !value.name->key.empty(); }) >= 128) {
         return std::unexpected(Error::capacity);
     }
     auto stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    advance(stamp->time, expired);
+    advance(replica, stamp->time, expired); // 已持来源锁, 先处理旧期限, 再准备新事实.
+    advance(stamp->time, expired, &replica);
     const auto old = replica.source.find(scope, uuid);
     if (!old && (form == Source::Form::data || form == Source::Form::renew)) {
         return std::unexpected(Error::ended); // 部分字段不能凭空创建半条注册, 等精确完整回补.
@@ -249,12 +259,13 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
     if (record && !hook) {
         if (!replica.agenda) {
             replica.agenda = std::make_unique<Agenda>(stamp->time);
+            due_ = std::min(due_, replica.agenda->next()); // 首次创建的轮立即纳入统一下次边界.
         }
         prepared = std::make_unique<Timer>(origin->name());
         replica.timers.reserve(replica.timers.size() + 1);
     }
     std::optional<Replica::Coverage> prepared_coverage; // 覆盖证据与正文一同准备, 不能装入未来记录后再分配标记.
-    if (repair && covered == 0) {
+    if (repair && !precise) {
         replica.coverage.reserve(replica.coverage.size() + 1);
         prepared_coverage.emplace(origin->name(), position);
     }
@@ -301,20 +312,68 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
     return {};
 }
 
+std::expected<Ephemeris::State::Recovery, Ephemeris::State::Error> Ephemeris::State::restore(std::string_view id, Source::Draft&& draft) {
+
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get())
+        return std::unexpected(Error::input);
+    auto& replica = *borrowed.get();
+    if (replica.retired || std::ranges::any_of(replica.coverage, [&](const Replica::Coverage& value) { return value.position > draft.position(); }))
+        return std::unexpected(Error::obsolete);
+    const auto valid = replica.source.validate(draft);
+    if (!valid)
+        return std::unexpected(error(valid.error()));
+    auto scopes = replica.source.scopes(); // 旧范围缺失也要安装空基线, 防止只处理新范围而遗留旧事实.
+    auto incoming = draft.scopes();
+    scopes.insert(scopes.end(), std::make_move_iterator(incoming.begin()), std::make_move_iterator(incoming.end()));
+    std::ranges::sort(scopes);
+    scopes.erase(std::unique(scopes.begin(), scopes.end()), scopes.end());
+    return Recovery(*this, std::string(id), std::move(draft), std::move(scopes));
+}
+
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::replace(std::string_view id, Source::Draft&& draft) {
 
+    auto task = restore(id, std::move(draft));
+    if (!task)
+        return std::unexpected(task.error());
+    for (;;) {
+        const auto result = task->step(); // 每一步释放锁并回收旧页后, 再开始下一个 Scope.
+        if (!result)
+            return std::unexpected(result.error());
+        if (*result)
+            return {};
+    }
+}
+
+std::expected<void, Ephemeris::State::Error> Ephemeris::State::finish(std::string_view id, std::uint64_t position) {
+
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get())
+        return std::unexpected(Error::input);
+    auto& replica = *borrowed.get();
+    if (replica.retired || std::ranges::any_of(replica.coverage, [position](const Replica::Coverage& value) { return value.position > position; }) || !replica.source.confirm(position))
+        return std::unexpected(Error::obsolete);
+    replica.coverage.clear(); // 全部范围完成后, 连续前缀接管范围覆盖证据.
+    return {};
+}
+
+std::expected<void, Ephemeris::State::Error> Ephemeris::State::install(std::string_view id, const Source::Draft& draft, const Scope& scope) {
+
     // 所有大块旧资源在 gate 外回收, 包括来源根、投影根和被替换的整组调度器.
-    std::optional<Source::Replaced> old_source;
-    std::vector<Projection::Batch::Retired> old_scenes;
-    std::unique_ptr<Agenda> agenda;
+    std::optional<Source::Tree> old_source;
+    std::vector<std::unique_ptr<Timer>> old_timers;      // 本范围被替换的钩子在锁外析构.
+    std::optional<Projection::Batch::Retired> old_scene; // 本范围旧投影及通知事件, 解锁后释放.
+
     std::unordered_map<const Source::Name*, std::unique_ptr<Timer>> timers;
     std::vector<Retired> expired;
-    const std::lock_guard lock(*gate_);
-    const auto found = replicas_.find(id);
-    if (found == replicas_.end()) {
+    std::unique_lock lock(*gate_);
+    auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
+    if (!borrowed.get()) {
         return std::unexpected(Error::input);
     }
-    auto& replica = *found->second;
+    auto& replica = *borrowed.get();
     if (replica.retired) {
         return std::unexpected(Error::obsolete);
     }
@@ -325,11 +384,75 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::replace(std::stri
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    advance(stamp->time, expired);
+    advance(replica, stamp->time, expired); // 已持来源锁, 先处理旧期限, 再准备新事实.
+    advance(stamp->time, expired, &replica);
     const auto bytes = replica.source.bytes();
-    if (draft.bytes() > limits_.replica_bytes || replica_bytes_ - bytes > limits_.replica_bytes - draft.bytes()) {
-        return std::unexpected(Error::capacity);
+
+    // 来源独占准备与公共投影提交分离. rows 只拥有名称/不可变正文, 不复制业务字节.
+    struct Native {
+        Source::Tree::Key name; // 原生候选中的稳定名称, 不是临时请求的 string_view.
+        Record record;          // 完整原生事实, 截止保持发送者原值, 不续一个新的 TTL.
+    };
+
+    std::vector<Source::Tree::Key> previous; // 本范围旧项, 在来源锁内枚举, 不占域锁.
+    std::vector<Native> rows;                // 与候选一起拥有, 最终合并不重新查询/验证输入正文.
+    std::optional<Source::Batch> origin;     // 先于锁外准备建立寿命, 恢复域锁后才回滚或发布.
+    std::optional<Error> failure;            // 回调失败只终止私有准备, 不发布此前已经准备的行.
+    Guard::outside(lock, [&] {
+        replica.source.each(scope, [&](const Source::Tree::Key& name, const Record&) { previous.push_back(name); });
+        origin.emplace(replica.source.prepare());
+        for (const auto& name : previous) {
+            if (!draft.find(scope, name->key)) {
+                const auto erased = origin->erase(scope, name->key);
+                if (!erased) {
+                    failure = error(erased.error());
+                    return;
+                }
+            }
+        }
+        draft.each(scope, [&](const Source::Tree::Key& name, Record incoming) {
+            if (failure)
+                return;
+            if (!Ephemeris::valid(name->key) || !Ephemeris::valid(incoming) || incoming.deadline.time_since_epoch().count() == 0) {
+                failure = Error::input;
+                return;
+            }
+            const auto old = origin->find(scope, name->key);
+            if (old && ((old->attr != incoming.attr && *old->attr != *incoming.attr) || old->ttl != incoming.ttl || incoming.update < old->update || incoming.renewal < old->renewal || incoming.deadline < old->deadline || (incoming.renewal == old->renewal && incoming.deadline != old->deadline) || (incoming.update == old->update && old->data != incoming.data && *old->data != *incoming.data))) {
+                failure = Error::conflict;
+                return;
+            }
+            if (old) {
+                incoming.attr = old->attr; // 固定属性已经完整比对, 不在最终域锁里再扫描一遍.
+                if (old->data == incoming.data || *old->data == *incoming.data)
+                    incoming.data = old->data;
+            }
+            auto native = origin->set(scope, name->key, incoming);
+            if (!native) {
+                failure = error(native.error());
+                return;
+            }
+            timers.emplace(native->get(), std::make_unique<Timer>(*native));
+            rows.push_back({*native, std::move(incoming)});
+        });
+    });
+    if (failure)
+        return std::unexpected(*failure);
+    if (replica.retired)
+        return std::unexpected(Error::obsolete); // 准备期间的身份撤销优先于最终发布.
+    stamp = reading();                           // 本地写入可能已经推进水位/投影/时间, 必须以当前状态重新合并.
+    if (!stamp)
+        return std::unexpected(stamp.error());
+    advance(stamp->time, expired, &replica); // 本来源由 borrowed 排他保护, 其他来源/合并投影仍正常到期.
+    if (!timers.empty() && !replica.agenda) {
+        replica.agenda = std::make_unique<Agenda>(stamp->time);
+        due_ = std::min(due_, replica.agenda->next());
     }
+    const auto scope_coverage = std::ranges::find_if(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && value.name->key.empty(); });
+    if (scope_coverage == replica.coverage.end() && std::ranges::count_if(replica.coverage, [](const Replica::Coverage& value) { return value.name->key.empty(); }) >= static_cast<std::ptrdiff_t>(limits_.source.scopes * 2))
+        return std::unexpected(Error::capacity);
+    auto marker = std::make_shared<const Source::Name>(std::make_shared<const Scope>(scope), std::string{}); // 空 Key 仅为内部整个范围覆盖标记.
+    replica.coverage.reserve(replica.coverage.size() + 1);                                                   // 提交后登记覆盖不能分配失败.
 
     // 计划只列出真实内容变化, 相同 Attr/Data 和纯续期不更改公共游标.
     struct Change {
@@ -338,98 +461,70 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::replace(std::stri
         bool data{};                   // 已有 Attr 的纯 Data 更新提示.
     };
 
-    std::map<Scope, std::vector<Change>> changes;
+    std::vector<Change> changes; // 当前范围唯一修改列表, 不再分配范围到计划的第二层目录.
     std::vector<const Source::Name*> removed;
     Ownership ownership{*this, {}, false};
-    std::optional<Error> failure; // 回调只准备计划, 失败不修改已经安装的来源根.
-    replica.source.each([&](const Source::Tree::Key& name, const Record&) {
+    for (const auto& name : previous) {
         const auto incoming = draft.find(*name->scope, name->key);
         if (incoming && incoming->deadline > stamp->time) {
-            return;
+            continue;
         }
         auto* scene = locate(*name->scope);
         const auto current = scene ? scene->find(name->key) : Projection::Point{};
         const auto owner = current.record ? owners_.find(current.name.get()) : owners_.end();
         if (owner != owners_.end() && owner->second == &replica) {
-            changes[*name->scope].push_back({current.name, {}, false});
+            changes.push_back({current.name, {}, false});
             removed.push_back(current.name.get());
         }
-    });
+    }
     std::optional<Clock::Time> earliest; // 最后取时检查新公开记录仍有效, 过期候选不重新获得 TTL.
-    draft.each([&](const Source::Tree::Key& name, const Record& incoming) {
-        if (failure) {
-            return;
-        }
-        if (!Ephemeris::valid(name->key) || !Ephemeris::valid(incoming) || incoming.deadline.time_since_epoch().count() == 0) {
-            failure = Error::input;
-            return;
-        }
-        const auto old = replica.source.find(*name->scope, name->key);
-        if (old && (*old->attr != *incoming.attr || old->ttl != incoming.ttl || incoming.update < old->update || incoming.renewal < old->renewal || incoming.deadline < old->deadline || (incoming.renewal == old->renewal && incoming.deadline != old->deadline) || (incoming.update == old->update && *old->data != *incoming.data))) {
-            failure = Error::conflict;
-            return;
-        }
-        if (!agenda) {
-            agenda = std::make_unique<Agenda>(stamp->time);
-        }
-        auto timer = std::make_unique<Timer>(name); // 连已过期原生项也挂下一拍清理, 不泄漏不可见副本正文.
-        agenda->set(*timer, incoming.deadline);
-        timers.emplace(name.get(), std::move(timer));
+    for (const auto& row : rows) {
+        const auto& name = row.name; // 私有准备已经校验的原生名称与正文.
+        const auto& incoming = row.record;
         if (incoming.deadline <= stamp->time) {
-            return;
+            continue;
         }
         earliest = earliest ? std::min(*earliest, incoming.deadline) : incoming.deadline;
         auto* scene = locate(*name->scope);
         const auto current = scene ? scene->find(name->key) : Projection::Point{};
         if (current.record) {
             const auto owner = owners_.find(current.name.get());
-            if (owner == owners_.end() || owner->second != &replica || *current.record->attr != *incoming.attr) {
-                failure = Error::conflict;
-                return;
+            if (owner == owners_.end() || owner->second != &replica || (current.record->attr != incoming.attr && *current.record->attr != *incoming.attr)) {
+                return std::unexpected(Error::conflict);
             }
-            if (*current.record->data == *incoming.data) {
-                return;
+            if (current.record->data == incoming.data || *current.record->data == *incoming.data) {
+                continue;
             }
         } else {
             ownership.add(name, replica);
         }
-        changes[*name->scope].push_back({current.record ? current.name : name, Content{incoming.attr, incoming.data}, current.record.has_value()});
-    });
-    if (failure) {
-        return std::unexpected(*failure);
+        changes.push_back({current.record ? current.name : name, Content{incoming.attr, incoming.data}, current.record.has_value()});
     }
 
     // 每个范围只创建一个 COW 批候选. 失败先析构候选, 再撤销新增空范围; 不复制整个公共哈希表.
-    struct Plan {
-        Projection* scene;       // 新旧范围地址均在域锁及目录内保持稳定.
-        Projection::Batch batch; // 一个 Scope 的完整投影修改候选.
-    };
-
-    std::list<Pending> pending; // 列表保证引用和析构次序, 不移动隐式拥有回滚责任的 Pending.
-    std::vector<Plan> plans;
-    plans.reserve(changes.size());
-    auto history = history_; // 按顺序分配共享下游历史预算, 不能每个 Scope 都占满剩余额度.
-    for (const auto& [scope, rows] : changes) {
-        pending.emplace_back(*this, scope);
+    Pending pending{*this, scope}; // 先有目录回滚责任, 后有批候选, 析构顺序不可倒置.
+    std::optional<Projection::Batch> projection;
+    auto history = history_; // 当前 Scope 使用全域剩余额度, 不改变其他范围历史.
+    if (!changes.empty()) {
         const auto count = scopes_;
         auto located = obtain(scope);
-        if (!located) {
+        if (!located)
             return std::unexpected(located.error());
-        }
-        pending.back().created = scopes_ != count;
-        auto* scene = *located;
-        const auto before = scene->history();
-        auto batch = scene->prepare(limits_.history - (history - before));
-        for (const auto& row : rows) {
-            const auto prepared = batch.set(row.name, row.record, std::chrono::steady_clock::now(), row.data);
-            if (!prepared) {
+        pending.created = scopes_ != count;
+        auto& scene = **located;
+        const auto before = scene.history();
+        projection.emplace(scene.prepare(allowance(scene)));
+        for (const auto& row : changes) {
+            auto prepared = projection->set(row.name, row.record, std::chrono::steady_clock::now(), row.data);
+            if (!prepared)
                 return std::unexpected(error(prepared.error()));
-            }
         }
-        history = history - before + batch.history();
-        plans.push_back({scene, std::move(batch)});
+        history = history - before + projection->history();
     }
-    old_scenes.reserve(plans.size()); // 最终提交路径不再为回收或通知分配.
+    if (origin->bytes() > limits_.replica_bytes || replica_bytes_ - bytes > limits_.replica_bytes - origin->bytes())
+        return std::unexpected(Error::capacity);
+    old_timers.reserve(previous.size());
+    replica.timers.reserve(replica.timers.size() + timers.size()); // merge 转移节点, 提交阶段不创建新节点或扩桶.
     stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
@@ -437,33 +532,35 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::replace(std::stri
     if (earliest && *earliest <= stamp->time) {
         return std::unexpected(Error::ended);
     }
-    auto installed = replica.source.reset(std::move(draft)); // reset 先做位置/容量校验, 成功后是无分配根交换.
-    if (!installed) {
-        return std::unexpected(error(installed.error()));
-    }
+    old_source.emplace(origin->commit()); // 仅发布此范围, 来源位置保持原完整前缀.
 
-    old_source.emplace(std::move(*installed));
-    for (auto& plan : plans) {
-        old_scenes.push_back(plan.batch.commit());
+    if (projection)
+        old_scene.emplace(projection->commit());
+    for (const auto& name : previous) {
+        const auto node = replica.timers.find(name.get());
+        if (node != replica.timers.end()) {
+            Agenda::erase(*node->second);
+            old_timers.push_back(std::move(node->second));
+            replica.timers.erase(node);
+        }
     }
-    replica.coverage.clear(); // 完整组基线覆盖全部 R 后才归还精确回补元数据.
-    replica.timers.swap(timers);
-    replica.agenda.swap(agenda);
+    for (auto& [name, timer] : timers) {
+        const auto record = replica.source.find(scope, name->key); // 此时原生批已提交, 定时器指向其稳定名称.
+        replica.agenda->set(*timer, record->deadline);
+    }
+    replica.timers.merge(timers);
+    std::erase_if(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope; });
+    replica.coverage.push_back({std::move(marker), draft.position()});
     replica_bytes_ = replica_bytes_ - bytes + replica.source.bytes();
     history_ = history;
     for (const auto* name : removed) {
         owners_.erase(name);
     }
-    for (auto& item : pending) {
-        item.committed = true;
-    }
+    pending.committed = true;
     ownership.committed = true;
-    if (notify_) {
-        for (const auto& batch : old_scenes) {
-            for (const auto& event : batch.events) {
-                notify_(context_, *event.name->scope, event);
-            }
-        }
+    if (notify_ && old_scene) {
+        for (const auto& event : old_scene->events)
+            notify_(context_, scope, event);
     }
     return {};
 }

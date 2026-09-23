@@ -89,7 +89,7 @@ std::future<Result<Publisher::Receipt>> Publishing::publish(std::uint64_t versio
         retry_ = {};
         report(Publisher::Phase::waiting);
     }
-    core_->wake();
+    core_->wake(this);
     return future;
 }
 
@@ -128,7 +128,7 @@ void Publishing::close() noexcept {
     }
     if (first) {
         core_->release();
-        core_->wake();
+        core_->wake(this);
     }
 }
 
@@ -153,7 +153,7 @@ void Publishing::report(Publisher::Phase phase, std::optional<Error> failure) {
 void Publishing::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
     call->code = status.error_code();
     call->done.store(true, std::memory_order_release);
-    call->owner->core_->wake();
+    call->owner->core_->wake(call->owner.get());
 }
 
 void Publishing::consume(const std::shared_ptr<const Binding>& binding, Core::Time now) {

@@ -81,6 +81,7 @@ public:
     static std::expected<void, Error> active(const Record& current, const Clock::Reading& reading) noexcept;
 
 private:
+    class Encoding; // 公开分页的字段策略, Attr 基线规则只由本域定义.
     // 验证一份有载荷的完整原生记录; 仅供已解码来源快照或内部候选使用.
     static bool valid(const Record& record) noexcept;
     // 验证非空共享载荷及 1 MiB 静态单正文上限, 不复制正文.

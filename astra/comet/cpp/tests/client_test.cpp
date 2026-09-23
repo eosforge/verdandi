@@ -3,13 +3,17 @@
 #include "core.hpp"
 #include "ephemeris_service.hpp"
 #include "identity.hpp"
+#include "reading.hpp"
 #include "readout.hpp"
+#include <array>
 #include <atomic>
 #include <comet/client.hpp>
 #include <condition_variable>
 #include <grpcpp/server_builder.h>
 #include <iostream>
+#include <ranges>
 #include <thread>
+#include <unordered_set>
 
 namespace {
 using namespace std::chrono_literals;
@@ -156,16 +160,93 @@ void eventually(auto&& condition, std::chrono::seconds timeout = 5s) {
 void cleanup() {
 
     Fixture fixture("cleanup", false, false); // 独占匿名回环服务, 测试不连接任意固定端口.
+    fixture.fill();
     for (unsigned attempt = 0; attempt < 32; ++attempt) {
         auto core = comet::detail::Core::prepare(fixture.options(false, false)); // 只借助私有测试入口观察所有权, 不扩大 SDK 公共 API.
         CHECK(core);
         const std::weak_ptr<comet::detail::Core> retained = *core; // 弱引用不阻止真实析构, 同时覆盖立即 close 与首轮回调竞争.
+        auto reader = (*core)->reader({"routes", "main"}, {}, {}); // 工作空间实际捕获对象, 才能暴露跨轮保留强引用形成的拥有环.
+        CHECK(reader);
+        const std::weak_ptr<comet::detail::Activity> activity = *reader; // 关闭后两个对象都必须自然释放.
         (*core)->start();
+        if (attempt % 2 != 0) {
+            eventually([&] { return (*reader)->load().state() == comet::Reader::State::ready; });
+        } // 同时覆盖未推进即关闭和已经捕获/消费数据后的关闭.
         (*core)->close();
         CHECK((*core)->wait(3s));
+        reader->reset();
         core->reset();
-        eventually([&] { return retained.expired(); });
+        eventually([&] { return retained.expired() && activity.expired(); });
     }
+}
+
+// 重复定向事件合并、poll 期间再次入队、关闭后迟到事件和目录复用共享一条真实控制路径.
+void queued() {
+
+    Fixture fixture("queued", false, false); // 无登录流替局部事件触发全局刷新.
+    fixture.fill();
+    auto prepared = comet::detail::Core::prepare(fixture.options(false, false)); // 先接纳, 后启动, 确定性堆积重复唤醒.
+    CHECK(prepared);
+    const auto core = *prepared;
+    std::vector<std::shared_ptr<comet::detail::Reading>> readers; // 活动对象保持到真实关闭, 测试不把裸指针留给网络.
+    std::weak_ptr<comet::detail::Reading> first;                  // 回调只借弱引用, 不与 Reading 自身形成拥有环.
+
+    struct Stop {
+        std::shared_ptr<comet::detail::Core> core; // 析构先排空异步通知, readers 和 first 随后才销毁.
+        bool started{};                            // 准备阶段失败也要启动一次关闭推进, 避免未 Set 的 Alarm 无法完成清理.
+
+        ~Stop() {
+            core->close();
+            if (!started)
+                core->start();
+            if (!core->wait(5s))
+                std::terminate();
+        }
+    } stop{core};
+
+    for (unsigned index = 0; index < 32; ++index) {
+        comet::Reader::Options options; // 首个对象在自己的通知中关闭, 强制 poll 尚未返回时重新排队.
+        if (index == 0) {
+            options.changed = [&first](const comet::Reader::View& view) {
+                if (view.state() == comet::Reader::State::ready) {
+                    if (auto reader = first.lock())
+                        reader->close();
+                }
+            };
+        }
+        auto reader = core->reader({"routes", "main"}, {}, std::move(options));
+        CHECK(reader);
+        readers.push_back(std::move(*reader));
+    }
+    first = readers.front(); // 在 start 之前完成回调绑定, 不与控制线程并发修改弱引用.
+
+    {
+        std::array<std::jthread, 4> workers; // 多生产者只发就绪事件, 不改变业务状态或创建重复流.
+        for (unsigned index = 0; index < workers.size(); ++index) {
+            workers[index] = std::jthread([&, index] {
+                for (unsigned repeat = 0; repeat < 1024; ++repeat)
+                    core->wake(readers[(repeat + index) % readers.size()].get());
+            });
+        }
+    } // 全部投递后才启动: 无论多少重复事件, 每对象仅需一个预留队列槽.
+    core->start();
+    stop.started = true;
+    CHECK(readers.front()->wait(3s)); // 关闭来自通知内部, 后续必须消费这一轮中途产生的事件.
+    eventually([&] {
+        return std::ranges::all_of(readers | std::views::drop(1), [](const auto& reader) { return reader->load().state() == comet::Reader::State::ready; });
+    });
+
+    for (unsigned round = 0; round < 32; ++round) {
+        const auto old = readers.back(); // 故意保留已完成对象, 模拟旧 RPC 或调用者晚到的唤醒.
+        old->close();
+        CHECK(old->wait(3s));
+        auto fresh = core->reader({"routes", "main"}, {}, {});
+        CHECK(fresh);
+        readers.back() = std::move(*fresh);
+        core->wake(old.get()); // 新对象接纳已清理旧目录; 旧指针仍有效但不能重入就绪队列.
+        eventually([&] { return readers.back()->load().state() == comet::Reader::State::ready; });
+    }
+    CHECK(core->exceptions() == 0);
 }
 
 // 一条登录流承载多个对象, 分页完整后才可见, 移动/关闭不破坏仍持有的不可变视图.
@@ -536,6 +617,53 @@ void publications() {
     CHECK(fixture.catalog.source().size() == 1); // 正文过期但防回退水位还在.
 }
 
+// 局部 RPC 完成只推进所属对象, 其他空闲对象仍必须按自己的截止续租并响应 Watch/关闭.
+void scheduling() {
+
+    Fixture fixture("scheduling", false, false); // 真实回环 RPC, 无全局登录事件替测试唤醒所有对象.
+    Client client(fixture.options(false, false));
+    std::vector<comet::Publisher> publishers;   // 16 个独立期限, 验证完成事件与定时唤醒相互独立.
+    std::vector<comet::Subscriber> subscribers; // 空闲订阅不会因为其他 Key 活跃而漏掉自己的数据.
+    for (unsigned index = 0; index < 16; ++index) {
+        const auto key = std::to_string(index); // 固定 Scope 内独立 Key, 不增加服务端范围数量.
+        auto publisher = client.value.publisher({"dynamic", "schedule"}, key, 1s);
+        auto subscriber = client.value.subscriber({"dynamic", "schedule"}, key);
+        CHECK(publisher && subscriber);
+        publishers.push_back(std::move(*publisher));
+        subscribers.push_back(std::move(*subscriber));
+        auto result = publishers.back().publish(1, {7}); // 每对象先获得真正受理, 后续保持空闲自动续租.
+        CHECK(result.wait_for(3s) == std::future_status::ready && result.get());
+    }
+
+    // 第一个对象持续更新, 同时等待其他对象独立的网络完成及下一次自动期限.
+    for (std::uint64_t version = 2; version <= 64; ++version) {
+        auto result = publishers.front().publish(version, {8}); // 顺序单 Key, 不通过客户端批次偷换业务负载.
+        CHECK(result.wait_for(3s) == std::future_status::ready && result.get());
+    }
+    eventually([&] {
+        return std::ranges::all_of(subscribers, [](const auto& subscriber) { return subscriber.watch().state() == comet::Subscriber::State::ready && subscriber.watch().size() == 1; });
+    });
+    eventually([&] {
+        const auto events = fixture.catalog.events(0); // 捕获真实来源历史, 保活必须覆盖每个对象, 不能只检查累计次数.
+        if (!events) {
+            return false;
+        }
+        std::unordered_set<std::string_view> renewed; // 仅借用本次 events 拥有的名称, 返回前销毁; 最多 16 个独立 Key.
+        for (const auto& event : *events) {
+            if (event.form == astra::Catalog::State::Source::Form::renew) {
+                renewed.insert(event.name->key);
+            }
+        }
+        return renewed.size() == publishers.size();
+    });
+    CHECK(fixture.catalog.capture({"dynamic", "schedule"})->version() == 79); // 续租不变成下行内容事件.
+    client.value.close();
+    CHECK(client.value.wait(3s));
+    for (const auto& subscriber : subscribers) {
+        CHECK(subscriber.wait(0ms)); // 非 ready 对象也要收到共享关闭, 不依靠新的网络流量.
+    }
+}
+
 // Client 显式关闭立即覆盖全部对象的公开状态, 不等控制轮在用户回调返回后再次推进 Publisher.
 void publications_closed() {
 
@@ -642,12 +770,14 @@ int main() {
     try {
         inputs();
         cleanup();
+        queued();
         shared();
         authentication();
         prepared_secret();
         observers();
         beacons();
         publications();
+        scheduling();
         publications_closed();
         publications_relocation();
         publications_pending();

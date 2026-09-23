@@ -240,7 +240,12 @@ async function commit(erase: boolean) {
               <td>{{ measurements.get(node.id)?.values.astra_ready ?? "未知" }}</td>
               <td>{{ measurements.get(node.id)?.values.astra_clock_synchronized ?? "未知" }}</td>
               <td>{{ measurements.get(node.id)?.values.astra_sessions ?? "—" }} / {{ measurements.get(node.id)?.values.astra_recovery_bytes ?? "—" }}</td>
-              <td>{{ measurements.get(node.id)?.observed ?? "未配置或尚未采样" }}<strong v-if="measurements.get(node.id)?.stale"> (陈旧)</strong></td>
+              <td>
+                <template v-if="measurements.get(node.id)?.values.astra_ready !== undefined"
+                  >{{ measurements.get(node.id)?.observed }}<strong v-if="measurements.get(node.id)?.stale"> (陈旧)</strong></template
+                >
+                <template v-else>未采集</template>
+              </td>
             </tr>
           </tbody>
         </table>

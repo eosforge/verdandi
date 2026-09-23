@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -19,7 +20,8 @@ import (
 	"github.com/eosforge/verdandi/astra/internal/admission"
 )
 
-// Targets 只读部署映射: Star 内部数值端点 -> 独立 /metrics URL, 最多 64 项.
+// Targets 只读部署映射: Star 内部数值端点 -> 独立 /metrics URL, 不单独限制节点数量.
+// 本地配置总字节限制为 8 MiB, 足够覆盖准入目录; 抓取范围仍由可信目录决定.
 // 不使用浏览器传入的 URL、不猜测相邻端口、不从环境变量启用代理.
 func Targets(path string) (map[string]string, error) {
 	result := make(map[string]string)
@@ -31,11 +33,12 @@ func Targets(path string) (map[string]string, error) {
 		return nil, errors.New("cannot open metrics targets")
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, 65537))
-	if err != nil || len(data) > 65536 {
+	const maximum = 8 << 20
+	data, err := io.ReadAll(io.LimitReader(file, maximum+1))
+	if err != nil || len(data) > maximum {
 		return nil, errors.New("metrics targets exceed limit")
 	}
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder := json.NewDecoder(bytes.NewReader(data)) // 直接借用本次拥有的响应, 不先复制为完整字符串.
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
 		return nil, errors.New("metrics targets must be an object")
 	}
@@ -43,7 +46,7 @@ func Targets(path string) (map[string]string, error) {
 		token, err := decoder.Token()
 		key, valid := token.(string)
 		var value string
-		if err != nil || !valid || decoder.Decode(&value) != nil || len(result) >= 64 || result[key] != "" {
+		if err != nil || !valid || decoder.Decode(&value) != nil || result[key] != "" {
 			return nil, errors.New("invalid or duplicate metrics target")
 		}
 		if _, err := admission.Endpoint(key); err != nil {
@@ -85,7 +88,7 @@ var gauges = map[string]bool{
 // parseMetrics 只提取既有 Star 契约, 全部必需项合法且无重复才发布; 不解析任意标签表达式.
 func parseMetrics(data []byte) (map[string]string, error) {
 	values := make(map[string]string, len(gauges))
-	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	scanner := bufio.NewScanner(bytes.NewReader(data)) // Scanner.Text 为保留的字段提供独立字符串, 不让结果借用输入缓存.
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -120,7 +123,8 @@ func (backend *Backend) Monitor(ctx context.Context, targets map[string]string, 
 	if len(targets) == 0 {
 		return
 	} // 默认关闭时不创建空轮询工作者或无意义计时器.
-	transport := &http.Transport{Proxy: nil, TLSClientConfig: certificate.Clone(), DialContext: (&net.Dialer{Timeout: 2 * time.Second}).DialContext, MaxConnsPerHost: 1, MaxIdleConns: 4, MaxIdleConnsPerHost: 1, IdleConnTimeout: 10 * time.Second, ResponseHeaderTimeout: 2 * time.Second, MaxResponseHeaderBytes: 8192, DisableCompression: true}
+	// 请求并发仍为四, 空闲池按已批准的端点数量保留, 避免下一轮抓取反复重建 TCP/TLS.
+	transport := &http.Transport{Proxy: nil, TLSClientConfig: certificate.Clone(), DialContext: (&net.Dialer{Timeout: 2 * time.Second}).DialContext, MaxConnsPerHost: 1, MaxIdleConns: len(targets), MaxIdleConnsPerHost: 1, IdleConnTimeout: 10 * time.Second, ResponseHeaderTimeout: 2 * time.Second, MaxResponseHeaderBytes: 8192, DisableCompression: true}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	ticker := time.NewTicker(5 * time.Second)
@@ -142,18 +146,13 @@ func (backend *Backend) sample(ctx context.Context, client *http.Client, targets
 	backend.mutex.RUnlock()
 	jobs := make(chan node)
 	var group sync.WaitGroup
+	defer func() { close(jobs); group.Wait() }() // 正常完成和取消共用一个退出责任, 先停输入再等待真实工作者退出.
 	for range 4 {
 		group.Go(func() {
 			for current := range jobs {
 				values, err := scrape(ctx, client, targets[current.Endpoint], current.ID)
 				backend.mutex.Lock()
-				valid := false
-				for _, newest := range backend.nodes {
-					if newest.ID == current.ID && newest.Endpoint == current.Endpoint {
-						valid = true
-						break
-					}
-				}
+				valid := backend.members[current.Endpoint] == current.ID
 				if valid && !backend.closed {
 					if backend.metrics == nil {
 						backend.metrics = make(map[string]metric)
@@ -180,13 +179,9 @@ func (backend *Backend) sample(ctx context.Context, client *http.Client, targets
 		select {
 		case jobs <- current:
 		case <-ctx.Done():
-			close(jobs)
-			group.Wait()
 			return
 		}
 	}
-	close(jobs)
-	group.Wait()
 }
 
 // scrape 成功必须同时匹配可信实例头、状态、大小和完整指标集; 网络失败只标陈旧, 不删除节点.
@@ -210,16 +205,20 @@ func scrape(ctx context.Context, client *http.Client, target, instance string) (
 	return parseMetrics(data)
 }
 
-// Metrics 只读取缓存, 不由浏览器刷新发起网络请求. 未抓取、失败和过期观察明确标为 stale.
+// Metrics 覆盖当前目录的全部 Star, 不由浏览器刷新发起网络请求.
+// 未抓取/替换后的实例返回零观察时间和空值, 失败和过期观察明确标为 stale, 不隐去未采集节点.
 func (backend *Backend) Metrics() any {
 	backend.mutex.RLock()
 	defer backend.mutex.RUnlock()
-	values := make([]metric, 0, len(backend.metrics))
+	values := make([]metric, 0, len(backend.nodes))
 	now := time.Now()
 	for _, current := range backend.nodes {
+		if current.Role != "ROLE_STAR" {
+			continue
+		} // 其他角色尚未提供相同指标契约, 不虚构 Star 业务指标.
 		value, exists := backend.metrics[current.Endpoint]
 		if !exists || value.ID != current.ID {
-			continue
+			value = metric{ID: current.ID, Stale: true}
 		}
 		value.Stale = value.Stale || backend.closed || now.Sub(value.Observed) > 15*time.Second
 		value.Observed, value.Attempted = value.Observed.UTC(), value.Attempted.UTC()

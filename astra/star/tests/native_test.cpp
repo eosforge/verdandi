@@ -224,6 +224,11 @@ void pages() {
 void agenda() {
 
     Agenda wheel(Clock::Time(1s));
+    CHECK(wheel.next() == Clock::Time(1010ms));
+    Agenda phase(Clock::Time(1003ms)); // 不同来源独立相位, 最早维护边界不能截成整十毫秒.
+    CHECK(phase.next() == Clock::Time(1013ms));
+    Agenda limit(Clock::Time::max() - 1ms); // 剩余不足一拍时饱和, 不发生有符号溢出.
+    CHECK(limit.next() == Clock::Time::max());
     Agenda::Node node; // 稳定地址的钩子, 由被测 Agenda 排程.
     unsigned fired{};  // 实际到期回调计数, 不把空拍当作完成.
     wheel.set(node, Clock::Time(1015ms));
@@ -249,7 +254,7 @@ void agenda() {
     } catch (const std::bad_alloc&) {
         failed = true;
     }
-    CHECK(failed && node.scheduled() && wheel.time() == Clock::Time(1050ms));
+    CHECK(failed && node.scheduled() && wheel.time() == Clock::Time(1050ms) && wheel.next() == Clock::Time(1060ms));
     wheel.advance(Clock::Time(1060ms), [&](auto*, auto boundary) { CHECK(boundary == Clock::Time(1060ms)); ++fired; });
     CHECK(fired == 4 && !node.scheduled());
     wheel.advance(Clock::Time(3601s + 3ms), [](auto*, auto) { CHECK(false); });

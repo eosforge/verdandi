@@ -1,18 +1,26 @@
 # 当前实现进度
 
+本轮完成 Catalog/Ephemeris 分页和读取同步边界抽取, 共用 Pagination/Reading, 保留不同的业务提交与 SDK 写入生命周期; 详见 [复用审核](review.md#动态域复用边界). 新增对应边界用例, **尚未构建或测试**. 此前就绪队列、多页缓存和 Catalog 2048 字节用例的通过证据只对应 [validation.md](../testkit/validation.md) 中的已测源码清单.
+
+当前远端 Replica 独立准备锁、域锁外原生候选、同范围下行批次/在途页共享及 Ephemeris 恢复覆盖修复已完成普通 Release 构建/回归. 三 Star 新旧产物对照均通过最终数据核验, 性能有收益也有退化, 不能称为全面加速. 实际源码身份、逐场数字与边界统一见 [validation.md](../testkit/validation.md).
+
 本文件仅保留当前状态. 设计见 [架构](architecture.md), 语义见 [协议](../proto/README.md), 用例见 [验收规约](../testkit/comet.md), 实际执行证据见 [validation.md](../testkit/validation.md).
 
 ## 范围与验证边界
 
 本轮范围为 Pulsar、Polaris、Star 三域存储及多 Star 复制、原生 Comet C++、必要 Go Astrolabe 与 Admin 管理适配. Moon、Planet、其他语言 SDK 和完整 Orrery 继续搁置. 不恢复旧 Redis SDK 或旧 Supervisor 的开发.
 
-当前为 alpha 工作副本. 用户于 2026-09-22 授权的最近一次构建与回归已完成: **Debug、Release、ASan/UBSan、TSan 均完整通过 53 项 CTest**, Linux Go 的八个测试包及 race、Windows Go 的五个纯 Go 包、Admin 的 101 项测试/严格类型检查/生产构建和真实浏览器操作均通过. 该基线修复了 Protobuf 布局混用、Alarm 引用环、公共 TLS 接入和浏览器 fetch 等实际问题, 源码与产物摘要已核对. 下述后续修改不包含在该完整基线中; 新一轮已获准性能测试并通过 13 项定向 Release CTest 和两个 Go 包常规测试, 实际性能范围见验证记录. 未提交或推送, 不把功能回归通过称为全部生产规模、覆盖率或性能资格已完成.
+当前为 alpha 工作副本. 抽取前源码的 57/57 CTest、Go 八个活动包及两端 Python 基线执行器通过; 本轮公共层和新增边界尚未验证. 实际执行范围只在 [验证记录](../testkit/validation.md) 维护. 未下载、提交或推送; 未运行 Sanitizer. 性能比较使用相同三 Star 配置的前后产物, 选测配置不代表重跑完整基线库; 未复测的冻结 Redis SDK 失败场景仍不宣称解决.
 
 ## 当前实现
 
-最近一次回归后, Scene 字符串所有权和异常回滚审核未发现所述悬垂引用或 editing 永久置位问题, 已补充交接注释与用例. 随后修正 Scene/Origin 历史读取: 超龄但仍连续保留的事件可用于恢复, 年龄只在写入裁剪时生效, 业务 TTL 与发送预算不变; 补充真实淘汰、零预算和双域 TTL 重放用例. Catalog/Ephemeris 的十个 expected 读取方法进一步收敛到私有 execute, 配合 expected 链式转换, 保留锁/回收顺序和原错误映射; Origin/Scene 使用 requires 表达记录类型要求, 补充错误路径、异常恢复和析构重入用例. **这些后续修改已通过定向 Release 回归**, 不延用上一轮 Sanitizer 结果. 详细边界见 [验证记录](../testkit/validation.md).
+SDK 保留共享连接/准入、固定范围 Watch、最后完整游标和不可变视图. 完成事件定向推进 Activity, 到期/共享身份/关闭仍唤醒. Star 自有来源导出独立且不触发 GC, 公开读取在下一整拍前共享. 远端原生候选改用独立来源锁在域锁外准备, 最终水位/投影/期限/预算提交仍在域锁内; 忙碌来源的到期等待释放域锁, 公开读取在完整推进后才返回. 同范围订阅共享不可变批次和仍在途的同页, 每流确认及预算独立. 具体边界见 [并发复核](review.md#sdk-与-scope-并发复核).
 
-当前 [全量范围静态审核](review.md) 又修复三个行为问题: Catalog/Ephemeris 只读未知范围消耗永久写入配额、Publisher 未立即反映共享 Client 关闭、Astrolabe 指标新鲜度因 UTC 转换丢失单调时间. 同时减少三域 Edition 有序后缀的重复排序及 Polaris 历史裁剪的全窗口元数据读取, 补充对应行为用例并纠正文档状态/性能承诺. 这些修复已通过相应 Release/Go 定向验证; 性能与原生/RPC 基准的具体范围见验证记录. 大基线域锁、按 Scope 扫描订阅和重复 TTL 调度的进一步优化保留在审核与性能矩阵, 不把理论收益当成实测结果.
+已有优化覆盖 Comet 调度工作空间和 expected 工厂交接、Table 计量/脏页/名称拥有、三域单项去重快路径、Star 写入复核和分页比较、Exchange 重复大小计算. Astrolabe/Admin 已取消独立 64 节点指标上限, 改为完整 Star 目录展示和有界并发采样, 复用连接并用目录索引拒绝旧实例结果; 指标地址仍需部署映射. C++/Go 部分纳入本轮普通回归, Admin 前端未重跑. 具体已改项、其余待归因候选统一见 [当前审核](review.md).
+
+Scene 字符串所有权和 Edit 回滚由共享拥有与 RAII 保证, 相关异常/移动用例已纳入回归. Scene/Origin 允许重放超龄但仍连续保留的历史, 年龄只在写入裁剪时生效, 不延长业务 TTL. 两动态域的 expected 读取方法使用私有 execute, 保持锁和回收次序; requires 表达模板记录要求. 当前 execute 的忙来源等待分支及已有机制均已通过本轮普通回归, 不由固定交错用例推出全部并发安全已证明.
+
+当前 [审核](review.md) 中的未知范围配额、共享 Client 关闭可见性、Go 单调时间新鲜度修复, 连同 Edition 有序后缀、Polaris 历史前缀裁剪、共享批次和锁外准备, 已包含在本轮相应普通回归. 按 Scope 扫描订阅和重复 TTL 调度仍是优化候选, 不把理论收益当成实测结果.
 
 | 组件 | 已写入源码的能力 | 主要入口 |
 | --- | --- | --- |
@@ -40,15 +48,15 @@
 - 真实公共 RPC: 登录撤销、TLS/匿名配置、Readout 与两动态域推流、零历史并发更新、精确订阅、取消和资源归还.
 - Comet: 投影、保守租约、共享身份、对象/future/回调寿命、切换与续租, Beacon 提交后丢回执/慢 Data; [Catalog 故障用例](../astra/comet/cpp/tests/catalog_fault_test.cpp) 覆盖 Publish 已提交但回执丢失、首帧停滞与半批停滞.
 - 对等: Dispatch/Landing/Exchange、整包结构检查、两个域双向闭环、无历史全量、跨 Scope 精确回补、来源本地 TTL/完整恢复、退役来源与预算归还.
-- 多进程: [cpp_comet_process](../astra/test_comet_process.py) 启动专有 Pulsar/Polaris/Astrolabe/两台 Star 和 SDK 探针; 持久重启、缓存可读、凭据脱敏、实际指标抓取、复制、强制结束原 Star、SDK 换节点/新 UUID、旧租约到期、原端口重启恢复.
-- 管理: Go HTTP/KDF/Cookie/CORS、指标身份/长度/部分正文; [Admin 适配用例](../admin/tests/management.test.mjs) 验证 uint64 精度及版本耗尽、UTF-8 跨块、半份快照拒绝、单次写入不重试、错误正文脱敏和陈旧状态. 界面轮询等待本轮全部读取结束后再调度, 读取失败将旧指标标为陈旧. 真实浏览器已验证登录、Cookie 恢复、完整读写和服务中断后的陈旧提示.
+- 多进程: [cpp_comet_process](../astra/test_comet_process.py) 启动专有 Pulsar/Polaris/Astrolabe/三台 Star 和 SDK 探针; 持久重启、缓存可读、凭据脱敏、实际指标抓取、第三台固定观察、复制、强制结束原 Star、SDK 换节点/新 UUID、旧租约到期、原端口重启恢复. 三台同时写入另外由统一性能基线覆盖.
+- 管理: Go HTTP/KDF/Cookie/CORS、指标身份/长度/部分正文; [Admin 适配用例](../admin/tests/management.test.mjs) 验证 uint64 精度及版本耗尽、UTF-8 跨块、半份快照拒绝、单次写入不重试、错误正文脱敏和陈旧状态. 界面轮询等待本轮全部读取结束后再调度, 读取失败将旧指标标为陈旧. 这些用例和构建入口保留; 本轮未重跑 Admin 自动化、类型、生产构建或真实浏览器交互.
 
 ## 已知限制与后续验证
 
 业务 RPC 批量化已完成静态评估: 保留现有单目标协议, 将共享 Client 续租密度和多精确 Watch 开销纳入 [性能矩阵 B10/B11](../testkit/comet.md#rpc-batching), 确认热点后再决定是否扩展. 已保留协议边界并增加可复现的 [性能入口](../astra/bench/README.md), 未修改 Schema/生成代码; 不宣称已有批量续租、多目标订阅或跨 Key 原子发布.
 
-1. 当前后续修复已有定向 Release 与 Go 回归, 完整 Sanitizer 结果仍受原源码身份限制. 不自动启动长期或无限测试.
-2. 全量来源安装的准备仍在域锁内, 已测有限工作集恢复和真实推流, 尚无大规模恢复并发锁等待及生产 SLA 证据. 计费为逻辑内存预算, 不包含全部 gRPC/分配器/应用持有旧视图的 RSS. 未采集覆盖率百分比.
+1. 当前改动已完成普通构建/回归及相同三 Star 性能对照. 大范围恢复与部分扇出/高并发提交有改善, 全订阅可见仍是主要短板; 具体退化及较长窗口复核见验证页. 后续先测关键路径, 不自动启动长期或无限测试.
+2. 来源安装按 Scope 分步, 原生准备已移出域锁, 最终合并/投影/预算仍串行; 单条远端增量未全部移出. 下行共享不消除逐订阅 pending 收集, gRPC 仍可能逐流序列化. 缺少本次持锁/分配实测, 不宣称完全拆锁或零复制. 逻辑预算不等于进程 RSS, 未采集覆盖率百分比.
 3. 当前指标为实际已实现的固定状态 gauge, 未伪造请求计数、延迟直方图或每 Scope 安装进度. Admin 当前以表格管理和观测, 完整实时 3D 拓扑仍属后续 Orrery.
-4. 编译器的第三方 SQLite 提示、前端 chunk 提示及 Sanitizer 插桩边界保留在 [验证记录](../testkit/validation.md), 不通过测试通过推断其已消失.
-5. 原始回归证据保存在 build/regression-20260922, 当前性能证据在 build/performance-current, 最新人工汇总仅维护 validation.md. 历史证据继续使用 Git 查询.
+4. 本轮未重跑 Admin、Debug、Sanitizer/race, 不将此前通过记录当作新增代码的当前证据; 既有第三方/前端提示不因本轮普通测试通过而自动消失.
+5. 当前普通回归、三 Star 前后/Redis 基线、原生恢复对照及 CPU/RSS 采样在 build/scope-review. 前后 Comet/Pulsar/Polaris 产物相同, 仅 Star 变化. 失败样本完整保留, 最新人工汇总仅维护 validation.md; 不将已测结论套用到后续未测源码.

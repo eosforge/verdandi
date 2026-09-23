@@ -120,16 +120,22 @@ Result<std::optional<Observer::View>> Selection::accept(const proto::comet::v1::
         return fail(Error::Code::protocol);
     }
 
+    // 一页一项的完整批次不可能重复, 无须为每次小更新分配去重节点和桶.
+    const bool track = !page.complete() || page.changes_size() != 1 || !seen_.empty(); // 之前已有页面时必须继续跨页去重.
     for (const auto& change : page.changes()) {
         // seen 只跟踪本批, 上限包含当前及最终两份记录集合, 不跨重连累计历史 Key.
-        if (!valid(change.uuid()) || (!target_.empty() && target_ != change.uuid()) || seen_.contains(change.uuid())) {
+        if (!valid(change.uuid()) || (!target_.empty() && target_ != change.uuid())) {
             return fail(Error::Code::protocol);
         }
-        if (seen_.size() == records_ * 2) {
-            return fail(Error::Code::limit);
+        if (track) {
+            if (seen_.size() == records_ * 2) {
+                return fail(seen_.contains(change.uuid()) ? Error::Code::protocol : Error::Code::limit); // 满额仍优先报告重复.
+            }
+            if (!seen_.insert(change.uuid()).second) {
+                return fail(Error::Code::protocol);
+            }
+            seen_bytes_ += change.uuid().size();
         }
-        seen_.insert(change.uuid());
-        seen_bytes_ += change.uuid().size();
         switch (change.action_case()) {
         case proto::comet::v1::EphemerisChange::kRecord: {
             const auto& record = change.record(); // 一条完整注册, 空 Attr/Data 同样是合法的完整值.

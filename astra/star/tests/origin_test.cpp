@@ -39,7 +39,7 @@ Catalog::Record record(std::uint64_t version) {
 }
 
 // 显式模拟外层原子提交, 旧资源声明在锁之前, 离开锁后才释放.
-void commit(Source& source, const std::shared_ptr<std::mutex>& gate, Scope scope, std::string key, std::optional<Catalog::Record> value, std::optional<std::uint64_t> position, std::chrono::steady_clock::time_point now) {
+void commit(Source& source, const std::shared_ptr<std::shared_mutex>& gate, Scope scope, std::string key, std::optional<Catalog::Record> value, std::optional<std::uint64_t> position, std::chrono::steady_clock::time_point now) {
 
     Source::Retired retired; // commit 移出的旧正文/事件, 不在 gate 内最终析构.
     const std::lock_guard lock(*gate);
@@ -51,7 +51,7 @@ void commit(Source& source, const std::shared_ptr<std::mutex>& gate, Scope scope
 // 不同 Sector/Spectrum 共用唯一来源位置, 回收空范围也不会重用旧序列.
 void scopes() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Source source(gate, measure, true);
     const auto now = std::chrono::steady_clock::now();
     commit(source, gate, {"one", "main"}, "key", record(20), 1, now);
@@ -88,7 +88,7 @@ void scopes() {
 // 外层第二项准备失败时丢弃 Edit, 原生根/目录/位置/历史全部维持原状态.
 void rollback() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Source source(gate, measure, true, {.records = 1, .scopes = 1, .bytes = 4096});
     const auto now = std::chrono::steady_clock::now();
     {
@@ -126,7 +126,7 @@ void rollback() {
 // 超大历史项、禁用历史和实际淘汰必须明确要求全量, 不空队列 pop 或返回断裂后缀.
 void history() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     const auto now = std::chrono::steady_clock::now();
     Source source(gate, measure, true, {.history = 2, .backlog = 4096});
     for (std::uint64_t position = 1; position <= 3; ++position) {
@@ -173,11 +173,11 @@ void history() {
 // 历史年龄只在写入时裁剪, 完整回放与有界复制读取必须一致; 删除不能因空闲被迫改走全量.
 void retention() {
 
-    const auto gate = std::make_shared<std::mutex>();  // 生产要求来源读写使用同一外层锁.
-    Source source(gate, measure, true);                // 默认 10 分钟保留时间, 无其他容量压力.
-    const auto now = std::chrono::steady_clock::now(); // 新写入触发维护的固定时刻.
-    const auto stored = now - 1h;                      // 直接构造已经超龄的历史, 不休眠或修改系统时间.
-    const Scope scope{"idle", "history"};              // 创建和删除位于同一来源范围.
+    const auto gate = std::make_shared<std::shared_mutex>(); // 生产要求来源读写使用同一外层锁.
+    Source source(gate, measure, true);                      // 默认 10 分钟保留时间, 无其他容量压力.
+    const auto now = std::chrono::steady_clock::now();       // 新写入触发维护的固定时刻.
+    const auto stored = now - 1h;                            // 直接构造已经超龄的历史, 不休眠或修改系统时间.
+    const Scope scope{"idle", "history"};                    // 创建和删除位于同一来源范围.
     commit(source, gate, scope, "key", record(1), 1, stored);
     commit(source, gate, scope, "key", std::nullopt, 2, stored);
     {
@@ -223,7 +223,7 @@ void retention() {
 // 全量是整个来源/域的一次替换, 准备中断/重复项不影响旧根, 不能逐 Scope 发布半份新基线.
 void snapshot() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Source replica(gate, measure, false);
     const auto now = std::chrono::steady_clock::now();
     commit(replica, gate, {"old", "scope"}, "key", record(1), 1, now);
@@ -273,7 +273,7 @@ void snapshot() {
 // Ephemeris 使用相同来源位置机制但原生载荷结构不同, 不通过同一 KV schema 串接两个 Buffer.
 void native() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     astra::Origin<Ephemeris::Record> source(gate, measure, true);
     const auto now = std::chrono::steady_clock::now();
     const Ephemeris::Record initial{std::make_shared<const Ephemeris::Buffer>(3), std::make_shared<const Ephemeris::Buffer>(7), Clock::Time(10s), 0, 0, 1000};
@@ -305,7 +305,7 @@ void native() {
 // 合并水位的内部 COW 批次不编号, 准备失败/放弃不能泄漏新目录或覆盖老版本.
 void batch() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     Source source(gate, measure, false, {.records = 3});
     const auto now = std::chrono::steady_clock::now();
     const astra::Scope scope{"one", "scope"};
@@ -337,7 +337,7 @@ void batch() {
 // 旧 View 的读完成锁独立存活, 页面复制与回调异常退出仍与写者同步, 不读取已析构的来源对象.
 void lifetime() {
 
-    const auto gate = std::make_shared<std::mutex>();
+    const auto gate = std::make_shared<std::shared_mutex>();
     std::optional<Source::View> frozen;
     {
         Source source(gate, measure, true);
@@ -358,6 +358,36 @@ void lifetime() {
     CHECK(thrown);
     const std::lock_guard lock(*gate); // 异常路径没有遗留持锁的 Fence.
 }
+
+// 批删除可复用旧槽但不得把旧键查到新内容, 放弃事务恢复原目录, 提交后仍不擅自确认来源.
+void removal() {
+
+    const auto gate = std::make_shared<std::shared_mutex>();
+    Source source(gate, measure, false, {.records = 1}); // 满容量替换必须先删除旧项再添加.
+    const Scope scope{"a", "main"};
+    commit(source, gate, scope, "old", record(1), 1, std::chrono::steady_clock::now());
+    {
+        const std::lock_guard lock(*gate);
+        auto batch = source.prepare();
+        CHECK(batch.erase(scope, "old") && batch.set(scope, "new", record(2)));
+        CHECK(!batch.find(scope, "old") && batch.find(scope, "new")->version == 2);
+        CHECK(batch.set(scope, "old", record(3)).error() == Source::Error::duplicate);
+    }
+    {
+        std::optional<Source::Tree> retired;
+        const std::lock_guard lock(*gate);
+        CHECK(source.find(scope, "old") && !source.find(scope, "new"));
+        auto batch = source.prepare();
+        CHECK(batch.erase(scope, "old") && batch.set(scope, "new", record(2)));
+        retired.emplace(batch.commit());
+        CHECK(!source.find(scope, "old") && source.find(scope, "new") && source.position() == 1);
+        CHECK(source.confirm(2) && !source.confirm(1));
+        std::size_t count{}; // 每范围遍历不枚举其他范围.
+        source.each(scope, [&](const auto&, const auto&) { ++count; });
+        CHECK(count == 1 && source.scopes() == std::vector<Scope>{scope});
+    }
+}
+
 } // namespace
 
 // 本组为源码级确定性用例, 不启动任何外部服务, 不代替多 Star 网络恢复验收.
@@ -372,6 +402,7 @@ int main() {
         native();
         lifetime();
         batch();
+        removal();
         std::cout << "source commits: ok\n";
         return 0;
     } catch (const std::exception& failure) {

@@ -50,8 +50,10 @@ void drain(Exchange& left, Exchange& right, astra::Steady::time_point time) {
         const bool first = transfer(left, right, time);
         const bool second = transfer(right, left, time);
         if (!first && !second) {
-            CHECK(left.ready() && right.ready());
-            return;
+            CHECK(left.pending() || right.pending() || (left.ready() && right.ready())); // 无网络进展时必须能报告本地继续安装, 不能依赖测试盲转.
+            if (!left.pending() && !right.pending()) {
+                return;
+            }
         }
     }
     throw std::runtime_error("Peer data did not settle within bounded transfers");
@@ -133,6 +135,8 @@ void snapshot() {
     for (unsigned index = 0; index != 300; ++index) {
         CHECK(left.catalog.publish(scope, std::to_string(index), bytes("v"), index + 1, 10000));
     }
+    CHECK(left.catalog.publish({"a", "main"}, "first", bytes("v"), 1, 10000)); // 三范围恢复必须允许无网络包的内部推进轮.
+    CHECK(left.catalog.publish({"z", "main"}, "last", bytes("v"), 1, 10000));
     const auto registration = left.ephemeris.create(scope, bytes("attr"), bytes("remote"), 10000);
     const auto own = right.ephemeris.create(scope, bytes("own"), bytes("own"), 10000);
     CHECK(registration && own);

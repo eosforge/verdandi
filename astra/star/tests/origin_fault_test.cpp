@@ -119,7 +119,7 @@ void atomicity(Operation operation) {
     bool completed{};
     unsigned failures{};
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
-        const auto gate = std::make_shared<std::mutex>(); // 每次注入独立提交域与容器容量状态.
+        const auto gate = std::make_shared<std::shared_mutex>(); // 每次注入独立提交域与容器容量状态.
         Source source(gate, measure, true, {.history = 1});
         const auto now = std::chrono::steady_clock::now();
         const astra::Scope scope{"one", "scope"};
@@ -174,7 +174,7 @@ void batch() {
     bool completed{};
     unsigned failures{};
     for (std::ptrdiff_t point = 0; point < 256; ++point) {
-        const auto gate = std::make_shared<std::mutex>();
+        const auto gate = std::make_shared<std::shared_mutex>();
         Source source(gate, measure, false);
         const astra::Scope scope{"one", "main"};
         {
@@ -218,7 +218,7 @@ void snapshot() {
     bool completed{};
     unsigned failures{};
     for (std::ptrdiff_t point = 0; point < 128; ++point) {
-        const auto gate = std::make_shared<std::mutex>();
+        const auto gate = std::make_shared<std::shared_mutex>();
         Source source(gate, measure, false);
         auto draft = source.prepare(100);
         CHECK(draft.set({"one", "scope"}, "key", {1, nullptr, std::nullopt}));
