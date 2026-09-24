@@ -63,8 +63,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .map(|entry| entry.path())
         // Pulsar 是 C++ 服务私有协议, 与 proto.astra.v1 具有同名 Ping/Pong.
-        // 它由 astra/build.py 生成, 不混入 Go 的单一 wire 包或旧 MessageID 注册表.
-        .filter(|path| path.extension().is_some_and(|extension| extension == "proto") && path.file_name().is_none_or(|name| name != "pulsar.proto"))
+        // 它由 astra/build.py 生成, 不混入 Go MessageID 注册表.
+        // Polaris 同理归 astra/build.py + astra/generate.py, 注册表只覆盖 astra/orbit/comet.
+        .filter(|path| {
+            path.extension().is_some_and(|extension| extension == "proto")
+                && path.file_name().is_none_or(|name| name != "pulsar.proto" && name != "polaris.proto")
+        })
         .collect();
     schemas.sort();
     if schemas.is_empty() {
@@ -76,57 +80,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     let protoc = env::var_os("PROTOC")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("build/tools/protoc/36.1/bin").join(executable("protoc")));
-    let go_plugin = root.join("build/tools/protoc-gen-go/1.36.12").join(executable("protoc-gen-go"));
-    let grpc_plugin = root.join("build/tools/protoc-gen-go-grpc/1.6.2").join(executable("protoc-gen-go-grpc"));
     require_version(&protoc, "libprotoc 36.1")?;
-    require_version(&go_plugin, &format!("{} v1.36.12", executable("protoc-gen-go")))?;
-    require_version(&grpc_plugin, "protoc-gen-go-grpc 1.6.2")?;
 
     // 描述符用于稳定消息编号. 旧 Rust 服务已废弃, 不再生成其运行时代码.
+    // Go 源码由 astra/generate.py 生成, 此处不再调用 protoc-gen-go 系列插件.
     run(Command::new(&protoc)
         .arg(format!("--descriptor_set_out={}", scratch.0.join("descriptor.pb").display()))
         .arg("--include_imports")
         .arg("-I")
         .arg(&proto_root)
         .args(&schemas))?;
-    let mut go = Command::new(&protoc);
-    go.arg(format!("--plugin=protoc-gen-go={}", go_plugin.display()))
-        .arg(format!("--plugin=protoc-gen-go-grpc={}", grpc_plugin.display()))
-        .arg(format!("--go_out={}", scratch.0.display()))
-        .arg("--go_opt=paths=source_relative")
-        .arg(format!("--go-grpc_out={}", scratch.0.display()))
-        .arg("--go-grpc_opt=paths=source_relative")
-        .arg("-I")
-        .arg(&proto_root)
-        .args(&schemas);
-    run(&mut go)?;
     let registry = generate_ids(&scratch.0, &proto_root)?;
-    run(Command::new("gofmt").arg("-w").arg(scratch.0.join("message_ids.go")))?;
 
     // 先收集和比较全部文件, --check 永远不写入源码. descriptor 仅为本次编号分配的中间输入.
+    // Go 源码由 astra/generate.py 按 per-proto 独立包生成, 本工具只维护 message-ids.lock, 不再输出 Go 文件.
     let mut outputs = BTreeMap::new();
     outputs.insert(proto_root.join("message-ids.lock"), registry.into_bytes());
-    for entry in fs::read_dir(&scratch.0)? {
-        let path = entry?.path();
-        let destination = match path.extension().and_then(|extension| extension.to_str()) {
-            Some("go") => root.join("supervisor/internal/generated"),
-            _ => continue,
-        };
-        let name = path.file_name().ok_or_else(|| io::Error::other("missing generated file name"))?;
-        outputs.insert(destination.join(name), fs::read(&path)?);
-    }
-    // 生成目录只保存本工具拥有的源文件. 多余文件必须显式移除, 避免删除 schema 后仍编译旧消息.
-    for directory in [root.join("supervisor/internal/generated")] {
-        if !directory.exists() {
-            continue;
-        }
-        for entry in fs::read_dir(&directory)? {
-            let path = entry?.path();
-            if !outputs.contains_key(&path) {
-                return Err(io::Error::other(format!("unexpected generated file: {}", path.display())).into());
-            }
-        }
-    }
     let stale: Vec<_> = outputs
         .iter()
         .filter(|(path, bytes)| fs::read(path).as_deref().ok() != Some(bytes.as_slice()))

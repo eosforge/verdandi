@@ -4,7 +4,7 @@
 
 ## 适用范围与组织
 
-- 活动实现为 C++ Star/Pulsar/Comet、Go Polaris/Astrolabe, 管理前端为 TypeScript/Vue, Python 提供构建与测试工具. 具体完成度以 docs/progress.md 为准, 不把已写源码当作已验证交付. Moon/Planet、Comet Go 和完整 Orrery 暂缓; 旧 Supervisor、Rust 服务与 Redis SDK 冻结.
+- 活动实现为 C++ Star/Pulsar/Comet、Go Polaris/Astrolabe, 管理前端为 TypeScript/Vue, Python 提供构建与测试工具. 具体完成度以 docs/progress.md 为准, 不把已写源码当作已验证交付. Moon/Planet、Comet Go 和完整 Orrery 暂缓; 旧 Rust 服务与 Redis SDK 冻结, 已删除的 Go Supervisor 只从 Git 历史查阅.
 - 按职责和所有权组织模块, 默认私有. 真实的多个使用者出现后才抽取共用层, 不为目录形式建立空接口、包装或管理类.
 - 各语言使用原生错误、取消、并发和资源机制; 统一协议行为与生命周期, 不强制相同的内部代码形状.
 - 优先用已支持的现代语言和标准库能力减少工作、分配和复制. 工具链下限变化单独评审, 不借此自动升级依赖.

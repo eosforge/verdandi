@@ -96,7 +96,7 @@ public:
     int run(const Signals& signals) {
 
         grpc::EnableDefaultHealthCheckService(true); // 使用 gRPC 自带标准健康服务, 不增加 Comet Inspect 握手.
-        // 先取得实际监听端口再登记准入, 避免向 Supervisor 发布尚未绑定或端口仍为 0 的端点.
+        // 先取得实际监听端口再登记准入, 避免向 Pulsar 发布尚未绑定或端口仍为 0 的端点.
         grpc::ServerBuilder builder;
         builder.SetMaxReceiveMessageSize(static_cast<int>(config_.max_frame_bytes));
         builder.SetMaxSendMessageSize(static_cast<int>(config_.max_frame_bytes));
@@ -476,7 +476,7 @@ private:
             } else if (config_.role == Member::Role::star) {
                 admission_->begin(0); // 已登记 Star 复用准入 metadata 调用 List, 不再发送密码.
             } else if (policy_->needs_refresh(now)) {
-                // 如果策略判断需要向 Supervisor 刷新候选列表
+                // 如果策略判断需要向 Pulsar 刷新候选列表
                 if (candidate_round_ == std::numeric_limits<std::uint32_t>::max()) {
                     fatal_ = true;
                     return;
@@ -588,7 +588,7 @@ private:
         const auto now = Steady::now();
         collect();              // 取出来自 gRPC 的新连接
         pump_sessions(now);     // 处理每个会话的状态读写
-        advance_admission(now); // 推动与 Supervisor 注册状态的更新
+        advance_admission(now); // 推动与 Pulsar 注册状态的更新
         if (fatal_) {
             return;
         }
@@ -724,7 +724,7 @@ private:
 
     Config config_;                                             // 全局配置实例.
     std::shared_ptr<Identity> identity_;                        // 节点证书和凭证管理者.
-    Id id_;                                                     // 节点自身的 ID, 首次向 Supervisor 注册后确定.
+    Id id_;                                                     // 节点自身的 ID, 首次向 Pulsar 注册后确定.
     std::unique_ptr<Policy> policy_;                            // 动态角色策略协调器.
     Logger logger_;                                             // 日志器实例, 打印格式化日志输出.
     std::shared_ptr<Wakeup> wake_ = std::make_shared<Wakeup>(); // 同步机制, 当有异步网络事件时触发.
@@ -744,7 +744,7 @@ private:
     std::vector<std::shared_ptr<Session>> sessions_;       // 主工作层, 仅由控制循环进行管理和状态推进.
     std::shared_ptr<const proto::astra::v1::Hello> hello_; // 握手用的 Hello 封包数据缓存.
     std::atomic_uint64_t next_generation_{1};              // 原子变量, 用于生成全进程唯一且递增的会话识别世代号.
-    std::unique_ptr<Admission> admission_;                 // Supervisor 交互管理器实例指针.
+    std::unique_ptr<Admission> admission_;                 // Pulsar 交互管理器实例指针.
     // 时钟先于借用它的动态状态/对时线程声明, 后于这些所有者销毁.
     Clock synchronized_clock_;
     // 自有来源和公开投影使用原生注册结构, 不再以通用 Store 作为业务占位.
@@ -785,8 +785,8 @@ private:
     std::unique_ptr<grpc::Server> server_;   // gRPC 服务监听器句柄.
     bool fatal_{};                           // 指示是否遇到了导致程序崩溃退出级别的严重错误.
     std::uint32_t candidate_round_{};        // 当前节点重新竞选和刷新角色的逻辑轮次.
-    std::uint32_t registration_failures_{};  // 与 Supervisor 通讯时连续发生错误的次数记录, 用于计算退避.
-    Steady::time_point next_registration_{}; // 下一次能够请求 Supervisor 进行验证的时钟点.
+    std::uint32_t registration_failures_{};  // 与 Pulsar 通讯时连续发生错误的次数记录, 用于计算退避.
+    Steady::time_point next_registration_{}; // 下一次能够请求 Pulsar 进行验证的时钟点.
     Steady::time_point next_dial_{};         // 流量控制: 允许发起下一次外呼请求的时间点.
     Steady::time_point next_status_{};       // 下一次定期打印节点状态的时钟点.
 };
@@ -827,7 +827,7 @@ int run_node(int argc, char** argv, Member::Role role, PolicyFactory factory) {
             return 2;
         }
 
-        // 配置通过后先验证身份材料; 进程 ID 等待 Supervisor 签发, 重连复用准入结果.
+        // 配置通过后先验证身份材料; 进程 ID 等待 Pulsar 签发, 重连复用准入结果.
         // 根据配置中指引的位置加载加密材料, 公私钥对以建立节点唯一 Identity
         auto identity = Identity::load(config->identity, config->advertise);
         if (!identity) {

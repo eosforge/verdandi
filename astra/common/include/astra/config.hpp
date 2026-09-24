@@ -44,9 +44,9 @@ struct Config {
     // 公共 TLS 默认开启, 不影响始终受保护的内部监听和对时链路.
     bool tls = true;
 
-    // supervisor: Supervisor 的远程拨号地址, 对应 --super 选项, 必填.
+    // pulsar: Pulsar 准入的远程拨号地址, 对应 --super 选项, 必填.
     // 支持 DNS 主机名或数值 IP, 且必须提供非零端口; 该选项解析阶段不联网也不执行 DNS 查询.
-    std::string supervisor;
+    std::string pulsar;
 
     // identity: 存储身份凭证材料的本地目录, 对应 --identity 选项.
     // 默认值为相对当前工作目录的 "identity", 路径长度须在 1..4096 字节.
@@ -120,11 +120,11 @@ struct Config {
     // 运行时控制循环每轮最多只会发起一次拨号, 且两次发起动作之间至少间隔 250 ms 以防拥塞, 没有独立 CLI 选项.
     std::size_t max_dials = 4;
 
-    // max_admission_request_bytes: 连接 Supervisor 发起准入请求时, 最大允许发送的消息字节数.
+    // max_admission_request_bytes: 连接 Pulsar 发起准入请求时, 最大允许发送的消息字节数.
     // 对应 --max-admission-request-bytes 选项, 默认 4096 (4KB).极小的封顶足以拦截异常大包发送.
     std::uint32_t max_admission_request_bytes = 4 * 1024;
 
-    // max_admission_response_bytes: 接收 Supervisor 准入响应时, 最大允许接收的消息字节数.
+    // max_admission_response_bytes: 接收 Pulsar 准入响应时, 最大允许接收的消息字节数.
     // 对应 --max-admission-response-bytes 选项, 默认 2097152 (2MB).足以容纳系统硬上限的拓扑名单, 防止控制面 OOM.
     std::uint32_t max_admission_response_bytes = 2 * 1024 * 1024;
 
@@ -143,11 +143,11 @@ struct Config {
     // 参数 role: 进程的角色, 决定程序名.
     static std::string help(Member::Role role);
 
-    // 解析并格式化 Supervisor 服务的网络地址.
-    // Supervisor 允许 DNS 主机, 只校验名称/端口格式, 返回规范拨号文本.
+    // 解析并格式化 Pulsar 服务的网络地址.
+    // Pulsar 允许 DNS 主机, 只校验名称/端口格式, 返回规范拨号文本.
     // value 在调用期间借用, 非零端口及主机格式不合法返回 configuration; DNS 主机文本保留原大小写.
     // 参数 value: 待解析的地址字符串.
-    static Result<std::string> format_supervisor(std::string_view value);
+    static Result<std::string> format_pulsar(std::string_view value);
 };
 
 } // namespace astra

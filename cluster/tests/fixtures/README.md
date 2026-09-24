@@ -4,7 +4,7 @@ These certificates and private keys are intentionally public test fixtures.
 They are trusted only when a test explicitly loads this fixture CA. They are
 not deployment credentials and must not be used by a deployed cluster.
 
-`supervisor` contains the test admission signing key. `star-a` through `star-d`
+`pulsar` contains the test admission signing key. `star-a` through `star-d`
 are distinct alpha deployment identities; `wrong-cluster` is authorized only
 for beta; `expired` is outside its validity interval; `rogue` has an invalid
 signature under the trusted test CA. Long validity of the other fixtures
@@ -23,7 +23,7 @@ Python/cryptography environment to renew these public fixtures. It preserves
 SANs, roles, expiration and invalid-signature scenarios. The CA private key is
 discarded after fixture generation; leaf private keys are intentionally public. No test root is installed
 into system trust. In v5, certificate URIs no longer authorize roles. Public login.json files use
-shared stars/planets accounts, and Supervisor accounts.json contains public test
+shared stars/planets accounts, and Pulsar accounts.json contains public test
 password hashes. Real Go gRPC tests verify account role authorization. The
 wrong-cluster fixture uses an unknown account; expired/rogue certificates fail
 local advertised-endpoint validation.

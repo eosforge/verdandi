@@ -7,8 +7,9 @@ namespace {
 using comet::Observer;
 using comet::detail::Selection;
 using Reply = proto::comet::v1::EphemerisWatchReply;
-constexpr std::string_view first = "00000000-0000-4000-8000-000000000001"; // 两个固定合法 UUID, 不依赖随机发生器.
-constexpr std::string_view second = "00000000-0000-4000-8000-000000000002";
+constexpr std::string_view first("\0\0\0\0\0\0\x40\0\x80\0\0\0\0\0\0\x01", 16);  // 两个固定合法 UUID 二进制, 不依赖随机发生器.
+constexpr std::string_view second("\0\0\0\0\0\0\x40\0\x80\0\0\0\0\0\0\x02", 16); // 版本/变体位固定, 其余位区分身份.
+constexpr std::string_view third("\0\0\0\0\0\0\x40\0\x80\0\0\0\0\0\0\x03", 16);  // 去重容量用例的第三个不同键.
 
 // 使用真实生成消息, 非 complete 页没有可安装位置.
 Reply page(proto::comet::v1::Mode mode, bool complete = true, std::uint64_t version = 1, std::string instance = "star-a") {
@@ -184,7 +185,7 @@ int main() {
         repair();
         identity();
         malformed();
-        comet::test::duplicates<Selection>([](auto& change, std::string_view key) { change.set_uuid(key); change.mutable_erase(); }); // Ephemeris 使用 UUID, 不能只覆盖普通 Key 域.
+        comet::test::duplicates<Selection>([](auto& change, std::string_view key) { change.set_uuid(key); change.mutable_erase(); }, {first, second, third}); // Ephemeris 使用 UUID 二进制, 不能只覆盖普通 Key 域.
         std::cout << "Ephemeris selection cases passed\n";
         return 0;
     } catch (const std::exception& error) {

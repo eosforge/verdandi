@@ -359,8 +359,10 @@ Result<void> Ledger::register_member(Member candidate, std::string_view request_
     pending.emplace(std::string(request_id), Start{principal, candidate.epoch.value});
     // node 持有提前分配的启动记录节点, 持久确认后的 map 插入无需再分配.
     auto node = pending.extract(pending.begin());
+    // format=1 的持久正文保持 64 字符摘要, 与线上 32 字节编码解耦, 避免协议优化破坏既有库恢复.
     // record 只保存当前身份正文, 启动请求作为独立索引在同一 SQLite 事务提交.
-    const auto record = Identity::encode(candidate);
+    auto record = Identity::encode(candidate);
+    record.set_principal(principal);
     // payload 在应答准备前序列化, COMMIT 成功之后不再分配或序列化成员正文.
     const auto payload = record.SerializeAsString();
     prepare(candidate, *replacement);
@@ -434,6 +436,10 @@ void Ledger::restore() {
             Database::require(principal.size() == 64 && !body.empty() && body.size() <= 1024);
             proto::orbit::v1::Member record;
             Database::require(record.ParseFromArray(body.data(), static_cast<int>(body.size())));
+            // format=1 明确保存规范文本摘要, 必须和主键一致; 仅在内存中转成当前线协议, 不改写恢复中的数据库.
+            const auto digest = Principal::parse(record.principal());
+            Database::require(digest && record.principal() == principal);
+            record.set_principal(digest->bytes.data(), digest->bytes.size());
             const auto member = decode_member(record);
             Database::require(member && member->galaxy == galaxy_ && member->principal.text() == principal);
             Database::require(++counts[static_cast<std::size_t>(member->role)] <= maximum_ && ids.insert(member->id).second && addresses.insert(member->address).second);

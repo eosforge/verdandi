@@ -221,23 +221,14 @@ Result<std::optional<Observer::View>> Selection::accept(const proto::comet::v1::
 } // namespace comet::detail
 
 namespace comet::detail {
-// Selection::valid 校验 UUID 文本形状, 不分配临时字符串.
-// uuid 为待校验文本; 规范小写才合法.
+// Selection::valid 校验 UUID 二进制形状, 不分配临时字符串.
+// uuid 为待校验的 16 字节原始 UUIDv4; 版本/变体位必须固定.
 bool Selection::valid(std::string_view uuid) noexcept {
-    if (uuid.size() != 36 || uuid[14] != '4' || (uuid[19] != '8' && uuid[19] != '9' && uuid[19] != 'a' && uuid[19] != 'b')) {
+    if (uuid.size() != 16) {
         return false;
     }
-    for (std::size_t index = 0; index < uuid.size(); ++index) {
-        const char digit = uuid[index]; // 仅接受规范小写文本, 不分配临时字符串.
-        if (index == 8 || index == 13 || index == 18 || index == 23) {
-            if (digit != '-') {
-                return false;
-            }
-        } else if (!((digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f'))) {
-            return false;
-        }
-    }
-    return true;
+    const auto bytes = reinterpret_cast<const std::uint8_t*>(uuid.data());
+    return (bytes[6] & 0xf0U) == 0x40U && (bytes[8] & 0xc0U) == 0x80U;
 }
 
 // Selection::repair 历史不足时单对象恢复, 只允许一次, 不触发共享切换.

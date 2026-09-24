@@ -22,7 +22,7 @@ inline std::string read(const std::filesystem::path& path) {
 inline std::string sign(std::string_view value, std::string_view domain = admission_signature_domain) {
 
     // pem 持有仓库公开 Ed25519 私钥文本, 不读取部署秘密或环境变量.
-    const auto pem = read(std::filesystem::path(ASTRA_FIXTURES) / "supervisor/admission.key");
+    const auto pem = read(std::filesystem::path(ASTRA_FIXTURES) / "pulsar/admission.key");
     // input 借用 pem 建立只读解析流, 其寿命严格短于 pem.
     bssl::UniquePtr<BIO> input(BIO_new_mem_buf(pem.data(), static_cast<int>(pem.size())));
     // key 独占解析后的密钥对象, 无效格式由后续检查拒绝.

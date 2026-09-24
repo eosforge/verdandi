@@ -121,6 +121,8 @@ close() 停止该 Key 的后续发布、续租和换入口恢复, 不发送 Cata
 
 服务端 UUID、来源实例、固定 Attr、可更新 Data、TTL 与操作 order 规则见 [Ephemeris 协议](../../../proto/README.md#registry). SDK 只管理自己创建的生命周期, 不接管传入的已有 UUID, Observer 读取也不产生写入句柄.
 
+Beacon::Identity.uuid 与 Observer 的精确 target 使用 16 字节原始 UUIDv4, std::string 仅作为拥有字节的容器, 内容可以包含 NUL. 应用原样传递完整长度, 不使用 strlen 或把它直接当成日志/JSON 文本; 展示时在应用边界编码. 旧的 36 字符 UUID 文本不作为当前协议的别名接受.
+
 ### 创建和身份恢复
 
 - 新 Beacon、应用进程重启或新 Client 创建对象时, 发起新 Create; 相同 APIKEY 不使其自动接管旧 UUID. 同一对象的移动、同 Star 重连或 SECRET 更新可继续使用尚未结束的原 UUID, 不因 TCP 重建就重新注册.

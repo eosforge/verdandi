@@ -109,28 +109,24 @@ constexpr Scope::ParseTableT_ Scope::InternalGenerateParseTable_(const ::_pbi::C
       ::_pbi::TcParser::GetTable<::proto::astra::v1::Scope>(),  // to_prefetch
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
-      // string spectrum = 2;
-      {::_pbi::TcParser::FastUS1,
+      // bytes spectrum = 2;
+      {::_pbi::TcParser::FastBS1,
        {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(Scope, _impl_.spectrum_)}},
-      // string sector = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes sector = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(Scope, _impl_.sector_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string sector = 1;
-      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.sector_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-      // string spectrum = 2;
-      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.spectrum_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes sector = 1;
+      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.sector_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
+      // bytes spectrum = 2;
+      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.spectrum_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     // no aux_entries
     {{
-      "\24\6\10\0\0\0\0\0"
-      "proto.astra.v1.Scope"
-      "sector"
-      "spectrum"
     }},
   };
 }
@@ -1905,8 +1901,8 @@ constexpr Repair::ParseTableT_ Repair::InternalGenerateParseTable_(const ::_pbi:
       {::_pbi::TcParser::FastMtS1,
        {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(Repair, _impl_.scope_)}},
-      // string key = 3;
-      {::_pbi::TcParser::FastUS1,
+      // bytes key = 3;
+      {::_pbi::TcParser::FastBS1,
        {26, 0, 0,
         PROTOBUF_FIELD_OFFSET(Repair, _impl_.key_)}},
       // uint64 trigger = 4;
@@ -1926,8 +1922,8 @@ constexpr Repair::ParseTableT_ Repair::InternalGenerateParseTable_(const ::_pbi:
       {PROTOBUF_FIELD_OFFSET(Repair, _impl_.domain_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
       // .proto.astra.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(Repair, _impl_.scope_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // string key = 3;
-      {PROTOBUF_FIELD_OFFSET(Repair, _impl_.key_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes key = 3;
+      {PROTOBUF_FIELD_OFFSET(Repair, _impl_.key_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // uint64 trigger = 4;
       {PROTOBUF_FIELD_OFFSET(Repair, _impl_.trigger_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
       // uint64 version = 5;
@@ -1941,9 +1937,6 @@ constexpr Repair::ParseTableT_ Repair::InternalGenerateParseTable_(const ::_pbi:
         #endif
     }},
     {{
-      "\25\0\0\3\0\0\0\0"
-      "proto.astra.v1.Repair"
-      "key"
     }},
   };
 }
@@ -2083,8 +2076,8 @@ constexpr EphemerisEntry::ParseTableT_ EphemerisEntry::InternalGenerateParseTabl
       {::_pbi::TcParser::FastMtS1,
        {10, 1, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisEntry, _impl_.scope_)}},
-      // string uuid = 2;
-      {::_pbi::TcParser::FastUS1,
+      // bytes uuid = 2;
+      {::_pbi::TcParser::FastBS1,
        {18, 0, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisEntry, _impl_.uuid_)}},
       // .proto.astra.v1.EphemerisRecord record = 3;
@@ -2096,8 +2089,8 @@ constexpr EphemerisEntry::ParseTableT_ EphemerisEntry::InternalGenerateParseTabl
     }}, {{
       // .proto.astra.v1.Scope scope = 1;
       {PROTOBUF_FIELD_OFFSET(EphemerisEntry, _impl_.scope_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // string uuid = 2;
-      {PROTOBUF_FIELD_OFFSET(EphemerisEntry, _impl_.uuid_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes uuid = 2;
+      {PROTOBUF_FIELD_OFFSET(EphemerisEntry, _impl_.uuid_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.astra.v1.EphemerisRecord record = 3;
       {PROTOBUF_FIELD_OFFSET(EphemerisEntry, _impl_.record_), _Internal::kHasBitsOffset + 2, 1, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
     }},
@@ -2114,9 +2107,6 @@ constexpr EphemerisEntry::ParseTableT_ EphemerisEntry::InternalGenerateParseTabl
         #endif
     }},
     {{
-      "\35\0\4\0\0\0\0\0"
-      "proto.astra.v1.EphemerisEntry"
-      "uuid"
     }},
   };
 }
@@ -2265,8 +2255,8 @@ constexpr EphemerisDelta::ParseTableT_ EphemerisDelta::InternalGenerateParseTabl
       {::_pbi::TcParser::FastMtS1,
        {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisDelta, _impl_.scope_)}},
-      // string uuid = 3;
-      {::_pbi::TcParser::FastUS1,
+      // bytes uuid = 3;
+      {::_pbi::TcParser::FastBS1,
        {26, 0, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisDelta, _impl_.uuid_)}},
     }}, {{
@@ -2276,8 +2266,8 @@ constexpr EphemerisDelta::ParseTableT_ EphemerisDelta::InternalGenerateParseTabl
       {PROTOBUF_FIELD_OFFSET(EphemerisDelta, _impl_.position_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
       // .proto.astra.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(EphemerisDelta, _impl_.scope_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // string uuid = 3;
-      {PROTOBUF_FIELD_OFFSET(EphemerisDelta, _impl_.uuid_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes uuid = 3;
+      {PROTOBUF_FIELD_OFFSET(EphemerisDelta, _impl_.uuid_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.astra.v1.EphemerisRecord record = 4;
       {PROTOBUF_FIELD_OFFSET(EphemerisDelta, _impl_.action_.record_), _Internal::kOneofCaseOffset + 0, 1, (0 | ::_fl::kFcOneof | ::_fl::kMessage | ::_fl::kTvTable)},
       // .proto.astra.v1.EphemerisData data = 5;
@@ -2315,9 +2305,6 @@ constexpr EphemerisDelta::ParseTableT_ EphemerisDelta::InternalGenerateParseTabl
         #endif
     }},
     {{
-      "\35\0\0\4\0\0\0\0"
-      "proto.astra.v1.EphemerisDelta"
-      "uuid"
     }},
   };
 }
@@ -4311,8 +4298,8 @@ const char descriptor_table_protodef_astra_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "\022,\n\010repaired\030\014 \001(\0132\030.proto.astra.v1.Repa"
     "iredH\000B\006\n\004body\"C\n\010Position\022&\n\006domain\030\001 \001"
     "(\0162\026.proto.astra.v1.Domain\022\017\n\007version\030\002 "
-    "\001(\004\")\n\005Scope\022\016\n\006sector\030\001 \001(\t\022\020\n\010spectrum"
-    "\030\002 \001(\t\"\007\n\005Empty\"/\n\014CatalogValue\022\r\n\005value"
+    "\001(\004\")\n\005Scope\022\016\n\006sector\030\001 \001(\014\022\020\n\010spectrum"
+    "\030\002 \001(\014\"\007\n\005Empty\"/\n\014CatalogValue\022\r\n\005value"
     "\030\001 \001(\014\022\020\n\010deadline\030\002 \001(\004\"\203\001\n\rCatalogReco"
     "rd\022\017\n\007version\030\001 \001(\004\022-\n\005value\030\002 \001(\0132\034.pro"
     "to.astra.v1.CatalogValueH\000\022*\n\twatermark\030"
@@ -4334,7 +4321,7 @@ const char descriptor_table_protodef_astra_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "ttr\030\001 \001(\014\022\014\n\004data\030\002 \001(\014\022\020\n\010deadline\030\003 \001("
     "\004\022\016\n\006update\030\004 \001(\004\022\017\n\007renewal\030\005 \001(\004\022\016\n\006tt"
     "l_ms\030\006 \001(\r\"u\n\016EphemerisEntry\022$\n\005scope\030\001 "
-    "\001(\0132\025.proto.astra.v1.Scope\022\014\n\004uuid\030\002 \001(\t"
+    "\001(\0132\025.proto.astra.v1.Scope\022\014\n\004uuid\030\002 \001(\014"
     "\022/\n\006record\030\003 \001(\0132\037.proto.astra.v1.Epheme"
     "risRecord\"h\n\021EphemerisSnapshot\022\020\n\010positi"
     "on\030\001 \001(\004\022/\n\007entries\030\002 \003(\0132\036.proto.astra."
@@ -4343,7 +4330,7 @@ const char descriptor_table_protodef_astra_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "\004\"1\n\016EphemerisLease\022\020\n\010deadline\030\001 \001(\004\022\r\n"
     "\005order\030\002 \001(\004\"\233\002\n\016EphemerisDelta\022\020\n\010posit"
     "ion\030\001 \001(\004\022$\n\005scope\030\002 \001(\0132\025.proto.astra.v"
-    "1.Scope\022\014\n\004uuid\030\003 \001(\t\0221\n\006record\030\004 \001(\0132\037."
+    "1.Scope\022\014\n\004uuid\030\003 \001(\014\0221\n\006record\030\004 \001(\0132\037."
     "proto.astra.v1.EphemerisRecordH\000\022-\n\004data"
     "\030\005 \001(\0132\035.proto.astra.v1.EphemerisDataH\000\022"
     "/\n\005lease\030\006 \001(\0132\036.proto.astra.v1.Ephemeri"
@@ -4353,7 +4340,7 @@ const char descriptor_table_protodef_astra_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "isDelta\022\014\n\004head\030\002 \001(\004\"\205\001\n\006Repair\022&\n\006doma"
     "in\030\001 \001(\0162\026.proto.astra.v1.Domain\022$\n\005scop"
     "e\030\002 \001(\0132\025.proto.astra.v1.Scope\022\013\n\003key\030\003 "
-    "\001(\t\022\017\n\007trigger\030\004 \001(\004\022\017\n\007version\030\005 \001(\004\"\341\001"
+    "\001(\014\022\017\n\007trigger\030\004 \001(\004\022\017\n\007version\030\005 \001(\004\"\341\001"
     "\n\010Repaired\022\'\n\007request\030\001 \001(\0132\026.proto.astr"
     "a.v1.Repair\022\020\n\010position\030\002 \001(\004\0220\n\007catalog"
     "\030\003 \001(\0132\035.proto.astra.v1.CatalogRecordH\000\022"
@@ -6399,23 +6386,19 @@ PROTOBUF_NOINLINE void Scope::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string sector = 1;
+  // bytes sector = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_sector().empty()) {
       const ::std::string& _s = this_._internal_sector();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.astra.v1.Scope.sector");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
-  // string spectrum = 2;
+  // bytes spectrum = 2;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_spectrum().empty()) {
       const ::std::string& _s = this_._internal_spectrum();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.astra.v1.Scope.spectrum");
-      target = stream->WriteStringMaybeAliased(2, _s, target);
+      target = stream->WriteBytesMaybeAliased(2, _s, target);
     }
   }
 
@@ -6443,17 +6426,17 @@ PROTOBUF_NOINLINE void Scope::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    // string sector = 1;
+    // bytes sector = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_sector().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_sector());
       }
     }
-    // string spectrum = 2;
+    // bytes spectrum = 2;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_spectrum().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_spectrum());
       }
     }
@@ -9116,13 +9099,11 @@ PROTOBUF_NOINLINE void EphemerisEntry::Clear() {
         stream);
   }
 
-  // string uuid = 2;
+  // bytes uuid = 2;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_uuid().empty()) {
       const ::std::string& _s = this_._internal_uuid();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.astra.v1.EphemerisEntry.uuid");
-      target = stream->WriteStringMaybeAliased(2, _s, target);
+      target = stream->WriteBytesMaybeAliased(2, _s, target);
     }
   }
 
@@ -9157,10 +9138,10 @@ PROTOBUF_NOINLINE void EphemerisEntry::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
-    // string uuid = 2;
+    // bytes uuid = 2;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_uuid().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_uuid());
       }
     }
@@ -10270,13 +10251,11 @@ PROTOBUF_NOINLINE void EphemerisDelta::Clear() {
         stream);
   }
 
-  // string uuid = 3;
+  // bytes uuid = 3;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_uuid().empty()) {
       const ::std::string& _s = this_._internal_uuid();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.astra.v1.EphemerisDelta.uuid");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+      target = stream->WriteBytesMaybeAliased(3, _s, target);
     }
   }
 
@@ -10332,10 +10311,10 @@ PROTOBUF_NOINLINE void EphemerisDelta::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
-    // string uuid = 3;
+    // bytes uuid = 3;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_uuid().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_uuid());
       }
     }
@@ -10911,13 +10890,11 @@ PROTOBUF_NOINLINE void Repair::Clear() {
         stream);
   }
 
-  // string key = 3;
+  // bytes key = 3;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_key().empty()) {
       const ::std::string& _s = this_._internal_key();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.astra.v1.Repair.key");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+      target = stream->WriteBytesMaybeAliased(3, _s, target);
     }
   }
 
@@ -10963,10 +10940,10 @@ PROTOBUF_NOINLINE void Repair::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000001fU)) {
-    // string key = 3;
+    // bytes key = 3;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_key().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_key());
       }
     }

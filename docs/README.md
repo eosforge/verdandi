@@ -17,7 +17,6 @@
 | [三域存储](../astra/common/README.md) | 原生记录、来源组、读取投影、提交与底层工具 |
 | [Pulsar](../astra/pulsar/README.md) | 登记、只读目录、SQLite 成员库、物理参考与连续时间 |
 | [Polaris](../astra/polaris/README.md) | Go/GORM 官方 SQLite 驱动、WAL 持久提交、有界历史与 Star 恢复 |
-| [Supervisor](../supervisor/README.md) | 已冻结 Go 控制服务的使用边界, 不承担当前准入 |
 | [Admin](../admin/README.md) | 真实管理入口、独立演示星图及前端开发; 完整 Orrery 暂缓 |
 | [Astrolabe](../astra/astrolabe/README.md) | Go 管理与实时观测入口、部署管理账号、Polaris 提交与凭据管理 |
 | [Comet C++](../astra/comet/cpp/README.md) | 客户端 API、所有权、恢复、计时与静态库交付 |

@@ -22,7 +22,7 @@ public:
     static std::optional<Ephemeris::Record> record(const proto::astra::v1::EphemerisRecord& message);
     // 来源事件按原生 form 编码, 续租/Data-only 不重发其他正文; 无效内部组合抛逻辑错误.
     static void delta(proto::astra::v1::CatalogDelta& message, const Origin<Catalog::Record>::Event& event);
-    static void delta(proto::astra::v1::EphemerisDelta& message, const Origin<Ephemeris::Record>::Event& event);
+    static void delta(proto::astra::v1::EphemerisDelta& message, const Origin<Ephemeris::Record, true>::Event& event);
     // 只检查完整单包结构及硬预算, 不比较当前连续位置或替代来源身份检查.
     static bool valid(const proto::astra::v1::CatalogChanges& message) noexcept;
     static bool valid(const proto::astra::v1::EphemerisChanges& message) noexcept;

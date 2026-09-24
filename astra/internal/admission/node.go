@@ -1,6 +1,7 @@
 package admission
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
@@ -111,7 +112,7 @@ func (node *Node) Register(ctx context.Context) error {
 		return err
 	}
 	member, err := node.identity.Verify(response.Admission, response.Signature)
-	if err != nil || member.Galaxy != node.request.Galaxy || member.Role != node.request.Role || member.Group != node.request.Group || member.Advertise != node.request.Advertise || member.Principal != node.identity.Principal(node.request.Galaxy, node.request.Advertise) {
+	if err != nil || member.Galaxy != node.request.Galaxy || member.Role != node.request.Role || member.Group != node.request.Group || member.Advertise != node.request.Advertise || !bytes.Equal(member.Principal, node.identity.Principal(node.request.Galaxy, node.request.Advertise)) {
 		return ErrIdentity
 	}
 	if !slicesContains(response.Members, member) {

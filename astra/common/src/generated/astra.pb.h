@@ -511,7 +511,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Scope final : public ::google::prot
     kSectorFieldNumber = 1,
     kSpectrumFieldNumber = 2,
   };
-  // string sector = 1;
+  // bytes sector = 1;
   void clear_sector() ;
   [[nodiscard]] const ::std::string& sector() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -526,7 +526,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Scope final : public ::google::prot
   ::std::string* PROTOBUF_NONNULL _internal_mutable_sector();
 
   public:
-  // string spectrum = 2;
+  // bytes spectrum = 2;
   void clear_spectrum() ;
   [[nodiscard]] const ::std::string& spectrum() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -546,7 +546,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Scope final : public ::google::prot
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<1, 2,
-                          0, 43,
+                          0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -3083,7 +3083,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Repair final : public ::google::pro
     kVersionFieldNumber = 5,
     kDomainFieldNumber = 1,
   };
-  // string key = 3;
+  // bytes key = 3;
   void clear_key() ;
   [[nodiscard]] const ::std::string& key() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3148,7 +3148,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Repair final : public ::google::pro
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 5,
-                          1, 33,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -3340,7 +3340,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisEntry final : public ::goo
     kScopeFieldNumber = 1,
     kRecordFieldNumber = 3,
   };
-  // string uuid = 2;
+  // bytes uuid = 2;
   void clear_uuid() ;
   [[nodiscard]] const ::std::string& uuid() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3390,7 +3390,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisEntry final : public ::goo
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<2, 3,
-                          2, 42,
+                          2, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -3591,7 +3591,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisDelta final : public ::goo
     kLeaseFieldNumber = 6,
     kEraseFieldNumber = 7,
   };
-  // string uuid = 3;
+  // bytes uuid = 3;
   void clear_uuid() ;
   [[nodiscard]] const ::std::string& uuid() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3720,7 +3720,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisDelta final : public ::goo
   inline void clear_has_action();
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<2, 7,
-                          5, 42,
+                          5, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -7590,7 +7590,7 @@ inline void Position::_internal_set_version(::uint64_t value) {
 
 // Scope
 
-// string sector = 1;
+// bytes sector = 1;
 inline void Scope::clear_sector() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.sector_.ClearToEmpty();
@@ -7605,7 +7605,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Scope::set_sector(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.sector_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.sector_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.astra.v1.Scope.sector)
 }
 inline ::std::string* PROTOBUF_NONNULL Scope::mutable_sector()
@@ -7654,7 +7654,7 @@ inline void Scope::set_allocated_sector(::std::string* PROTOBUF_NULLABLE value) 
   // @@protoc_insertion_point(field_set_allocated:proto.astra.v1.Scope.sector)
 }
 
-// string spectrum = 2;
+// bytes spectrum = 2;
 inline void Scope::clear_spectrum() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.spectrum_.ClearToEmpty();
@@ -7669,7 +7669,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Scope::set_spectrum(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.spectrum_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.spectrum_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.astra.v1.Scope.spectrum)
 }
 inline ::std::string* PROTOBUF_NONNULL Scope::mutable_spectrum()
@@ -9210,7 +9210,7 @@ inline void EphemerisEntry::set_allocated_scope(::proto::astra::v1::Scope* PROTO
   // @@protoc_insertion_point(field_set_allocated:proto.astra.v1.EphemerisEntry.scope)
 }
 
-// string uuid = 2;
+// bytes uuid = 2;
 inline void EphemerisEntry::clear_uuid() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uuid_.ClearToEmpty();
@@ -9225,7 +9225,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void EphemerisEntry::set_uuid(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.uuid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.uuid_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.astra.v1.EphemerisEntry.uuid)
 }
 inline ::std::string* PROTOBUF_NONNULL EphemerisEntry::mutable_uuid()
@@ -9749,7 +9749,7 @@ inline void EphemerisDelta::set_allocated_scope(::proto::astra::v1::Scope* PROTO
   // @@protoc_insertion_point(field_set_allocated:proto.astra.v1.EphemerisDelta.scope)
 }
 
-// string uuid = 3;
+// bytes uuid = 3;
 inline void EphemerisDelta::clear_uuid() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uuid_.ClearToEmpty();
@@ -9764,7 +9764,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void EphemerisDelta::set_uuid(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.uuid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.uuid_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.astra.v1.EphemerisDelta.uuid)
 }
 inline ::std::string* PROTOBUF_NONNULL EphemerisDelta::mutable_uuid()
@@ -10355,7 +10355,7 @@ inline void Repair::set_allocated_scope(::proto::astra::v1::Scope* PROTOBUF_NULL
   // @@protoc_insertion_point(field_set_allocated:proto.astra.v1.Repair.scope)
 }
 
-// string key = 3;
+// bytes key = 3;
 inline void Repair::clear_key() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.key_.ClearToEmpty();
@@ -10370,7 +10370,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Repair::set_key(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.key_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.key_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.astra.v1.Repair.key)
 }
 inline ::std::string* PROTOBUF_NONNULL Repair::mutable_key()

@@ -29,7 +29,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Supervisor 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
+// Pulsar 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
 type AdmissionClient interface {
 	Register(ctx context.Context, in *RegistrationRequest, opts ...grpc.CallOption) (*RegistrationResponse, error)
 	// 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.
@@ -68,7 +68,7 @@ func (c *admissionClient) List(ctx context.Context, in *DirectoryRequest, opts .
 // All implementations must embed UnimplementedAdmissionServer
 // for forward compatibility.
 //
-// Supervisor 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
+// Pulsar 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
 type AdmissionServer interface {
 	Register(context.Context, *RegistrationRequest) (*RegistrationResponse, error)
 	// 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.

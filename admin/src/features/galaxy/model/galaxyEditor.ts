@@ -97,7 +97,7 @@ export function galaxyFromDraft(draft: GalaxyDraft): GalaxyData {
     links,
     ...(draft.pulsar.enabled ? { centerStarId: draft.pulsar.id } : {}),
     sourceLabel: "自定义演示",
-    description: "本地生成的星图, 未接入 Supervisor. 所有恒星（含黑洞状态）参与共同公转与等权质心布局; 黑洞状态不显示卫星或连线.",
+    description: "本地生成的星图, 未接入准入服务. 所有恒星（含黑洞状态）参与共同公转与等权质心布局; 黑洞状态不显示卫星或连线.",
   };
   validateGalaxyData(data);
   return data;

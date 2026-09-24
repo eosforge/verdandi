@@ -42,11 +42,11 @@ pub(crate) fn config(role: &str, supervisor: SocketAddr) -> PeerConfig {
     config
 }
 pub(crate) fn signed(member: &Member) -> io::Result<Hello> {
-    let pem = std::fs::read(fixture("supervisor").join("admission.key"))?;
+    let pem = std::fs::read(fixture("pulsar").join("admission.key"))?;
     let key = rustls_pemfile::private_key(&mut pem.as_slice())?.ok_or_else(|| io::Error::other("missing fixture key"))?;
     let key = Ed25519KeyPair::from_pkcs8_maybe_unchecked(key.secret_der()).map_err(|_| io::Error::other("invalid fixture key"))?;
     // 公开夹具使用 PKCS#8 v1, 公钥不嵌入私钥文件, 因而显式核对独立公钥.
-    let public = std::fs::read(fixture("supervisor").join("admission.pub"))?;
+    let public = std::fs::read(fixture("pulsar").join("admission.pub"))?;
     if key.public_key().as_ref() != public {
         return Err(io::Error::other("fixture signing key mismatch"));
     }
@@ -103,7 +103,7 @@ impl Supervisor {
         signed(&Member::default())?;
         let listener = TcpListener::bind(address).await?;
         let address = listener.local_addr()?;
-        let identity = Arc::new(Identity::load(&fixture("supervisor"))?);
+        let identity = Arc::new(Identity::load(&fixture("pulsar"))?);
         let state = Arc::new(Mutex::new(Model::default()));
         let cancellation = CancellationToken::new();
         let (model, token) = (state.clone(), cancellation.clone());

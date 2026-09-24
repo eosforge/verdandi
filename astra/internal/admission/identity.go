@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -131,10 +130,10 @@ func (identity *Identity) Server() *tls.Config { return identity.server.Clone() 
 // Username 用于权威库固定部署绑定, 不暴露密码.
 func (identity *Identity) Username() string { return identity.username }
 
-// Principal 与 C++/旧 Go 保持同一字节序列, 密码轮换不会改变部署槽位.
-func (identity *Identity) Principal(galaxy, advertise string) string {
+// Principal 与 C++ 保持同一字节序列, 返回原始 32 字节摘要, 密码轮换不会改变部署槽位.
+func (identity *Identity) Principal(galaxy, advertise string) []byte {
 	digest := sha256.Sum256([]byte(identity.username + "\x00" + galaxy + "\x00" + advertise))
-	return hex.EncodeToString(digest[:])
+	return digest[:]
 }
 
 // Verify 验证原始签名字节和完整身份格式; 当前性仍由 Directory 的已知替换关系判定.
@@ -155,13 +154,8 @@ func (identity *Identity) Verify(data, signature []byte) (*orbit.Member, error) 
 
 // Valid 只检查格式, 不把结构有效的成员当成已经通过签名或当前身份验证.
 func Valid(member *orbit.Member) bool {
-	if member == nil || !Name(member.Galaxy) || !Name(member.Group) || len(member.Id) == 0 || len(member.Id) > 128 || !utf8.ValidString(member.Id) || member.Epoch == 0 || !Role(member.Role) || len(member.Principal) != 64 {
+	if member == nil || !Name(member.Galaxy) || !Name(member.Group) || len(member.Id) == 0 || len(member.Id) > 128 || !utf8.Valid(member.Id) || member.Epoch == 0 || !Role(member.Role) || len(member.Principal) != 32 {
 		return false
-	}
-	for _, char := range member.Principal {
-		if !(char >= '0' && char <= '9' || char >= 'a' && char <= 'f') {
-			return false
-		}
 	}
 	_, err := Endpoint(member.Advertise)
 	return err == nil

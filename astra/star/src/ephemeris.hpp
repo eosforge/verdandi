@@ -67,9 +67,9 @@ public:
         bool visible{};
     };
 
-    // 验证规范小写 UUIDv4, 无格式化/分配; 不接受文本别名, 不将非法 UUID 当作全范围.
+    // 验证 16 字节原始 UUIDv4 二进制的版本/变体位, 无格式化/分配; 不接受文本别名, 不将非法 UUID 当作全范围.
     static bool valid(std::string_view uuid) noexcept;
-    // 仅 Create 调用可靠系统随机源并格式化一次; 失败抛 system_error, 不降级伪随机.
+    // 仅 Create 调用可靠系统随机源并固定版本/变体位一次; 失败抛 system_error, 不降级伪随机.
     static std::string uuid();
     // 验证并准备新的完整注册. attr/data 移交共享引用, reading 必须在最终提交保护内读取.
     static std::expected<Record, Error> create(Value attr, Value data, std::uint32_t ttl, const Clock::Reading& reading) noexcept;

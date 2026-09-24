@@ -12,7 +12,7 @@ NAMES = ("astra", "orbit", "comet", "pulsar", "polaris")
 
 
 def main():
-    """每个协议使用独立 Go 包, 不把新业务消息混入冻结 Supervisor 的旧 wire 包."""
+    """每个协议使用独立 Go 包, 不把新业务消息混入旧 wire 包."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",

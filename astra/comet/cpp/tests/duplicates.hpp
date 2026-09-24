@@ -11,9 +11,8 @@ namespace comet::test {
 // 三域共同的跨页去重边界: 满额后重复项仍报协议错误, 新项报容量错误, 二者都不发布半批.
 // erase 只填写对应域的键和 Delete 分支; Policy 使用各自真实生成消息和安装器.
 template <class Policy>
-void duplicates(auto&& erase) {
+void duplicates(auto&& erase, const std::array<std::string_view, 3>& keys = {"key-alpha-0001", "key-alpha-0002", "key-alpha-0003"}) {
 
-    constexpr std::array<std::string_view, 3> keys{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002", "00000000-0000-4000-8000-000000000003"}; // 同时是合法普通 Key 和 UUID.
     std::array<std::size_t, 2> peaks{};                                                                                                                                     // 同一缺失 Delete, 分别按单页完整批次和跨页批次比较准备计费.
     for (const bool split : {false, true}) {
         std::size_t peak{}; // 只记录共享预算真正观察到的峰值, 不读取安装器私有字段.

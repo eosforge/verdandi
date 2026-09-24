@@ -101,7 +101,7 @@ using Steady = std::chrono::steady_clock;
 // Milliseconds: 毫秒级别的时间间隔, 广泛用于超时配置.
 using Milliseconds = std::chrono::milliseconds;
 
-// Supervisor 签发的不透明字符串, 只比较原值, 不解释编码格式或版本位.
+// Pulsar 签发的不透明字符串, 只比较原值, 不解释编码格式或版本位.
 // 用于全局唯一标识一个节点或实体的 ID.
 using Id = std::string;
 
@@ -159,7 +159,7 @@ struct Endpoint {
 // 角色状态持有这个独立值, 不持有生成消息的引用或密码材料.
 // 描述系统中一个成员的完整拓扑信息.
 struct Member {
-    // 成员代次由 Supervisor 签发, 会话代次由本进程分配, 类型分开以阻止误用.
+    // 成员代次由 Pulsar 签发, 会话代次由本进程分配, 类型分开以阻止误用.
     // 用于在分布式环境下识别数据的时序和新鲜度.
     struct Epoch {
         // value: 代表代次的 64 位无符号整数, 默认值为 0.

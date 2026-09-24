@@ -1,6 +1,7 @@
 package admission
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"sync"
@@ -38,14 +39,14 @@ func (directory *Directory) Install(members []*orbit.Member) error {
 	}
 	prepared := make(map[string]*orbit.Member, len(members))
 	addresses := make(map[string]bool, len(members))
-	previous := ""
+	var previous []byte
 	for index, member := range members {
-		if !Valid(member) || member.Galaxy != directory.galaxy || directory.role != orbit.Role_ROLE_ASTROLABE && member.Role != orbit.Role_ROLE_STAR && member.Role != orbit.Role_ROLE_POLARIS || index != 0 && previous >= member.Id || prepared[member.Principal] != nil || addresses[member.Advertise] {
+		if !Valid(member) || member.Galaxy != directory.galaxy || directory.role != orbit.Role_ROLE_ASTROLABE && member.Role != orbit.Role_ROLE_STAR && member.Role != orbit.Role_ROLE_POLARIS || index != 0 && bytes.Compare(previous, member.Id) >= 0 || prepared[string(member.Principal)] != nil || addresses[member.Advertise] {
 			return ErrIdentity
 		}
 		previous = member.Id
 		addresses[member.Advertise] = true
-		prepared[member.Principal] = proto.Clone(member).(*orbit.Member)
+		prepared[string(member.Principal)] = proto.Clone(member).(*orbit.Member)
 	}
 	directory.mutex.Lock()
 	defer directory.mutex.Unlock()
@@ -55,7 +56,7 @@ func (directory *Directory) Install(members []*orbit.Member) error {
 			prepared[principal] = old
 			continue
 		}
-		if incoming.Epoch == old.Epoch && !same(incoming, old) || incoming.Role != old.Role || incoming.Advertise != old.Advertise || incoming.Epoch > old.Epoch && incoming.Id == old.Id {
+		if incoming.Epoch == old.Epoch && !same(incoming, old) || incoming.Role != old.Role || incoming.Advertise != old.Advertise || incoming.Epoch > old.Epoch && bytes.Equal(incoming.Id, old.Id) {
 			return ErrIdentity
 		}
 	}
@@ -66,10 +67,10 @@ func (directory *Directory) Install(members []*orbit.Member) error {
 	clear(addresses)
 	ids := make(map[string]bool, len(prepared))
 	for _, member := range prepared {
-		if addresses[member.Advertise] || ids[member.Id] {
+		if addresses[member.Advertise] || ids[string(member.Id)] {
 			return ErrIdentity
 		}
-		addresses[member.Advertise], ids[member.Id] = true, true
+		addresses[member.Advertise], ids[string(member.Id)] = true, true
 	}
 	directory.known = prepared
 	return nil
@@ -79,9 +80,9 @@ func (directory *Directory) Install(members []*orbit.Member) error {
 func (directory *Directory) observe(member *orbit.Member) error {
 	directory.mutex.Lock()
 	defer directory.mutex.Unlock()
-	old := directory.known[member.Principal]
+	old := directory.known[string(member.Principal)]
 	if old != nil {
-		if member.Epoch < old.Epoch || member.Epoch == old.Epoch && !same(member, old) || member.Role != old.Role || member.Advertise != old.Advertise || member.Epoch > old.Epoch && member.Id == old.Id {
+		if member.Epoch < old.Epoch || member.Epoch == old.Epoch && !same(member, old) || member.Role != old.Role || member.Advertise != old.Advertise || member.Epoch > old.Epoch && bytes.Equal(member.Id, old.Id) {
 			return ErrIdentity
 		}
 		if same(member, old) {
@@ -91,11 +92,11 @@ func (directory *Directory) observe(member *orbit.Member) error {
 		return status.Error(codes.ResourceExhausted, "Directory capacity exceeded")
 	}
 	for principal, known := range directory.known {
-		if principal != member.Principal && (known.Id == member.Id || known.Advertise == member.Advertise) {
+		if principal != string(member.Principal) && (bytes.Equal(known.Id, member.Id) || known.Advertise == member.Advertise) {
 			return ErrIdentity
 		}
 	}
-	directory.known[member.Principal] = proto.Clone(member).(*orbit.Member)
+	directory.known[string(member.Principal)] = proto.Clone(member).(*orbit.Member)
 	return nil
 }
 
@@ -131,7 +132,7 @@ func (directory *Directory) Current(member *orbit.Member) bool {
 	}
 	directory.mutex.RLock()
 	defer directory.mutex.RUnlock()
-	return same(directory.known[member.Principal], member)
+	return same(directory.known[string(member.Principal)], member)
 }
 
 // Members 返回独立消息副本, 调用方不能修改目录; 结果按 ID 稳定排序, 不表示实时健康.
@@ -143,18 +144,12 @@ func (directory *Directory) Members() []*orbit.Member {
 		result = append(result, proto.Clone(member).(*orbit.Member))
 	}
 	slices.SortFunc(result, func(a, b *orbit.Member) int {
-		if a.Id < b.Id {
-			return -1
-		}
-		if a.Id > b.Id {
-			return 1
-		}
-		return 0
+		return bytes.Compare(a.Id, b.Id)
 	})
 	return result
 }
 
 // same 比较已经校验的业务身份字段, 未知 Protobuf 字段不成为新的身份代次.
 func same(a, b *orbit.Member) bool {
-	return a != nil && b != nil && a.Galaxy == b.Galaxy && a.Id == b.Id && a.Principal == b.Principal && a.Advertise == b.Advertise && a.Epoch == b.Epoch && a.Role == b.Role && a.Group == b.Group
+	return a != nil && b != nil && a.Galaxy == b.Galaxy && bytes.Equal(a.Id, b.Id) && bytes.Equal(a.Principal, b.Principal) && a.Advertise == b.Advertise && a.Epoch == b.Epoch && a.Role == b.Role && a.Group == b.Group
 }

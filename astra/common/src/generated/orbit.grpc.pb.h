@@ -32,7 +32,7 @@ namespace proto {
 namespace orbit {
 namespace v1 {
 
-// Supervisor 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
+// Pulsar 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
 class Admission final {
  public:
   static constexpr char const* service_full_name() {

@@ -215,7 +215,7 @@ std::optional<Member> PlanetUpstream::due(Steady::time_point now) {
     // 当所有非隔离的候选节点都已经被尝试过了 (attempted == true 或者是 quarantined)，
     // 这意味着当前一轮的所有尝试均已耗尽。
     if (std::ranges::all_of(candidates_, [](const Candidate& c) { return c.attempted || c.quarantined; })) {
-        // 标记需要向外请求刷新上游名单（如果 Supervisor 掉线，这一步可能收不到响应）。
+        // 标记需要向外请求刷新上游名单（如果 Pulsar 掉线，这一步可能收不到响应）。
         refresh_ = true;
         // 重置所有候选节点的 attempted 标志，从而开启新一轮的尝试循环。
         for (auto& candidate : candidates_) {

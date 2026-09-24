@@ -273,29 +273,31 @@ void snapshot() {
 // Ephemeris 使用相同来源位置机制但原生载荷结构不同, 不通过同一 KV schema 串接两个 Buffer.
 void native() {
 
+    constexpr std::string_view uuid("\0\0\0\0\0\0\x40\0\x80\0\0\0\0\0\0\x09", 16); // 二进制 Key 同样走版本/变体位门卫, 不接受文本别名.
+    using ESource = astra::Origin<Ephemeris::Record, true>; // 模板实参逗号不能进单参 CHECK, 此处统一别名.
     const auto gate = std::make_shared<std::shared_mutex>();
-    astra::Origin<Ephemeris::Record> source(gate, measure, true);
+    ESource source(gate, measure, true);
     const auto now = std::chrono::steady_clock::now();
     const Ephemeris::Record initial{std::make_shared<const Ephemeris::Buffer>(3), std::make_shared<const Ephemeris::Buffer>(7), Clock::Time(10s), 0, 0, 1000};
-    std::optional<astra::Origin<Ephemeris::Record>::View> frozen;
+    std::optional<ESource::View> frozen;
     {
-        astra::Origin<Ephemeris::Record>::Retired retired;
+        ESource::Retired retired;
         const std::lock_guard lock(*gate);
-        auto edit = source.prepare({"services", "main"}, "uuid", initial, 1, now);
+        auto edit = source.prepare({"services", "main"}, uuid, initial, 1, now);
         CHECK(edit);
         retired = edit->commit();
         frozen = source.capture();
     }
     {
-        astra::Origin<Ephemeris::Record>::Retired retired;
+        ESource::Retired retired;
         const std::lock_guard lock(*gate);
         auto next = initial; // 仅续租 metadata 变化, 原正文仍共享, 旧来源快照固定原截止.
         next.deadline = Clock::Time(20s);
         next.renewal = 1;
-        auto edit = source.prepare({"services", "main"}, "uuid", next, 2, now, astra::Origin<Ephemeris::Record>::Form::renew);
+        auto edit = source.prepare({"services", "main"}, uuid, next, 2, now, ESource::Form::renew);
         CHECK(edit);
         retired = edit->commit();
-        CHECK(source.replay(1)->front().form == astra::Origin<Ephemeris::Record>::Form::renew);
+        CHECK(source.replay(1)->front().form == ESource::Form::renew);
     }
     frozen->each([&](const auto&, const auto&, const auto& value) {
         CHECK(value.attr == initial.attr && value.data == initial.data && value.deadline == initial.deadline && value.renewal == 0);

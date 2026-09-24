@@ -123,7 +123,7 @@ Result<std::shared_ptr<Core>> Core::prepare(Client::Options options) {
     }
     std::set<std::string> endpoints; // 冷启动去重与规范化, 不作为运行时逐 RPC 地址选择器.
     for (auto& endpoint : options.endpoints) {
-        auto normalized = astra::Config::format_supervisor(endpoint);
+        auto normalized = astra::Config::format_pulsar(endpoint);
         if (!normalized || !endpoints.insert(*normalized).second) {
             return invalid();
         }

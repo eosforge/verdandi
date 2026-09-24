@@ -275,7 +275,7 @@ func TestCommit(t *testing.T) {
 }
 
 func TestSnapshot(t *testing.T) {
-	scope := &comet.Scope{Sector: "routes", Spectrum: "main"}
+	scope := &comet.Scope{Sector: []byte("routes"), Spectrum: []byte("main")}
 	backend := &backend{pages: []*polaris.Snapshot{{Scope: scope, Version: proto.Uint64(7), Entries: []*comet.AlmanacChange{{Key: "key", Action: &comet.AlmanacChange_Value{Value: []byte{}}}}}, {Scope: scope, Version: proto.Uint64(7), Complete: true}}}
 	server := server(t, backend)
 	cookie := login(t, server)

@@ -2,7 +2,7 @@
 #include "topology.hpp"
 #include <astra/runtime.hpp>
 
-// Star 入口只能被指定并选择运行 Star 策略, 账号认证以及授权信息仍交由 Supervisor 组件独立校验.
+// Star 入口只能被指定并选择运行 Star 策略, 账号认证以及授权信息仍交由 Pulsar 组件独立校验.
 // main 函数的主要职责就是将接收到的命令行参数 argc 和 argv,
 // 连同固定写死的 astra::Member::Role::star 角色和 astra::make_star 工厂方法,
 // 一并透传给 astra::run_node 去执行节点核心循环.

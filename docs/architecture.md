@@ -14,7 +14,7 @@
 | Orrery | 管理与星图界面 | 由 admin/ 继续演进, 完整真实界面暂缓 |
 | Planet / Moon | 中继、边缘接入与聚合 | 提案阶段, 不作为本轮业务闭环的前置依赖 |
 
-取消架构级 standalone 降级分支. 单机或 All-in-One 只作为部署形态, 使用同一组核心组件和协议; 不因部署在同机就绕过内部初始化链路. 旧 Go Supervisor 和既有 Planet 骨架的存在, 不代表它们是新业务架构的新增实现范围.
+取消架构级 standalone 降级分支. 单机或 All-in-One 只作为部署形态, 使用同一组核心组件和协议; 不因部署在同机就绕过内部初始化链路. 既有 Planet 骨架的存在, 不代表它是新业务架构的新增实现范围. 已删除的 Go Supervisor 只从 Git 历史查阅.
 
 Polaris 已确认使用 GORM 官方 CGO SQLite 驱动与 WAL + synchronous=FULL, 持久提交、连接配置及恢复要求只在 [Polaris](../astra/polaris/README.md#sqlite) 定义. Pulsar 的独立成员库仍使用 DELETE + EXTRA; 两者不共享数据库或驱动层.
 

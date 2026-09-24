@@ -32,7 +32,7 @@ namespace proto {
 namespace astra {
 namespace v1 {
 
-// Star/Planet 的互联传输. Supervisor 准入使用 orbit.proto 中的 gRPC 接口.
+// Star/Planet 的互联传输. Pulsar 准入使用 orbit.proto 中的 gRPC 接口.
 //
 // 每对 Star 保留一条双向逻辑会话. 双方第一条均为 Hello, 后续消息由当前阶段验证.
 // 相反方向的竞争按发起方身份裁决, 不依赖底层连接是否复用.

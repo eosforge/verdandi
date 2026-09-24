@@ -3,6 +3,7 @@ package admission
 import (
 	"crypto/ed25519"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"os"
@@ -31,7 +32,7 @@ func identity(t *testing.T) *Identity {
 // sign 使用公开夹具 Ed25519 私钥, prefix 可显式指定以验证跨域拒绝.
 func sign(t *testing.T, data []byte, prefix string) []byte {
 	t.Helper()
-	dataKey, err := os.ReadFile(fixture("supervisor/admission.key"))
+	dataKey, err := os.ReadFile(fixture("pulsar/admission.key"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +55,11 @@ func sign(t *testing.T, data []byte, prefix string) []byte {
 func TestIdentity(t *testing.T) {
 	t.Parallel()
 	identity := identity(t)
-	if identity.Principal("alpha", "127.0.0.1:7443") != "40ff2c81b912f4ba03daa166aa9ad70a81d80c2b1c33e85cf9e2c18e43a072dd" {
+	if hex.EncodeToString(identity.Principal("alpha", "127.0.0.1:7443")) != "40ff2c81b912f4ba03daa166aa9ad70a81d80c2b1c33e85cf9e2c18e43a072dd" {
 		t.Fatal("principal differs from cross-language vector")
 	}
 	for _, role := range []orbit.Role{orbit.Role_ROLE_STAR, orbit.Role_ROLE_PLANET, orbit.Role_ROLE_POLARIS, orbit.Role_ROLE_ASTROLABE} {
-		member := &orbit.Member{Galaxy: "alpha", Id: "opaque/星体\n", Principal: identity.Principal("alpha", "127.0.0.1:7443"), Advertise: "127.0.0.1:7443", Epoch: 1, Role: role, Group: "default"}
+		member := &orbit.Member{Galaxy: "alpha", Id: []byte("opaque/星体\n"), Principal: identity.Principal("alpha", "127.0.0.1:7443"), Advertise: "127.0.0.1:7443", Epoch: 1, Role: role, Group: "default"}
 		data, err := proto.Marshal(member)
 		if err != nil {
 			t.Fatal(err)
@@ -79,6 +80,22 @@ func TestIdentity(t *testing.T) {
 		member.Role = orbit.Role(99)
 		if Valid(member) {
 			t.Fatal("unknown role became valid")
+		}
+		// bytes 字段允许任意原始编码, 准入层仍须与 C++ 一致地拒绝畸形 UTF-8.
+		member.Role = role
+		for _, invalid := range [][]byte{{0xff}, {0xc0, 0x80}, {0xed, 0xa0, 0x80}, {0xf4, 0x90, 0x80, 0x80}, {0xe4, 0xb8}} {
+			member.Id = invalid
+			data, err := proto.Marshal(member)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := identity.Verify(data, sign(t, data, "proto.orbit.v1.admission\x00")); err == nil {
+				t.Fatal("accepted invalid UTF-8 member ID")
+			}
+		}
+		member.Id = []byte{'a', 0, 'b'}
+		if !Valid(member) {
+			t.Fatal("rejected valid UTF-8 containing NUL")
 		}
 	}
 	if _, err := Load(fixture("expired"), "127.0.0.1:7443"); err == nil {

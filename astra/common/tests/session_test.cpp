@@ -19,7 +19,8 @@ std::shared_ptr<proto::astra::v1::Hello> hello(const Identity& identity) {
     member.set_group("default");
     member.set_id("00000001000040008000000000000000");
     member.set_advertise("127.0.0.1:7443");
-    member.set_principal(identity.principal(member.galaxy(), member.advertise()).text());
+    const auto digest = identity.principal(member.galaxy(), member.advertise());
+    member.set_principal(digest.bytes.data(), digest.bytes.size());
     member.set_epoch(1);
     member.set_role(proto::orbit::v1::ROLE_STAR);
     // result 共享不可变握手内容, 使用真实测试签名供会话层验证.

@@ -16,7 +16,7 @@ public:
     struct Identity {
         Scope scope;                                      // 本对象固定分组, 不含内部 __ 范围.
         std::string instance;                             // 接纳此 UUID 的 Star, 切换实例必须重新 Create.
-        std::string uuid;                                 // Star 签发的规范小写 UUIDv4, 未确认时不对外提供 Identity.
+        std::string uuid;                                 // Star 签发的 16 字节原始 UUIDv4, 可含 NUL, 未确认时不提供 Identity.
         bool operator==(const Identity&) const = default; // 只比较身份, 不包含 Session 或 TCP 连接.
     };
 

@@ -3,6 +3,7 @@
 #include "check.hpp"
 #include "ephemeris_edition.hpp"
 #include "progress.hpp"
+#include "watch_kernel.hpp"
 #include <algorithm>
 #include <iostream>
 #include <limits>
@@ -15,6 +16,62 @@ using astra::Catalog;
 using astra::Clock;
 using astra::Ephemeris;
 using astra::Scope;
+
+// 只提供调度所需字段, 不依赖 gRPC; 拥有者必须在两个侵入式索引清除后才释放对象.
+struct Pending : std::enable_shared_from_this<Pending> {
+    bool queued{};                      // 就绪标志, 初始未入队.
+    Pending* next{};                    // 就绪后继, 与在途链独立.
+    std::atomic_bool busy{true};        // 模拟未完成的网络写入, false 时扫描不能再次唤醒.
+    astra::Watch<Pending>::Link flight; // 在途链, 初始为空.
+};
+
+// 重复入队、任意摘除、超时扫描及取消后的残留就绪通知互不破坏生命周期.
+void scheduling() {
+
+    astra::Watch<Pending> queue;              // 本例单线程模拟拥有者索引锁.
+    auto first = std::make_shared<Pending>(); // 三个独立拥有节点, 用于覆盖头/中间/尾删除.
+    auto middle = std::make_shared<Pending>();
+    auto last = std::make_shared<Pending>();
+    const auto now = std::chrono::steady_clock::now(); // 固定时间基线, 测试不实际休眠.
+    auto deadline = now;                               // 首次扫描立即到期.
+    unsigned wakes{};                                  // 扫描要求调度的次数, 无就绪流时不得增加.
+    auto wake = [&] { ++wakes; };                      // 不重入 queue, 与生产唤醒约束一致.
+    static_assert(noexcept(queue.write(*first)) && noexcept(queue.settle(*first)));
+    CHECK(queue.idle() && !queue.pop());
+
+    for (const auto& stream : {first, middle, last}) {
+        queue.enqueue(*stream);
+        queue.enqueue(*stream);
+        queue.write(*stream);
+        queue.write(*stream);
+    }
+    CHECK(queue.pop() == first && queue.pop() == middle && queue.pop() == last && queue.idle());
+    queue.settle(*middle); // 移除中间节点, 其余两个仍可扫描.
+    queue.settle(*middle); // 幂等清理不误摘除邻居.
+    queue.sweep(now, deadline, wake);
+    CHECK(wakes == 1 && queue.pop() == last && queue.pop() == first && queue.idle());
+    queue.sweep(now, deadline, wake);
+    CHECK(wakes == 1 && queue.idle());
+
+    queue.settle(*last);  // 摘除链头.
+    queue.settle(*first); // 摘除最后一项.
+    queue.sweep(now + 1s, deadline, wake);
+    CHECK(wakes == 1 && queue.idle());
+    queue.write(*middle); // 已清理节点允许再利用.
+    middle->busy.store(false);
+    queue.sweep(now + 2s, deadline, wake);
+    CHECK(wakes == 1 && queue.idle());
+    middle->busy.store(true);
+    queue.sweep(now + 3s, deadline, wake);
+    queue.settle(*middle);   // OnDone 先摘除在途, 就绪通知仍保留供拥有者收尾.
+    auto held = queue.pop(); // pop 返回强引用, 不借用将被删除的拥有索引.
+    middle.reset();
+    CHECK(held && !held->queued && !held->next && !held->flight.previous && !held->flight.next);
+    CHECK(queue.idle());
+    CHECK(!astra::Watch<Pending>::exceeds(3, 4, 7));
+    CHECK(astra::Watch<Pending>::exceeds(8, 0, 7));
+    CHECK(astra::Watch<Pending>::exceeds(1, std::numeric_limits<std::size_t>::max(), 7));
+}
 
 // Scope 轮转只依赖拥有索引, 不借用 RPC 状态; 覆盖慢范围、公平调度、取消及遍历期间的新提交.
 void progress() {
@@ -280,10 +337,11 @@ int main() {
     try {
         pages<Catalog>([](auto& state, const Scope& scope, unsigned index) { return state.publish(scope, std::to_string(index), bytes("value"), 1, 1000); });
         pages<Ephemeris>([](auto& state, const Scope& scope, unsigned) { return state.create(scope, bytes("attr"), bytes("data"), 1000); });
+        scheduling();
         progress();
         payload();
         boundaries<Catalog>("key", [](Catalog::Value value) { return Catalog::State::Content{1, std::move(value)}; });
-        boundaries<Ephemeris>("00112233-4455-4677-8899-aabbccddeeff", [](Ephemeris::Value value) { return Ephemeris::State::Content{bytes("fixed"), std::move(value)}; });
+        boundaries<Ephemeris>(std::string("\x00\x11\x22\x33\x44\x55\x46\x77\x88\x99\xaa\xbb\xcc\xdd\xee\xff", 16), [](Ephemeris::Value value) { return Ephemeris::State::Content{bytes("fixed"), std::move(value)}; });
         collapse();
         delta();
         empty();

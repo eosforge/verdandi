@@ -29,7 +29,7 @@ public:
     using API = Observer;                                // 本投影的公共读取接口.
     using Reply = proto::comet::v1::EphemerisWatchReply; // 私有具体下行消息.
     using Service = proto::comet::v1::Ephemeris;         // 私有生成 Watch 服务.
-    static bool valid(std::string_view uuid) noexcept;   // 只接受小写 RFC UUIDv4 文本, 不在热路径格式化.
+    static bool valid(std::string_view uuid) noexcept;   // 只接受 16 字节 UUIDv4 二进制, 不在热路径格式化.
     bool repair(Error::Code code) noexcept;              // 缺少 Attr 最多允许一次新快照回退, 其他错误立即失败.
     bool resume() const noexcept;                        // 回退期间省略恢复版本, 仍保留旧完整视图供应用读取.
     // scope/target 已由工厂作外部边界检查, bytes/records 为本地安装预算.

@@ -46,7 +46,7 @@ func (issuer *issuer) sign(member *orbit.Member) *astra.Hello {
 
 // Register 回应测试节点的真实部署绑定, 不让接收端跳过 TLS 或准入验签.
 func (issuer *issuer) Register(_ context.Context, request *orbit.RegistrationRequest) (*orbit.RegistrationResponse, error) {
-	member := &orbit.Member{Galaxy: request.Galaxy, Id: "polaris", Principal: issuer.identity.Principal(request.Galaxy, request.Advertise), Epoch: 1, Advertise: request.Advertise, Role: request.Role, Group: request.Group}
+	member := &orbit.Member{Galaxy: request.Galaxy, Id: []byte("polaris"), Principal: issuer.identity.Principal(request.Galaxy, request.Advertise), Epoch: 1, Advertise: request.Advertise, Role: request.Role, Group: request.Group}
 	hello := issuer.sign(member)
 	return &orbit.RegistrationResponse{Members: []*orbit.Member{member}, Admission: hello.Admission, Signature: hello.AdmissionSignature}, nil
 }
@@ -70,7 +70,7 @@ func environment(t *testing.T, limits storage.Limits) *system {
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := os.ReadFile(filepath.Join(root, "supervisor", "admission.key"))
+	encoded, err := os.ReadFile(filepath.Join(root, "pulsar", "admission.key"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,9 +122,9 @@ func environment(t *testing.T, limits storage.Limits) *system {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = channel.Close() })
-	member := &orbit.Member{Galaxy: "alpha", Id: "star", Principal: identity.Principal("alpha", "127.0.0.1:7447"), Epoch: 1, Advertise: "127.0.0.1:7447", Role: orbit.Role_ROLE_STAR, Group: "default"}
+	member := &orbit.Member{Galaxy: "alpha", Id: []byte("star"), Principal: identity.Principal("alpha", "127.0.0.1:7447"), Epoch: 1, Advertise: "127.0.0.1:7447", Role: orbit.Role_ROLE_STAR, Group: "default"}
 	star := issuer.sign(member)
-	member.Id, member.Advertise, member.Principal, member.Role = "manager", "127.0.0.1:7448", identity.Principal("alpha", "127.0.0.1:7448"), orbit.Role_ROLE_ASTROLABE
+	member.Id, member.Advertise, member.Principal, member.Role = []byte("manager"), "127.0.0.1:7448", identity.Principal("alpha", "127.0.0.1:7448"), orbit.Role_ROLE_ASTROLABE
 	return &system{store: store, issuer: issuer, node: node, streams: streams, channel: channel, star: star, manager: issuer.sign(member)}
 }
 
@@ -210,7 +210,7 @@ func TestStreamSnapshotSuffix(t *testing.T) {
 			t.Fatal("unexpected frame")
 		}
 		if installed != 0 {
-			if err := stream.Send(&polaris.Packet{Body: &polaris.Packet_Acknowledged{Acknowledged: &polaris.Position{Scope: &comet.Scope{Sector: scope.Sector, Spectrum: scope.Spectrum}, Version: installed}}}); err != nil {
+			if err := stream.Send(&polaris.Packet{Body: &polaris.Packet_Acknowledged{Acknowledged: &polaris.Position{Scope: &comet.Scope{Sector: []byte(scope.Sector), Spectrum: []byte(scope.Spectrum)}, Version: installed}}}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -221,7 +221,7 @@ func TestStreamSnapshotSuffix(t *testing.T) {
 func TestStreamUnknownEmptyScope(t *testing.T) {
 	t.Parallel()
 	system := environment(t, storage.Default())
-	stream := system.connect(t, &polaris.Inventory{Complete: true, Positions: []*polaris.Position{{Scope: &comet.Scope{Sector: "missing", Spectrum: "scope"}}}})
+	stream := system.connect(t, &polaris.Inventory{Complete: true, Positions: []*polaris.Position{{Scope: &comet.Scope{Sector: []byte("missing"), Spectrum: []byte("scope")}}}})
 	_, err := stream.Recv()
 	if status.Code(err) != codes.Aborted {
 		t.Fatal("accepted unknown installed empty scope", err)
@@ -235,7 +235,7 @@ func TestAuthorityRPC(t *testing.T) {
 	client := polaris.NewAuthorityClient(system.channel)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	request := &polaris.CommitRequest{Scope: &comet.Scope{Sector: "s", Spectrum: "p"}, Version: 1, Change: &comet.AlmanacChange{Key: "k", Action: &comet.AlmanacChange_Value{Value: []byte{1}}}}
+	request := &polaris.CommitRequest{Scope: &comet.Scope{Sector: []byte("s"), Spectrum: []byte("p")}, Version: 1, Change: &comet.AlmanacChange{Key: "k", Action: &comet.AlmanacChange_Value{Value: []byte{1}}}}
 	if _, err := client.Commit(ctx, request); status.Code(err) != codes.Unauthenticated {
 		t.Fatal("missing identity accepted", err)
 	}

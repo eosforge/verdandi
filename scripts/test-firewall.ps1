@@ -15,7 +15,6 @@ $verdandiStop = Join-Path $verdandiRoot "build/testkit/firewall-$RunId.stop"
 if ((Test-Path -LiteralPath $verdandiReport) -or (Test-Path -LiteralPath $verdandiStop)) { throw 'Run ID already exists.' }
 $verdandiPrograms = @{
     star = Join-Path $verdandiRoot 'build/cluster/target/release/star.exe'
-    supervisor = Join-Path $verdandiRoot 'build/supervisor/supervisor.exe'
 }
 $verdandiCreated = [Collections.Generic.List[string]]::new()
 $verdandiResult = @{ status = 'starting'; rules = @(); remaining_rules = @(); local_address = '192.168.0.25'; remote_address = '192.168.0.119'; error = $null }

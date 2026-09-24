@@ -97,7 +97,7 @@ func (authority *Authority) Commit(ctx context.Context, request *polaris.CommitR
 	if request == nil || request.Scope == nil || request.Change == nil || proto.Size(request) > 2<<20 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid authority commit")
 	}
-	scope := storage.Scope{Sector: request.Scope.Sector, Spectrum: request.Scope.Spectrum}
+	scope := storage.Scope{Sector: string(request.Scope.Sector), Spectrum: string(request.Scope.Spectrum)}
 	change := storage.Change{Version: storage.Version(request.Version), Key: request.Change.Key}
 	// 动作二选一: 设值携带载荷, 删除必须是显式擦除.
 	switch action := request.Change.Action.(type) {
@@ -159,7 +159,7 @@ func (authority *Authority) List(ctx context.Context, _ *comet.Empty) (*polaris.
 	// 逐项转换为协议位置, 完整标志表示本次为全量目录.
 	result := &polaris.Inventory{Complete: true}
 	for _, position := range positions {
-		result.Positions = append(result.Positions, &polaris.Position{Scope: &comet.Scope{Sector: position.Sector, Spectrum: position.Spectrum}, Version: uint64(position.Version)})
+		result.Positions = append(result.Positions, &polaris.Position{Scope: &comet.Scope{Sector: []byte(position.Sector), Spectrum: []byte(position.Spectrum)}, Version: uint64(position.Version)})
 	}
 	if proto.Size(result) > 8<<20 {
 		return nil, status.Error(codes.ResourceExhausted, "Scope inventory exceeds message capacity")
@@ -178,7 +178,7 @@ func (authority *Authority) Load(request *comet.Scope, stream grpc.ServerStreami
 	if request == nil {
 		return status.Error(codes.InvalidArgument, "Missing scope")
 	}
-	scope := storage.Scope{Sector: request.Sector, Spectrum: request.Spectrum}
+	scope := storage.Scope{Sector: string(request.Sector), Spectrum: string(request.Spectrum)}
 	// 当前请求单独捕获最低版本, 不复用已落后于这次读取的旧缓存快照.
 	version, err := authority.store.Version(stream.Context(), scope)
 	if err != nil {
@@ -206,7 +206,7 @@ func pages(snapshot *storage.Snapshot, maximum int, send func(*polaris.Snapshot)
 	if maximum < 1024 || maximum > 8<<20 {
 		return status.Error(codes.InvalidArgument, "Invalid Almanac receive capacity")
 	}
-	scope := &comet.Scope{Sector: snapshot.Sector, Spectrum: snapshot.Spectrum}
+	scope := &comet.Scope{Sector: []byte(snapshot.Sector), Spectrum: []byte(snapshot.Spectrum)}
 	page := &polaris.Snapshot{Scope: scope, Version: proto.Uint64(uint64(snapshot.Version))}
 	size := proto.Size(scope) + 32
 	// 逐条打包: 页满即发送并开新页, 单条超限直接拒绝整批.

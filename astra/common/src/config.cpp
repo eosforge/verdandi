@@ -225,9 +225,9 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Member
     // 跨字段约束保持普通代码, 不把地址关系塞入元编程规则引擎.
     // 将解析出的临时 option 值, 代入类型化的验证结构里.
     auto listen = Endpoint::parse(options.listen, true);
-    // supervisor 拥有校验后的控制面地址, 支持合规 DNS 名称或数值 IP.
-    auto supervisor = Config::format_supervisor(options.supervisor);
-    if (!listen || !supervisor || !Member::valid_name(options.galaxy) || !Member::valid_name(options.group) || options.identity.empty()) {
+    // pulsar 拥有校验后的 Pulsar 控制面地址, 支持合规 DNS 名称或数值 IP.
+    auto pulsar = Config::format_pulsar(options.pulsar);
+    if (!listen || !pulsar || !Member::valid_name(options.galaxy) || !Member::valid_name(options.group) || options.identity.empty()) {
         return Status::configuration("Invalid endpoint, name or identity path");
     }
 
@@ -270,7 +270,7 @@ Result<Config> Config::parse(std::span<const std::string_view> arguments, Member
     result.group = std::move(options.group);
     result.listen = std::move(*listen);
     result.advertise = std::move(*advertise);
-    result.supervisor = std::move(*supervisor);
+    result.pulsar = std::move(*pulsar);
     result.identity = std::move(options.identity);
     // 成员预算设置
     result.max_members = options.maximum;
@@ -312,7 +312,7 @@ std::string Config::help(Member::Role role) {
 
     // clang-format on
     // 在已有缓冲追加结尾, 返回时允许移动或消除复制, 不再复制整段帮助正文.
-    result += "  --help / --version\nTLS and Supervisor account login are required. Stop with SIGINT or SIGTERM.\n";
+    result += "  --help / --version\nTLS and Pulsar account login are required. Stop with SIGINT or SIGTERM.\n";
     return result;
 }
 } // namespace astra

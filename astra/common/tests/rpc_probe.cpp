@@ -91,11 +91,11 @@ struct Stream {
     }
 };
 
-// 使用指定 supervisor 和 advertise 登记测试节点, 验证签名后返回拥有凭证的 Hello.
-proto::astra::v1::Hello admit(const Identity& identity, const std::string& supervisor, const std::string& advertise) {
+// 使用指定 Pulsar 和 advertise 登记测试节点, 验证签名后返回拥有凭证的 Hello.
+proto::astra::v1::Hello admit(const Identity& identity, const std::string& pulsar, const std::string& advertise) {
 
     // channel 共享持有使用公开测试证书的 TLS 通道, 由存根覆盖调用寿命.
-    auto channel = grpc::CreateChannel(supervisor, identity.channel_credentials());
+    auto channel = grpc::CreateChannel(pulsar, identity.channel_credentials());
     // stub 独占当前生成服务存根, 不跨进程共享.
     auto stub = proto::orbit::v1::Admission::NewStub(channel);
     // request 拥有测试登记参数, 与每次启动生成的随机请求 ID 绑定.

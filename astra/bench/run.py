@@ -85,7 +85,7 @@ def cluster(binaries, case, output, probe=None):
     ) as directory, ExitStack() as stack:
         directory = Path(directory)
         identity = directory / "identity"
-        shutil.copytree(fixtures / "supervisor", identity)
+        shutil.copytree(fixtures / "pulsar", identity)
         accounts = json.loads((identity / "accounts.json").read_text())
         for account in accounts:
             if account["username"] == "stars":

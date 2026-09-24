@@ -14,9 +14,8 @@ import time
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from testkit.support import atomic_json, environment, temporary_directory
+from testkit.support import atomic_json, binary_digest, environment, temporary_directory
 from testkit.transport.run import owned, ready, shape_arguments, source_hashes, trial
-from test_processes import binary_digest
 
 
 def cases(smoke):

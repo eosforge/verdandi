@@ -168,7 +168,7 @@ type Hello struct {
 	ProtocolMinor uint32 `protobuf:"varint,2,opt,name=protocol_minor,json=protocolMinor,proto3" json:"protocol_minor,omitempty"`
 	// 本端 payload 容量, 至少 1024 字节. 不改变当前阶段的硬上限.
 	MaxFrameBytes uint32 `protobuf:"varint,7,opt,name=max_frame_bytes,json=maxFrameBytes,proto3" json:"max_frame_bytes,omitempty"`
-	// 原样转发 Supervisor 返回的 Member 编码, 校验前不信任其中任何字段.
+	// 原样转发 Pulsar 返回的 Member 编码, 校验前不信任其中任何字段.
 	Admission []byte `protobuf:"bytes,8,opt,name=admission,proto3" json:"admission,omitempty"`
 	// Ed25519 签名, 覆盖域分隔前缀和 admission 原始字节.
 	AdmissionSignature []byte `protobuf:"bytes,9,opt,name=admission_signature,json=admissionSignature,proto3" json:"admission_signature,omitempty"`
@@ -673,9 +673,10 @@ func (x *Position) GetVersion() uint64 {
 
 // Scope 只定位记录, 不是独立的对等恢复边界.
 type Scope struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sector        string                 `protobuf:"bytes,1,opt,name=sector,proto3" json:"sector,omitempty"`
-	Spectrum      string                 `protobuf:"bytes,2,opt,name=spectrum,proto3" json:"spectrum,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// UTF-8 文本内容不变, 类型改为 bytes 以跳过 Protobuf 层的重复 UTF-8 校验; 形状仍由各域入口校验.
+	Sector        []byte `protobuf:"bytes,1,opt,name=sector,proto3" json:"sector,omitempty"`
+	Spectrum      []byte `protobuf:"bytes,2,opt,name=spectrum,proto3" json:"spectrum,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -710,18 +711,18 @@ func (*Scope) Descriptor() ([]byte, []int) {
 	return file_astra_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *Scope) GetSector() string {
+func (x *Scope) GetSector() []byte {
 	if x != nil {
 		return x.Sector
 	}
-	return ""
+	return nil
 }
 
-func (x *Scope) GetSpectrum() string {
+func (x *Scope) GetSpectrum() []byte {
 	if x != nil {
 		return x.Spectrum
 	}
-	return ""
+	return nil
 }
 
 // 明确的无正文分支, 不将合法的零字节正文误认为水位或删除.
@@ -1326,11 +1327,11 @@ func (x *EphemerisRecord) GetTtlMs() uint32 {
 	return 0
 }
 
-// 标准小写 UUIDv4 原样索引, 不在续租路径反复格式化.
+// 标准 UUIDv4 原始 16 字节二进制索引, 不在续租路径反复格式化.
 type EphemerisEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Scope         *Scope                 `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
-	Uuid          string                 `protobuf:"bytes,2,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Uuid          []byte                 `protobuf:"bytes,2,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	Record        *EphemerisRecord       `protobuf:"bytes,3,opt,name=record,proto3" json:"record,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1373,11 +1374,11 @@ func (x *EphemerisEntry) GetScope() *Scope {
 	return nil
 }
 
-func (x *EphemerisEntry) GetUuid() string {
+func (x *EphemerisEntry) GetUuid() []byte {
 	if x != nil {
 		return x.Uuid
 	}
-	return ""
+	return nil
 }
 
 func (x *EphemerisEntry) GetRecord() *EphemerisRecord {
@@ -1559,7 +1560,7 @@ type EphemerisDelta struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Position uint64                 `protobuf:"varint,1,opt,name=position,proto3" json:"position,omitempty"`
 	Scope    *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Uuid     string                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Uuid     []byte                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	// Types that are valid to be assigned to Action:
 	//
 	//	*EphemerisDelta_Record
@@ -1615,11 +1616,11 @@ func (x *EphemerisDelta) GetScope() *Scope {
 	return nil
 }
 
-func (x *EphemerisDelta) GetUuid() string {
+func (x *EphemerisDelta) GetUuid() []byte {
 	if x != nil {
 		return x.Uuid
 	}
-	return ""
+	return nil
 }
 
 func (x *EphemerisDelta) GetAction() isEphemerisDelta_Action {
@@ -1749,12 +1750,13 @@ func (x *EphemerisChanges) GetHead() uint64 {
 
 // 目标及触发位置构成有界回补关联, 不新增全局请求序号. version 仅 Catalog 使用.
 type Repair struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Domain        Domain                 `protobuf:"varint,1,opt,name=domain,proto3,enum=proto.astra.v1.Domain" json:"domain,omitempty"`
-	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Key           string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
-	Trigger       uint64                 `protobuf:"varint,4,opt,name=trigger,proto3" json:"trigger,omitempty"`
-	Version       uint64                 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Domain Domain                 `protobuf:"varint,1,opt,name=domain,proto3,enum=proto.astra.v1.Domain" json:"domain,omitempty"`
+	Scope  *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	// Catalog 为 UTF-8 Key, Ephemeris 为 16 字节 UUID 二进制; 域决定形状, 本字段不做文本约束.
+	Key           []byte `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	Trigger       uint64 `protobuf:"varint,4,opt,name=trigger,proto3" json:"trigger,omitempty"`
+	Version       uint64 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1803,11 +1805,11 @@ func (x *Repair) GetScope() *Scope {
 	return nil
 }
 
-func (x *Repair) GetKey() string {
+func (x *Repair) GetKey() []byte {
 	if x != nil {
 		return x.Key
 	}
-	return ""
+	return nil
 }
 
 func (x *Repair) GetTrigger() uint64 {
@@ -1979,8 +1981,8 @@ const file_astra_proto_rawDesc = "" +
 	"\x06domain\x18\x01 \x01(\x0e2\x16.proto.astra.v1.DomainR\x06domain\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\";\n" +
 	"\x05Scope\x12\x16\n" +
-	"\x06sector\x18\x01 \x01(\tR\x06sector\x12\x1a\n" +
-	"\bspectrum\x18\x02 \x01(\tR\bspectrum\"\a\n" +
+	"\x06sector\x18\x01 \x01(\fR\x06sector\x12\x1a\n" +
+	"\bspectrum\x18\x02 \x01(\fR\bspectrum\"\a\n" +
 	"\x05Empty\"@\n" +
 	"\fCatalogValue\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\fR\x05value\x12\x1a\n" +
@@ -2020,7 +2022,7 @@ const file_astra_proto_rawDesc = "" +
 	"\x06ttl_ms\x18\x06 \x01(\rR\x05ttlMs\"\x8a\x01\n" +
 	"\x0eEphemerisEntry\x12+\n" +
 	"\x05scope\x18\x01 \x01(\v2\x15.proto.astra.v1.ScopeR\x05scope\x12\x12\n" +
-	"\x04uuid\x18\x02 \x01(\tR\x04uuid\x127\n" +
+	"\x04uuid\x18\x02 \x01(\fR\x04uuid\x127\n" +
 	"\x06record\x18\x03 \x01(\v2\x1f.proto.astra.v1.EphemerisRecordR\x06record\"\x85\x01\n" +
 	"\x11EphemerisSnapshot\x12\x1a\n" +
 	"\bposition\x18\x01 \x01(\x04R\bposition\x128\n" +
@@ -2035,7 +2037,7 @@ const file_astra_proto_rawDesc = "" +
 	"\x0eEphemerisDelta\x12\x1a\n" +
 	"\bposition\x18\x01 \x01(\x04R\bposition\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.astra.v1.ScopeR\x05scope\x12\x12\n" +
-	"\x04uuid\x18\x03 \x01(\tR\x04uuid\x129\n" +
+	"\x04uuid\x18\x03 \x01(\fR\x04uuid\x129\n" +
 	"\x06record\x18\x04 \x01(\v2\x1f.proto.astra.v1.EphemerisRecordH\x00R\x06record\x123\n" +
 	"\x04data\x18\x05 \x01(\v2\x1d.proto.astra.v1.EphemerisDataH\x00R\x04data\x126\n" +
 	"\x05lease\x18\x06 \x01(\v2\x1e.proto.astra.v1.EphemerisLeaseH\x00R\x05lease\x12-\n" +
@@ -2047,7 +2049,7 @@ const file_astra_proto_rawDesc = "" +
 	"\x06Repair\x12.\n" +
 	"\x06domain\x18\x01 \x01(\x0e2\x16.proto.astra.v1.DomainR\x06domain\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.astra.v1.ScopeR\x05scope\x12\x10\n" +
-	"\x03key\x18\x03 \x01(\tR\x03key\x12\x18\n" +
+	"\x03key\x18\x03 \x01(\fR\x03key\x12\x18\n" +
 	"\atrigger\x18\x04 \x01(\x04R\atrigger\x12\x18\n" +
 	"\aversion\x18\x05 \x01(\x04R\aversion\"\x91\x02\n" +
 	"\bRepaired\x120\n" +

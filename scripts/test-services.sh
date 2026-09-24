@@ -1,28 +1,21 @@
 #!/usr/bin/env bash
-# 一键服务回归/长时测试. 参数仅传给子进程, 不安装依赖或修改调用终端的配置.
+# 当前服务回归入口. 旧 soak/scale 尚未迁移, 明确拒绝, 不将未执行报告为成功.
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
     printf '%s\n' 'Execute this script; do not source it.' >&2
     return 1
 fi
 set -euo pipefail
 astra_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-skip_checks=false
-implementation=cpp
-arguments=()
+astra_command=regression
+astra_arguments=()
 for argument in "$@"; do
     case "$argument" in
-        --skip-checks) skip_checks=true ;;
-        --implementation=cpp) implementation="${argument#*=}" ;;
-        --implementation|--implementation=*) printf '%s\n' 'Use --implementation=cpp; the Rust service is retired.' >&2; exit 2 ;;
-        *) arguments+=("$argument") ;;
+        --mode=regression|--implementation=cpp) ;;
+        --skip-checks) astra_command=test ;;
+        --jobs=*|--test-jobs=*) astra_arguments+=("$argument") ;;
+        --mode=soak|--mode=scale) printf '%s\n' 'Legacy soak/scale is retired; no tests were executed.' >&2; exit 2 ;;
+        *) printf 'Unsupported service test option: %s\n' "$argument" >&2; exit 2 ;;
     esac
 done
-if [[ "$skip_checks" == false ]]; then bash "$astra_root/scripts/check-services.sh" --implementation="$implementation"; fi
-astra_python="$astra_root/build/tools/python-build/bin/python"
-if [[ ! -x "$astra_python" ]]; then printf '%s\n' 'Prepare the approved project-local Python environment first.' >&2; exit 1; fi
-cd -- "$astra_root"
-if [[ "$skip_checks" == false ]]; then "$astra_python" -B -m unittest discover -s testkit/tests -p 'test_*.py'; fi
-if [[ "$skip_checks" == false && "$implementation" == cpp ]]; then
-    "$astra_python" -B astra/test_processes.py --binaries "$astra_root/build/astra/release"
-fi
-exec "$astra_python" -B -m testkit.services --implementation="$implementation" "${arguments[@]}"
+# skip-checks 仅省略协议生成比较, 实际 C++/Go 构建与回归不可跳过. 子入口负责资源预算和失败退出码.
+exec bash "$astra_root/astra/build.sh" "$astra_command" --profile release "${astra_arguments[@]}"

@@ -129,7 +129,7 @@ func run(ctx context.Context, config options) error {
 	}()
 	serving := make(chan error, 1)
 	go func() { serving <- rpc.Serve(listener) }()
-	slog.Info("Polaris ready", "endpoint", config.advertise, "galaxy", config.galaxy, "instance", node.Member().Id)
+	slog.Info("Polaris ready", "endpoint", config.advertise, "galaxy", config.galaxy, "instance", string(node.Member().Id))
 	// 主循环等待三者之一: 父取消、目录任务结束、服务结束.
 	var result error
 	refreshed := false

@@ -98,9 +98,9 @@ void Parcel::delta(proto::astra::v1::CatalogDelta& message, const Origin<Catalog
     }
 }
 
-void Parcel::delta(proto::astra::v1::EphemerisDelta& message, const Origin<Ephemeris::Record>::Event& event) {
+void Parcel::delta(proto::astra::v1::EphemerisDelta& message, const Origin<Ephemeris::Record, true>::Event& event) {
 
-    using Source = Origin<Ephemeris::Record>; // 根据事件形式只编码实际改变的原生字段.
+    using Source = Origin<Ephemeris::Record, true>; // 根据事件形式只编码实际改变的原生字段.
     if (!event.name || !event.name->scope || !event.name->scope->valid() || !Ephemeris::valid(event.name->key) || event.position == 0 || (event.form == Source::Form::erase) != !event.record) {
         throw std::logic_error("Invalid Ephemeris source event");
     }

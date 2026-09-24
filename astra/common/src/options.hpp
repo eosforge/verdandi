@@ -67,9 +67,9 @@ struct Options {
     // 在地址上允许输入数值型的通配 IP(如 0.0.0.0)和特殊的表示系统自动分配的端口 0, 但坚决不支持任何形式的 DNS 域名解析.
     [[=Option{"listen", "Local numeric IP:PORT; wildcard requires advertise", 0, 0, true}]] std::string listen;
 
-    // supervisor: 远端 Supervisor 系统拨号地址原文配置, 强制必填项;
+    // pulsar: 远端 Pulsar 系统拨号地址原文配置, 强制必填项;
     // 地址部分允许接受常规 DNS 域名格式或者是纯数值 IP 形式, 但在端口方面必须提供真实有效的非零端口参数.
-    [[=Option{"super", "Supervisor HOST:PORT", 0, 0, true}]] std::string supervisor;
+    [[=Option{"super", "Pulsar HOST:PORT", 0, 0, true}]] std::string pulsar;
 
     // advertise: 外网公开公布的网络端点原文配置, 若缺省未填则默认为空字符串, 系统运行时将自动回退使用监听端点值;
     // 若显式填写该值, 则所输入地址必须具有真实的网络可达性, 并必须确切使用非零真实网络端口.
@@ -115,11 +115,11 @@ struct Options {
     // 后续转换正式 Config 处理时同样也会做一层底层毫秒数据转换对接.
     [[=Option{"status-interval-seconds", "Actual-state snapshot interval; zero disables", 0, 3600}]] std::uint64_t status = 0;
 
-    // max_admission_request_bytes: 连接 Supervisor 发起准入请求时, 最大允许发送的消息字节数上限.
+    // max_admission_request_bytes: 连接 Pulsar 发起准入请求时, 最大允许发送的消息字节数上限.
     // 默认配置 4096 (4KB), 允许范围从 1 到 1 MB.极小的封顶足以拦截本地异常超大请求发出的风险.
     [[=Option{"max-admission-request-bytes", "Max admission request bytes", 1, 1024 * 1024}]] std::uint64_t max_admission_request_bytes = 4 * 1024;
 
-    // max_admission_response_bytes: 接收 Supervisor 准入响应时, 最大允许接收的消息字节数上限.
+    // max_admission_response_bytes: 接收 Pulsar 准入响应时, 最大允许接收的消息字节数上限.
     // 默认配置 2097152 (2MB), 允许范围从 1 KB 到 256 MB.足以容纳系统硬上限的拓扑名单回包而不触发内存 OOM.
     [[=Option{"max-admission-response-bytes", "Max admission response bytes", 1024, 256 * 1024 * 1024}]] std::uint64_t max_admission_response_bytes = 2 * 1024 * 1024;
 

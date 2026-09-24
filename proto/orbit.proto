@@ -1,9 +1,9 @@
 // Orbit v1 控制面. Member 和 Role 是准入凭证及成员名单的唯一协议定义.
 syntax = "proto3";
 package proto.orbit.v1;
-option go_package = "github.com/eosforge/verdandi/supervisor/internal/generated;wire";
+option go_package = "github.com/eosforge/verdandi/astra/internal/generated/orbit;orbit";
 
-// Supervisor 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
+// Pulsar 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
 service Admission {
     rpc Register(RegistrationRequest) returns (RegistrationResponse);
     // 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.
@@ -25,7 +25,7 @@ message Credential {
     bytes secret = 1;
 }
 
-// 账号通过 TLS 提交, Supervisor 从已验证账号和规范端点构建指纹.
+// 账号通过 TLS 提交, Pulsar 从已验证账号和规范端点构建指纹.
 message RegistrationRequest {
     string galaxy = 1;
     // 身份与代次由服务端分配, 以下编号不用于当前请求字段.
@@ -41,11 +41,11 @@ message RegistrationRequest {
     string group = 7;
     // 仅 Planet 使用, 候选耗尽后递增以轮换小名单. 不影响进程准入代次或写入版本.
     uint32 candidate_round = 8;
-    // 仅向 Supervisor 发送, 不复制到成员名单, 日志或节点间 Hello.
+    // 仅向 Pulsar 发送, 不复制到成员名单, 日志或节点间 Hello.
     string username = 9;
     string password = 10;
     // 本次启动生成一次的 32 字节随机幂等键, 所有重试和候选刷新复用, 不作为实例身份或授权凭据.
-    // Supervisor 持久记住已提交请求; 被替换的旧请求不能再次登记.
+    // Pulsar 持久记住已提交请求; 被替换的旧请求不能再次登记.
     bytes request_id = 13;
 }
 
@@ -64,10 +64,10 @@ message RegistrationResponse {
 
 message Member {
     string galaxy = 1;
-    // Supervisor 签发的不透明 UTF-8 字符串, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
-    string id = 2;
-    // SHA-256(username + NUL + galaxy + NUL + advertise), 小写十六进制, 不替代本次启动的 id.
-    string principal = 3;
+    // Pulsar 签发的不透明字节标识, 当前内容为 p_ 前缀十六进制文本, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
+    bytes id = 2;
+    // SHA-256(username + NUL + galaxy + NUL + advertise) 原始 32 字节, 不再传输小写十六进制文本, 不替代本次启动的 id.
+    bytes principal = 3;
     string advertise = 4;
     // 每部署身份的重启代次, 不用于 Catalog/Registry 的业务版本排序.
     uint64 epoch = 5;

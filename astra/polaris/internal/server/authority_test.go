@@ -58,7 +58,7 @@ func TestPages(t *testing.T) {
 		seen := 0
 		for index, page := range received {
 			last := index == len(received)-1
-			if page.Complete != last || page.Version == nil || page.GetVersion() != 9 || page.Scope.Sector != "s" || page.Scope.Spectrum != "p" {
+			if page.Complete != last || page.Version == nil || page.GetVersion() != 9 || string(page.Scope.Sector) != "s" || string(page.Scope.Spectrum) != "p" {
 				t.Fatal("invalid snapshot completion boundary")
 			}
 			for _, entry := range page.Entries {

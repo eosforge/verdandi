@@ -58,11 +58,11 @@ impl Auth {
             role: role as i32,
             group: "default".into(),
         };
-        // 只使用仓库公开的测试签名密钥. 本程序不模拟真实 Supervisor 的 CAS 或候选管理.
-        let pem = fs::read(root.join("supervisor/admission.key"))?;
+        // 只使用仓库公开的测试签名密钥. 本程序不模拟真实 Pulsar/CAS 或候选管理.
+        let pem = fs::read(root.join("pulsar/admission.key"))?;
         let key = rustls_pemfile::private_key(&mut pem.as_slice())?.ok_or_else(|| io::Error::other("missing fixture key"))?;
         let signer = Ed25519KeyPair::from_pkcs8_maybe_unchecked(key.secret_der()).map_err(|_| io::Error::other("invalid fixture key"))?;
-        if signer.public_key().as_ref() != fs::read(root.join("supervisor/admission.pub"))? {
+        if signer.public_key().as_ref() != fs::read(root.join("pulsar/admission.pub"))? {
             return Err(io::Error::other("fixture key mismatch"));
         }
         let admission = Bytes::from(member.encode_to_vec());

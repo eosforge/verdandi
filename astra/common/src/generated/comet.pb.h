@@ -974,7 +974,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED SessionReply final : public ::googl
     kInstanceFieldNumber = 1,
     kSessionFieldNumber = 2,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -1009,7 +1009,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED SessionReply final : public ::googl
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<1, 2,
-                          0, 44,
+                          0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -1197,7 +1197,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Scope final : public ::google::prot
     kSectorFieldNumber = 1,
     kSpectrumFieldNumber = 2,
   };
-  // string sector = 1;
+  // bytes sector = 1;
   void clear_sector() ;
   [[nodiscard]] const ::std::string& sector() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -1212,7 +1212,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Scope final : public ::google::prot
   ::std::string* PROTOBUF_NONNULL _internal_mutable_sector();
 
   public:
-  // string spectrum = 2;
+  // bytes spectrum = 2;
   void clear_spectrum() ;
   [[nodiscard]] const ::std::string& spectrum() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -1232,7 +1232,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Scope final : public ::google::prot
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<1, 2,
-                          0, 43,
+                          0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -1621,7 +1621,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED PublishReply final : public ::googl
     kInstanceFieldNumber = 1,
     kVersionFieldNumber = 2,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -1651,7 +1651,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED PublishReply final : public ::googl
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<1, 2,
-                          0, 44,
+                          0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -1878,7 +1878,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Failure final : public ::google::pr
   ::std::string* PROTOBUF_NONNULL _internal_mutable_message();
 
   public:
-  // string instance = 11;
+  // bytes instance = 11;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -1984,7 +1984,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Failure final : public ::google::pr
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<4, 11,
-                          0, 59,
+                          0, 51,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -2543,7 +2543,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CreateReply final : public ::google
     kUuidFieldNumber = 2,
     kTtlMsFieldNumber = 3,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -2558,7 +2558,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CreateReply final : public ::google
   ::std::string* PROTOBUF_NONNULL _internal_mutable_instance();
 
   public:
-  // string uuid = 2;
+  // bytes uuid = 2;
   void clear_uuid() ;
   [[nodiscard]] const ::std::string& uuid() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -2588,7 +2588,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CreateReply final : public ::google
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<2, 3,
-                          0, 47,
+                          0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -2779,7 +2779,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED WatchRequest final : public ::googl
     kScopeFieldNumber = 2,
     kVersionFieldNumber = 4,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -2794,7 +2794,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED WatchRequest final : public ::googl
   ::std::string* PROTOBUF_NONNULL _internal_mutable_instance();
 
   public:
-  // string target = 3;
+  // bytes target = 3;
   void clear_target() ;
   [[nodiscard]] const ::std::string& target() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -2840,7 +2840,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED WatchRequest final : public ::googl
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<2, 4,
-                          1, 50,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -3033,7 +3033,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED UpdateRequest final : public ::goog
     kScopeFieldNumber = 2,
     kOrderFieldNumber = 4,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3048,7 +3048,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED UpdateRequest final : public ::goog
   ::std::string* PROTOBUF_NONNULL _internal_mutable_instance();
 
   public:
-  // string uuid = 3;
+  // bytes uuid = 3;
   void clear_uuid() ;
   [[nodiscard]] const ::std::string& uuid() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3108,7 +3108,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED UpdateRequest final : public ::goog
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 5,
-                          1, 49,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -3301,7 +3301,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RenewRequest final : public ::googl
     kScopeFieldNumber = 2,
     kOrderFieldNumber = 4,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3316,7 +3316,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RenewRequest final : public ::googl
   ::std::string* PROTOBUF_NONNULL _internal_mutable_instance();
 
   public:
-  // string uuid = 3;
+  // bytes uuid = 3;
   void clear_uuid() ;
   [[nodiscard]] const ::std::string& uuid() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3361,7 +3361,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RenewRequest final : public ::googl
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<2, 4,
-                          1, 48,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -3552,7 +3552,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RemoveRequest final : public ::goog
     kUuidFieldNumber = 3,
     kScopeFieldNumber = 2,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3567,7 +3567,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RemoveRequest final : public ::goog
   ::std::string* PROTOBUF_NONNULL _internal_mutable_instance();
 
   public:
-  // string uuid = 3;
+  // bytes uuid = 3;
   void clear_uuid() ;
   [[nodiscard]] const ::std::string& uuid() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3602,7 +3602,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED RemoveRequest final : public ::goog
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<2, 3,
-                          1, 49,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -3795,7 +3795,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED PublishRequest final : public ::goo
     kVersionFieldNumber = 3,
     kTtlMsFieldNumber = 6,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -3880,7 +3880,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED PublishRequest final : public ::goo
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 6,
-                          1, 49,
+                          1, 41,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -4081,7 +4081,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisChange final : public ::go
     kEraseFieldNumber = 3,
     kDataFieldNumber = 4,
   };
-  // string uuid = 1;
+  // bytes uuid = 1;
   void clear_uuid() ;
   [[nodiscard]] const ::std::string& uuid() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -4162,7 +4162,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisChange final : public ::go
   inline void clear_has_action();
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<0, 4,
-                          2, 43,
+                          2, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -4360,7 +4360,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CreateRequest final : public ::goog
     kScopeFieldNumber = 2,
     kTtlMsFieldNumber = 5,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -4435,7 +4435,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CreateRequest final : public ::goog
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 5,
-                          1, 45,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -4629,7 +4629,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CatalogRenewRequest final : public 
     kVersionFieldNumber = 4,
     kTtlMsFieldNumber = 5,
   };
-  // string instance = 1;
+  // bytes instance = 1;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -4699,7 +4699,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CatalogRenewRequest final : public 
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 5,
-                          1, 54,
+                          1, 46,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -5447,7 +5447,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisWatchReply final : public 
   ::google::protobuf::RepeatedPtrField<::proto::comet::v1::EphemerisChange>* PROTOBUF_NONNULL _internal_mutable_changes();
 
   public:
-  // string instance = 5;
+  // bytes instance = 5;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -5498,7 +5498,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisWatchReply final : public 
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 5,
-                          1, 51,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -5712,7 +5712,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CatalogWatchReply final : public ::
   ::google::protobuf::RepeatedPtrField<::proto::comet::v1::CatalogChange>* PROTOBUF_NONNULL _internal_mutable_changes();
 
   public:
-  // string instance = 5;
+  // bytes instance = 5;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -5763,7 +5763,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CatalogWatchReply final : public ::
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 5,
-                          1, 49,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -5977,7 +5977,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED AlmanacWatchReply final : public ::
   ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL _internal_mutable_changes();
 
   public:
-  // string instance = 5;
+  // bytes instance = 5;
   void clear_instance() ;
   [[nodiscard]] const ::std::string& instance() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -6028,7 +6028,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED AlmanacWatchReply final : public ::
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 5,
-                          1, 49,
+                          1, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -6087,7 +6087,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED AlmanacWatchReply final : public ::
 
 // Scope
 
-// string sector = 1;
+// bytes sector = 1;
 inline void Scope::clear_sector() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.sector_.ClearToEmpty();
@@ -6102,7 +6102,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Scope::set_sector(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.sector_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.sector_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.Scope.sector)
 }
 inline ::std::string* PROTOBUF_NONNULL Scope::mutable_sector()
@@ -6151,7 +6151,7 @@ inline void Scope::set_allocated_sector(::std::string* PROTOBUF_NULLABLE value) 
   // @@protoc_insertion_point(field_set_allocated:proto.comet.v1.Scope.sector)
 }
 
-// string spectrum = 2;
+// bytes spectrum = 2;
 inline void Scope::clear_spectrum() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.spectrum_.ClearToEmpty();
@@ -6166,7 +6166,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Scope::set_spectrum(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.spectrum_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.spectrum_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.Scope.spectrum)
 }
 inline ::std::string* PROTOBUF_NONNULL Scope::mutable_spectrum()
@@ -6849,7 +6849,7 @@ inline void EphemerisChange_Record::set_allocated_data(::std::string* PROTOBUF_N
 
 // EphemerisChange
 
-// string uuid = 1;
+// bytes uuid = 1;
 inline void EphemerisChange::clear_uuid() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uuid_.ClearToEmpty();
@@ -6864,7 +6864,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void EphemerisChange::set_uuid(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.uuid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.uuid_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.EphemerisChange.uuid)
 }
 inline ::std::string* PROTOBUF_NONNULL EphemerisChange::mutable_uuid()
@@ -7299,7 +7299,7 @@ inline void SessionRequest::set_allocated_secret(::std::string* PROTOBUF_NULLABL
 
 // SessionReply
 
-// string instance = 1;
+// bytes instance = 1;
 inline void SessionReply::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -7314,7 +7314,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void SessionReply::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.SessionReply.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL SessionReply::mutable_instance()
@@ -7431,7 +7431,7 @@ inline void SessionReply::set_allocated_session(::std::string* PROTOBUF_NULLABLE
 
 // PublishRequest
 
-// string instance = 1;
+// bytes instance = 1;
 inline void PublishRequest::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -7446,7 +7446,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void PublishRequest::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.PublishRequest.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL PublishRequest::mutable_instance()
@@ -7773,7 +7773,7 @@ inline void PublishRequest::_internal_set_ttl_ms(::uint32_t value) {
 
 // PublishReply
 
-// string instance = 1;
+// bytes instance = 1;
 inline void PublishReply::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -7788,7 +7788,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void PublishReply::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.PublishReply.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL PublishReply::mutable_instance()
@@ -7865,7 +7865,7 @@ inline void PublishReply::_internal_set_version(::uint64_t value) {
 
 // CatalogRenewRequest
 
-// string instance = 1;
+// bytes instance = 1;
 inline void CatalogRenewRequest::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -7880,7 +7880,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void CatalogRenewRequest::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.CatalogRenewRequest.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL CatalogRenewRequest::mutable_instance()
@@ -8143,7 +8143,7 @@ inline void CatalogRenewRequest::_internal_set_ttl_ms(::uint32_t value) {
 
 // CreateRequest
 
-// string instance = 1;
+// bytes instance = 1;
 inline void CreateRequest::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -8158,7 +8158,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void CreateRequest::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.CreateRequest.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL CreateRequest::mutable_instance()
@@ -8461,7 +8461,7 @@ inline void CreateRequest::_internal_set_ttl_ms(::uint32_t value) {
 
 // CreateReply
 
-// string instance = 1;
+// bytes instance = 1;
 inline void CreateReply::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -8476,7 +8476,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void CreateReply::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.CreateReply.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL CreateReply::mutable_instance()
@@ -8525,7 +8525,7 @@ inline void CreateReply::set_allocated_instance(::std::string* PROTOBUF_NULLABLE
   // @@protoc_insertion_point(field_set_allocated:proto.comet.v1.CreateReply.instance)
 }
 
-// string uuid = 2;
+// bytes uuid = 2;
 inline void CreateReply::clear_uuid() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uuid_.ClearToEmpty();
@@ -8540,7 +8540,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void CreateReply::set_uuid(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.uuid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.uuid_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.CreateReply.uuid)
 }
 inline ::std::string* PROTOBUF_NONNULL CreateReply::mutable_uuid()
@@ -8617,7 +8617,7 @@ inline void CreateReply::_internal_set_ttl_ms(::uint32_t value) {
 
 // UpdateRequest
 
-// string instance = 1;
+// bytes instance = 1;
 inline void UpdateRequest::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -8632,7 +8632,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void UpdateRequest::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.UpdateRequest.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL UpdateRequest::mutable_instance()
@@ -8779,7 +8779,7 @@ inline void UpdateRequest::set_allocated_scope(::proto::comet::v1::Scope* PROTOB
   // @@protoc_insertion_point(field_set_allocated:proto.comet.v1.UpdateRequest.scope)
 }
 
-// string uuid = 3;
+// bytes uuid = 3;
 inline void UpdateRequest::clear_uuid() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uuid_.ClearToEmpty();
@@ -8794,7 +8794,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void UpdateRequest::set_uuid(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.uuid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.uuid_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.UpdateRequest.uuid)
 }
 inline ::std::string* PROTOBUF_NONNULL UpdateRequest::mutable_uuid()
@@ -8963,7 +8963,7 @@ inline void UpdateReply::_internal_set_order(::uint64_t value) {
 
 // RenewRequest
 
-// string instance = 1;
+// bytes instance = 1;
 inline void RenewRequest::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -8978,7 +8978,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void RenewRequest::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.RenewRequest.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL RenewRequest::mutable_instance()
@@ -9125,7 +9125,7 @@ inline void RenewRequest::set_allocated_scope(::proto::comet::v1::Scope* PROTOBU
   // @@protoc_insertion_point(field_set_allocated:proto.comet.v1.RenewRequest.scope)
 }
 
-// string uuid = 3;
+// bytes uuid = 3;
 inline void RenewRequest::clear_uuid() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uuid_.ClearToEmpty();
@@ -9140,7 +9140,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void RenewRequest::set_uuid(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.uuid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.uuid_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.RenewRequest.uuid)
 }
 inline ::std::string* PROTOBUF_NONNULL RenewRequest::mutable_uuid()
@@ -9245,7 +9245,7 @@ inline void RenewReply::_internal_set_order(::uint64_t value) {
 
 // RemoveRequest
 
-// string instance = 1;
+// bytes instance = 1;
 inline void RemoveRequest::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -9260,7 +9260,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void RemoveRequest::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.RemoveRequest.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL RemoveRequest::mutable_instance()
@@ -9407,7 +9407,7 @@ inline void RemoveRequest::set_allocated_scope(::proto::comet::v1::Scope* PROTOB
   // @@protoc_insertion_point(field_set_allocated:proto.comet.v1.RemoveRequest.scope)
 }
 
-// string uuid = 3;
+// bytes uuid = 3;
 inline void RemoveRequest::clear_uuid() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.uuid_.ClearToEmpty();
@@ -9422,7 +9422,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void RemoveRequest::set_uuid(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.uuid_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.uuid_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.RemoveRequest.uuid)
 }
 inline ::std::string* PROTOBUF_NONNULL RemoveRequest::mutable_uuid()
@@ -9475,7 +9475,7 @@ inline void RemoveRequest::set_allocated_uuid(::std::string* PROTOBUF_NULLABLE v
 
 // WatchRequest
 
-// string instance = 1;
+// bytes instance = 1;
 inline void WatchRequest::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -9490,7 +9490,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void WatchRequest::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000001U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.WatchRequest.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL WatchRequest::mutable_instance()
@@ -9637,7 +9637,7 @@ inline void WatchRequest::set_allocated_scope(::proto::comet::v1::Scope* PROTOBU
   // @@protoc_insertion_point(field_set_allocated:proto.comet.v1.WatchRequest.scope)
 }
 
-// string target = 3;
+// bytes target = 3;
 inline void WatchRequest::clear_target() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.target_.ClearToEmpty();
@@ -9652,7 +9652,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void WatchRequest::set_target(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.target_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.target_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.WatchRequest.target)
 }
 inline ::std::string* PROTOBUF_NONNULL WatchRequest::mutable_target()
@@ -9864,7 +9864,7 @@ inline void AlmanacWatchReply::_internal_set_version(::uint64_t value) {
   _impl_.version_ = value;
 }
 
-// string instance = 5;
+// bytes instance = 5;
 inline void AlmanacWatchReply::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -9879,7 +9879,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void AlmanacWatchReply::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.AlmanacWatchReply.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL AlmanacWatchReply::mutable_instance()
@@ -10063,7 +10063,7 @@ inline void CatalogWatchReply::_internal_set_version(::uint64_t value) {
   _impl_.version_ = value;
 }
 
-// string instance = 5;
+// bytes instance = 5;
 inline void CatalogWatchReply::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -10078,7 +10078,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void CatalogWatchReply::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.CatalogWatchReply.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL CatalogWatchReply::mutable_instance()
@@ -10262,7 +10262,7 @@ inline void EphemerisWatchReply::_internal_set_version(::uint64_t value) {
   _impl_.version_ = value;
 }
 
-// string instance = 5;
+// bytes instance = 5;
 inline void EphemerisWatchReply::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -10277,7 +10277,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void EphemerisWatchReply::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.EphemerisWatchReply.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL EphemerisWatchReply::mutable_instance()
@@ -10674,7 +10674,7 @@ inline void Failure::set_allocated_message(::std::string* PROTOBUF_NULLABLE valu
   // @@protoc_insertion_point(field_set_allocated:proto.comet.v1.Failure.message)
 }
 
-// string instance = 11;
+// bytes instance = 11;
 inline void Failure::clear_instance() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.instance_.ClearToEmpty();
@@ -10689,7 +10689,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Failure::set_instance(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000004U);
-  _impl_.instance_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.instance_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.comet.v1.Failure.instance)
 }
 inline ::std::string* PROTOBUF_NONNULL Failure::mutable_instance()

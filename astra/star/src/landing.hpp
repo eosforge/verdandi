@@ -9,7 +9,7 @@ template <typename Domain>
     requires(std::same_as<Domain, Catalog> || std::same_as<Domain, Ephemeris>)
 class Landing {
 public:
-    using Source = Origin<typename Domain::Record>; // 接收者持有的远端来源, 不允许借来本机发送来源.
+    using Source = Origin<typename Domain::Record, std::same_as<Domain, Ephemeris>>; // 接收者持有的远端来源, 不允许借来本机发送来源.
     using Page = std::conditional_t<std::same_as<Domain, Catalog>, proto::astra::v1::CatalogSnapshot, proto::astra::v1::EphemerisSnapshot>;
     using Error = typename Source::Error; // 结构/重复/容量/位置区分, 不用错误文本决定恢复策略.
 

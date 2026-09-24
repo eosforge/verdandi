@@ -25,8 +25,8 @@ flowchart LR
 ```
 
 登记复用 `proto.orbit.v1.Admission/Register`, 没有另造一套空的 Issuer 协议.
-`RegistrationResponse.pulse_endpoint` 告知对时端口; 旧 Go Supervisor 返回空值时,
-Star 仍可完成原有准入, 但不能接受依赖全局截止的新有限租约.
+`RegistrationResponse.pulse_endpoint` 告知对时端口; 返回空值时,
+Star 仍可完成原有准入, 但不能接受依赖全局截止的新有限租约. Pulsar 正常返回该地址.
 
 `proto.pulsar.v1.Pulse/Bounce` 是短生命周期双向流. 只允许当前有效的 Star 凭证,
 每条流验签一次, 不重复执行密码 KDF. Planet 暂不接入对时线程, 其既有准入和候选规则保留.
@@ -107,6 +107,8 @@ SQLITE_BUSY 的等待及重试有界, 不能阻塞 Pulse 或绕过 RPC 期限. C
 初始化与正常启动分开: 初始化使用明确的新群组/新信任边界和未占用的状态目标, 已存在文件时拒绝覆盖; 正常启动缺库、错误格式或身份绑定不符时失败, 不自动创建空库. 不在原信任域内清空成员代次和启动幂等索引后重新签发. 初始化 schema/元信息原子完成, 中断不能把半成品当作合法空群组; CLI 为 `--init=true|false`, 默认 false; 父目录必须已存在, 该实现不授权重建已有部署.
 
 同一 SQLite 库的正常重启继续恢复全部当前成员和启动绑定, 旧请求的拒绝证据不因本次裁剪兼容范围而删除. 旧备份不能直接覆盖正在运行的签发者状态, SQLite 文件也不提供防回滚保证.
+
+Schema 1 成员正文的 principal 固定为 64 字符小写十六进制, 必须与 members 主键一致. 线上 Member 使用 32 字节摘要, Ledger 在持久化/恢复边界转换, 不让线协议的 string/bytes 优化改变既有磁盘格式. 正常恢复不重写数据库、不重置成员代次, 也不接受正文与主键不匹配的记录.
 
 SQLite 不保存一个用于重启续接的物理时钟计数器. 重启时间仍按下文从受系统对时约束的 Unix 时间重新建立参考, 不能用最后落盘的时间推断停机时长. 实现固定 SQLite 3.53.4 与 Schema 1, CMake 仅消费已存在的官方 amalgamation, 核对压缩包及 C/头文件 SHA256; 不查找系统库或隐式下载. 独立 `.lock` 使用 flock 保持整个进程生命周期的服务独占. 恢复核对当前成员和从 1 到当前代次的全部启动绑定, 历史受已确认容量限制. 新增依赖仍需明确下载授权. 存储验收要求见 [管理与成员存储](../../testkit/comet.md#管理与成员存储), 实际结果见 [验证记录](../../testkit/validation.md).
 

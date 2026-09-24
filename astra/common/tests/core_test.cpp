@@ -63,8 +63,8 @@ void configuration() {
     CHECK(!Endpoint::parse("[fe80::1%2]:7443"));
     CHECK(!Endpoint::parse("224.0.0.1:7443"));
     CHECK(!Endpoint::parse("0.0.0.0:7443"));
-    CHECK(!Config::format_supervisor("0.0.0.0:7443"));
-    CHECK(!Config::format_supervisor("224.0.0.1:7443"));
+    CHECK(!Config::format_pulsar("0.0.0.0:7443"));
+    CHECK(!Config::format_pulsar("224.0.0.1:7443"));
     CHECK(Endpoint::parse("0.0.0.0:0", true));
     CHECK(Endpoint::parse("[2001:0DB8:0:0:0:0:0:1]:7443")->text() == "[2001:db8::1]:7443");
     CHECK(Member::valid_id("short"));
@@ -100,10 +100,10 @@ void configuration() {
     public_options.insert(public_options.end(), {"--comet=127.0.0.1:7445", "--comet-identity=public"});
     const auto encrypted = Config::parse(public_options, Member::Role::star);
     CHECK(encrypted && encrypted->tls && encrypted->auth && encrypted->comet_identity == "public");
-    // Supervisor 主机解析移动实现文件后仍保留端口与 DNS 标签验证.
-    CHECK(Config::format_supervisor("Supervisor.EXAMPLE:7444") == "Supervisor.EXAMPLE:7444");
+    // Pulsar 主机解析移动实现文件后仍保留端口与 DNS 标签验证.
+    CHECK(Config::format_pulsar("Pulsar.EXAMPLE:7444") == "Pulsar.EXAMPLE:7444");
     for (const auto invalid : {"host:0", "host:65536", "host:1x", "-host:7444", "host..local:7444", "[::]:7444"}) {
-        CHECK(!Config::format_supervisor(invalid));
+        CHECK(!Config::format_pulsar(invalid));
     }
 }
 
@@ -472,7 +472,7 @@ void candidate_group_changes() {
     b.group = "default";
     CHECK(planet.accept(b, Policy::Direction::outbound, {2}, *second));
     planet.closed({2}, Status::Code::transport, now);
-    // 不依赖 Supervisor 刷新, 下一轮仍优先当前的同组 Star, 而不是原名单中排第一的 Star.
+    // 不依赖 Pulsar 刷新, 下一轮仍优先当前的同组 Star, 而不是原名单中排第一的 Star.
     const auto preferred = planet.due(now + std::chrono::seconds(6));
     CHECK(preferred && *preferred == b);
 }

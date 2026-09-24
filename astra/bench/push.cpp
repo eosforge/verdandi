@@ -398,7 +398,8 @@ public:
         proto::orbit::v1::Member member;
         member.set_galaxy("alpha");
         member.set_id("probe/" + std::to_string(hub_.config.fanout));
-        member.set_principal(identity_->principal("alpha", "127.0.0.1:39001").text());
+        const auto digest = identity_->principal("alpha", "127.0.0.1:39001");
+        member.set_principal(digest.bytes.data(), digest.bytes.size());
         member.set_advertise("127.0.0.1:39001");
         member.set_epoch(1);
         member.set_role(proto::orbit::v1::ROLE_STAR);

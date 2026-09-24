@@ -30,28 +30,19 @@ Ephemeris::Error Ephemeris::error(Clock::Error value) noexcept {
 
 bool Ephemeris::valid(std::string_view uuid) noexcept {
 
-    if (uuid.size() != 36 || uuid[14] != '4' || (uuid[19] != '8' && uuid[19] != '9' && uuid[19] != 'a' && uuid[19] != 'b')) {
+    if (uuid.size() != 16) {
         return false;
     }
-    for (std::size_t index = 0; index < uuid.size(); ++index) {
-        const auto value = uuid[index]; // 当前 ASCII 字节, 不做大小写或 Unicode 归一化.
-        if (index == 8 || index == 13 || index == 18 || index == 23) {
-            if (value != '-') {
-                return false;
-            }
-        } else if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f'))) {
-            return false;
-        }
-    }
-    return true;
+    const auto bytes = reinterpret_cast<const std::uint8_t*>(uuid.data());
+    return (bytes[6] & 0xf0U) == 0x40U && (bytes[8] & 0xc0U) == 0x80U; // 仅接受版本 4 与 RFC 变体, 不解释文本别名.
 }
 
 std::string Ephemeris::uuid() {
 
-    std::array<std::uint8_t, 16> bytes{}; // 系统随机字节, 仅生成时在栈上保存原始二进制.
-    std::size_t offset{};                 // 已取得字节数, 正确处理 EINTR 和短读取.
-    while (offset < bytes.size()) {
-        const auto count = ::getrandom(bytes.data() + offset, bytes.size() - offset, 0);
+    std::string result(16, '\0'); // 直接保存原始二进制, 不再格式化连字符文本.
+    std::size_t offset{};         // 已取得字节数, 正确处理 EINTR 和短读取.
+    while (offset < result.size()) {
+        const auto count = ::getrandom(result.data() + offset, result.size() - offset, 0);
         if (count < 0 && errno == EINTR) {
             continue;
         }
@@ -60,19 +51,9 @@ std::string Ephemeris::uuid() {
         }
         offset += static_cast<std::size_t>(count);
     }
+    auto* bytes = reinterpret_cast<std::uint8_t*>(result.data());
     bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U); // 固定 UUID 版本 4.
     bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U); // 固定 RFC variant, 保留其余随机位.
-
-    constexpr std::string_view digits = "0123456789abcdef"; // 项目统一小写, 不在后续请求中重复格式化.
-    std::string result(36, '-');                            // 只有此处创建规范文本, 字节不经过流格式化或区域设置.
-    offset = 0;
-    for (const auto value : bytes) {
-        if (offset == 8 || offset == 13 || offset == 18 || offset == 23) {
-            ++offset;
-        }
-        result[offset++] = digits[value >> 4];
-        result[offset++] = digits[value & 15];
-    }
     return result;
 }
 

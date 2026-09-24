@@ -650,7 +650,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Member final : public ::google::pro
   ::std::string* PROTOBUF_NONNULL _internal_mutable_galaxy();
 
   public:
-  // string id = 2;
+  // bytes id = 2;
   void clear_id() ;
   [[nodiscard]] const ::std::string& id() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -665,7 +665,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Member final : public ::google::pro
   ::std::string* PROTOBUF_NONNULL _internal_mutable_id();
 
   public:
-  // string principal = 3;
+  // bytes principal = 3;
   void clear_principal() ;
   [[nodiscard]] const ::std::string& principal() const;
   template <typename Arg_ = const ::std::string&, typename... Args_>
@@ -735,7 +735,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Member final : public ::google::pro
   class _Internal;
   using ParseTableT_ =
       ::google::protobuf::internal::TcParseTable<3, 7,
-                          0, 61,
+                          0, 50,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -2491,7 +2491,7 @@ inline void Member::set_allocated_galaxy(::std::string* PROTOBUF_NULLABLE value)
   // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.Member.galaxy)
 }
 
-// string id = 2;
+// bytes id = 2;
 inline void Member::clear_id() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.id_.ClearToEmpty();
@@ -2506,7 +2506,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Member::set_id(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000002U);
-  _impl_.id_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.id_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.orbit.v1.Member.id)
 }
 inline ::std::string* PROTOBUF_NONNULL Member::mutable_id()
@@ -2555,7 +2555,7 @@ inline void Member::set_allocated_id(::std::string* PROTOBUF_NULLABLE value) {
   // @@protoc_insertion_point(field_set_allocated:proto.orbit.v1.Member.id)
 }
 
-// string principal = 3;
+// bytes principal = 3;
 inline void Member::clear_principal() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.principal_.ClearToEmpty();
@@ -2570,7 +2570,7 @@ template <typename Arg_, typename... Args_>
 PROTOBUF_ALWAYS_INLINE void Member::set_principal(Arg_&& arg, Args_... args) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   SetHasBit(_impl_._has_bits_[0], 0x00000004U);
-  _impl_.principal_.Set(static_cast<Arg_&&>(arg), args..., GetArena());
+  _impl_.principal_.SetBytes(static_cast<Arg_&&>(arg), args..., GetArena());
   // @@protoc_insertion_point(field_set:proto.orbit.v1.Member.principal)
 }
 inline ::std::string* PROTOBUF_NONNULL Member::mutable_principal()

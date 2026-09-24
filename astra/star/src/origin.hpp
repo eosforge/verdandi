@@ -26,7 +26,7 @@ namespace astra {
 // 除已返回 View 外, 写入及 Edit 寿命由外层串行保护, const 读取同样不得与准备交错. 同时至多一个准备事务.
 // 远端 Batch 可在来源独占锁下准备私有根/目录, 发布原根之前仍取得 gate, 与已有 View 的读完成屏障配对.
 // 提交只移交不可变字节引用和原生标量, Item 的复制/移动必须无异常, 在模板使用边界拒绝不合格类型.
-template <typename Item>
+template <typename Item, bool BinaryKey = false>
     requires(std::is_nothrow_copy_constructible_v<Item> && std::is_nothrow_copy_assignable_v<Item> && std::is_nothrow_move_constructible_v<Item> && std::is_nothrow_move_assignable_v<Item>)
 class Origin {
 public:
@@ -34,9 +34,22 @@ public:
     struct Name {
         // 已验证的二元地址, 不同 Key 共享本来源 Scope 的同一个对象.
         std::shared_ptr<const Scope> scope;
-        // 原始 UTF-8 Key 或规范 UUID, 不包含 Scope/来源前缀.
+        // 原始 UTF-8 Key 或 16 字节 UUID 二进制, 不包含 Scope/来源前缀.
         std::string key;
     };
+
+    // 按域校验 Key 形状: Catalog 为 UTF-8 文本, Ephemeris 为 16 字节 UUID 二进制. 外层仍做完整业务校验, 本类只做形状门卫.
+    static bool valid_key(std::string_view key) noexcept {
+        if constexpr (BinaryKey) {
+            if (key.size() != 16) {
+                return false;
+            }
+            const auto bytes = reinterpret_cast<const std::uint8_t*>(key.data());
+            return (bytes[6] & 0xf0U) == 0x40U && (bytes[8] & 0xc0U) == 0x80U;
+        } else {
+            return Scope::text(key, 1024);
+        }
+    }
 
     // 来源根直接保存原生记录, 不把 Attr/Data 或仅水位序列化成 KV Buffer.
     using Tree = Pages<Item, Name>;
@@ -333,7 +346,7 @@ public:
         // 一个候选中每个 Scope/Key 至多修改一次. 任意失败后只能放弃整批, 不提交先前准备的子集.
         std::expected<typename Tree::Key, Error> set(const Scope& scope, std::string_view key, Item record) {
 
-            if (failed_ || !owner_ || !scope.valid() || !Scope::text(key, 1024)) {
+            if (failed_ || !owner_ || !scope.valid() || !valid_key(key)) {
                 failed_ = true;
                 return std::unexpected(Error::input);
             }
@@ -669,7 +682,7 @@ public:
     std::expected<Edit, Error> prepare(const Scope& scope, std::string_view key, std::optional<Item> record, std::optional<std::uint64_t> position, std::chrono::steady_clock::time_point now, Form form = Form::record) {
 
         idle();
-        if (!scope.valid() || !Scope::text(key, 1024)) {
+        if (!scope.valid() || !valid_key(key)) {
             return std::unexpected(Error::input);
         }
         if ((record && form == Form::erase) || (!record && (form == Form::data || form == Form::renew))) {

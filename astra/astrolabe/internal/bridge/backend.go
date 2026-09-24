@@ -2,6 +2,7 @@
 package bridge
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -63,7 +64,7 @@ func (backend *Backend) Update(observation error) {
 	index := make(map[string]string, len(members))
 	for _, candidate := range members {
 		nodes = append(nodes, describe(candidate))
-		index[candidate.Advertise] = candidate.Id
+		index[candidate.Advertise] = string(candidate.Id)
 		if candidate.Role == orbit.Role_ROLE_POLARIS {
 			multiple = multiple || member != nil
 			member = candidate
@@ -76,7 +77,7 @@ func (backend *Backend) Update(observation error) {
 	backend.mutex.Lock()
 	backend.observed, backend.stale, backend.nodes = time.Now(), false, nodes
 	backend.members = index // 与目录在同一短锁内发布, 抓取仍在锁外, 不缓存一次请求开始时的旧身份.
-	unchanged := backend.target != nil && member != nil && backend.target.member.Id == member.Id
+	unchanged := backend.target != nil && member != nil && bytes.Equal(backend.target.member.Id, member.Id)
 	closed := backend.closed
 	backend.mutex.Unlock()
 	if unchanged || closed {
@@ -208,7 +209,7 @@ type node struct {
 
 // describe 只在可信目录变更时提取展示字段, 浏览器 epoch 使用字符串防止丢失 uint64 精度.
 func describe(member *orbit.Member) node {
-	return node{member.Id, member.Role.String(), member.Galaxy, member.Group, member.Advertise, strconv.FormatUint(member.Epoch, 10)}
+	return node{string(member.Id), member.Role.String(), member.Galaxy, member.Group, member.Advertise, strconv.FormatUint(member.Epoch, 10)}
 }
 
 // Nodes 捕获不可变脱敏投影, observed/stale 不等同于节点在线状态, 不在请求热路径克隆全部 Protobuf.

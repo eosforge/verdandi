@@ -1,4 +1,5 @@
 #include "readout.hpp"
+#include "watch_kernel.hpp"
 #include <algorithm>
 #include <atomic>
 #include <stdexcept>
@@ -86,6 +87,7 @@ public:
     bool overflow{};                                             // 后缀分配/预算/连续性失败, mutex_ 内单向置位.
     bool queued{};                                               // 在就绪链表中至多一次, mutex_ 保护.
     Stream* next{};                                              // 侵入式就绪后继, 没有独立分配.
+    typename astra::Watch<Stream>::Link flight;                  // 独立在途双向链, 由拥有者索引锁保护, 初始未入链.
     std::unique_ptr<std::stop_callback<Cancel>> cancel;          // 必须在 OnDone 返回前注销上下文借用.
     std::size_t encoded{};                                       // 当前在途页逻辑字节, mutex_ 保护计费.
 };
@@ -93,7 +95,8 @@ public:
 Readout::Readout(Library& library, Gateway& gateway, std::function<void()> wake) : Readout(library, gateway, std::move(wake), Limits{}) {}
 
 Readout::Readout(Library& library, Gateway& gateway, std::function<void()> wake, Limits limits) : library_(library), gateway_(gateway), wake_(std::move(wake)), limits_(limits) {
-    if (!wake_ || limits.streams == 0 || limits.streams > 65536 || limits.bytes == 0 || limits.pending == 0 || limits.pending > limits.bytes || limits.timeout.count() <= 0) {
+    astra::Watch<Stream>::validate(limits_, "Invalid Almanac watch budget");
+    if (!wake_) {
         throw std::invalid_argument("Invalid Almanac watch budget");
     }
 }
@@ -101,15 +104,7 @@ Readout::Readout(Library& library, Gateway& gateway, std::function<void()> wake,
 Readout::~Readout() = default;
 
 void Readout::enqueue(Stream& stream) noexcept {
-    if (!stream.queued) {
-        stream.queued = true;
-        if (tail_) {
-            tail_->next = &stream;
-        } else {
-            head_ = &stream;
-        }
-        tail_ = &stream;
-    }
+    queue_.enqueue(stream);
 }
 
 void Readout::signal(Stream& stream) noexcept {
@@ -257,6 +252,7 @@ std::expected<Edition, grpc::Status> Readout::initial(Stream& stream) {
 
 void Readout::retire(Stream& stream) {
     bytes_ -= stream.bytes + stream.held + stream.encoded;
+    queue_.settle(stream);
     const auto group = streams_.find(stream.scope);
     progress_.erase(group->second, &stream);
     group->second.broadcast.erase(&stream); // 非拥有视图与拥有者同锁同步清除, 不留悬空指针.
@@ -331,6 +327,7 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
                 const std::lock_guard lock(mutex_);
                 bytes_ -= stream.encoded;
                 stream.encoded = 0;
+                queue_.settle(stream);
             }
         }
         if (!stream.started) {
@@ -417,8 +414,8 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
             return;
         }
         const std::lock_guard lock(mutex_);
-        const auto over_total = bytes_ > limits_.bytes || encoded > limits_.bytes - bytes_; // 全局已超限时不再用减法比较, 避免回绕放行.
-        const auto over_stream = stream.bytes > limits_.pending || encoded > limits_.pending - stream.bytes;
+        const auto over_total = astra::Watch<Stream>::exceeds(bytes_, encoded, limits_.bytes); // 全局已超限时不再用减法比较, 避免回绕放行.
+        const auto over_stream = astra::Watch<Stream>::exceeds(stream.bytes, encoded, limits_.pending);
         if (stream.overflow || stopped_ || !streams_.find(stream.scope)->second.covers(stream.edition->version()) || over_total || over_stream) {
             proto::comet::v1::AlmanacWatchReply{}.Swap(&stream.page); // 此页尚未进入在途, 不保留未计费的大编码缓冲.
             stream.finished = true;
@@ -430,6 +427,7 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
         stream.deadline = now + limits_.timeout;
         stream.writing = true;
         stream.busy.store(true, std::memory_order_release);
+        queue_.write(stream);
         stream.StartWrite(&stream.page);
     } catch (...) {
         stream.finished = true;
@@ -439,34 +437,20 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
 
 void Readout::pump(std::chrono::steady_clock::time_point now, std::size_t maximum) {
 
+    // 扫描期限仅由串行控制循环读写, 未到期时不取得订阅索引锁.
     if (now >= sweep_) {
         const std::lock_guard lock(mutex_);
-        // 只有在途 Write 需要检查 deadline, 空闲 Watch 的数据更新完全由提交通知触发.
-        for (const auto& [scope, group] : streams_) {
-            static_cast<void>(scope);
-            for (const auto& [address, stream] : group.streams) {
-                static_cast<void>(address);
-                if (stream->busy.load(std::memory_order_acquire)) {
-                    enqueue(*stream);
-                }
-            }
-        }
-        sweep_ = now + std::chrono::seconds(1);
+        queue_.sweep(now, sweep_, wake_);
     }
+
     for (std::size_t count = 0; count < maximum; ++count) {
         std::shared_ptr<Stream> stream; // 弹出后保活, OnDone 回收索引不会释放当前栈使用的对象.
         {
             const std::lock_guard lock(mutex_);
-            if (!head_) {
+            stream = queue_.pop();
+            if (!stream) {
                 break;
             }
-            stream = head_->shared_from_this();
-            head_ = head_->next;
-            if (!head_) {
-                tail_ = nullptr;
-            }
-            stream->queued = false;
-            stream->next = nullptr;
         }
         advance(*stream, now);
     }
@@ -480,7 +464,7 @@ void Readout::pump(std::chrono::steady_clock::time_point now, std::size_t maximu
         enqueue(*stream); // 已在写/结束的流也安全入队, advance 在 io 锁内判定, 不倒置锁序.
     }
     const std::lock_guard lock(mutex_);
-    if (head_ || progress_.pending()) {
+    if (!queue_.idle() || progress_.pending()) {
         wake_(); // 孤立的一次无关提交也会被排空, 不依赖下一次更新或低频兜底.
     }
 }

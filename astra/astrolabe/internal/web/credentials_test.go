@@ -22,7 +22,7 @@ func TestCredentials(t *testing.T) {
 	secret := base64.StdEncoding.EncodeToString([]byte("private-secret"))
 	input := `{"key":"application","secret":"` + secret + `","version":"1"}`
 	response := request(server, http.MethodPost, "/api/credentials", input, cookie)
-	if response.Code != http.StatusOK || backend.calls.Load() != 1 || backend.request.Scope.Sector != "__auth" || backend.request.Scope.Spectrum != "comet" || backend.request.Version != 1 || backend.request.Change.Key != "application" {
+	if response.Code != http.StatusOK || backend.calls.Load() != 1 || string(backend.request.Scope.Sector) != "__auth" || string(backend.request.Scope.Spectrum) != "comet" || backend.request.Version != 1 || backend.request.Change.Key != "application" {
 		t.Fatal("credential did not use one authority commit")
 	}
 	var decoded orbit.Credential
@@ -51,7 +51,7 @@ func TestCredentialRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	backend := &backend{pages: []*polaris.Snapshot{{Scope: &comet.Scope{Sector: "__auth", Spectrum: "comet"}, Version: proto.Uint64(3), Complete: true, Entries: []*comet.AlmanacChange{{Key: "application", Action: &comet.AlmanacChange_Value{Value: encoded}}}}}}
+	backend := &backend{pages: []*polaris.Snapshot{{Scope: &comet.Scope{Sector: []byte("__auth"), Spectrum: []byte("comet")}, Version: proto.Uint64(3), Complete: true, Entries: []*comet.AlmanacChange{{Key: "application", Action: &comet.AlmanacChange_Value{Value: encoded}}}}}}
 	server := server(t, backend)
 	cookie := login(t, server)
 	for _, path := range []string{"/api/credentials", "/api/almanac?sector=__auth&spectrum=comet"} {

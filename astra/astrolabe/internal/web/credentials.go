@@ -14,7 +14,7 @@ import (
 // response/request 为当前 HTTP 交换; 凭据存于内部 __auth/comet 范围, 版本乐观并发由 Polaris 裁决.
 func (server *Server) credentials(response http.ResponseWriter, request *http.Request) {
 	// 凭据固定存于内部范围, 不接受调用方指定范围.
-	scope := &comet.Scope{Sector: "__auth", Spectrum: "comet"}
+	scope := &comet.Scope{Sector: []byte("__auth"), Spectrum: []byte("comet")}
 	if request.URL.RawQuery != "" {
 		// 查询串无意义, 直接拒绝, 不进入方法分发.
 		problem(response, http.StatusBadRequest, "input", "unapplied")

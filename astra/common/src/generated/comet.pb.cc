@@ -405,23 +405,20 @@ constexpr SessionReply::ParseTableT_ SessionReply::InternalGenerateParseTable_(c
       {::_pbi::TcParser::FastBS1,
        {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(SessionReply, _impl_.session_)}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(SessionReply, _impl_.instance_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(SessionReply, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(SessionReply, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // bytes session = 2;
       {PROTOBUF_FIELD_OFFSET(SessionReply, _impl_.session_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     // no aux_entries
     {{
-      "\33\10\0\0\0\0\0\0"
-      "proto.comet.v1.SessionReply"
-      "instance"
     }},
   };
 }
@@ -555,28 +552,24 @@ constexpr Scope::ParseTableT_ Scope::InternalGenerateParseTable_(const ::_pbi::C
       ::_pbi::TcParser::GetTable<::proto::comet::v1::Scope>(),  // to_prefetch
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
-      // string spectrum = 2;
-      {::_pbi::TcParser::FastUS1,
+      // bytes spectrum = 2;
+      {::_pbi::TcParser::FastBS1,
        {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(Scope, _impl_.spectrum_)}},
-      // string sector = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes sector = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(Scope, _impl_.sector_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string sector = 1;
-      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.sector_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-      // string spectrum = 2;
-      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.spectrum_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes sector = 1;
+      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.sector_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
+      // bytes spectrum = 2;
+      {PROTOBUF_FIELD_OFFSET(Scope, _impl_.spectrum_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     // no aux_entries
     {{
-      "\24\6\10\0\0\0\0\0"
-      "proto.comet.v1.Scope"
-      "sector"
-      "spectrum"
     }},
   };
 }
@@ -854,23 +847,20 @@ constexpr PublishReply::ParseTableT_ PublishReply::InternalGenerateParseTable_(c
       {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(PublishReply, _impl_.version_), 1>(),
        {16, 1, 0,
         PROTOBUF_FIELD_OFFSET(PublishReply, _impl_.version_)}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(PublishReply, _impl_.instance_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(PublishReply, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(PublishReply, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // uint64 version = 2;
       {PROTOBUF_FIELD_OFFSET(PublishReply, _impl_.version_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
     }},
     // no aux_entries
     {{
-      "\33\10\0\0\0\0\0\0"
-      "proto.comet.v1.PublishReply"
-      "instance"
     }},
   };
 }
@@ -1043,8 +1033,8 @@ constexpr Failure::ParseTableT_ Failure::InternalGenerateParseTable_(const ::_pb
       {::_pbi::TcParser::FastUS1,
        {82, 1, 0,
         PROTOBUF_FIELD_OFFSET(Failure, _impl_.message_)}},
-      // string instance = 11;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 11;
+      {::_pbi::TcParser::FastBS1,
        {90, 2, 0,
         PROTOBUF_FIELD_OFFSET(Failure, _impl_.instance_)}},
       {::_pbi::TcParser::MiniParse, {}},
@@ -1074,16 +1064,15 @@ constexpr Failure::ParseTableT_ Failure::InternalGenerateParseTable_(const ::_pb
       {PROTOBUF_FIELD_OFFSET(Failure, _impl_.maximum_), _Internal::kHasBitsOffset + 9, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
       // string message = 10;
       {PROTOBUF_FIELD_OFFSET(Failure, _impl_.message_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-      // string instance = 11;
-      {PROTOBUF_FIELD_OFFSET(Failure, _impl_.instance_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 11;
+      {PROTOBUF_FIELD_OFFSET(Failure, _impl_.instance_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     // no aux_entries
     {{
-      "\26\0\0\0\0\0\0\0\5\0\7\10\0\0\0\0"
+      "\26\0\0\0\0\0\0\0\5\0\7\0\0\0\0\0"
       "proto.comet.v1.Failure"
       "limit"
       "message"
-      "instance"
     }},
   };
 }
@@ -1504,12 +1493,12 @@ constexpr CreateReply::ParseTableT_ CreateReply::InternalGenerateParseTable_(con
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
       {::_pbi::TcParser::MiniParse, {}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(CreateReply, _impl_.instance_)}},
-      // string uuid = 2;
-      {::_pbi::TcParser::FastUS1,
+      // bytes uuid = 2;
+      {::_pbi::TcParser::FastBS1,
        {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(CreateReply, _impl_.uuid_)}},
       // uint32 ttl_ms = 3;
@@ -1519,19 +1508,15 @@ constexpr CreateReply::ParseTableT_ CreateReply::InternalGenerateParseTable_(con
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(CreateReply, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-      // string uuid = 2;
-      {PROTOBUF_FIELD_OFFSET(CreateReply, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(CreateReply, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
+      // bytes uuid = 2;
+      {PROTOBUF_FIELD_OFFSET(CreateReply, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // uint32 ttl_ms = 3;
       {PROTOBUF_FIELD_OFFSET(CreateReply, _impl_.ttl_ms_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt32)},
     }},
     // no aux_entries
     {{
-      "\32\10\4\0\0\0\0\0"
-      "proto.comet.v1.CreateReply"
-      "instance"
-      "uuid"
     }},
   };
 }
@@ -1670,27 +1655,27 @@ constexpr WatchRequest::ParseTableT_ WatchRequest::InternalGenerateParseTable_(c
       {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(WatchRequest, _impl_.version_), 3>(),
        {32, 3, 0,
         PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.version_)}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.instance_)}},
       // .proto.comet.v1.Scope scope = 2;
       {::_pbi::TcParser::FastMtS1,
        {18, 2, 0,
         PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.scope_)}},
-      // string target = 3;
-      {::_pbi::TcParser::FastUS1,
+      // bytes target = 3;
+      {::_pbi::TcParser::FastBS1,
        {26, 1, 0,
         PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.target_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.scope_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // string target = 3;
-      {PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.target_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes target = 3;
+      {PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.target_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // optional uint64 version = 4;
       {PROTOBUF_FIELD_OFFSET(WatchRequest, _impl_.version_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
     }},
@@ -1702,10 +1687,6 @@ constexpr WatchRequest::ParseTableT_ WatchRequest::InternalGenerateParseTable_(c
         #endif
     }},
     {{
-      "\33\10\0\6\0\0\0\0"
-      "proto.comet.v1.WatchRequest"
-      "instance"
-      "target"
     }},
   };
 }
@@ -1842,16 +1823,16 @@ constexpr UpdateRequest::ParseTableT_ UpdateRequest::InternalGenerateParseTable_
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
       {::_pbi::TcParser::MiniParse, {}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.instance_)}},
       // .proto.comet.v1.Scope scope = 2;
       {::_pbi::TcParser::FastMtS1,
        {18, 3, 0,
         PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.scope_)}},
-      // string uuid = 3;
-      {::_pbi::TcParser::FastUS1,
+      // bytes uuid = 3;
+      {::_pbi::TcParser::FastBS1,
        {26, 1, 0,
         PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.uuid_)}},
       // uint64 order = 4;
@@ -1867,12 +1848,12 @@ constexpr UpdateRequest::ParseTableT_ UpdateRequest::InternalGenerateParseTable_
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.scope_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // string uuid = 3;
-      {PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes uuid = 3;
+      {PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // uint64 order = 4;
       {PROTOBUF_FIELD_OFFSET(UpdateRequest, _impl_.order_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
       // bytes data = 5;
@@ -1886,10 +1867,6 @@ constexpr UpdateRequest::ParseTableT_ UpdateRequest::InternalGenerateParseTable_
         #endif
     }},
     {{
-      "\34\10\0\4\0\0\0\0"
-      "proto.comet.v1.UpdateRequest"
-      "instance"
-      "uuid"
     }},
   };
 }
@@ -2032,27 +2009,27 @@ constexpr RenewRequest::ParseTableT_ RenewRequest::InternalGenerateParseTable_(c
       {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RenewRequest, _impl_.order_), 3>(),
        {32, 3, 0,
         PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.order_)}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.instance_)}},
       // .proto.comet.v1.Scope scope = 2;
       {::_pbi::TcParser::FastMtS1,
        {18, 2, 0,
         PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.scope_)}},
-      // string uuid = 3;
-      {::_pbi::TcParser::FastUS1,
+      // bytes uuid = 3;
+      {::_pbi::TcParser::FastBS1,
        {26, 1, 0,
         PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.uuid_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.scope_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // string uuid = 3;
-      {PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes uuid = 3;
+      {PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // uint64 order = 4;
       {PROTOBUF_FIELD_OFFSET(RenewRequest, _impl_.order_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
     }},
@@ -2064,10 +2041,6 @@ constexpr RenewRequest::ParseTableT_ RenewRequest::InternalGenerateParseTable_(c
         #endif
     }},
     {{
-      "\33\10\0\4\0\0\0\0"
-      "proto.comet.v1.RenewRequest"
-      "instance"
-      "uuid"
     }},
   };
 }
@@ -2204,27 +2177,27 @@ constexpr RemoveRequest::ParseTableT_ RemoveRequest::InternalGenerateParseTable_
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
       {::_pbi::TcParser::MiniParse, {}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.instance_)}},
       // .proto.comet.v1.Scope scope = 2;
       {::_pbi::TcParser::FastMtS1,
        {18, 2, 0,
         PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.scope_)}},
-      // string uuid = 3;
-      {::_pbi::TcParser::FastUS1,
+      // bytes uuid = 3;
+      {::_pbi::TcParser::FastBS1,
        {26, 1, 0,
         PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.uuid_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.scope_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
-      // string uuid = 3;
-      {PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes uuid = 3;
+      {PROTOBUF_FIELD_OFFSET(RemoveRequest, _impl_.uuid_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     {{
         #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -2234,10 +2207,6 @@ constexpr RemoveRequest::ParseTableT_ RemoveRequest::InternalGenerateParseTable_
         #endif
     }},
     {{
-      "\34\10\0\4\0\0\0\0"
-      "proto.comet.v1.RemoveRequest"
-      "instance"
-      "uuid"
     }},
   };
 }
@@ -2373,8 +2342,8 @@ constexpr PublishRequest::ParseTableT_ PublishRequest::InternalGenerateParseTabl
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
       {::_pbi::TcParser::MiniParse, {}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(PublishRequest, _impl_.instance_)}},
       // .proto.comet.v1.Scope scope = 2;
@@ -2401,8 +2370,8 @@ constexpr PublishRequest::ParseTableT_ PublishRequest::InternalGenerateParseTabl
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(PublishRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(PublishRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(PublishRequest, _impl_.scope_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
       // uint64 version = 3;
@@ -2422,9 +2391,8 @@ constexpr PublishRequest::ParseTableT_ PublishRequest::InternalGenerateParseTabl
         #endif
     }},
     {{
-      "\35\10\0\0\3\0\0\0"
+      "\35\0\0\0\3\0\0\0"
       "proto.comet.v1.PublishRequest"
-      "instance"
       "key"
     }},
   };
@@ -2567,15 +2535,15 @@ constexpr EphemerisChange::ParseTableT_ EphemerisChange::InternalGenerateParseTa
       ::_pbi::TcParser::GetTable<::proto::comet::v1::EphemerisChange>(),  // to_prefetch
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
-      // string uuid = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes uuid = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisChange, _impl_.uuid_)}},
     }}, {{
       65535, 65535
     }}, {{
-      // string uuid = 1;
-      {PROTOBUF_FIELD_OFFSET(EphemerisChange, _impl_.uuid_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes uuid = 1;
+      {PROTOBUF_FIELD_OFFSET(EphemerisChange, _impl_.uuid_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.EphemerisChange.Record record = 2;
       {PROTOBUF_FIELD_OFFSET(EphemerisChange, _impl_.action_.record_), _Internal::kOneofCaseOffset + 0, 0, (0 | ::_fl::kFcOneof | ::_fl::kMessage | ::_fl::kTvTable)},
       // .proto.comet.v1.Empty erase = 3;
@@ -2596,9 +2564,6 @@ constexpr EphemerisChange::ParseTableT_ EphemerisChange::InternalGenerateParseTa
         #endif
     }},
     {{
-      "\36\4\0\0\0\0\0\0"
-      "proto.comet.v1.EphemerisChange"
-      "uuid"
     }},
   };
 }
@@ -2732,8 +2697,8 @@ constexpr CreateRequest::ParseTableT_ CreateRequest::InternalGenerateParseTable_
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
       {::_pbi::TcParser::MiniParse, {}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(CreateRequest, _impl_.instance_)}},
       // .proto.comet.v1.Scope scope = 2;
@@ -2757,8 +2722,8 @@ constexpr CreateRequest::ParseTableT_ CreateRequest::InternalGenerateParseTable_
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(CreateRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(CreateRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(CreateRequest, _impl_.scope_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
       // bytes attr = 3;
@@ -2776,9 +2741,6 @@ constexpr CreateRequest::ParseTableT_ CreateRequest::InternalGenerateParseTable_
         #endif
     }},
     {{
-      "\34\10\0\0\0\0\0\0"
-      "proto.comet.v1.CreateRequest"
-      "instance"
     }},
   };
 }
@@ -2918,8 +2880,8 @@ constexpr CatalogRenewRequest::ParseTableT_ CatalogRenewRequest::InternalGenerat
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
       {::_pbi::TcParser::MiniParse, {}},
-      // string instance = 1;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 1;
+      {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(CatalogRenewRequest, _impl_.instance_)}},
       // .proto.comet.v1.Scope scope = 2;
@@ -2943,8 +2905,8 @@ constexpr CatalogRenewRequest::ParseTableT_ CatalogRenewRequest::InternalGenerat
     }}, {{
       65535, 65535
     }}, {{
-      // string instance = 1;
-      {PROTOBUF_FIELD_OFFSET(CatalogRenewRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 1;
+      {PROTOBUF_FIELD_OFFSET(CatalogRenewRequest, _impl_.instance_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // .proto.comet.v1.Scope scope = 2;
       {PROTOBUF_FIELD_OFFSET(CatalogRenewRequest, _impl_.scope_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
       // string key = 3;
@@ -2962,9 +2924,8 @@ constexpr CatalogRenewRequest::ParseTableT_ CatalogRenewRequest::InternalGenerat
         #endif
     }},
     {{
-      "\42\10\0\3\0\0\0\0"
+      "\42\0\0\3\0\0\0\0"
       "proto.comet.v1.CatalogRenewRequest"
-      "instance"
       "key"
     }},
   };
@@ -3444,8 +3405,8 @@ constexpr EphemerisWatchReply::ParseTableT_ EphemerisWatchReply::InternalGenerat
       {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(EphemerisWatchReply, _impl_.version_), 4>(),
        {32, 4, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisWatchReply, _impl_.version_)}},
-      // string instance = 5;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 5;
+      {::_pbi::TcParser::FastBS1,
        {42, 1, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisWatchReply, _impl_.instance_)}},
       {::_pbi::TcParser::MiniParse, {}},
@@ -3461,8 +3422,8 @@ constexpr EphemerisWatchReply::ParseTableT_ EphemerisWatchReply::InternalGenerat
       {PROTOBUF_FIELD_OFFSET(EphemerisWatchReply, _impl_.complete_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kBool)},
       // optional uint64 version = 4;
       {PROTOBUF_FIELD_OFFSET(EphemerisWatchReply, _impl_.version_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
-      // string instance = 5;
-      {PROTOBUF_FIELD_OFFSET(EphemerisWatchReply, _impl_.instance_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 5;
+      {PROTOBUF_FIELD_OFFSET(EphemerisWatchReply, _impl_.instance_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     {{
         #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -3472,9 +3433,6 @@ constexpr EphemerisWatchReply::ParseTableT_ EphemerisWatchReply::InternalGenerat
         #endif
     }},
     {{
-      "\42\0\0\0\0\10\0\0"
-      "proto.comet.v1.EphemerisWatchReply"
-      "instance"
     }},
   };
 }
@@ -3630,8 +3588,8 @@ constexpr CatalogWatchReply::ParseTableT_ CatalogWatchReply::InternalGeneratePar
       {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(CatalogWatchReply, _impl_.version_), 4>(),
        {32, 4, 0,
         PROTOBUF_FIELD_OFFSET(CatalogWatchReply, _impl_.version_)}},
-      // string instance = 5;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 5;
+      {::_pbi::TcParser::FastBS1,
        {42, 1, 0,
         PROTOBUF_FIELD_OFFSET(CatalogWatchReply, _impl_.instance_)}},
       {::_pbi::TcParser::MiniParse, {}},
@@ -3647,8 +3605,8 @@ constexpr CatalogWatchReply::ParseTableT_ CatalogWatchReply::InternalGeneratePar
       {PROTOBUF_FIELD_OFFSET(CatalogWatchReply, _impl_.complete_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kBool)},
       // optional uint64 version = 4;
       {PROTOBUF_FIELD_OFFSET(CatalogWatchReply, _impl_.version_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
-      // string instance = 5;
-      {PROTOBUF_FIELD_OFFSET(CatalogWatchReply, _impl_.instance_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 5;
+      {PROTOBUF_FIELD_OFFSET(CatalogWatchReply, _impl_.instance_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     {{
         #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -3658,9 +3616,6 @@ constexpr CatalogWatchReply::ParseTableT_ CatalogWatchReply::InternalGeneratePar
         #endif
     }},
     {{
-      "\40\0\0\0\0\10\0\0"
-      "proto.comet.v1.CatalogWatchReply"
-      "instance"
     }},
   };
 }
@@ -3816,8 +3771,8 @@ constexpr AlmanacWatchReply::ParseTableT_ AlmanacWatchReply::InternalGeneratePar
       {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(AlmanacWatchReply, _impl_.version_), 4>(),
        {32, 4, 0,
         PROTOBUF_FIELD_OFFSET(AlmanacWatchReply, _impl_.version_)}},
-      // string instance = 5;
-      {::_pbi::TcParser::FastUS1,
+      // bytes instance = 5;
+      {::_pbi::TcParser::FastBS1,
        {42, 1, 0,
         PROTOBUF_FIELD_OFFSET(AlmanacWatchReply, _impl_.instance_)}},
       {::_pbi::TcParser::MiniParse, {}},
@@ -3833,8 +3788,8 @@ constexpr AlmanacWatchReply::ParseTableT_ AlmanacWatchReply::InternalGeneratePar
       {PROTOBUF_FIELD_OFFSET(AlmanacWatchReply, _impl_.complete_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kBool)},
       // optional uint64 version = 4;
       {PROTOBUF_FIELD_OFFSET(AlmanacWatchReply, _impl_.version_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
-      // string instance = 5;
-      {PROTOBUF_FIELD_OFFSET(AlmanacWatchReply, _impl_.instance_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes instance = 5;
+      {PROTOBUF_FIELD_OFFSET(AlmanacWatchReply, _impl_.instance_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
     }},
     {{
         #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -3844,9 +3799,6 @@ constexpr AlmanacWatchReply::ParseTableT_ AlmanacWatchReply::InternalGeneratePar
         #endif
     }},
     {{
-      "\40\0\0\0\0\10\0\0"
-      "proto.comet.v1.AlmanacWatchReply"
-      "instance"
     }},
   };
 }
@@ -4267,65 +4219,65 @@ static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
 const char descriptor_table_protodef_comet_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
     "\n\013comet.proto\022\016proto.comet.v1\"\007\n\005Empty\")"
-    "\n\005Scope\022\016\n\006sector\030\001 \001(\t\022\020\n\010spectrum\030\002 \001("
-    "\t\"_\n\rAlmanacChange\022\013\n\003key\030\001 \001(\t\022\017\n\005value"
+    "\n\005Scope\022\016\n\006sector\030\001 \001(\014\022\020\n\010spectrum\030\002 \001("
+    "\014\"_\n\rAlmanacChange\022\013\n\003key\030\001 \001(\t\022\017\n\005value"
     "\030\002 \001(\014H\000\022&\n\005erase\030\003 \001(\0132\025.proto.comet.v1"
     ".EmptyH\000B\010\n\006action\"p\n\rCatalogChange\022\013\n\003k"
     "ey\030\001 \001(\t\022\017\n\005value\030\002 \001(\014H\000\022&\n\005erase\030\003 \001(\013"
     "2\025.proto.comet.v1.EmptyH\000\022\017\n\007version\030\004 \001"
     "(\004B\010\n\006action\"\301\001\n\017EphemerisChange\022\014\n\004uuid"
-    "\030\001 \001(\t\0228\n\006record\030\002 \001(\0132&.proto.comet.v1."
+    "\030\001 \001(\014\0228\n\006record\030\002 \001(\0132&.proto.comet.v1."
     "EphemerisChange.RecordH\000\022&\n\005erase\030\003 \001(\0132"
     "\025.proto.comet.v1.EmptyH\000\022\016\n\004data\030\004 \001(\014H\000"
     "\032$\n\006Record\022\014\n\004attr\030\001 \001(\014\022\014\n\004data\030\002 \001(\014B\010"
     "\n\006action\"-\n\016SessionRequest\022\013\n\003key\030\001 \001(\t\022"
     "\016\n\006secret\030\002 \001(\014\"1\n\014SessionReply\022\020\n\010insta"
-    "nce\030\001 \001(\t\022\017\n\007session\030\002 \001(\014\"\205\001\n\016PublishRe"
-    "quest\022\020\n\010instance\030\001 \001(\t\022$\n\005scope\030\002 \001(\0132\025"
+    "nce\030\001 \001(\014\022\017\n\007session\030\002 \001(\014\"\205\001\n\016PublishRe"
+    "quest\022\020\n\010instance\030\001 \001(\014\022$\n\005scope\030\002 \001(\0132\025"
     ".proto.comet.v1.Scope\022\017\n\007version\030\003 \001(\004\022\013"
     "\n\003key\030\004 \001(\t\022\r\n\005value\030\005 \001(\014\022\016\n\006ttl_ms\030\006 \001"
-    "(\r\"1\n\014PublishReply\022\020\n\010instance\030\001 \001(\t\022\017\n\007"
+    "(\r\"1\n\014PublishReply\022\020\n\010instance\030\001 \001(\014\022\017\n\007"
     "version\030\002 \001(\004\"{\n\023CatalogRenewRequest\022\020\n\010"
-    "instance\030\001 \001(\t\022$\n\005scope\030\002 \001(\0132\025.proto.co"
+    "instance\030\001 \001(\014\022$\n\005scope\030\002 \001(\0132\025.proto.co"
     "met.v1.Scope\022\013\n\003key\030\003 \001(\t\022\017\n\007version\030\004 \001"
     "(\004\022\016\n\006ttl_ms\030\005 \001(\r\"s\n\rCreateRequest\022\020\n\010i"
-    "nstance\030\001 \001(\t\022$\n\005scope\030\002 \001(\0132\025.proto.com"
+    "nstance\030\001 \001(\014\022$\n\005scope\030\002 \001(\0132\025.proto.com"
     "et.v1.Scope\022\014\n\004attr\030\003 \001(\014\022\014\n\004data\030\004 \001(\014\022"
     "\016\n\006ttl_ms\030\005 \001(\r\"=\n\013CreateReply\022\020\n\010instan"
-    "ce\030\001 \001(\t\022\014\n\004uuid\030\002 \001(\t\022\016\n\006ttl_ms\030\003 \001(\r\"r"
-    "\n\rUpdateRequest\022\020\n\010instance\030\001 \001(\t\022$\n\005sco"
+    "ce\030\001 \001(\014\022\014\n\004uuid\030\002 \001(\014\022\016\n\006ttl_ms\030\003 \001(\r\"r"
+    "\n\rUpdateRequest\022\020\n\010instance\030\001 \001(\014\022$\n\005sco"
     "pe\030\002 \001(\0132\025.proto.comet.v1.Scope\022\014\n\004uuid\030"
-    "\003 \001(\t\022\r\n\005order\030\004 \001(\004\022\014\n\004data\030\005 \001(\014\"\034\n\013Up"
+    "\003 \001(\014\022\r\n\005order\030\004 \001(\004\022\014\n\004data\030\005 \001(\014\"\034\n\013Up"
     "dateReply\022\r\n\005order\030\001 \001(\004\"c\n\014RenewRequest"
-    "\022\020\n\010instance\030\001 \001(\t\022$\n\005scope\030\002 \001(\0132\025.prot"
-    "o.comet.v1.Scope\022\014\n\004uuid\030\003 \001(\t\022\r\n\005order\030"
+    "\022\020\n\010instance\030\001 \001(\014\022$\n\005scope\030\002 \001(\0132\025.prot"
+    "o.comet.v1.Scope\022\014\n\004uuid\030\003 \001(\014\022\r\n\005order\030"
     "\004 \001(\004\"\033\n\nRenewReply\022\r\n\005order\030\001 \001(\004\"U\n\rRe"
-    "moveRequest\022\020\n\010instance\030\001 \001(\t\022$\n\005scope\030\002"
+    "moveRequest\022\020\n\010instance\030\001 \001(\014\022$\n\005scope\030\002"
     " \001(\0132\025.proto.comet.v1.Scope\022\014\n\004uuid\030\003 \001("
-    "\t\"x\n\014WatchRequest\022\020\n\010instance\030\001 \001(\t\022$\n\005s"
+    "\014\"x\n\014WatchRequest\022\020\n\010instance\030\001 \001(\014\022$\n\005s"
     "cope\030\002 \001(\0132\025.proto.comet.v1.Scope\022\016\n\006tar"
-    "get\030\003 \001(\t\022\024\n\007version\030\004 \001(\004H\000\210\001\001B\n\n\010_vers"
+    "get\030\003 \001(\014\022\024\n\007version\030\004 \001(\004H\000\210\001\001B\n\n\010_vers"
     "ion\"\255\001\n\021AlmanacWatchReply\022\"\n\004mode\030\001 \001(\0162"
     "\024.proto.comet.v1.Mode\022.\n\007changes\030\002 \003(\0132\035"
     ".proto.comet.v1.AlmanacChange\022\020\n\010complet"
     "e\030\003 \001(\010\022\024\n\007version\030\004 \001(\004H\000\210\001\001\022\020\n\010instanc"
-    "e\030\005 \001(\tB\n\n\010_version\"\255\001\n\021CatalogWatchRepl"
+    "e\030\005 \001(\014B\n\n\010_version\"\255\001\n\021CatalogWatchRepl"
     "y\022\"\n\004mode\030\001 \001(\0162\024.proto.comet.v1.Mode\022.\n"
     "\007changes\030\002 \003(\0132\035.proto.comet.v1.CatalogC"
     "hange\022\020\n\010complete\030\003 \001(\010\022\024\n\007version\030\004 \001(\004"
-    "H\000\210\001\001\022\020\n\010instance\030\005 \001(\tB\n\n\010_version\"\261\001\n\023"
+    "H\000\210\001\001\022\020\n\010instance\030\005 \001(\014B\n\n\010_version\"\261\001\n\023"
     "EphemerisWatchReply\022\"\n\004mode\030\001 \001(\0162\024.prot"
     "o.comet.v1.Mode\0220\n\007changes\030\002 \003(\0132\037.proto"
     ".comet.v1.EphemerisChange\022\020\n\010complete\030\003 "
     "\001(\010\022\024\n\007version\030\004 \001(\004H\000\210\001\001\022\020\n\010instance\030\005 "
-    "\001(\tB\n\n\010_version\"\341\002\n\007Failure\022&\n\006reason\030\001 "
+    "\001(\014B\n\n\010_version\"\341\002\n\007Failure\022&\n\006reason\030\001 "
     "\001(\0162\026.proto.comet.v1.Reason\022&\n\006effect\030\002 "
     "\001(\0162\026.proto.comet.v1.Effect\022\024\n\007version\030\003"
     " \001(\004H\000\210\001\001\022\022\n\005order\030\004 \001(\004H\001\210\001\001\022\027\n\nttl_min"
     "_ms\030\005 \001(\rH\002\210\001\001\022\027\n\nttl_max_ms\030\006 \001(\rH\003\210\001\001\022"
     "\025\n\010retry_ms\030\007 \001(\rH\004\210\001\001\022\r\n\005limit\030\010 \001(\t\022\024\n"
     "\007maximum\030\t \001(\004H\005\210\001\001\022\017\n\007message\030\n \001(\t\022\020\n\010"
-    "instance\030\013 \001(\tB\n\n\010_versionB\010\n\006_orderB\r\n\013"
+    "instance\030\013 \001(\014B\n\n\010_versionB\010\n\006_orderB\r\n\013"
     "_ttl_min_msB\r\n\013_ttl_max_msB\013\n\t_retry_msB"
     "\n\n\010_maximum*<\n\004Mode\022\024\n\020MODE_UNSPECIFIED\020"
     "\000\022\016\n\nMODE_RESET\020\001\022\016\n\nMODE_APPLY\020\002*\210\002\n\006Re"
@@ -4588,23 +4540,19 @@ PROTOBUF_NOINLINE void Scope::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string sector = 1;
+  // bytes sector = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_sector().empty()) {
       const ::std::string& _s = this_._internal_sector();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.Scope.sector");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
-  // string spectrum = 2;
+  // bytes spectrum = 2;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_spectrum().empty()) {
       const ::std::string& _s = this_._internal_spectrum();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.Scope.spectrum");
-      target = stream->WriteStringMaybeAliased(2, _s, target);
+      target = stream->WriteBytesMaybeAliased(2, _s, target);
     }
   }
 
@@ -4632,17 +4580,17 @@ PROTOBUF_NOINLINE void Scope::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    // string sector = 1;
+    // bytes sector = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_sector().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_sector());
       }
     }
-    // string spectrum = 2;
+    // bytes spectrum = 2;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_spectrum().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_spectrum());
       }
     }
@@ -5837,13 +5785,11 @@ PROTOBUF_NOINLINE void EphemerisChange::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string uuid = 1;
+  // bytes uuid = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_uuid().empty()) {
       const ::std::string& _s = this_._internal_uuid();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.EphemerisChange.uuid");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -5890,11 +5836,11 @@ PROTOBUF_NOINLINE void EphemerisChange::Clear() {
   ::uint32_t cached_has_bits [[maybe_unused]] = 0;
 
    {
-    // string uuid = 1;
+    // bytes uuid = 1;
     cached_has_bits = this_._impl_._has_bits_[0];
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_uuid().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_uuid());
       }
     }
@@ -6385,13 +6331,11 @@ PROTOBUF_NOINLINE void SessionReply::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.SessionReply.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -6427,10 +6371,10 @@ PROTOBUF_NOINLINE void SessionReply::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -6665,13 +6609,11 @@ PROTOBUF_NOINLINE void PublishRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.PublishRequest.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -6742,10 +6684,10 @@ PROTOBUF_NOINLINE void PublishRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -7001,13 +6943,11 @@ PROTOBUF_NOINLINE void PublishReply::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.PublishReply.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -7044,10 +6984,10 @@ PROTOBUF_NOINLINE void PublishReply::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -7272,13 +7212,11 @@ PROTOBUF_NOINLINE void CatalogRenewRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.CatalogRenewRequest.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -7341,10 +7279,10 @@ PROTOBUF_NOINLINE void CatalogRenewRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000001fU)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -7611,13 +7549,11 @@ PROTOBUF_NOINLINE void CreateRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.CreateRequest.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -7677,10 +7613,10 @@ PROTOBUF_NOINLINE void CreateRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000001fU)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -7932,23 +7868,19 @@ PROTOBUF_NOINLINE void CreateReply::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.CreateReply.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
-  // string uuid = 2;
+  // bytes uuid = 2;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_uuid().empty()) {
       const ::std::string& _s = this_._internal_uuid();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.CreateReply.uuid");
-      target = stream->WriteStringMaybeAliased(2, _s, target);
+      target = stream->WriteBytesMaybeAliased(2, _s, target);
     }
   }
 
@@ -7985,17 +7917,17 @@ PROTOBUF_NOINLINE void CreateReply::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
-    // string uuid = 2;
+    // bytes uuid = 2;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_uuid().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_uuid());
       }
     }
@@ -8224,13 +8156,11 @@ PROTOBUF_NOINLINE void UpdateRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.UpdateRequest.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -8241,13 +8171,11 @@ PROTOBUF_NOINLINE void UpdateRequest::Clear() {
         stream);
   }
 
-  // string uuid = 3;
+  // bytes uuid = 3;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_uuid().empty()) {
       const ::std::string& _s = this_._internal_uuid();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.UpdateRequest.uuid");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+      target = stream->WriteBytesMaybeAliased(3, _s, target);
     }
   }
 
@@ -8292,17 +8220,17 @@ PROTOBUF_NOINLINE void UpdateRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000001fU)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
-    // string uuid = 3;
+    // bytes uuid = 3;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_uuid().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_uuid());
       }
     }
@@ -8747,13 +8675,11 @@ PROTOBUF_NOINLINE void RenewRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.RenewRequest.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -8764,13 +8690,11 @@ PROTOBUF_NOINLINE void RenewRequest::Clear() {
         stream);
   }
 
-  // string uuid = 3;
+  // bytes uuid = 3;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_uuid().empty()) {
       const ::std::string& _s = this_._internal_uuid();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.RenewRequest.uuid");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+      target = stream->WriteBytesMaybeAliased(3, _s, target);
     }
   }
 
@@ -8807,17 +8731,17 @@ PROTOBUF_NOINLINE void RenewRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
-    // string uuid = 3;
+    // bytes uuid = 3;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_uuid().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_uuid());
       }
     }
@@ -9238,13 +9162,11 @@ PROTOBUF_NOINLINE void RemoveRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.RemoveRequest.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -9255,13 +9177,11 @@ PROTOBUF_NOINLINE void RemoveRequest::Clear() {
         stream);
   }
 
-  // string uuid = 3;
+  // bytes uuid = 3;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_uuid().empty()) {
       const ::std::string& _s = this_._internal_uuid();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.RemoveRequest.uuid");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+      target = stream->WriteBytesMaybeAliased(3, _s, target);
     }
   }
 
@@ -9289,17 +9209,17 @@ PROTOBUF_NOINLINE void RemoveRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
-    // string uuid = 3;
+    // bytes uuid = 3;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_uuid().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_uuid());
       }
     }
@@ -9524,13 +9444,11 @@ PROTOBUF_NOINLINE void WatchRequest::Clear() {
   (void)cached_has_bits;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  // string instance = 1;
+  // bytes instance = 1;
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.WatchRequest.instance");
-      target = stream->WriteStringMaybeAliased(1, _s, target);
+      target = stream->WriteBytesMaybeAliased(1, _s, target);
     }
   }
 
@@ -9541,13 +9459,11 @@ PROTOBUF_NOINLINE void WatchRequest::Clear() {
         stream);
   }
 
-  // string target = 3;
+  // bytes target = 3;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_target().empty()) {
       const ::std::string& _s = this_._internal_target();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.WatchRequest.target");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+      target = stream->WriteBytesMaybeAliased(3, _s, target);
     }
   }
 
@@ -9582,17 +9498,17 @@ PROTOBUF_NOINLINE void WatchRequest::Clear() {
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
   if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
-    // string instance = 1;
+    // bytes instance = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
-    // string target = 3;
+    // bytes target = 3;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_target().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_target());
       }
     }
@@ -9879,13 +9795,11 @@ PROTOBUF_NOINLINE void AlmanacWatchReply::Clear() {
         4, this_._internal_version(), target);
   }
 
-  // string instance = 5;
+  // bytes instance = 5;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.AlmanacWatchReply.instance");
-      target = stream->WriteStringMaybeAliased(5, _s, target);
+      target = stream->WriteBytesMaybeAliased(5, _s, target);
     }
   }
 
@@ -9920,10 +9834,10 @@ PROTOBUF_NOINLINE void AlmanacWatchReply::Clear() {
         total_size += ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
       }
     }
-    // string instance = 5;
+    // bytes instance = 5;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -10216,13 +10130,11 @@ PROTOBUF_NOINLINE void CatalogWatchReply::Clear() {
         4, this_._internal_version(), target);
   }
 
-  // string instance = 5;
+  // bytes instance = 5;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.CatalogWatchReply.instance");
-      target = stream->WriteStringMaybeAliased(5, _s, target);
+      target = stream->WriteBytesMaybeAliased(5, _s, target);
     }
   }
 
@@ -10257,10 +10169,10 @@ PROTOBUF_NOINLINE void CatalogWatchReply::Clear() {
         total_size += ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
       }
     }
-    // string instance = 5;
+    // bytes instance = 5;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -10553,13 +10465,11 @@ PROTOBUF_NOINLINE void EphemerisWatchReply::Clear() {
         4, this_._internal_version(), target);
   }
 
-  // string instance = 5;
+  // bytes instance = 5;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.EphemerisWatchReply.instance");
-      target = stream->WriteStringMaybeAliased(5, _s, target);
+      target = stream->WriteBytesMaybeAliased(5, _s, target);
     }
   }
 
@@ -10594,10 +10504,10 @@ PROTOBUF_NOINLINE void EphemerisWatchReply::Clear() {
         total_size += ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
       }
     }
-    // string instance = 5;
+    // bytes instance = 5;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }
@@ -10937,13 +10847,11 @@ PROTOBUF_NOINLINE void Failure::Clear() {
     }
   }
 
-  // string instance = 11;
+  // bytes instance = 11;
   if (CheckHasBit(cached_has_bits, 0x00000004U)) {
     if (!this_._internal_instance().empty()) {
       const ::std::string& _s = this_._internal_instance();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.comet.v1.Failure.instance");
-      target = stream->WriteStringMaybeAliased(11, _s, target);
+      target = stream->WriteBytesMaybeAliased(11, _s, target);
     }
   }
 
@@ -10985,10 +10893,10 @@ PROTOBUF_NOINLINE void Failure::Clear() {
                                         this_._internal_message());
       }
     }
-    // string instance = 11;
+    // bytes instance = 11;
     if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       if (!this_._internal_instance().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_instance());
       }
     }

@@ -81,8 +81,8 @@ build/astra/debug/star --listen=192.168.0.119:7442 --super=192.168.0.119:7440 --
 build/astra/debug/planet --listen=192.168.0.119:7443 --super=192.168.0.119:7440 --galaxy=alpha --group=east --identity=build/deployment/planet-a
 ```
 
-C++ 当前使用 `--galaxy`, Go Supervisor 使用 `--cluster`; 不把旧文档的参数套到所有程序.
-`--super` 指向 Orbit 登记端口. 使用 Pulsar 时响应携带 Pulse 地址, Star 启动采样; Go Supervisor 返回空地址时仅有连接准入, 不获得新有限租约的时间资格.
+C++ 当前使用 `--galaxy`; 不把旧文档的参数套到所有程序.
+`--super` 指向 Pulsar 的 Orbit 登记端口. 响应携带 Pulse 地址, Star 启动采样; 空地址时仅有连接准入, 不获得新有限租约的时间资格.
 
 TLS 1.3/h2, 跨 Go/C++ 测试证书采用 ECDSA P-256/SHA-256, 准入签名采用 Ed25519. TLS 服务端证书与签名 bearer 的职责不同.
 通配监听需提供可达 `--advertise`; 实际选项、范围和默认值见配置与 `--help`. 角色由可执行文件决定, `--worker-threads` 不支持.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from contextlib import contextmanager
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -65,6 +66,15 @@ def environment(overrides=None):
     if rustup.is_dir():
         env["RUSTUP_HOME"] = str(rustup)
     return env
+
+
+def binary_digest(path):
+    """按块记录实际执行产物的摘要, 不用源码 commit 代替二进制身份."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while block := stream.read(1024 * 1024):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def atomic_json(path, value):

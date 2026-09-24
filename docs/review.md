@@ -1,25 +1,25 @@
 # 当前代码审核
 
-当前 alpha HEAD 为 `12c6f78`, 加未提交工作副本. **2026-09-24 已完成普通 Release 构建、57/57 CTest、8 个 Go 包回归及 3 Star/6 Star/Redis 性能对照.** 主矩阵 Astra 60/60 通过, Redis 27/30 通过; 另有 3 个通过样本因系统换页排除性能统计. 来源身份、失败详情和实际边界统一见 [validation.md](../testkit/validation.md).
+当前 alpha HEAD 为 `b47db21`, 加工作副本. **2026-09-24 最新完成分阶段诊断: 16/16 正式三 Star 对照、2/2 单列诊断、2/2 冒烟通过, 隔离构建相关 CTest 3/3 通过.** 主项目 824 项构建输入和生产 Star 二进制保持不变. 已测 Star 排队/下行索引锁比页面准备和 SDK 投影更值得优先排查, 但尚未闭合逐变更跨节点关键路径. 此前普通回归与 Watch 策略对照仍作为当前实现的依据, 不称为本轮重跑. 计时扰动、源码身份和详细数据见 [validation.md](../testkit/validation.md).
 
-本页只维护当前结论和有效候选. 活动范围包括 Pulsar、Polaris、Star、Comet C++、Astrolabe 及公共核心; 冻结 SDK、Planet/Moon 和生成/第三方代码不扩展或重写. 下文引用的既有通过结果, 一律以验证记录对应的源码清单为准.
+本页只维护当前结论和有效候选. 活动范围为 Pulsar、Polaris、Star、Comet C++、Astrolabe 及公共核心. Planet/Moon 与其他语言 SDK 不推进. 本次审核以暂存区和工作区的合并结果为准, 不将一个不完整的暂存切片称为已经测试通过.
 
-## 当前改动的整理结果
+## 当前修复与取舍
 
-| 项目 | 已修改 | 收益与代价 |
+| 项目 | 发现与处理 | 收益及边界 |
 | --- | --- | --- |
-| 精确目标与范围进度 | 保留 broadcast/precise 索引. 公共 [Progress](../astra/star/src/progress.hpp) 维护 Scope 的首次通知、末版本和重置/断档边界, 删除逐流 first/latest/reset | 正文只访问全范围及命中流, 目标检索仍是树索引 O(log T), 不是整个提交 O(1). 范围状态减少重复写入, 代价是目标集合和范围队列的维护 |
-| 有界进度调度 | 将 pump 的整范围持锁扫描改为侵入式 Scope 轮转; 每次最多 maximum 条通知, 逐条释放索引锁. 移除在该锁内读取 writing/done 等 I/O 字段 | 修复锁域不一致造成的数据竞争风险, 限制单轮进度工作量; 新提交可合并, 慢流不会丢失最终水位. 取消需同步修正扫描迭代器, 这是新增机制最需覆盖的边界 |
-| 连续性 | 断档在 Scope 层判断, 不因某个精确目标跳过更新而忽略; initial/冻结/发送前都验证覆盖 | 保留空 apply、reset 和末游标契约. 空页可以合并版本, 不要求每个无关提交都向每流发一帧; 真正发送仍有逐流成本 |
-| Almanac 后缀准备 | Readout 与动态域一样, 锁内交换后缀和游标, 锁外构造 Edition、销毁旧节点; 准备阶段仍计入总预算 | 缩短大后缀下的索引锁持有时间, 没有扩大合法预算或复制整 Scope. 短暂候选内存仍需保守计费 |
-| 预算防御 | 保留分页和 Exchange 的差额比较; changed 遇旧记录计费大于账本时直接拒绝, 不以归零掩盖后续减法下溢 | 正常路径语义不变. `backlog` 用例证明的是全局额度拒绝/资源归还, 不是构造过了所有内部计数损坏情形 |
-| 计数成本 | Core 的 polled 计数合并进已有锁区; Broadcast 单控制线程计数改普通整数 | 去掉额外加锁和每页原子 RMW. Broadcast 计数只能在同一控制线程读取; 分发 scans 不含进度通知、编码、网络与客户端安装 |
-| Polaris 文件入口 | 恢复 Lstat 普通文件检查并补符号链接拒绝用例 | 避免别名绕过按路径加锁; 这是启动检查, 不影响业务提交热路径. 不声称它消除了目录被外部恶意替换的全部 TOCTOU 风险 |
-| 测试与注释 | 新增公平轮转/取消/版本边界, 两类真实 Watch 核对命中正文及无关空 apply. 归因负载改为显式环境变量, 严格解析 1..4096 | 普通回归保持有限确定性验收, 不再默认夹带规模计时. 修正 Ping/Pong、凭据与测量口径的误导性注释, 保留用户既有整理 |
+| Pulsar 持久格式 | 原始 32 字节 principal 的协议迁移会使已有 Schema 1 正文恢复失败. 保存时保留规范 64 字符十六进制, 恢复时校验主键并转换为当前线上表示 | 旧库可恢复且幂等/代次不变. 不清空库, 不自动写回迁移, 不将持久编码与网络编码捆绑 |
+| 跨语言身份验证 | Member.id 改 bytes 后 C++ 失去 Protobuf UTF-8 验证, Go 仍拒绝非法文本. C++ 入口补回同一检查 | 两端拒绝相同非法编码, 保持先前合法 UTF-8 与内嵌 NUL 边界; 身份不是任意二进制放行 |
+| Watch 公共调度 | 保留抽取及无分配在途链; 最新修正恢复控制线程先检查扫描期限, 到期才取得索引锁 | 在途开始/结束 O(1), 未到期不为扫描重复加锁. 每条流增加两个指针, 对象寿命仍由拥有索引保证, 不引入新线程/全局池 |
+| 协议 bytes | 保留原始 UUID/principal 及 Scope/实例字段迁移, 修正 SDK、协议和验收中的文本 UUID 残留 | 代表消息编解码实测有收益, 文本字段本身不省线字节. UUID 可含 NUL, 跨语言生成 API 改变, 当前服务和 SDK 须配套更新 |
+| 旧服务删除 | 保留删除 Go Supervisor, 活动准入已由 C++ Pulsar 提供; 共享夹具统一到 pulsar, 生成工具不再输出已删除服务 | 去掉废弃实现及路径, 冻结的 Rust 辅助入口只修共享引用, 不恢复其开发 |
+| 测试入口 | 已删除的规模/长期选项明确拒绝, --skip-checks 只跳生成比较, 保留构建/回归; Linux 转发真实退出码, Windows 明确不可执行当前 Linux 回归 | 消除无操作成功和吞掉失败. 删除重复 binary_digest, 补入口测试; 不把删除的长期场景算作现有覆盖 |
+| 临时工具 | 删除 5 个根目录 .cursor_*.py 及其暂存副本, 不迁到 tools | 与现有构建/同步能力重复, 含明文连接凭据且同步解析不稳. 诊断帮助脚本仅在忽略的 build/review-repair、build/watch-ab 和 build/stage-probe |
+| 文档一致性 | 更新当前进度、生成目录、UUID/持久编码及验证记录, 删除重复的临时协议过程稿 | 设计与当前实现一致; 内部文档仍遵守 alpha 发布边界 |
 
-本轮没有拆域级 gate、重写 TTL、增加异步框架或修改协议. 仍有每秒一次的在途写超时全索引扫描; 正文命中收集和最终投影提交仍持锁. 当前已测吞吐、尾延迟、CPU/RSS, **提交吞吐领先 Redis, 全部订阅可见仍落后, 同机 6 Star 多数场景不如 3 Star**. 主矩阵比较当前拓扑而非改动前后, 不把差异直接归因为本轮代码优化, 也不能从单次 update 推导整体容量.
+没有仅凭风格偏好回滚用户功能改动. Watch 容器按局部 A/B 改进; bytes 保留依据是代表消息测量和配套回归, 不是未经验证的整机提速承诺. 本轮未下载、未运行 Sanitizer/长期任务、未 commit/push; Admin 前端只静态审阅.
 
-本轮已完成普通回归、混合 Scope/全范围扇出/2048 B 正文及所有节点同时写入的 3/6 Star 对照, 另有 64/500/2000 精确流的 18 次有限检查. 慢消费者和取消有功能用例, 不等同于已经做过这些场景的规模性能测量. 下一步优先拆解全部可见路径、域锁等待与进度排空的成本; Sanitizer 和长期测试需另获对应授权.
+上轮整包对照不能单独归因 Watch. 本轮固定协议/SDK/控制面后, 完成三种扫描策略的全部六种运行排列: 未复现稳定的在途索引退化, 不采用旧全目录扫描. 仅落地到期后取锁, 确定减少无效 mutex 操作, 但 Ephemeris 的配对 p99.9 仍然波动, 不宣称已解决尾延迟根因. 两处改动覆盖 Almanac/Catalog/Ephemeris; 共享链的扫描继续持锁, `sweep_` 仍由唯一控制线程拥有. 具体数据及样本限制只在 [验证页](../testkit/validation.md#baseline) 维护.
 
 ## 动态域复用边界
 
@@ -37,9 +37,9 @@ Catalog/Ephemeris 的成对文件确有共同机制, 但不能由文件名推导
 
 Pagination/Reading 的局部抽取减少重复机制, 行数变化不是性能指标. 共用模板仍针对不同内容类型实例化, 不能据此承诺二进制变小或编译加速. 没有新增虚调用、type erasure、运行时领域选择或正文副本; 字段长度校验内联, 消息追加仍按各域静态派发. 实际产物大小、构建时间与运行性能需另行验证.
 
-新增两域共用的空/零字节点查、独立复制位置、错误后位置保留、合法大页/硬预算拒绝及过滤前批次校验; 另覆盖逆序同 Key 合并、Catalog 业务版本与游标区分、Ephemeris Create+Data 保留 Attr、末次删除和冻结后变化. 原有读取/回收、准备交错与异常用例继续作为 Reading 的回归入口. 这些用例随本轮普通回归通过, 不创建 Planet/Moon 或新域占位策略.
+新增两域共用的空/零字节点查、独立复制位置、错误后位置保留、合法大页/硬预算拒绝及过滤前批次校验; 另覆盖逆序同 Key 合并、Catalog 业务版本与游标区分、Ephemeris Create+Data 保留 Attr、末次删除和冻结后变化. 原有读取/回收、准备交错与异常用例继续作为 Reading 的回归入口. 这些用例随此前普通回归基线通过, 不创建 Planet/Moon 或新域占位策略.
 
-本轮追加无符号预算比较加固, 均未改变正常预算语义, 只消除计数不一致时的回绕误判: [Pagination](../astra/star/src/pagination.hpp) 与 [Almanac Edition](../astra/star/src/edition.cpp) 的单页 `append` 先拒绝超硬上限的键/载荷, 再判 `bytes >= hard || cost > hard - bytes`; [Downstream](../astra/star/src/downstream.hpp)/[Readout](../astra/star/src/readout.cpp) 的 `changed/advance` 与 [Exchange](../astra/star/src/exchange.cpp) 的积压/回补响应改用“先判基数再比较差额”, 替换 `cost > limit - used` 形式. 写法与既有 `Budget::acquire` 的防御顺序一致. 属 P3 防御性修复, 正常计费路径下行为不变, 异常超限统一走 `overflow`/长度错误/容量拒绝. 新增 `exchange_test.cpp::backlog` 覆盖积压容量拒绝的无安装、无泄漏路径; 相关加固随本轮普通回归通过, 不代表人为损坏内部账本的所有组合均已构造.
+当前保留的无符号预算比较加固, 均未改变正常预算语义, 只消除计数不一致时的回绕误判: [Pagination](../astra/star/src/pagination.hpp) 与 [Almanac Edition](../astra/star/src/edition.cpp) 的单页 `append` 先拒绝超硬上限的键/载荷, 再判 `bytes >= hard || cost > hard - bytes`; [Downstream](../astra/star/src/downstream.hpp)/[Readout](../astra/star/src/readout.cpp) 的 `changed/advance` 与 [Exchange](../astra/star/src/exchange.cpp) 的积压/回补响应改用“先判基数再比较差额”, 替换 `cost > limit - used` 形式. 写法与既有 `Budget::acquire` 的防御顺序一致. 属 P3 防御性修复, 正常计费路径下行为不变, 异常超限统一走 `overflow`/长度错误/容量拒绝. 新增 `exchange_test.cpp::backlog` 覆盖积压容量拒绝的无安装、无泄漏路径; 相关加固随此前普通回归基线通过, 不代表人为损坏内部账本的所有组合均已构造.
 
 ## 当前锁与调度整理
 
@@ -64,12 +64,12 @@ Pagination/Reading 的局部抽取减少重复机制, 行数变化不是性能�
 - 高频流式续租可以减少重复 RPC 建立, 但必须管理流恢复、关联与背压. 现有 Unary 已有实际 SDK、重试和错误契约; 本轮先隔离锁和调度收益, 不凭理论引入第二套写入流. [gRPC 性能指南](https://grpc.io/docs/guides/performance/).
 - gRPC Callback 包装器已经使用其内部 arena; 这不代表所有 Protobuf 子对象都使用 `google::protobuf::Arena`. 额外 Arena 必须结合具体消息分配器和异步寿命验证, 跨 arena 移动可能复制, 也并非永远没有析构列表. 本轮不添加无分配剖析依据的池. [Protobuf Arena](https://protobuf.dev/reference/cpp/arenas/).
 - 固定版本 gRPC 的 optimization target 为小写 `latency/throughput/blend`; 默认 blend 当前等价 latency. minimal stack 改变可选功能默认值, 不是任意跳过拦截器的开关. 不把重复默认值作为性能优化, 不关闭现有观测和故障语义来提高报数.
-- 当前 Exchange 需要合并版本、判定期限及生成不同接收者的消息, 不是透明字节转发. `ByteBuffer` 可共享已编码数据, 不代表 NIC 到业务全链路零复制. UUID 继续采用已确认的文本契约, 不为理论 20 字节收益重写全线协议.
+- 当前 Exchange 需要合并版本、判定期限及生成不同接收者的消息, 不是透明字节转发. `ByteBuffer` 可共享已编码数据, 不代表 NIC 到业务全链路零复制. UUID 当前统一为原始 16 字节; 文本字段改 bytes 的收益与校验边界见验证页, 不等于所有字符串都应无差别改型.
 - 小消息维持不启用全局 gzip. 2 字节 Protobuf 只是部分 payload, gRPC 的 5 字节前缀之外还有 HTTP/2/TLS/TCP/IP 开销, 不能宣称线上心跳只有 7 字节. [gRPC HTTP/2 协议](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md).
 
 ## SDK 与 Scope 并发复核
 
-当前锁与共享批次改动已完成普通回归、三 Star 基线和恢复争用诊断, 以 validation.md 的源码身份为准. 标准拓扑保持三台 Star 同时写入及跨节点订阅, 详见 [基线契约](../testkit/baseline/README.md). 单 Star 与冻结 Redis 仍作为诊断对照, 不预设多线程必然超过 Redis, 也不靠增加总资源来宣称优化成功.
+当前锁与共享批次实现已纳入普通回归及三 Star 基线; 本轮未重跑恢复争用性能矩阵, 以 validation.md 的源码身份和边界为准. 标准拓扑保持三台 Star 同时写入及跨节点订阅, 详见 [基线契约](../testkit/baseline/README.md). 单 Star 与冻结 Redis 的诊断入口保留, 不预设多线程必然超过 Redis, 也不靠增加总资源来宣称优化成功.
 
 ### SDK 的实际状态
 
@@ -110,7 +110,7 @@ Pagination/Reading 的局部抽取减少重复机制, 行数变化不是性能�
 - Ephemeris Update 最终只重新检查原租约活性, 不重复比较已确认不变的 Data; Renew 仍从最终读数计算期限. Catalog 最终 publish 复用首次校验后选定的正文引用, 保留版本、合并和期限检查. Exchange 复用一次响应线长计算.
 - 新增 cpp_comet_table: 位图字首尾页、候选移动、旧根不变、独立参考表核对、清空后空间回收、放弃/溢出. 三域新增共用满额跨页重复用例; Client 清理覆盖真实 Reading 的拥有环; Ephemeris 新增同/异 Data 准备期间恰好到期的回滚用例. 均已随当前回归通过, 不以用例数代替代码覆盖率.
 
-扩散检查: Table/去重/排序覆盖全部三种 C++ 投影或对应 Edition; Catalog/Ephemeris 分别检查最终写入复核, Almanac 无 TTL 不套用此精简. 指标覆盖限制同时检查 Go Astrolabe、Admin 解析/展示和部署文档; 原生 Pulsar/Polaris 不采用这套 Star 指标契约. 本轮 Protobuf 未变化, 不修改生成代码、冻结 SDK 或第三方代码.
+扩散检查: Table/去重/排序覆盖全部三种 C++ 投影或对应 Edition; Catalog/Ephemeris 分别检查最终写入复核, Almanac 无 TTL 不套用此精简. 指标覆盖限制同时检查 Go Astrolabe、Admin 解析/展示和部署文档; 原生 Pulsar/Polaris 不采用这套 Star 指标契约. 当前 Protobuf 已随字段改型统一重新生成并比较一致, 不手改生成代码、冻结 SDK 或第三方代码.
 
 ## 确认问题与修复
 
@@ -129,7 +129,7 @@ Go 的 UTC/Round 会移除单调分量, 两个时间都含单调分量时 Sub �
 1. 三域 Edition 原先对每批变化执行排序, 但实时 pending 本来就是按 Key 排序的唯一映射. 现在先作线性有序检查, 有序输入跳过排序; 历史回放仍支持 Key/版本交错与同 Key 压缩. 没有删除 Ephemeris 的 Attr 基线传播或扩大公开 API. 复用 [Almanac Edition](../astra/star/tests/edition_test.cpp) 和 [动态 Edition 用例](../astra/star/tests/ephemeris_rpc_test.cpp) 检查排序、合并及单项路径. 静态减少比较工作不等于已经测得吞吐收益.
 2. [Polaris retain](../astra/polaris/internal/storage/commit.go) 原先在窗口满时把全部历史元数据装入切片, 即使只淘汰一项. 改为沿现有 (sector,spectrum,version) 主键读取必要前缀, 在同表 DELETE 前关闭游标. 不增加索引、缓存计数副本或持久队列. 新增 [TestHistoryPrefix](../astra/polaris/internal/storage/storage_test.go) 覆盖共同预算、多项淘汰、连续后缀和跨 Scope 隔离. 本轮 Go 常规测试已覆盖, 未重跑 race; 没有重新执行 SQLite 持久提交性能矩阵, 不声称已测该项前后收益.
 3. 保留前序已完成的私有 execute、std::expected 链式转换和 requires 约束. execute 明确先构造 Retired、后构造锁, 返回及异常均先解锁再释放旧载荷; 不把它抽象为运行期 Task/Executor. 不适合链式表达的事务准备、回滚和多条件失败继续使用显式分支.
-4. 保留 Scene/Origin 的历史修正: 物理上仍连续保留的后缀可以重放, 年龄只控制写入时裁剪. 业务 TTL 不因历史可读而续命; 数量/字节/连续性预算不取消. 已包含在本轮普通 Release 回归中; 本轮未运行 Debug 或 Sanitizer.
+4. 保留 Scene/Origin 的历史修正: 物理上仍连续保留的后缀可以重放, 年龄只控制写入时裁剪. 业务 TTL 不因历史可读而续命; 数量/字节/连续性预算不取消. 已包含在此前普通 Release 回归基线中; 本轮未运行 Debug 或 Sanitizer.
 
 ## 不应作为缺陷修复的机制
 
@@ -162,11 +162,11 @@ Go 的 UTC/Round 会移除单调分量, 两个时间都含单调分量时 Sub �
 
 ## 优化分析的证据边界
 
-固定内存的 [3 Star / 6 Star / Redis 结果](../testkit/validation.md#baseline) 显示: 有效提交对照中多 Star 领先, 四种全部订阅可见配置仍落后冻结 Redis SDK, 多 Star 合计 CPU/RSS 更高. 两种 Star 拓扑使用同一当前产物, 共享整台 VM 的 16 vCPU, 不能解释为代码改动前后的单变量比较. CPU 为进程采样, 本轮没有重新采集调用栈、完整分配计数或锁等待追踪, 不能把全部差距归给某一个函数或 gRPC.
+当前 [三 Star 结果和局部 A/B](../testkit/validation.md#performance) 验证了 Watch 索引分配消除与代表消息编解码收益. 整系统只有当前版本的有限样本, 本轮没有 6 Star/Redis 或整系统 before/after 对照. 未采集完整调用栈、锁等待或全请求分配, 不能将局部 ns 结果外推成整机 QPS 提升.
 
 原生准备分锁不消除最终合并/投影的域锁, 下一步应测这些阶段与通知的等待和持锁时间. 既有原生恢复诊断的历史数值从 Git 查询, 本轮没有重跑其性能矩阵. 同步 replace 与真实 Exchange 控制轮调度不同, 不能由前者推断全链路恢复收益. 旧单 Star/三 Star 矩阵参数不同, 不能与本轮数字直接相除.
 
-基线使用同一 VM 的回环网络、每轮短窗口和公开视图轮询, 业务认证/TLS 关闭. 不能由它推出真实跨机带宽上限、认证成本、长期稳定吞吐或生产 SLA. 不复写完整成绩表; 旧 SDK 的失败样本及合并窗口差异也只按验证页解释.
+基线使用同一 VM 的回环网络、每轮短窗口和公开视图轮询, 业务认证/TLS 关闭. 不能由它推出真实跨机带宽上限、认证成本、长期稳定吞吐或生产 SLA. 不复写完整成绩表; 冻结 Redis SDK 未重测, 其历史失败与合并窗口差异从 Git 查询.
 
 下面 A 表示优先准备的小范围改动, B 表示先做定向归因再改变结构, C 表示当前不推进. 这是实施顺序, 不是漏洞等级或收益保证. N 为记录数, A 为 Client 活动对象数, W 为同 Scope 订阅数, P 为对端数, R 为来源组数, H 为保留历史数.
 
@@ -190,10 +190,10 @@ Go 的 UTC/Round 会移除单调分量, 两个时间都含单调分量时 Sub �
 | --- | --- | --- |
 | B5. 通知位于域提交锁内 | [Catalog::State](../astra/star/src/catalog_state.cpp) 和 [Ephemeris::State](../astra/star/src/ephemeris_state.cpp) 各有域级 gate, 不同 Scope 共享它. publish 调用订阅通知时尚未解锁; 通知又遍历订阅并准备 pending 项 | 首先减少 changed 本身的工作, 测锁内准备与通知各占多少. 若移动通知到锁外, 必须有严格有序、受预算约束的发布责任, 覆盖提交成功后分配失败、并发通知反序和新 Watch 挂入时序. 不直接解锁后任意调用 notify |
 | B6. 精确目标通知 | 已保留定向索引, 范围连续性和有界通知收敛到 Progress; 具体修改见页首. 原实现把全扫描下沉 pump, 仍可能持相同索引锁阻塞提交, 且跨锁读取 I/O 字段 | 范围轮转、取消/挂入、空 apply 和版本断档已通过普通回归; 64/500/2000 精确流检查均通过, 单次 update 耗时并非各规模稳定改善. 整个进度排空的独立 CPU/字节/p99 仍需测量, 不证明所有锁竞争已消失, 更不能据此断言拆锁无收益 |
-| B7. 相同订阅的重复准备 | 已加入相同区间/目标的冻结 Edition 及在途页共享, 保留最近批次及其逐页弱缓存; pending 仍逐流收集 | 普通回归与三 Star 性能已执行, 不同负载收益不一致. 仍需测缓存命中、快慢流和精确目标交错, 不把减少消息构建次数等同于消除逐流序列化或 pending 分配 |
+| B7. 相同订阅的重复准备 | 已加入相同区间/目标的冻结 Edition 及在途页共享, 保留最近批次及其逐页弱缓存; pending 仍逐流收集 | 普通回归与当前三 Star 性能已执行, 本轮未隔离共享批次自身的前后收益. 仍需测缓存命中、快慢流和精确目标交错, 不把减少消息构建次数等同于消除逐流序列化或 pending 分配 |
 | A4/B8. 空闲来源扫描 | deliver/source/events/resolve 已只读 export; 公开 execute 在 due 前共享读取, advance 在 due 前 O(1) 返回 | due 保持各 Agenda 实际相位, 创建新轮、退役和失败均保持维护责任. 跨界仍遍历全部来源, 空轮跳段和每来源到期索引继续按实际热点评估; 不恢复 max_ticks |
 | B9. 长暂停追赶 | [Agenda](../astra/star/src/agenda.hpp) 按 10 ms 补拍, 成本与时间差及 Agenda 数有关; 空轮也推进 | 空/稀疏轮可研究占用位图和安全跳段, 正常高频续租仍保留时间轮 O(1) 摊销优势. 完整时间必须追平, 跨级级联、异常重排和边界删除不变. 不恢复 max_ticks, 不直接换 O(log N) 堆 |
-| B10. 大来源替换 | 原生根、正文校验/复用和期限节点已移到 Replica 独占准备边界; 最终合并、投影候选及总预算仍持域锁. Scene::Batch 仍复制对应 Scope 旧历史 deque | 原生并发恢复已测写入 p99/p99.9, 不同 Scope 数有取舍; 持锁时长与真实网络恢复中的续租延迟仍缺定向证据. 保留身份撤销、到期、并发新水位及分配失败边界, 不把锁外准备宣称为安装 O(1) |
+| B10. 大来源替换 | 原生根、正文校验/复用和期限节点已移到 Replica 独占准备边界; 最终合并、投影候选及总预算仍持域锁. Scene::Batch 仍复制对应 Scope 旧历史 deque | 已有原生并发恢复诊断入口, 本轮未重跑该性能矩阵; 持锁时长与真实网络恢复中的续租延迟仍缺定向证据. 保留身份撤销、到期、并发新水位及分配失败边界, 不把锁外准备宣称为安装 O(1) |
 | A5. 重复内容检查 | Ephemeris Update 已将最终正文重比改为活性复核; Catalog 最终 publish 使用首轮校验选定的正文引用 | 相关回归已通过; 单项性能收益尚未隔离. Catalog 不同来源的相同正文仍可能需要比较, 不增加摘要缓存. 提交前时钟采样和 Renew 期限计算必须保留 |
 | B11. COW/索引布局 | [Pages](../astra/common/src/pages.hpp)、[Origin](../astra/star/src/origin.hpp)、Scene 共享 Name/正文, 同时维护点查与不可变遍历树, 写入仍有路径复制/引用计数及 timer 分配 | 按持有旧快照的比例测复制页数、分配数和缓存缺失. 先预留有界候选/回收容器和改善局部性; 分配池须活过最后读者, 不能由已销毁 State 回收旧 View 内存. 不用 pragma pack 或全局对象池替代生命周期设计 |
 
@@ -257,14 +257,14 @@ SQLite 的 FULL 与 NORMAL 耐久差异、检查点与活跃读者的关系见 [
 
 现有统一基线已经覆盖多注册/选择器、多发布/订阅及分组/载荷/短租约, 无需从头另造测试系统. 但短窗口、同 VM 及视图 1 ms 轮询不足以准确分离微秒级网络/服务端成本. 后续需在兼容比较之外增加 Astra 自身的 callback 时间戳和持久视图消费模型, 同时保留原对照口径. 不把控制面或大型恢复优化的收益用单 Star 小消息基准证明.
 
-除页首明确标为已修改的部分外, 以上仍是候选. 当前就绪队列及多页缓存已完成普通构建/回归和有限性能对照, 包含 2048 字节 Catalog 场景. 未下载或启动长期任务. 后续优先测剩余临界区、就绪/目录工作量和缓存实际命中, 不将小规模基线等同于大 N 收益证明.
+除页首明确标为已修改的部分外, 以上仍是候选. 当前就绪队列及多页缓存已完成普通构建/回归和有限性能验证, 包含 2048 字节 Catalog 场景. 未下载或启动长期任务. 后续优先测剩余临界区、就绪/目录工作量和缓存实际命中, 不将小规模基线等同于大 N 收益证明.
 
 ## 编码规范与精简边界
 
 - 新修正遵循 [cpp-coding.md](../cpp-coding.md): 沿用核心单词命名, 复用私有上下文, 多阶段函数首行空白, 长表达式不按列宽折行, 中文注释及 ASCII 标点. C++/Go 使用现有 clang-format/gofmt, 不动生成代码和第三方源码.
 - 现有 requires、std::expected、ranges、move_only_function、RAII 和拥有式视图已经用于真实职责. 不把全部 if 错误分支机械改成多层 lambda, 不用静态反射替代已经生成的 Protobuf 类型或业务校验.
 - 三域 Edition、State 仍存在相似流程, 但 Almanac 权威安装、Catalog 水位、Ephemeris Attr/Data 不同. 优先保持独立业务代码, 只共享页、来源历史和真实相同的投递机制; 再建通用 Store/继承层的收益不足.
-- 全仓注释仍有可改进之处, 特别是 Runtime 的重复说明、残留 Supervisor 泛称及一些局部测试变量的契约不够明确. 本次不以批量改名或大量无信息注释宣称已经逐变量完美符合规范. 后续随模块维护收敛, 不与行为修复混成不可审阅的机械重写.
+- 全仓注释仍有可改进之处, 特别是 Runtime 的重复说明及一些局部测试变量的契约不够明确. 已删除 Go Supervisor 并将准入命名收敛为 Pulsar, 标识符/协议字段的改名随模块维护收敛, 不与行为修复混成不可审阅的机械重写.
 
 ## 测试完整度
 
@@ -275,7 +275,7 @@ SQLite 的 FULL 与 NORMAL 耐久差异、检查点与活跃读者的关系见 [
 | 对等复制 | Dispatch/Landing/Exchange 双域、回补、断档、预算、三个真实 Star 下的停止/重启/SDK 切换 | 三台及以上同时分区、交叉重连、滚动重启与大来源恢复还缺系统化进程矩阵; 组件模拟不等于真实网络验证 |
 | 时间与持久库 | Pulsar 时钟/SQLite 故障、Polaris 事务/恢复/历史及进程重启 | 真实宿主休眠、时钟突变、断电、磁盘满/长 I/O 抖动的组合证据不足; 历史前缀用例有本轮 Go 常规测试证据 |
 | 管理 | Go HTTP/KDF/Cookie/指标解析已重跑, Admin 保留协议适配用例 | 本次未重跑 Admin 前端, 完整真实 3D Orrery 不在当前交付范围 |
-| 性能与资源 | 逻辑预算和容量拒绝、当前 3 Star/6 Star/Redis 基线和既有原生恢复对照 | B01–B14 未全部覆盖, 缺大规模分配/锁等待、长期及跨机器证据; 不以短矩阵替代生产容量评估 |
+| 性能与资源 | 逻辑预算和容量拒绝、当前三 Star、队列/编解码微基准及已有原生恢复用例 | B01–B14 未全部覆盖, 缺大规模分配/锁等待、长期及跨机器证据; 不以短矩阵替代生产容量评估 |
 
 优先补充可重复的随机操作/参考模型验证, 覆盖发布、续租、到期、快照、回补及断链组合; 对畸形分页/序列/大小进行属性或模糊测试. 这些是待办, 不虚构为已有测试. 在测得覆盖率前不能回答“当前覆盖率达到某百分比”, 即使 Sanitizer 全绿也不能保证不存在竞态或生命周期缺陷.
 

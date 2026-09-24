@@ -31,7 +31,7 @@ def main():
         "seconds": args.seconds,
         "workload": "shared_source_push",
         "notes": [
-            "Public fixture TLS and signed admissions; no SDK or live Supervisor state machine.",
+            "Public fixture TLS and signed admissions; no SDK or live Pulsar state machine.",
             "Remote server is sampled locally on Ubuntu, CPU includes setup/warmup.",
         ],
         "samples": [],

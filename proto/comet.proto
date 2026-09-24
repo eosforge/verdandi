@@ -34,8 +34,9 @@ message Empty {}
 
 // 字节精确匹配的范围, 两字段均必需; 公共接口拒绝 sector 的 __ 前缀.
 message Scope {
-    string sector = 1;
-    string spectrum = 2;
+    // UTF-8 文本内容不变, 类型改为 bytes 以跳过 Protobuf 层的重复 UTF-8 校验; 形状仍由各域入口校验.
+    bytes sector = 1;
+    bytes spectrum = 2;
 }
 
 // value 允许零字节, action presence 明确区分删除、空值与非法缺失操作.
@@ -64,7 +65,8 @@ message EphemerisChange {
         bytes attr = 1;
         bytes data = 2;
     }
-    string uuid = 1;
+    // 16 字节原始 UUIDv4 二进制, 版本/变体位固定, 不再传输连字符文本.
+    bytes uuid = 1;
     oneof action {
         Record record = 2;
         Empty erase = 3;
@@ -80,13 +82,13 @@ message SessionRequest {
 
 // session 固定 32 个原始随机字节, 后续 RPC 用 comet-session-bin 初始 metadata 提交.
 message SessionReply {
-    string instance = 1;
+    bytes instance = 1;
     bytes session = 2;
 }
 
 // 首次定位允许空 instance; version 必须为正, TTL 明确指定整数毫秒.
 message PublishRequest {
-    string instance = 1;
+    bytes instance = 1;
     Scope scope = 2;
     uint64 version = 3;
     string key = 4;
@@ -96,13 +98,13 @@ message PublishRequest {
 
 // 确认当前实例本次受理, 不承诺对等复制完成或固定重试期限.
 message PublishReply {
-    string instance = 1;
+    bytes instance = 1;
     uint64 version = 2;
 }
 
 // 仅续接该 Star 仍有效的本机来源记录, 缺失时须通过完整 Publish 恢复.
 message CatalogRenewRequest {
-    string instance = 1;
+    bytes instance = 1;
     Scope scope = 2;
     string key = 3;
     uint64 version = 4;
@@ -111,25 +113,25 @@ message CatalogRenewRequest {
 
 // 每次成功受理分配新 UUID, 不提供客户端请求 ID 或创建结果查询.
 message CreateRequest {
-    string instance = 1;
+    bytes instance = 1;
     Scope scope = 2;
     bytes attr = 3;
     bytes data = 4;
     uint32 ttl_ms = 5;
 }
 
-// uuid 为小写连字符 UUIDv4; 注册时固定 TTL, 两种 order 初始均为 0.
+// uuid 为 16 字节原始 UUIDv4 二进制; 注册时固定 TTL, 两种 order 初始均为 0.
 message CreateReply {
-    string instance = 1;
-    string uuid = 2;
+    bytes instance = 1;
+    bytes uuid = 2;
     uint32 ttl_ms = 3;
 }
 
 // Data 整体替换不延期; order 必须为正且按 UUID 独立验证.
 message UpdateRequest {
-    string instance = 1;
+    bytes instance = 1;
     Scope scope = 2;
-    string uuid = 3;
+    bytes uuid = 3;
     uint64 order = 4;
     bytes data = 5;
 }
@@ -141,9 +143,9 @@ message UpdateReply {
 
 // Renew 使用注册时保存的 TTL, 相同 order 只确认旧结果, 不再次延长.
 message RenewRequest {
-    string instance = 1;
+    bytes instance = 1;
     Scope scope = 2;
-    string uuid = 3;
+    bytes uuid = 3;
     uint64 order = 4;
 }
 
@@ -154,16 +156,16 @@ message RenewReply {
 
 // 只结束该实例/范围/UUID; 不存在返回明确 ended, 不永久保留注销墓碑.
 message RemoveRequest {
-    string instance = 1;
+    bytes instance = 1;
     Scope scope = 2;
-    string uuid = 3;
+    bytes uuid = 3;
 }
 
-// target 空为全 Scope, 非空为精确 Key/UUID; version 缺失与显式 0 不同.
+// target 空为全 Scope, 非空为精确 Key 或 16 字节 UUID 二进制; version 缺失与显式 0 不同.
 message WatchRequest {
-    string instance = 1;
+    bytes instance = 1;
     Scope scope = 2;
-    string target = 3;
+    bytes target = 3;
     optional uint64 version = 4;
 }
 
@@ -173,7 +175,7 @@ message AlmanacWatchReply {
     repeated AlmanacChange changes = 2;
     bool complete = 3;
     optional uint64 version = 4;
-    string instance = 5;
+    bytes instance = 5;
 }
 
 // Watch version 是本地视图游标, 不等于 changes 中的每 Key 业务版本.
@@ -182,7 +184,7 @@ message CatalogWatchReply {
     repeated CatalogChange changes = 2;
     bool complete = 3;
     optional uint64 version = 4;
-    string instance = 5;
+    bytes instance = 5;
 }
 
 // reset 仅允许 record, apply 可以 record/data/erase, 不暴露半条注册.
@@ -191,7 +193,7 @@ message EphemerisWatchReply {
     repeated EphemerisChange changes = 2;
     bool complete = 3;
     optional uint64 version = 4;
-    string instance = 5;
+    bytes instance = 5;
 }
 
 // 同一批 mode 不变, reset 仅允许为新流首批, 断档须结束流后恢复.
@@ -216,7 +218,7 @@ message Failure {
     string limit = 8;
     optional uint64 maximum = 9;
     string message = 10;
-    string instance = 11;
+    bytes instance = 11;
 }
 
 // 业务分类不能替代实际提交效果, SDK 不因一次 unapplied 抹去之前尝试的不确定性.

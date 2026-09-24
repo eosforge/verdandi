@@ -13,7 +13,7 @@ message Hello {
     reserved "galaxy", "id", "boot_id", "advertise";
     // 本端 payload 容量, 至少 1024 字节. 不改变当前阶段的硬上限.
     uint32 max_frame_bytes = 7;
-    // 原样转发 Supervisor 返回的 Member 编码, 校验前不信任其中任何字段.
+    // 原样转发 Pulsar 返回的 Member 编码, 校验前不信任其中任何字段.
     bytes admission = 8;
     // Ed25519 签名, 覆盖域分隔前缀和 admission 原始字节.
     bytes admission_signature = 9;
@@ -59,7 +59,7 @@ enum ProtocolErrorCode {
     PROTOCOL_ERROR_CODE_STORAGE_UNAVAILABLE = 10;
 }
 
-// Star/Planet 的互联传输. Supervisor 准入使用 orbit.proto 中的 gRPC 接口.
+// Star/Planet 的互联传输. Pulsar 准入使用 orbit.proto 中的 gRPC 接口.
 
 // 每对 Star 保留一条双向逻辑会话. 双方第一条均为 Hello, 后续消息由当前阶段验证.
 // 相反方向的竞争按发起方身份裁决, 不依赖底层连接是否复用.
@@ -104,8 +104,9 @@ message Position {
 
 // Scope 只定位记录, 不是独立的对等恢复边界.
 message Scope {
-    string sector = 1;
-    string spectrum = 2;
+    // UTF-8 文本内容不变, 类型改为 bytes 以跳过 Protobuf 层的重复 UTF-8 校验; 形状仍由各域入口校验.
+    bytes sector = 1;
+    bytes spectrum = 2;
 }
 
 // 明确的无正文分支, 不将合法的零字节正文误认为水位或删除.
@@ -174,10 +175,10 @@ message EphemerisRecord {
     uint32 ttl_ms = 6;
 }
 
-// 标准小写 UUIDv4 原样索引, 不在续租路径反复格式化.
+// 标准 UUIDv4 原始 16 字节二进制索引, 不在续租路径反复格式化.
 message EphemerisEntry {
     Scope scope = 1;
-    string uuid = 2;
+    bytes uuid = 2;
     EphemerisRecord record = 3;
 }
 
@@ -204,7 +205,7 @@ message EphemerisLease {
 message EphemerisDelta {
     uint64 position = 1;
     Scope scope = 2;
-    string uuid = 3;
+    bytes uuid = 3;
     oneof action {
         EphemerisRecord record = 4;
         EphemerisData data = 5;
@@ -224,7 +225,8 @@ message EphemerisChanges {
 message Repair {
     Domain domain = 1;
     Scope scope = 2;
-    string key = 3;
+    // Catalog 为 UTF-8 Key, Ephemeris 为 16 字节 UUID 二进制; 域决定形状, 本字段不做文本约束.
+    bytes key = 3;
     uint64 trigger = 4;
     uint64 version = 5;
 }

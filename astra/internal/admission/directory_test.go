@@ -16,7 +16,9 @@ import (
 
 // member 为独立部署生成明确测试字段, 不把当前网络时间用于身份顺序.
 func member(index, epoch int, role orbit.Role) *orbit.Member {
-	return &orbit.Member{Galaxy: "alpha", Id: fmt.Sprintf("node-%02d-%02d", index, epoch), Principal: fmt.Sprintf("%064x", index), Advertise: fmt.Sprintf("127.0.0.1:%d", 7400+index), Epoch: uint64(epoch), Role: role, Group: "default"}
+	principal := make([]byte, 32)
+	principal[0], principal[31] = byte(index>>8), byte(index)
+	return &orbit.Member{Galaxy: "alpha", Id: []byte(fmt.Sprintf("node-%02d-%02d", index, epoch)), Principal: principal, Advertise: fmt.Sprintf("127.0.0.1:%d", 7400+index), Epoch: uint64(epoch), Role: role, Group: "default"}
 }
 
 // directory 创建独立内存目录, 不启动网络或访问磁盘成员库.
@@ -45,12 +47,12 @@ func TestDirectoryReplacement(t *testing.T) {
 		t.Fatal("late query downgraded identity or absence deleted deployment")
 	}
 	conflict := proto.Clone(fresh).(*orbit.Member)
-	conflict.Id = "same-epoch-conflict"
+	conflict.Id = []byte("same-epoch-conflict")
 	if directory.Install([]*orbit.Member{conflict}) == nil || !directory.Current(fresh) {
 		t.Fatal("conflicting epoch modified directory")
 	}
 	view := directory.Members()
-	view[0].Id = "mutated-by-reader"
+	view[0].Id = []byte("mutated-by-reader")
 	if !directory.Current(fresh) {
 		t.Fatal("reader mutated internal identity")
 	}

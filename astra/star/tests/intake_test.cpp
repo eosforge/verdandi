@@ -35,7 +35,7 @@ proto::astra::v1::Hello hello(const Member& value) {
     proto::orbit::v1::Member encoded;
     encoded.set_galaxy(value.galaxy);
     encoded.set_id(value.id);
-    encoded.set_principal(value.principal.text());
+    encoded.set_principal(value.principal.bytes.data(), value.principal.bytes.size());
     encoded.set_advertise(value.address.text());
     encoded.set_epoch(value.epoch.value);
     encoded.set_role(Identity::role(value.role));

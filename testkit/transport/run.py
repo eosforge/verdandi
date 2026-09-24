@@ -254,7 +254,7 @@ def main():
         "notes": [
             "Synthetic bidirectional echo; fanout is simultaneous sessions, not a implemented broadcast store.",
             "CPU includes connection setup and warmup; RSS is sampled; allocator counts and wire bytes are not measured.",
-            "TLS/Hello uses public fixture admissions, not live Supervisor CAS/candidate selection.",
+            "TLS/Hello uses public fixture admissions, not live Pulsar CAS/candidate selection.",
             "Window is in-flight messages, not a forced equal TLS/HTTP2 batching policy.",
         ],
     }

@@ -1,4 +1,4 @@
-// 该头文件主要声明了用于处理节点(Star/Planet)向 Supervisor 进行注册并获取准入凭证的相关结构和类.
+// 该头文件主要声明了用于处理节点(Star/Planet)向 Pulsar 进行注册并获取准入凭证的相关结构和类.
 #pragma once
 #include "identity.hpp"
 #include "orbit.grpc.pb.h"
@@ -7,8 +7,8 @@
 #include <functional>
 
 namespace astra {
-// Admission 类: 唯一拥有 Supervisor RPC 的上下文和输入, 控制循环轮询完成, gRPC 回调不修改角色索引.
-// 该类封装了与 Supervisor 交互的异步 gRPC 调用过程, 并作为一个有限状态机(Idle -> Connecting -> Registration)运行.
+// Admission 类: 唯一拥有 Pulsar RPC 的上下文和输入, 控制循环轮询完成, gRPC 回调不修改角色索引.
+// 该类封装了与 Pulsar 交互的异步 gRPC 调用过程, 并作为一个有限状态机(Idle -> Connecting -> Registration)运行.
 class Admission {
 public:
     // 成功注册后的准入结果, 不借用 RPC 响应缓冲.
@@ -25,7 +25,7 @@ public:
         std::vector<Member> services;
     };
 
-    // 构造函数: 复制已校验配置, 持有 identity, 进程 ID 由 Supervisor 签发, wake 须可由 gRPC 回调安全调用且不得借用 Runtime.
+    // 构造函数: 复制已校验配置, 持有 identity, 进程 ID 由 Pulsar 签发, wake 须可由 gRPC 回调安全调用且不得借用 Runtime.
     // 构造只准备通道和稳定请求缓冲; 使用者必须在 pending 变为 false 后才能销毁对象.
     // 参数 config: 包含节点的全局配置(如地址, 角色, 超时等), 无默认值.
     // 参数 identity: 提供 TLS 凭证及签名的身份对象指针, 无默认值.
@@ -46,7 +46,7 @@ public:
     Admission& operator=(Admission&&) = delete;
 
     // begin: 没有在途 RPC 时开始一次尝试, candidate_round 只影响 Planet 候选, 不改变启动请求.
-    // 参数 candidate_round: 当前进行到第几轮候选更新, 默认影响向 Supervisor 提交的请求内容.无默认值.
+    // 参数 candidate_round: 当前进行到第几轮候选更新, 默认影响向 Pulsar 提交的请求内容.无默认值.
     void begin(std::uint32_t candidate_round);
 
     // poll: 返回完成的一次结果; nullopt 表示等待. 响应对象在完成回调结束前始终由共享状态持有.
@@ -108,9 +108,9 @@ private:
     std::optional<Member> local_;
     // wake_: 唤醒主事件循环的闭包函数.
     std::function<void()> wake_;
-    // channel_: 与 Supervisor 的 gRPC 连接通道.
+    // channel_: 与 Pulsar 的 gRPC 连接通道.
     std::shared_ptr<grpc::Channel> channel_;
-    // stub_: 与 Supervisor 通信的 gRPC 客户端存根.
+    // stub_: 与 Pulsar 通信的 gRPC 客户端存根.
     std::unique_ptr<proto::orbit::v1::Admission::Stub> stub_;
     // phase_: 当前的状态机阶段, 默认为 Admission::Phase::idle (由于 {} 初始化).
     Admission::Phase phase_{};

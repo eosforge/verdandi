@@ -227,7 +227,7 @@ func (transfer *transfer) positions(target map[storage.Scope]storage.Version, pa
 		if position == nil || position.Scope == nil {
 			return status.Error(codes.InvalidArgument, "Missing installation scope")
 		}
-		scope := storage.Scope{Sector: position.Scope.Sector, Spectrum: position.Scope.Spectrum}
+		scope := storage.Scope{Sector: string(position.Scope.Sector), Spectrum: string(position.Scope.Spectrum)}
 		// 重复范围或非法范围拒绝, 防止清单歧义.
 		if _, duplicate := target[scope]; duplicate || !scope.Valid() {
 			return status.Error(codes.InvalidArgument, "Invalid or duplicate installation scope")
@@ -262,15 +262,15 @@ func (transfer *transfer) run() error {
 	transfer.maximum = int(hello.MaxFrameBytes)
 	// 同实例第二条连接明确拒绝, 重连等待旧 handler 和缓冲实际退出, 不制造相互抢占循环.
 	transfer.owner.mutex.Lock()
-	if _, exists := transfer.owner.active[transfer.remote.Id]; exists {
+	if _, exists := transfer.owner.active[string(transfer.remote.Id)]; exists {
 		transfer.owner.mutex.Unlock()
 		return status.Error(codes.AlreadyExists, "Star already has an Almanac stream")
 	}
-	transfer.owner.active[transfer.remote.Id] = struct{}{}
+	transfer.owner.active[string(transfer.remote.Id)] = struct{}{}
 	transfer.owner.mutex.Unlock()
 	defer func() {
 		transfer.owner.mutex.Lock()
-		delete(transfer.owner.active, transfer.remote.Id)
+		delete(transfer.owner.active, string(transfer.remote.Id))
 		transfer.owner.mutex.Unlock()
 	}()
 	// 回送本端 Hello, 准入未就绪即返回不可用.
@@ -413,7 +413,7 @@ func (transfer *transfer) manifest(positions []storage.Position) error {
 	size := 16
 	// 逐项打包, 页满即发送并开新页, 大小计量含单条开销.
 	for _, position := range positions {
-		item := &polaris.Position{Scope: &comet.Scope{Sector: position.Sector, Spectrum: position.Spectrum}, Version: uint64(position.Version)}
+		item := &polaris.Position{Scope: &comet.Scope{Sector: []byte(position.Sector), Spectrum: []byte(position.Spectrum)}, Version: uint64(position.Version)}
 		cost := proto.Size(item) + 6
 		if len(page.Positions) != 0 && size+cost > min(transfer.maximum, 256<<10) {
 			if err := transfer.send(&polaris.Packet{Body: &polaris.Packet_Plan{Plan: page}}); err != nil {
@@ -457,7 +457,7 @@ func (transfer *transfer) synchronize(position storage.Position) error {
 // update 一次发送同 Scope 的有序后缀, 按编码预算分页, 不合并重复 Key 或跳过无操作提交.
 // scope 为目标范围; changes 为有序变更; 空变更直接返回, 非空按预算分页发送.
 func (transfer *transfer) update(scope storage.Scope, changes []storage.Change) error {
-	page := &polaris.Updates{Scope: &comet.Scope{Sector: scope.Sector, Spectrum: scope.Spectrum}}
+	page := &polaris.Updates{Scope: &comet.Scope{Sector: []byte(scope.Sector), Spectrum: []byte(scope.Spectrum)}}
 	size := proto.Size(page) + 16
 	// 逐条转补丁打包, 页满即发送并开新页, 每页后处理控制帧.
 	for _, change := range changes {
@@ -514,7 +514,7 @@ func (transfer *transfer) control(packet *polaris.Packet) error {
 	}
 	// ACK 分支: 位置必须合法且不超过已发送, 推进已安装并释放窗口.
 	if position := packet.GetAcknowledged(); position != nil && position.Scope != nil {
-		scope := storage.Scope{Sector: position.Scope.Sector, Spectrum: position.Scope.Spectrum}
+		scope := storage.Scope{Sector: string(position.Scope.Sector), Spectrum: string(position.Scope.Spectrum)}
 		sent, exists := transfer.sent[scope]
 		if !scope.Valid() || !exists || storage.Version(position.Version) > sent {
 			return status.Error(codes.InvalidArgument, "Acknowledgement exceeds sent state")

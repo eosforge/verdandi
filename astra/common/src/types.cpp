@@ -1,6 +1,7 @@
 // 详细说明: 这个实现文件处理 `Principal` 对象的解析和文本化, 错误码转换以及 `Endpoint` 终端地址(IPv4 / IPv6
 // 和端口号)的解析和验证, 提供统一且规范的基础类型功能.
 #include <astra/config.hpp>
+#include <astra/scope.hpp>
 
 #include <algorithm>
 #include <arpa/inet.h>
@@ -171,10 +172,17 @@ bool Member::valid_name(std::string_view value) {
 // valid_id 方法实现
 // 详细说明: 校验传入 ID 非空, 且字符数不得超过 128.
 bool Member::valid_id(std::string_view id) {
-    return !id.empty() && id.size() <= 128;
+
+    if (id.empty() || id.size() > 128) {
+        return false;
+    }
+
+    // 线上 bytes 不再替我们检查 UTF-8. 沿 NUL 分段复用无分配文本校验, 保留身份原本允许控制字符的契约.
+    // part 借用 id 的完整码点序列; 空段与 NUL 均合法, 其余字节必须和 Go utf8.Valid 一致.
+    return std::ranges::all_of(id | std::views::split('\0'), [](auto part) { return part.empty() || Scope::text(std::string_view(part.begin(), part.end()), 128); });
 }
 
-// supervisor_address 方法实现
+// pulsar_address 方法实现: 解析 Pulsar 准入地址, 支持 IP:PORT 与 HOSTNAME:PORT.
 // - value (std::string_view): 可能是 IP:PORT 或 HOSTNAME:PORT 的字符串.
 
 // validate_member 方法实现
@@ -199,7 +207,7 @@ Result<void> Member::validate() const {
 }
 
 // 返回值: 解析通过并进行标准化处理后的字符串, 或者错误信息.
-Result<std::string> Config::format_supervisor(std::string_view value) {
+Result<std::string> Config::format_pulsar(std::string_view value) {
 
     // 尝试先按数字端点(IP:PORT)去解析
     if (auto endpoint = Endpoint::parse(value)) {
@@ -209,7 +217,7 @@ Result<std::string> Config::format_supervisor(std::string_view value) {
     // 若不是 IP 格式, 按 HOSTNAME:PORT 解析.
     const auto separator = value.rfind(':');
     if (separator == std::string_view::npos || !port_number(value.substr(separator + 1), false)) {
-        return Status::configuration("Supervisor requires HOST:PORT");
+        return Status::configuration("Pulsar requires HOST:PORT");
     }
 
     // host 借用最后一个冒号之前的主机部分, 长度与 DNS 标签随后分别校验.
@@ -218,19 +226,19 @@ Result<std::string> Config::format_supervisor(std::string_view value) {
     std::array<unsigned char, 4> numeric{};
     // 为了防止部分 inet_pton 或域名解析 API 遇到伪装为非规范 IP 的边缘情况, 再拦一道.
     if (inet_pton(AF_INET, std::string(host).c_str(), numeric.data()) == 1) {
-        return Status::configuration("Invalid numeric Supervisor endpoint");
+        return Status::configuration("Invalid numeric Pulsar endpoint");
     }
 
     // DNS 名字整体长度限制.
     if (host.empty() || host.size() > 253) {
-        return Status::configuration("Invalid supervisor hostname");
+        return Status::configuration("Invalid Pulsar hostname");
     }
 
     // 检查每一段 label 的合法性: 不能超长, 头尾不能是横杠, 字符需符合规范.
     for (auto label : host | std::views::split('.')) {
         const std::string_view part(label.begin(), label.end());
         if (part.empty() || part.size() > 63 || part.starts_with('-') || part.ends_with('-') || !std::ranges::all_of(part, [](unsigned char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-'; })) {
-            return Status::configuration("Invalid supervisor hostname");
+            return Status::configuration("Invalid Pulsar hostname");
         }
     }
     return std::string(value);

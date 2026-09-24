@@ -13,7 +13,7 @@ def main():
     """保留每个夹具的主题、有效期、SAN 和用途, 准入签名密钥及账号文件保持原样."""
     root = Path(__file__).resolve().parent / "fixtures"
     names = (
-        "supervisor",
+        "pulsar",
         "star-a",
         "star-b",
         "star-c",

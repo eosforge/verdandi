@@ -8,7 +8,7 @@ namespace astra {
 // Pulsar 签发权威, 持有账号摘要和签名私钥, 不承担成员持久状态.
 class Authority {
 public:
-    // 加载既有 Supervisor 格式的账号和密钥, 验证两个监听端点的证书授权; 失败不返回部分对象.
+    // 加载既有 Pulsar 格式的账号和密钥, 验证两个监听端点的证书授权; 失败不返回部分对象.
     static Result<std::unique_ptr<Authority>> load(const std::filesystem::path& directory, const Endpoint& admission, const Endpoint& pulse);
     // 释放时清理内存中的 Ed25519 私钥; 服务和请求必须已退出.
     ~Authority();

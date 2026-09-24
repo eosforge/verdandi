@@ -4,7 +4,7 @@
 
 | Schema | package / C++ 命名空间 | 状态与职责 |
 | --- | --- | --- |
-| [orbit.proto](orbit.proto) | `proto.orbit.v1` / `proto::orbit::v1` | Register、List、Member、四种 Role、Credential; 当前准入由 C++ Pulsar 提供, 旧 Go Supervisor 冻结 |
+| [orbit.proto](orbit.proto) | `proto.orbit.v1` / `proto::orbit::v1` | Register、List、Member、四种 Role、Credential; 当前准入由 C++ Pulsar 提供 |
 | [astra.proto](astra.proto) | `proto.astra.v1` / `proto::astra::v1` | StarTransport 单条类型化双向流承载控制与两动态来源; 旧 SyncTransport 已移除 |
 | [pulsar.proto](pulsar.proto) | `proto.pulsar.v1` / `proto::pulsar::v1` | C++ Pulse 四时间戳对时 |
 | [comet.proto](comet.proto) | `proto.comet.v1` / `proto::comet::v1` | 三域业务、Session、Watch 和错误消息; Star 与原生 Comet C++ 已接入 |
@@ -23,7 +23,7 @@ Member 与 Role 只在 Orbit 定义, Hello 原样携带已签名 Member 字节. 
 
 ## 准入身份
 
-当前准入由 C++ Pulsar 提供, 独占 SQLite 成员事务在 COMMIT 成功后确认, 已纳入成员库、故障注入和真实进程回归. 首版只支持显式初始化新群组及恢复该 SQLite 库, 不实现旧 journal 导入, 也不与冻结 Go Supervisor 的 bbolt 文件互换. 身份、幂等与持久确认契约如下, 容量与初始化边界见 [Pulsar](../astra/pulsar/README.md#sqlite).
+当前准入由 C++ Pulsar 提供, 独占 SQLite 成员事务在 COMMIT 成功后确认, 已纳入成员库、故障注入和真实进程回归. 首版只支持显式初始化新群组及恢复该 SQLite 库, 不实现旧 journal 导入. 身份、幂等与持久确认契约如下, 容量与初始化边界见 [Pulsar](../astra/pulsar/README.md#sqlite).
 
 ### 一次启动
 
@@ -39,8 +39,8 @@ Member 与 Role 只在 Orbit 定义, Hello 原样携带已签名 Member 字节. 
 
 ### 身份和会话
 
-- `id` 是登记服务签发的不透明 UTF-8 字符串, 1..128 字节. 客户端不生成或解析它.
-- `principal` 是账号、Galaxy、规范端点的 SHA-256 指纹, 用于识别可被新实例替换的部署槽位.
+- `id` 在线上使用 bytes, 内容保持合法 UTF-8 (当前为 `p_` 前缀文本), 1..128 字节. 它是不透明标识, 客户端不生成或解析它; C++/Go 的准入入口继续校验文本有效性.
+- `principal` 是账号、Galaxy、规范端点的 SHA-256 原始 32 字节指纹, 用于识别可被新实例替换的部署槽位.
 - `epoch` 由登记服务在持久提交中分配, 只排序同部署的实例替换, 不承担业务版本含义.
 - `Generation` 只属于本地 RPC 生命周期, 用于忽略旧会话完成事件, 不发送给登记服务.
 - request_id 只发给登记服务, 不复制到成员名单、Hello、日志或业务版本中.
@@ -59,7 +59,7 @@ Member 与 Role 只在 Orbit 定义, Hello 原样携带已签名 Member 字节. 
 - 相同 request_id 改变账号、端点、角色或 group 会被拒绝.
 - 事务失败不留下部分成员或请求记录. 并发重复请求只产生一次提交.
 
-启动记录受持久预算限制, 不能通过自动驱逐旧请求解除容量限制, 否则旧请求可能再次登记. 当前没有压缩或在线回收协议, 不承诺无限次重启. 存储格式、工程上限及正常恢复只在 [Pulsar 成员库](../astra/pulsar/README.md#sqlite) 定义; 冻结 Go 实现的使用边界见 [Supervisor](../supervisor/README.md).
+启动记录受持久预算限制, 不能通过自动驱逐旧请求解除容量限制, 否则旧请求可能再次登记. 当前没有压缩或在线回收协议, 不承诺无限次重启. 存储格式、工程上限及正常恢复只在 [Pulsar 成员库](../astra/pulsar/README.md#sqlite) 定义.
 
 ### Star 接入验证
 
@@ -285,11 +285,11 @@ Catalog.Renew 必须带当前绑定 Star 的非空 instance, Ephemeris Update/Re
 
 ### 消息数据与标识
 
-Scope 表达 Sector/Spectrum, 域由服务确定. Watch 的 target 为空表示全 Scope, 非空精确匹配 Almanac/Catalog Key 或 Ephemeris UUID, 不提供跨 Scope 通配. 必需标识非空、不含 NUL、必须是合法 UTF-8 且满足字节上限; 按原始字节精确比较, 不自动修剪、大小写转换或 Unicode 规范化. * 是字面字符, 非法 UUID 不降级成全量目标. __ 限制检查原始 Sector, 不以路径拼接或客户端声明权限代替.
+Scope 表达 Sector/Spectrum, 域由服务确定. Watch 的 target 为空表示全 Scope, 非空精确匹配 Almanac/Catalog Key 或 Ephemeris UUID, 不提供跨 Scope 通配. Scope 内容仍为 UTF-8 文本 (1..128 字节、不含 NUL), 类型为 bytes 以跳过 Protobuf 层的重复校验; 按原始字节精确比较, 不自动修剪、大小写转换或 Unicode 规范化. * 是字面字符, 非法 UUID 不降级成全量目标. __ 限制检查原始 Sector, 不以路径拼接或客户端声明权限代替.
 
-实例 ID 复用现有 Star 进程身份, 不新增业务纪元, 不把不透明节点 ID 当作业务 UUID. Ephemeris UUID 仍由 Star 使用可靠随机源生成 UUIDv4, 但线上字段、SDK 身份和物理 Key 均统一使用 36 字符的小写连字符字符串, 不在每次 RPC 中往返转换 raw 16 字节. 项目统一接受规范小写形式, 校验长度、连字符、十六进制、v4 版本和 variant, 拒绝大写/花括号/无连字符别名而非静默规范化; RFC 本身允许多种大小写, 小写是项目约束. Star 只在生成时格式化一次, 随机源失败不降级为时间戳或普通伪随机数. 参见 [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html#section-4).
+实例 ID 复用现有 Star 进程身份, 不新增业务纪元, 不把不透明节点 ID 当作业务 UUID. Ephemeris UUID 由 Star 使用可靠随机源生成 UUIDv4, 线上字段统一使用原始 16 字节二进制 (版本/变体位固定), 不再传输 36 字符连字符文本; 各域入口校验 16 字节长度与版本/变体位, 拒绝文本别名而非静默规范化. 内存 Key 与 SDK 身份同样按字节比较, 不在每次 RPC 中往返格式化; 随机源失败不降级为时间戳或普通伪随机数. 参见 [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html#section-4).
 
-UUID 字符串每次比 raw 16 字节多 20 字节, 也出现在 Update/Renew/Watch 中. 采用它是为了统一边界表示, 不宣称零性能代价; 分组键查找的实现取舍见 [存储索引](../astra/common/README.md#data). 版本和顺序仍为 uint64. 内容版本必须大于 0; 空视图游标及新注册的操作顺序可以为 0, 新操作不能以 0 绕过校验, 溢出拒绝. Almanac Watch 使用权威分组版本, Catalog/Ephemeris Watch 使用接入 Star 的本地视图游标; Catalog 每 Key 内容版本与 Ephemeris 每 UUID 的 order 均不是该游标.
+UUID 二进制每条比连字符文本少 20 字节, 覆盖 Create/Update/Renew/Remove/Watch/Snapshot/Delta/Repair 全链路. 版本和顺序仍为 uint64. 内容版本必须大于 0; 空视图游标及新注册的操作顺序可以为 0, 新操作不能以 0 绕过校验, 溢出拒绝. Almanac Watch 使用权威分组版本, Catalog/Ephemeris Watch 使用接入 Star 的本地视图游标; Catalog 每 Key 内容版本与 Ephemeris 每 UUID 的 order 均不是该游标.
 
 普通 Catalog Publish 只提交一个 Key 的完整 Buffer, 允许零字节, 没有 Delete、操作列表、字段 Patch 或分块上传. Almanac Set/Delete 属于独立管理契约. Ephemeris 为 UUID/Attr/Data, 续租与顺序元数据不塞进用户 Buffer; Observer 不按客户端墙钟独立删除, 由接入 Star 推送并明确陈旧状态.
 
@@ -430,23 +430,23 @@ Polaris 在提交前校验记录, Star 在安装前准备新记录和登录查�
 
 ### 消息字段契约
 
-以下编号在各消息内部独立计数, 字段均属 `proto.comet.v1`. 使用本地空消息 Empty, 不为状态占位额外引入协议依赖. 表中的 oneof 必须恰有一个分支, 未设置不能被默认成合法操作; 未列出的 presence 要求由服务端明确校验. Scope 中 Sector/Spectrum 对应前述文本规则. 所有带分组的业务请求直接携带 `1 string instance` 和 `2 Scope scope`, 不再定义 Address 中间消息; 凭据仍仅放 metadata. 缺失 Scope 或空名称拒绝, 空 instance 的用途仍由各 RPC 的身份规则限定.
+以下编号在各消息内部独立计数, 字段均属 `proto.comet.v1`. 使用本地空消息 Empty, 不为状态占位额外引入协议依赖. 表中的 oneof 必须恰有一个分支, 未设置不能被默认成合法操作; 未列出的 presence 要求由服务端明确校验. Scope 中 Sector/Spectrum 对应前述文本规则. 所有带分组的业务请求直接携带 `1 bytes instance` 和 `2 Scope scope`, 不再定义 Address 中间消息; 凭据仍仅放 metadata. 缺失 Scope 或空名称拒绝, 空 instance 的用途仍由各 RPC 的身份规则限定.
 
 | 消息 | 字段号与类型 |
 | --- | --- |
 | Empty | 无字段 |
-| Scope | `1 string sector`, `2 string spectrum` |
+| Scope | `1 bytes sector`, `2 bytes spectrum` |
 | AlmanacChange | `1 string key`; oneof action: `2 bytes value`, `3 Empty erase`; 普通值与删除分开 |
 | CatalogChange | `1 string key`; oneof action: `2 bytes value`, `3 Empty erase`; `4 uint64 version`; value 时版本为该 Key 的正内容版本, erase 时为 0, 本地删除不表达权威业务删除 |
-| EphemerisChange | `1 string uuid`; oneof action: `2 Record record`, `3 Empty erase`, `4 bytes data`; Record 为完整注册, data 仅替换已有注册的完整 Data |
+| EphemerisChange | `1 bytes uuid`; oneof action: `2 Record record`, `3 Empty erase`, `4 bytes data`; Record 为完整注册, data 仅替换已有注册的完整 Data |
 | EphemerisChange::Record | `1 bytes attr`, `2 bytes data`; 不重复 UUID, 二者都为空时仍通过 record 分支表示完整注册存在 |
 
-普通 APIKEY 是非空 UTF-8 标识, 初值上限 128 字节且不含 NUL; SECRET 为非空不透明字节, 初值上限 4096 字节, 不作文本规范化. Session 凭据仍为 Star 产生的 32 字节不可预测随机值, 用初始 metadata comet-session-bin 携带, 不复制进业务消息; 开启认证时该项必须恰有一个且为原始 32 字节, 缺失、重复或长度错误拒绝, 不把其文本/Base64 别名当作有效凭据. Session 随机值安装前检查活动表碰撞, 不覆盖已有会话; 随机源或有限重试失败拒绝本次登录. Ephemeris UUID 则为规范的 36 字符字符串, Create 不接受指定 UUID 或另一个创建请求标识. UUID 字符串调整不改变 Session 凭据或 Pulsar 节点身份的格式.
+普通 APIKEY 是非空 UTF-8 标识, 初值上限 128 字节且不含 NUL; SECRET 为非空不透明字节, 初值上限 4096 字节, 不作文本规范化. Session 凭据仍为 Star 产生的 32 字节不可预测随机值, 用初始 metadata comet-session-bin 携带, 不复制进业务消息; 开启认证时该项必须恰有一个且为原始 32 字节, 缺失、重复或长度错误拒绝, 不把其文本/Base64 别名当作有效凭据. Session 随机值安装前检查活动表碰撞, 不覆盖已有会话; 随机源或有限重试失败拒绝本次登录. Ephemeris UUID 的原始 16 字节格式见 [消息数据与标识](#消息数据与标识), Create 不接受指定 UUID 或另一个创建请求标识. 业务 UUID 与 Session 凭据、Pulsar 节点身份相互独立.
 
 | 消息 | 字段号与类型 / 约束 |
 | --- | --- |
 | SessionRequest | `1 string key`, `2 bytes secret`; 建立会话无需预先查询实例, 实际实例从 SessionReply 取得 |
-| SessionReply | `1 string instance`, `2 bytes session`; 唯一的成功确认消息, 凭据仅在对应 Session 有效期间可用, 后续靠流结束表达失效 |
+| SessionReply | `1 bytes instance`, `2 bytes session`; 唯一的成功确认消息, 凭据仅在对应 Session 有效期间可用, 后续靠流结束表达失效 |
 
 拍平只去掉一层子消息, 保留 Scope 对分组的表达. 字段号按本表统一调整; 当前 Schema 已生成且两端已接线, 不增加旧 Address 的兼容解析. 生成对象的具体分配取决于首次构造、对象复用与 Arena, 不将每次 RPC 都视为固定两次堆分配; 见 [Protobuf C++ Arena](https://protobuf.dev/reference/cpp/arenas/). 不据此承诺已测量的吞吐或内存收益.
 
@@ -454,22 +454,22 @@ Polaris 在提交前校验记录, Star 在安装前准备新记录和登录查�
 
 | Catalog 消息 | 字段号与类型 / 约束 |
 | --- | --- |
-| PublishRequest | `1 string instance`, `2 Scope scope`, `3 uint64 version`, `4 string key`, `5 bytes value`, `6 uint32 ttl_ms`; version/TTL 必须有效, value 可为空 |
-| PublishReply | `1 string instance`, `2 uint64 version`; 确认本次内容及期限已在该实例受理, 不返回视图游标或原重试截止 |
-| CatalogRenewRequest | `1 string instance`, `2 Scope scope`, `3 string key`, `4 uint64 version`, `5 uint32 ttl_ms`; instance/Key 非空, version 大于 0, TTL 明确给出并通过范围校验 |
+| PublishRequest | `1 bytes instance`, `2 Scope scope`, `3 uint64 version`, `4 string key`, `5 bytes value`, `6 uint32 ttl_ms`; version/TTL 必须有效, value 可为空 |
+| PublishReply | `1 bytes instance`, `2 uint64 version`; 确认本次内容及期限已在该实例受理, 不返回视图游标或原重试截止 |
+| CatalogRenewRequest | `1 bytes instance`, `2 Scope scope`, `3 string key`, `4 uint64 version`, `5 uint32 ttl_ms`; instance/Key 非空, version 大于 0, TTL 明确给出并通过范围校验 |
 | Catalog.Renew 的结果 | 复用 Empty; 本次上下文已含实例/Key/版本, 不增加 order、remaining_ms 或重复身份字段 |
 
 Publish 不携带 Set/Delete oneof, 每次就是完整值发布. 编码大小、Key、TTL 和资源预算仍校验, 不自动拆包或修改版本. 没有 CatalogVersionRequest/Reply, 无需先查询整分组版本再发布.
 
 | Ephemeris 消息 | 字段号与类型 / 约束 |
 | --- | --- |
-| CreateRequest | `1 string instance`, `2 Scope scope`, `3 bytes attr`, `4 bytes data`, `5 uint32 ttl_ms`; 不含 uuid 或创建请求标识, ttl_ms 不接受 0 作为默认值 |
-| CreateReply | `1 string instance`, `2 string uuid`, `3 uint32 ttl_ms`; 仅创建时确认固定 TTL, Data/续租顺序初始为 0, 只绑定当前创建尝试的成功结果 |
-| UpdateRequest | `1 string instance`, `2 Scope scope`, `3 string uuid`, `4 uint64 order`, `5 bytes data`; order 大于 0, data 零字节合法 |
+| CreateRequest | `1 bytes instance`, `2 Scope scope`, `3 bytes attr`, `4 bytes data`, `5 uint32 ttl_ms`; 不含 uuid 或创建请求标识, ttl_ms 不接受 0 作为默认值 |
+| CreateReply | `1 bytes instance`, `2 bytes uuid`, `3 uint32 ttl_ms`; 仅创建时确认固定 TTL, Data/续租顺序初始为 0, 只绑定当前创建尝试的成功结果 |
+| UpdateRequest | `1 bytes instance`, `2 Scope scope`, `3 bytes uuid`, `4 uint64 order`, `5 bytes data`; order 大于 0, data 零字节合法 |
 | UpdateReply | `1 uint64 order`; 确认本次更新顺序, 不表示租约已续 |
-| RenewRequest | `1 string instance`, `2 Scope scope`, `3 string uuid`, `4 uint64 order`; order 大于 0, 不包含 TTL 修改参数 |
+| RenewRequest | `1 bytes instance`, `2 Scope scope`, `3 bytes uuid`, `4 uint64 order`; order 大于 0, 不包含 TTL 修改参数 |
 | RenewReply | `1 uint64 order`; 仅确认本次请求顺序, 不返回 Lease、ttl_ms 或 remaining_ms, 同序号重试不重新计算期限 |
-| RemoveRequest | `1 string instance`, `2 Scope scope`, `3 string uuid`; 对应来源实例、范围、UUID 和 Session 仍校验 |
+| RemoveRequest | `1 bytes instance`, `2 Scope scope`, `3 bytes uuid`; 对应来源实例、范围、UUID 和 Session 仍校验 |
 | Ephemeris.Remove 的结果 | 复用 Empty, 无专有 RemoveReply; OK 确认该次请求目标在提交边界已不活动, 不证明先前未知 Update 从未提交 |
 
 Ephemeris 不提供创建结果查询或四状态恢复消息. 对已确认 UUID 的 Renew/Update 校验来源实例、会话和活动期限. 不存在或来源已到期返回结束原因, 会话错误不伪装成到期诱发新注册; 不保存 APIKEY 所有者.
@@ -484,10 +484,10 @@ Update/Renew 请求均带非空预期 instance、Scope、UUID 和正 order. Star
 
 | Watch 消息 | 字段号与类型 / 约束 |
 | --- | --- |
-| WatchRequest | `1 string instance`, `2 Scope scope`, `3 string target`, `4 optional uint64 version`; target 为空订阅整个 Scope, 非空为精确 Key/UUID; version 缺失请求新快照, 显式 0 表示恢复版本 0, 携带 version 时 instance 必须非空 |
-| AlmanacWatchReply | `1 Mode mode`, `2 repeated AlmanacChange changes`, `3 bool complete`, `4 optional uint64 version`, `5 string instance`; version 为已安装权威分组版本 |
-| CatalogWatchReply | `1 Mode mode`, `2 repeated CatalogChange changes`, `3 bool complete`, `4 optional uint64 version`, `5 string instance`; complete 时 version/instance 必须存在 |
-| EphemerisWatchReply | `1 Mode mode`, `2 repeated EphemerisChange changes`, `3 bool complete`, `4 optional uint64 version`, `5 string instance`; 与 Catalog 使用相同安装边界, 不共用跨业务域 Change |
+| WatchRequest | `1 bytes instance`, `2 Scope scope`, `3 bytes target`, `4 optional uint64 version`; target 为空订阅整个 Scope, 非空为精确 Key/UUID; version 缺失请求新快照, 显式 0 表示恢复版本 0, 携带 version 时 instance 必须非空 |
+| AlmanacWatchReply | `1 Mode mode`, `2 repeated AlmanacChange changes`, `3 bool complete`, `4 optional uint64 version`, `5 bytes instance`; version 为已安装权威分组版本 |
+| CatalogWatchReply | `1 Mode mode`, `2 repeated CatalogChange changes`, `3 bool complete`, `4 optional uint64 version`, `5 bytes instance`; complete 时 version/instance 必须存在 |
+| EphemerisWatchReply | `1 Mode mode`, `2 repeated EphemerisChange changes`, `3 bool complete`, `4 optional uint64 version`, `5 bytes instance`; 与 Catalog 使用相同安装边界, 不共用跨业务域 Change |
 
 Mode 的数值为 unspecified=0、reset=1、apply=2, 未知或 unspecified 拒绝. 业务域由调用的 Almanac/Catalog/Ephemeris 服务和响应类型决定, Scope/target 由本次请求确定, 不另包 Target、Position/Domain 或 bytes cursor, 不再有游标序列化与 4 KiB 游标限制. target 未设置与显式空字符串含义相同, 这是本协议选择的全 Scope 默认值; 参见 [Protobuf 标量默认值](https://protobuf.dev/programming-guides/proto3/#default). reset 仅允许 Almanac/Catalog 的 value 或 Ephemeris 的 record 分支, apply 也允许 erase, Ephemeris apply 还可使用 data, 具体前置条件见 [Ephemeris 增量](#registry-delta); 缺少 action、空 Key/UUID 或非法 UUID 均拒绝. Ephemeris record 始终含完整 Attr/Data, 不重复外层 UUID. 实例和版本不是访问凭据, Session 与 __ 边界仍独立校验.
 
@@ -501,7 +501,7 @@ Catalog 纯期限刷新和 Ephemeris 纯续租推进必要来源组状态, 不�
 
 非 OK 的 RPC 可通过有界 trailing metadata `comet-error-bin` 携带序列化 Failure, 不把本地错误对象或异常跨线传递. 使用独立的 metadata 名称, 不把自定义结构冒充标准 `google.rpc.Status`. 缺失、重复或不能合法解析的细节不能作为业务效果证明, 写入保持不确定; 已知的 gRPC 分类仍可用于退避或暂停, 不把每种拒绝都改成网络故障. 未识别的 Effect 不能当作 unapplied.
 
-Failure 字段为 `1 Reason reason`, `2 Effect effect`, `3 optional uint64 version`, `4 optional uint64 order`, `5 optional uint32 ttl_min_ms`, `6 optional uint32 ttl_max_ms`, `7 optional uint32 retry_ms`, `8 string limit`, `9 optional uint64 maximum`, `10 string message`, `11 string instance`. instance 为服务端当前实际实例, 用于明确实例不匹配和只读恢复, 不能据此自动改投旧写入. 细节总量初值上限 4 KiB, message 上限 512 字节且不含凭据/载荷; 传输错误可能没有详情. 可选数值必须有 presence, 不把默认 0 误当成当前版本或合法 TTL 下限.
+Failure 字段为 `1 Reason reason`, `2 Effect effect`, `3 optional uint64 version`, `4 optional uint64 order`, `5 optional uint32 ttl_min_ms`, `6 optional uint32 ttl_max_ms`, `7 optional uint32 retry_ms`, `8 string limit`, `9 optional uint64 maximum`, `10 string message`, `11 bytes instance`. instance 为服务端当前实际实例, 用于明确实例不匹配和只读恢复, 不能据此自动改投旧写入. 细节总量初值上限 4 KiB, message 上限 512 字节且不含凭据/载荷; 传输错误可能没有详情. 可选数值必须有 presence, 不把默认 0 误当成当前版本或合法 TTL 下限.
 
 Reason 与 Effect 的数值以 [comet.proto](comet.proto) 为准. 未识别原因保留为未知服务端错误, 不自动改写输入或跨实例重放. Effect 只描述这一次尝试能确定的效果; SDK 对整个逻辑操作保留此前的不确定性, 不因某次重试 unapplied 就否定先前可能提交的事实.
 
@@ -634,7 +634,7 @@ bash astra/build.sh check-generated
 ```
 
 复用项目 protoc 36.1、protoc-gen-go 1.36.12、protoc-gen-go-grpc 1.6.2、grpc_cpp_plugin 1.84.0. 普通构建不运行生成器, 生成器不下载工具; 运行规则仍遵循 AGENTS.md.
-Go 源码在 `supervisor/internal/generated`, C++ 在 `astra/common/src/generated`. Pulsar schema 仅生成 C++ Pulse 类型, Orbit 的 pulse_endpoint 同步生成 Go/C++.
+Go 源码在 `astra/internal/generated` (按 proto 独立分包, 由 `astra/generate.py` 生成), C++ 在 `astra/common/src/generated`. Pulsar schema 仅生成 C++ Pulse 类型, Orbit 的 pulse_endpoint 同步生成 Go/C++.
 Go module/import/go_package 暂保留仓库原路径. 当前不手改生成源码, 不留下旧 schema 的替代入口.
 
 `message-ids.lock` 仅是旧帧编号历史, 不参与 gRPC 路由. 独立 Rust 生成工具仍维护既有检查, 不代表恢复 Rust 服务.

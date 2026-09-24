@@ -160,7 +160,7 @@ int main() {
         config.listen = *Endpoint::parse("127.0.0.1:0", true);
         config.pulse_listen = *Endpoint::parse("127.0.0.1:0", true);
         config.galaxy = "alpha";
-        config.identity = std::filesystem::path(ASTRA_FIXTURES) / "supervisor";
+        config.identity = std::filesystem::path(ASTRA_FIXTURES) / "pulsar";
         config.state = directory.path / "membership.db";
         config.initialize = true;
         // RPC 测试注入独立参考源, 不要求测试主机联网对时, 也不更改系统墙钟或生产配置.

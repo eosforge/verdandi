@@ -36,6 +36,16 @@ public:
         CHECK(sqlite3_exec(database_, sql, nullptr, nullptr, nullptr) == SQLITE_OK);
     }
 
+    // body 为本例构造的完整成员正文, 长度单独绑定, 不经 SQL 字符串插值或 NUL 截断.
+    void replace(std::string_view body) {
+        sqlite3_stmt* statement{}; // 唯一测试 UPDATE, 绑定寿命覆盖 step, owner 在异常时也会 finalize.
+        const auto prepared = sqlite3_prepare_v2(database_, "UPDATE members SET body=?", -1, &statement, nullptr);
+        const std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> owner(statement, sqlite3_finalize);
+        CHECK(prepared == SQLITE_OK);
+        CHECK(sqlite3_bind_blob(statement, 1, body.data(), static_cast<int>(body.size()), SQLITE_STATIC) == SQLITE_OK);
+        CHECK(sqlite3_step(statement) == SQLITE_DONE);
+    }
+
     // 单列标量查询返回独立拥有的文本, 可读取 hex(epoch) 验证完整字节表示.
     std::string value(const char* sql) {
 
@@ -193,6 +203,45 @@ void registration(const std::filesystem::path& path, const std::string& authorit
     CHECK(!restored.register_member(test::member(4, Member::Role::astrolabe), std::string(32, 'e'), prepare));
 }
 
+// 固定 format=1 的磁盘编码不随 protobuf string/bytes 迁移变化, 恢复保留身份、代次与启动去重证据.
+void encoding(const std::filesystem::path& path, const std::string& authority) {
+
+    const auto candidate = test::member(1); // 登记候选的 epoch 必须为零, 由 Ledger 分配.
+    auto original = candidate;              // 独立保存首次成功登记预期身份, 不把已有代次再次当作候选提交.
+    original.epoch.value = 1;
+    const std::string request(32, 'a'); // 首次启动幂等键, 恢复后仍必须返回同一身份.
+    {
+        Ledger ledger(path, "alpha", authority, 2, 4, true);
+        CHECK(ledger.register_member(candidate, request, [](const auto&, const auto&) {}));
+    }
+    {
+        SQL sql(path);
+        proto::orbit::v1::Member persisted; // 新写入也必须遵守既有磁盘契约.
+        CHECK(persisted.ParseFromString(sql.value("SELECT body FROM members")));
+        CHECK(persisted.principal() == original.principal.text());
+        persisted.set_principal(original.principal.text());
+        sql.replace(persisted.SerializeAsString());
+    }
+    {
+        Ledger restored(path, "alpha", authority, 2, 4);
+        CHECK(restored.current(original));
+        CHECK(restored.register_member(candidate, request, [&](const Member& member, const auto&) { CHECK(member == original); }));
+        auto next = candidate; // 新启动由 Ledger 继承旧部署代次, 不把恢复误判为重新初始化.
+        next.id = "next-process";
+        CHECK(restored.register_member(next, std::string(32, 'b'), [&](const Member& member, const auto&) { CHECK(member.epoch.value == original.epoch.value + 1); }));
+    }
+
+    // 正文与主键不匹配时仍拒绝, 不能通过编码转换绕过原有部署身份检查.
+    {
+        SQL sql(path);
+        proto::orbit::v1::Member persisted;
+        CHECK(persisted.ParseFromString(sql.value("SELECT body FROM members")));
+        persisted.set_principal(std::string(64, 'f'));
+        sql.replace(persisted.SerializeAsString());
+    }
+    rejects([&] { Ledger invalid(path, "alpha", authority, 2, 4); });
+}
+
 // 真实 VFS 一次性写/同步故障, 失败后不发布身份也不继续签发; 关闭后同库恢复旧身份.
 void io_failure(const std::filesystem::path& path, const std::string& authority, int error, bool sync, bool main = false, bool persistent = false) {
 
@@ -325,6 +374,7 @@ int main() {
         const std::string authority(64, 'a');
         initialization(directory.path, authority);
         registration(directory.path / "registration.db", authority);
+        encoding(directory.path / "encoding.db", authority);
         concurrent_retry(directory.path / "concurrent.db", authority);
         commit_failure(directory.path / "commit.db", authority);
         busy(directory.path / "busy.db", authority);

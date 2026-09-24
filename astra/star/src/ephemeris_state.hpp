@@ -15,7 +15,7 @@ namespace astra {
 // 不承担 Session/实例验证, RPC 调用方须持有 Access::Permit 到方法返回; 本对象不调用应用回调或网络.
 class Ephemeris::State {
 public:
-    using Source = Origin<Record>; // 一个来源位置覆盖本 Star 的全部 Ephemeris Scope, 不按范围编号.
+    using Source = Origin<Record, true>; // 一个来源位置覆盖本 Star 的全部 Ephemeris Scope, 不按范围编号.
 
     // 公开投影没有 TTL/order, Renew 和同字节 Update 不复制这份页面或制造观察事件.
     struct Content {
@@ -59,7 +59,7 @@ public:
 
     // 创建确认只含已提交 UUID 和固定 TTL, 不返回调度节点或公开原生 order 元数据.
     struct Receipt {
-        std::string uuid;    // 本 Star 新分配的规范 UUIDv4, 成功后由调用方持有.
+        std::string uuid;    // 本 Star 新分配的 16 字节 UUIDv4 二进制, 成功后由调用方持有.
         std::uint32_t ttl{}; // 此注册固定毫秒 TTL, 1000..600000.
     };
 

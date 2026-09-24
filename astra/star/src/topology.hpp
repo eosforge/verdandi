@@ -68,7 +68,7 @@ public:
     void failed(const Member& target, Status::Code error, Steady::time_point now) override;
 
     // 判断是否需要刷新: 与 Planet 能够动态刷新候选单上游不同, Star 的初始完整名单一旦安装成功,
-    // 不会通过此周期接口主动从 Supervisor 拉取刷新请求; 新身份由已验签的入站会话接纳.
+    // 不会通过此周期接口主动从 Pulsar 拉取刷新请求; 新身份由已验签的入站会话接纳.
     // 所以在此方法中忽略 now 并始终固定返回 false.
     bool needs_refresh(Steady::time_point now) override;
 

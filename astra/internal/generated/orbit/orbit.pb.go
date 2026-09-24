@@ -213,7 +213,7 @@ func (x *Credential) GetSecret() []byte {
 	return nil
 }
 
-// 账号通过 TLS 提交, Supervisor 从已验证账号和规范端点构建指纹.
+// 账号通过 TLS 提交, Pulsar 从已验证账号和规范端点构建指纹.
 type RegistrationRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Galaxy string                 `protobuf:"bytes,1,opt,name=galaxy,proto3" json:"galaxy,omitempty"`
@@ -225,11 +225,11 @@ type RegistrationRequest struct {
 	Group string `protobuf:"bytes,7,opt,name=group,proto3" json:"group,omitempty"`
 	// 仅 Planet 使用, 候选耗尽后递增以轮换小名单. 不影响进程准入代次或写入版本.
 	CandidateRound uint32 `protobuf:"varint,8,opt,name=candidate_round,json=candidateRound,proto3" json:"candidate_round,omitempty"`
-	// 仅向 Supervisor 发送, 不复制到成员名单, 日志或节点间 Hello.
+	// 仅向 Pulsar 发送, 不复制到成员名单, 日志或节点间 Hello.
 	Username string `protobuf:"bytes,9,opt,name=username,proto3" json:"username,omitempty"`
 	Password string `protobuf:"bytes,10,opt,name=password,proto3" json:"password,omitempty"`
 	// 本次启动生成一次的 32 字节随机幂等键, 所有重试和候选刷新复用, 不作为实例身份或授权凭据.
-	// Supervisor 持久记住已提交请求; 被替换的旧请求不能再次登记.
+	// Pulsar 持久记住已提交请求; 被替换的旧请求不能再次登记.
 	RequestId     []byte `protobuf:"bytes,13,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -398,10 +398,10 @@ func (x *RegistrationResponse) GetPulseEndpoint() string {
 type Member struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Galaxy string                 `protobuf:"bytes,1,opt,name=galaxy,proto3" json:"galaxy,omitempty"`
-	// Supervisor 签发的不透明 UTF-8 字符串, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
-	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	// SHA-256(username + NUL + galaxy + NUL + advertise), 小写十六进制, 不替代本次启动的 id.
-	Principal string `protobuf:"bytes,3,opt,name=principal,proto3" json:"principal,omitempty"`
+	// Pulsar 签发的不透明字节标识, 当前内容为 p_ 前缀十六进制文本, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
+	Id []byte `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// SHA-256(username + NUL + galaxy + NUL + advertise) 原始 32 字节, 不再传输小写十六进制文本, 不替代本次启动的 id.
+	Principal []byte `protobuf:"bytes,3,opt,name=principal,proto3" json:"principal,omitempty"`
 	Advertise string `protobuf:"bytes,4,opt,name=advertise,proto3" json:"advertise,omitempty"`
 	// 每部署身份的重启代次, 不用于 Catalog/Registry 的业务版本排序.
 	Epoch         uint64 `protobuf:"varint,5,opt,name=epoch,proto3" json:"epoch,omitempty"`
@@ -448,18 +448,18 @@ func (x *Member) GetGalaxy() string {
 	return ""
 }
 
-func (x *Member) GetId() string {
+func (x *Member) GetId() []byte {
 	if x != nil {
 		return x.Id
 	}
-	return ""
+	return nil
 }
 
-func (x *Member) GetPrincipal() string {
+func (x *Member) GetPrincipal() []byte {
 	if x != nil {
 		return x.Principal
 	}
-	return ""
+	return nil
 }
 
 func (x *Member) GetAdvertise() string {
@@ -520,8 +520,8 @@ const file_orbit_proto_rawDesc = "" +
 	"\x0epulse_endpoint\x18\x04 \x01(\tR\rpulseEndpoint\"\xd4\x01\n" +
 	"\x06Member\x12\x16\n" +
 	"\x06galaxy\x18\x01 \x01(\tR\x06galaxy\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1c\n" +
-	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x1c\n" +
+	"\x02id\x18\x02 \x01(\fR\x02id\x12\x1c\n" +
+	"\tprincipal\x18\x03 \x01(\fR\tprincipal\x12\x1c\n" +
 	"\tadvertise\x18\x04 \x01(\tR\tadvertise\x12\x14\n" +
 	"\x05epoch\x18\x05 \x01(\x04R\x05epoch\x12(\n" +
 	"\x04role\x18\a \x01(\x0e2\x14.proto.orbit.v1.RoleR\x04role\x12\x14\n" +
@@ -535,7 +535,7 @@ const file_orbit_proto_rawDesc = "" +
 	"\x0eROLE_ASTROLABE\x10\x042\xaf\x01\n" +
 	"\tAdmission\x12U\n" +
 	"\bRegister\x12#.proto.orbit.v1.RegistrationRequest\x1a$.proto.orbit.v1.RegistrationResponse\x12K\n" +
-	"\x04List\x12 .proto.orbit.v1.DirectoryRequest\x1a!.proto.orbit.v1.DirectoryResponseBAZ?github.com/eosforge/verdandi/supervisor/internal/generated;wireb\x06proto3"
+	"\x04List\x12 .proto.orbit.v1.DirectoryRequest\x1a!.proto.orbit.v1.DirectoryResponseBCZAgithub.com/eosforge/verdandi/astra/internal/generated/orbit;orbitb\x06proto3"
 
 var (
 	file_orbit_proto_rawDescOnce sync.Once

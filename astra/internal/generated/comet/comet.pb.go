@@ -257,9 +257,10 @@ func (*Empty) Descriptor() ([]byte, []int) {
 
 // 字节精确匹配的范围, 两字段均必需; 公共接口拒绝 sector 的 __ 前缀.
 type Scope struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sector        string                 `protobuf:"bytes,1,opt,name=sector,proto3" json:"sector,omitempty"`
-	Spectrum      string                 `protobuf:"bytes,2,opt,name=spectrum,proto3" json:"spectrum,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// UTF-8 文本内容不变, 类型改为 bytes 以跳过 Protobuf 层的重复 UTF-8 校验; 形状仍由各域入口校验.
+	Sector        []byte `protobuf:"bytes,1,opt,name=sector,proto3" json:"sector,omitempty"`
+	Spectrum      []byte `protobuf:"bytes,2,opt,name=spectrum,proto3" json:"spectrum,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -294,18 +295,18 @@ func (*Scope) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Scope) GetSector() string {
+func (x *Scope) GetSector() []byte {
 	if x != nil {
 		return x.Sector
 	}
-	return ""
+	return nil
 }
 
-func (x *Scope) GetSpectrum() string {
+func (x *Scope) GetSpectrum() []byte {
 	if x != nil {
 		return x.Spectrum
 	}
-	return ""
+	return nil
 }
 
 // value 允许零字节, action presence 明确区分删除、空值与非法缺失操作.
@@ -501,7 +502,8 @@ func (*CatalogChange_Erase) isCatalogChange_Action() {}
 // 完整注册只在首次出现/快照/回补发送; data 分支只替换已有 UUID 的 Data.
 type EphemerisChange struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Uuid  string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	// 16 字节原始 UUIDv4 二进制, 版本/变体位固定, 不再传输连字符文本.
+	Uuid []byte `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	// Types that are valid to be assigned to Action:
 	//
 	//	*EphemerisChange_Record_
@@ -542,11 +544,11 @@ func (*EphemerisChange) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *EphemerisChange) GetUuid() string {
+func (x *EphemerisChange) GetUuid() []byte {
 	if x != nil {
 		return x.Uuid
 	}
-	return ""
+	return nil
 }
 
 func (x *EphemerisChange) GetAction() isEphemerisChange_Action {
@@ -661,7 +663,7 @@ func (x *SessionRequest) GetSecret() []byte {
 // session 固定 32 个原始随机字节, 后续 RPC 用 comet-session-bin 初始 metadata 提交.
 type SessionReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Session       []byte                 `protobuf:"bytes,2,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -697,11 +699,11 @@ func (*SessionReply) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *SessionReply) GetInstance() string {
+func (x *SessionReply) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *SessionReply) GetSession() []byte {
@@ -714,7 +716,7 @@ func (x *SessionReply) GetSession() []byte {
 // 首次定位允许空 instance; version 必须为正, TTL 明确指定整数毫秒.
 type PublishRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	Version       uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	Key           string                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
@@ -754,11 +756,11 @@ func (*PublishRequest) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *PublishRequest) GetInstance() string {
+func (x *PublishRequest) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *PublishRequest) GetScope() *Scope {
@@ -799,7 +801,7 @@ func (x *PublishRequest) GetTtlMs() uint32 {
 // 确认当前实例本次受理, 不承诺对等复制完成或固定重试期限.
 type PublishReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -835,11 +837,11 @@ func (*PublishReply) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *PublishReply) GetInstance() string {
+func (x *PublishReply) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *PublishReply) GetVersion() uint64 {
@@ -852,7 +854,7 @@ func (x *PublishReply) GetVersion() uint64 {
 // 仅续接该 Star 仍有效的本机来源记录, 缺失时须通过完整 Publish 恢复.
 type CatalogRenewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	Key           string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	Version       uint64                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
@@ -891,11 +893,11 @@ func (*CatalogRenewRequest) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *CatalogRenewRequest) GetInstance() string {
+func (x *CatalogRenewRequest) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *CatalogRenewRequest) GetScope() *Scope {
@@ -929,7 +931,7 @@ func (x *CatalogRenewRequest) GetTtlMs() uint32 {
 // 每次成功受理分配新 UUID, 不提供客户端请求 ID 或创建结果查询.
 type CreateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	Attr          []byte                 `protobuf:"bytes,3,opt,name=attr,proto3" json:"attr,omitempty"`
 	Data          []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
@@ -968,11 +970,11 @@ func (*CreateRequest) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *CreateRequest) GetInstance() string {
+func (x *CreateRequest) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *CreateRequest) GetScope() *Scope {
@@ -1003,11 +1005,11 @@ func (x *CreateRequest) GetTtlMs() uint32 {
 	return 0
 }
 
-// uuid 为小写连字符 UUIDv4; 注册时固定 TTL, 两种 order 初始均为 0.
+// uuid 为 16 字节原始 UUIDv4 二进制; 注册时固定 TTL, 两种 order 初始均为 0.
 type CreateReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
-	Uuid          string                 `protobuf:"bytes,2,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Uuid          []byte                 `protobuf:"bytes,2,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	TtlMs         uint32                 `protobuf:"varint,3,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1043,18 +1045,18 @@ func (*CreateReply) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *CreateReply) GetInstance() string {
+func (x *CreateReply) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
-func (x *CreateReply) GetUuid() string {
+func (x *CreateReply) GetUuid() []byte {
 	if x != nil {
 		return x.Uuid
 	}
-	return ""
+	return nil
 }
 
 func (x *CreateReply) GetTtlMs() uint32 {
@@ -1067,9 +1069,9 @@ func (x *CreateReply) GetTtlMs() uint32 {
 // Data 整体替换不延期; order 必须为正且按 UUID 独立验证.
 type UpdateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Uuid          string                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Uuid          []byte                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	Order         uint64                 `protobuf:"varint,4,opt,name=order,proto3" json:"order,omitempty"`
 	Data          []byte                 `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1106,11 +1108,11 @@ func (*UpdateRequest) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *UpdateRequest) GetInstance() string {
+func (x *UpdateRequest) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *UpdateRequest) GetScope() *Scope {
@@ -1120,11 +1122,11 @@ func (x *UpdateRequest) GetScope() *Scope {
 	return nil
 }
 
-func (x *UpdateRequest) GetUuid() string {
+func (x *UpdateRequest) GetUuid() []byte {
 	if x != nil {
 		return x.Uuid
 	}
-	return ""
+	return nil
 }
 
 func (x *UpdateRequest) GetOrder() uint64 {
@@ -1189,9 +1191,9 @@ func (x *UpdateReply) GetOrder() uint64 {
 // Renew 使用注册时保存的 TTL, 相同 order 只确认旧结果, 不再次延长.
 type RenewRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Uuid          string                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Uuid          []byte                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	Order         uint64                 `protobuf:"varint,4,opt,name=order,proto3" json:"order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1227,11 +1229,11 @@ func (*RenewRequest) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *RenewRequest) GetInstance() string {
+func (x *RenewRequest) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *RenewRequest) GetScope() *Scope {
@@ -1241,11 +1243,11 @@ func (x *RenewRequest) GetScope() *Scope {
 	return nil
 }
 
-func (x *RenewRequest) GetUuid() string {
+func (x *RenewRequest) GetUuid() []byte {
 	if x != nil {
 		return x.Uuid
 	}
-	return ""
+	return nil
 }
 
 func (x *RenewRequest) GetOrder() uint64 {
@@ -1303,9 +1305,9 @@ func (x *RenewReply) GetOrder() uint64 {
 // 只结束该实例/范围/UUID; 不存在返回明确 ended, 不永久保留注销墓碑.
 type RemoveRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Uuid          string                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Uuid          []byte                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1340,11 +1342,11 @@ func (*RemoveRequest) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *RemoveRequest) GetInstance() string {
+func (x *RemoveRequest) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *RemoveRequest) GetScope() *Scope {
@@ -1354,19 +1356,19 @@ func (x *RemoveRequest) GetScope() *Scope {
 	return nil
 }
 
-func (x *RemoveRequest) GetUuid() string {
+func (x *RemoveRequest) GetUuid() []byte {
 	if x != nil {
 		return x.Uuid
 	}
-	return ""
+	return nil
 }
 
-// target 空为全 Scope, 非空为精确 Key/UUID; version 缺失与显式 0 不同.
+// target 空为全 Scope, 非空为精确 Key 或 16 字节 UUID 二进制; version 缺失与显式 0 不同.
 type WatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      string                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Target        string                 `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
+	Target        []byte                 `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	Version       *uint64                `protobuf:"varint,4,opt,name=version,proto3,oneof" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1402,11 +1404,11 @@ func (*WatchRequest) Descriptor() ([]byte, []int) {
 	return file_comet_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *WatchRequest) GetInstance() string {
+func (x *WatchRequest) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 func (x *WatchRequest) GetScope() *Scope {
@@ -1416,11 +1418,11 @@ func (x *WatchRequest) GetScope() *Scope {
 	return nil
 }
 
-func (x *WatchRequest) GetTarget() string {
+func (x *WatchRequest) GetTarget() []byte {
 	if x != nil {
 		return x.Target
 	}
-	return ""
+	return nil
 }
 
 func (x *WatchRequest) GetVersion() uint64 {
@@ -1437,7 +1439,7 @@ type AlmanacWatchReply struct {
 	Changes       []*AlmanacChange       `protobuf:"bytes,2,rep,name=changes,proto3" json:"changes,omitempty"`
 	Complete      bool                   `protobuf:"varint,3,opt,name=complete,proto3" json:"complete,omitempty"`
 	Version       *uint64                `protobuf:"varint,4,opt,name=version,proto3,oneof" json:"version,omitempty"`
-	Instance      string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1500,11 +1502,11 @@ func (x *AlmanacWatchReply) GetVersion() uint64 {
 	return 0
 }
 
-func (x *AlmanacWatchReply) GetInstance() string {
+func (x *AlmanacWatchReply) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 // Watch version 是本地视图游标, 不等于 changes 中的每 Key 业务版本.
@@ -1514,7 +1516,7 @@ type CatalogWatchReply struct {
 	Changes       []*CatalogChange       `protobuf:"bytes,2,rep,name=changes,proto3" json:"changes,omitempty"`
 	Complete      bool                   `protobuf:"varint,3,opt,name=complete,proto3" json:"complete,omitempty"`
 	Version       *uint64                `protobuf:"varint,4,opt,name=version,proto3,oneof" json:"version,omitempty"`
-	Instance      string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1577,11 +1579,11 @@ func (x *CatalogWatchReply) GetVersion() uint64 {
 	return 0
 }
 
-func (x *CatalogWatchReply) GetInstance() string {
+func (x *CatalogWatchReply) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 // reset 仅允许 record, apply 可以 record/data/erase, 不暴露半条注册.
@@ -1591,7 +1593,7 @@ type EphemerisWatchReply struct {
 	Changes       []*EphemerisChange     `protobuf:"bytes,2,rep,name=changes,proto3" json:"changes,omitempty"`
 	Complete      bool                   `protobuf:"varint,3,opt,name=complete,proto3" json:"complete,omitempty"`
 	Version       *uint64                `protobuf:"varint,4,opt,name=version,proto3,oneof" json:"version,omitempty"`
-	Instance      string                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,5,opt,name=instance,proto3" json:"instance,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1654,11 +1656,11 @@ func (x *EphemerisWatchReply) GetVersion() uint64 {
 	return 0
 }
 
-func (x *EphemerisWatchReply) GetInstance() string {
+func (x *EphemerisWatchReply) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 // 非 OK trailing metadata comet-error-bin, 总编码至多 4 KiB, 不含载荷或秘密.
@@ -1674,7 +1676,7 @@ type Failure struct {
 	Limit         string                 `protobuf:"bytes,8,opt,name=limit,proto3" json:"limit,omitempty"`
 	Maximum       *uint64                `protobuf:"varint,9,opt,name=maximum,proto3,oneof" json:"maximum,omitempty"`
 	Message       string                 `protobuf:"bytes,10,opt,name=message,proto3" json:"message,omitempty"`
-	Instance      string                 `protobuf:"bytes,11,opt,name=instance,proto3" json:"instance,omitempty"`
+	Instance      []byte                 `protobuf:"bytes,11,opt,name=instance,proto3" json:"instance,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1779,11 +1781,11 @@ func (x *Failure) GetMessage() string {
 	return ""
 }
 
-func (x *Failure) GetInstance() string {
+func (x *Failure) GetInstance() []byte {
 	if x != nil {
 		return x.Instance
 	}
-	return ""
+	return nil
 }
 
 // attr 和 data 都可为空, 不在子记录重复 UUID.
@@ -1846,8 +1848,8 @@ const file_comet_proto_rawDesc = "" +
 	"\vcomet.proto\x12\x0eproto.comet.v1\"\a\n" +
 	"\x05Empty\";\n" +
 	"\x05Scope\x12\x16\n" +
-	"\x06sector\x18\x01 \x01(\tR\x06sector\x12\x1a\n" +
-	"\bspectrum\x18\x02 \x01(\tR\bspectrum\"r\n" +
+	"\x06sector\x18\x01 \x01(\fR\x06sector\x12\x1a\n" +
+	"\bspectrum\x18\x02 \x01(\fR\bspectrum\"r\n" +
 	"\rAlmanacChange\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
 	"\x05value\x18\x02 \x01(\fH\x00R\x05value\x12-\n" +
@@ -1860,7 +1862,7 @@ const file_comet_proto_rawDesc = "" +
 	"\aversion\x18\x04 \x01(\x04R\aversionB\b\n" +
 	"\x06action\"\xe8\x01\n" +
 	"\x0fEphemerisChange\x12\x12\n" +
-	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12@\n" +
+	"\x04uuid\x18\x01 \x01(\fR\x04uuid\x12@\n" +
 	"\x06record\x18\x02 \x01(\v2&.proto.comet.v1.EphemerisChange.RecordH\x00R\x06record\x12-\n" +
 	"\x05erase\x18\x03 \x01(\v2\x15.proto.comet.v1.EmptyH\x00R\x05erase\x12\x14\n" +
 	"\x04data\x18\x04 \x01(\fH\x00R\x04data\x1a0\n" +
@@ -1872,58 +1874,58 @@ const file_comet_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x16\n" +
 	"\x06secret\x18\x02 \x01(\fR\x06secret\"D\n" +
 	"\fSessionReply\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12\x18\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12\x18\n" +
 	"\asession\x18\x02 \x01(\fR\asession\"\xb2\x01\n" +
 	"\x0ePublishRequest\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12+\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x04R\aversion\x12\x10\n" +
 	"\x03key\x18\x04 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\fR\x05value\x12\x15\n" +
 	"\x06ttl_ms\x18\x06 \x01(\rR\x05ttlMs\"D\n" +
 	"\fPublishReply\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12\x18\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\"\xa1\x01\n" +
 	"\x13CatalogRenewRequest\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12+\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x10\n" +
 	"\x03key\x18\x03 \x01(\tR\x03key\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\x04R\aversion\x12\x15\n" +
 	"\x06ttl_ms\x18\x05 \x01(\rR\x05ttlMs\"\x97\x01\n" +
 	"\rCreateRequest\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12+\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
 	"\x04attr\x18\x03 \x01(\fR\x04attr\x12\x12\n" +
 	"\x04data\x18\x04 \x01(\fR\x04data\x12\x15\n" +
 	"\x06ttl_ms\x18\x05 \x01(\rR\x05ttlMs\"T\n" +
 	"\vCreateReply\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12\x12\n" +
-	"\x04uuid\x18\x02 \x01(\tR\x04uuid\x12\x15\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12\x12\n" +
+	"\x04uuid\x18\x02 \x01(\fR\x04uuid\x12\x15\n" +
 	"\x06ttl_ms\x18\x03 \x01(\rR\x05ttlMs\"\x96\x01\n" +
 	"\rUpdateRequest\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12+\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
-	"\x04uuid\x18\x03 \x01(\tR\x04uuid\x12\x14\n" +
+	"\x04uuid\x18\x03 \x01(\fR\x04uuid\x12\x14\n" +
 	"\x05order\x18\x04 \x01(\x04R\x05order\x12\x12\n" +
 	"\x04data\x18\x05 \x01(\fR\x04data\"#\n" +
 	"\vUpdateReply\x12\x14\n" +
 	"\x05order\x18\x01 \x01(\x04R\x05order\"\x81\x01\n" +
 	"\fRenewRequest\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12+\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
-	"\x04uuid\x18\x03 \x01(\tR\x04uuid\x12\x14\n" +
+	"\x04uuid\x18\x03 \x01(\fR\x04uuid\x12\x14\n" +
 	"\x05order\x18\x04 \x01(\x04R\x05order\"\"\n" +
 	"\n" +
 	"RenewReply\x12\x14\n" +
 	"\x05order\x18\x01 \x01(\x04R\x05order\"l\n" +
 	"\rRemoveRequest\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12+\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
-	"\x04uuid\x18\x03 \x01(\tR\x04uuid\"\x9a\x01\n" +
+	"\x04uuid\x18\x03 \x01(\fR\x04uuid\"\x9a\x01\n" +
 	"\fWatchRequest\x12\x1a\n" +
-	"\binstance\x18\x01 \x01(\tR\binstance\x12+\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x16\n" +
-	"\x06target\x18\x03 \x01(\tR\x06target\x12\x1d\n" +
+	"\x06target\x18\x03 \x01(\fR\x06target\x12\x1d\n" +
 	"\aversion\x18\x04 \x01(\x04H\x00R\aversion\x88\x01\x01B\n" +
 	"\n" +
 	"\b_version\"\xd9\x01\n" +
@@ -1932,7 +1934,7 @@ const file_comet_proto_rawDesc = "" +
 	"\achanges\x18\x02 \x03(\v2\x1d.proto.comet.v1.AlmanacChangeR\achanges\x12\x1a\n" +
 	"\bcomplete\x18\x03 \x01(\bR\bcomplete\x12\x1d\n" +
 	"\aversion\x18\x04 \x01(\x04H\x00R\aversion\x88\x01\x01\x12\x1a\n" +
-	"\binstance\x18\x05 \x01(\tR\binstanceB\n" +
+	"\binstance\x18\x05 \x01(\fR\binstanceB\n" +
 	"\n" +
 	"\b_version\"\xd9\x01\n" +
 	"\x11CatalogWatchReply\x12(\n" +
@@ -1940,7 +1942,7 @@ const file_comet_proto_rawDesc = "" +
 	"\achanges\x18\x02 \x03(\v2\x1d.proto.comet.v1.CatalogChangeR\achanges\x12\x1a\n" +
 	"\bcomplete\x18\x03 \x01(\bR\bcomplete\x12\x1d\n" +
 	"\aversion\x18\x04 \x01(\x04H\x00R\aversion\x88\x01\x01\x12\x1a\n" +
-	"\binstance\x18\x05 \x01(\tR\binstanceB\n" +
+	"\binstance\x18\x05 \x01(\fR\binstanceB\n" +
 	"\n" +
 	"\b_version\"\xdd\x01\n" +
 	"\x13EphemerisWatchReply\x12(\n" +
@@ -1948,7 +1950,7 @@ const file_comet_proto_rawDesc = "" +
 	"\achanges\x18\x02 \x03(\v2\x1f.proto.comet.v1.EphemerisChangeR\achanges\x12\x1a\n" +
 	"\bcomplete\x18\x03 \x01(\bR\bcomplete\x12\x1d\n" +
 	"\aversion\x18\x04 \x01(\x04H\x00R\aversion\x88\x01\x01\x12\x1a\n" +
-	"\binstance\x18\x05 \x01(\tR\binstanceB\n" +
+	"\binstance\x18\x05 \x01(\fR\binstanceB\n" +
 	"\n" +
 	"\b_version\"\xc1\x03\n" +
 	"\aFailure\x12.\n" +
@@ -1965,7 +1967,7 @@ const file_comet_proto_rawDesc = "" +
 	"\amaximum\x18\t \x01(\x04H\x05R\amaximum\x88\x01\x01\x12\x18\n" +
 	"\amessage\x18\n" +
 	" \x01(\tR\amessage\x12\x1a\n" +
-	"\binstance\x18\v \x01(\tR\binstanceB\n" +
+	"\binstance\x18\v \x01(\fR\binstanceB\n" +
 	"\n" +
 	"\b_versionB\b\n" +
 	"\x06_orderB\r\n" +

@@ -297,12 +297,12 @@ constexpr Member::ParseTableT_ Member::InternalGenerateParseTable_(const ::_pbi:
       {::_pbi::TcParser::FastUS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(Member, _impl_.galaxy_)}},
-      // string id = 2;
-      {::_pbi::TcParser::FastUS1,
+      // bytes id = 2;
+      {::_pbi::TcParser::FastBS1,
        {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(Member, _impl_.id_)}},
-      // string principal = 3;
-      {::_pbi::TcParser::FastUS1,
+      // bytes principal = 3;
+      {::_pbi::TcParser::FastBS1,
        {26, 2, 0,
         PROTOBUF_FIELD_OFFSET(Member, _impl_.principal_)}},
       // string advertise = 4;
@@ -323,10 +323,10 @@ constexpr Member::ParseTableT_ Member::InternalGenerateParseTable_(const ::_pbi:
     }}, {{
       // string galaxy = 1;
       {PROTOBUF_FIELD_OFFSET(Member, _impl_.galaxy_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-      // string id = 2;
-      {PROTOBUF_FIELD_OFFSET(Member, _impl_.id_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
-      // string principal = 3;
-      {PROTOBUF_FIELD_OFFSET(Member, _impl_.principal_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
+      // bytes id = 2;
+      {PROTOBUF_FIELD_OFFSET(Member, _impl_.id_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
+      // bytes principal = 3;
+      {PROTOBUF_FIELD_OFFSET(Member, _impl_.principal_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // string advertise = 4;
       {PROTOBUF_FIELD_OFFSET(Member, _impl_.advertise_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUtf8String | ::_fl::kRepAString)},
       // uint64 epoch = 5;
@@ -338,11 +338,9 @@ constexpr Member::ParseTableT_ Member::InternalGenerateParseTable_(const ::_pbi:
     }},
     // no aux_entries
     {{
-      "\25\6\2\11\11\0\0\5"
+      "\25\6\0\0\11\0\0\5"
       "proto.orbit.v1.Member"
       "galaxy"
-      "id"
-      "principal"
       "advertise"
       "group"
     }},
@@ -1163,8 +1161,8 @@ const char descriptor_table_protodef_orbit_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "onse\022\'\n\007members\030\001 \003(\0132\026.proto.orbit.v1.M"
     "ember\022\021\n\tadmission\030\002 \001(\014\022\021\n\tsignature\030\003 "
     "\001(\014\022\026\n\016pulse_endpoint\030\004 \001(\t\"\236\001\n\006Member\022\016"
-    "\n\006galaxy\030\001 \001(\t\022\n\n\002id\030\002 \001(\t\022\021\n\tprincipal\030"
-    "\003 \001(\t\022\021\n\tadvertise\030\004 \001(\t\022\r\n\005epoch\030\005 \001(\004\022"
+    "\n\006galaxy\030\001 \001(\t\022\n\n\002id\030\002 \001(\014\022\021\n\tprincipal\030"
+    "\003 \001(\014\022\021\n\tadvertise\030\004 \001(\t\022\r\n\005epoch\030\005 \001(\004\022"
     "\"\n\004role\030\007 \001(\0162\024.proto.orbit.v1.Role\022\r\n\005g"
     "roup\030\010 \001(\tJ\004\010\006\020\007R\npublic_key*b\n\004Role\022\024\n\020"
     "ROLE_UNSPECIFIED\020\000\022\r\n\tROLE_STAR\020\001\022\017\n\013ROL"
@@ -1173,15 +1171,15 @@ const char descriptor_table_protodef_orbit_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "to.orbit.v1.RegistrationRequest\032$.proto."
     "orbit.v1.RegistrationResponse\022K\n\004List\022 ."
     "proto.orbit.v1.DirectoryRequest\032!.proto."
-    "orbit.v1.DirectoryResponseBAZ\?github.com"
-    "/eosforge/verdandi/supervisor/internal/g"
-    "enerated;wireb\006proto3"
+    "orbit.v1.DirectoryResponseBCZAgithub.com"
+    "/eosforge/verdandi/astra/internal/genera"
+    "ted/orbit;orbitb\006proto3"
 };
 static ::absl::once_flag descriptor_table_orbit_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_orbit_2eproto = {
     false,
     false,
-    1061,
+    1063,
     descriptor_table_protodef_orbit_2eproto,
     "orbit.proto",
     &descriptor_table_orbit_2eproto_once,
@@ -2625,23 +2623,19 @@ PROTOBUF_NOINLINE void Member::Clear() {
     }
   }
 
-  // string id = 2;
+  // bytes id = 2;
   if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     if (!this_._internal_id().empty()) {
       const ::std::string& _s = this_._internal_id();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.orbit.v1.Member.id");
-      target = stream->WriteStringMaybeAliased(2, _s, target);
+      target = stream->WriteBytesMaybeAliased(2, _s, target);
     }
   }
 
-  // string principal = 3;
+  // bytes principal = 3;
   if (CheckHasBit(cached_has_bits, 0x00000004U)) {
     if (!this_._internal_principal().empty()) {
       const ::std::string& _s = this_._internal_principal();
-      ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
-          _s.data(), static_cast<int>(_s.length()), ::google::protobuf::internal::WireFormatLite::SERIALIZE, "proto.orbit.v1.Member.principal");
-      target = stream->WriteStringMaybeAliased(3, _s, target);
+      target = stream->WriteBytesMaybeAliased(3, _s, target);
     }
   }
 
@@ -2714,17 +2708,17 @@ PROTOBUF_NOINLINE void Member::Clear() {
                                         this_._internal_galaxy());
       }
     }
-    // string id = 2;
+    // bytes id = 2;
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (!this_._internal_id().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_id());
       }
     }
-    // string principal = 3;
+    // bytes principal = 3;
     if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       if (!this_._internal_principal().empty()) {
-        total_size += 1 + ::google::protobuf::internal::WireFormatLite::StringSize(
+        total_size += 1 + ::google::protobuf::internal::WireFormatLite::BytesSize(
                                         this_._internal_principal());
       }
     }

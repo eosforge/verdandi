@@ -1,4 +1,4 @@
-// 该文件实现了 Admission 类的具体逻辑, 负责与 Supervisor 建立 gRPC 通道, 发送注册请求, 并验证响应.
+// 该文件实现了 Admission 类的具体逻辑, 负责与 Pulsar 建立 gRPC 通道, 发送注册请求, 并验证响应.
 #include "admission.hpp"
 #include "rpc_status.hpp"
 #include <astra/proto_proxy.hpp>
@@ -28,8 +28,8 @@ Admission::Admission(const Config& config, std::shared_ptr<Identity> identity, s
     args.SetMaxReceiveMessageSize(static_cast<int>(config_.max_admission_response_bytes));
     args.SetMaxSendMessageSize(static_cast<int>(config_.max_admission_request_bytes));
     args.SetInt("grpc.enable_retries", 0); // 关闭重试机制
-    // 根据提供的 Supervisor 地址和 TLS 凭据创建 gRPC 通道
-    channel_ = grpc::CreateCustomChannel(config_.supervisor, identity_->channel_credentials(), args);
+    // 根据提供的 Pulsar 地址和 TLS 凭据创建 gRPC 通道
+    channel_ = grpc::CreateCustomChannel(config_.pulsar, identity_->channel_credentials(), args);
     // 实例化对应的 RPC Stub
     stub_ = proto::orbit::v1::Admission::NewStub(channel_);
 
@@ -40,7 +40,7 @@ Admission::Admission(const Config& config, std::shared_ptr<Identity> identity, s
         throw std::runtime_error("Startup request entropy unavailable");
     }
 
-    // 填充将要发送到 Supervisor 的请求消息基础字段
+    // 填充将要发送到 Pulsar 的请求消息基础字段
     mutate(request_).request_id(std::move(request_id)).username(identity_->username()).password(identity_->password()).galaxy(config_.galaxy).advertise(config_.advertise.text()).role(Identity::role(config_.role)).group(config_.group);
 }
 
@@ -110,7 +110,7 @@ std::optional<Result<Admission::Joined>> Admission::poll() {
         if (cancelled_ || Steady::now() >= connect_deadline_) {
             // 退回空闲状态, 并返回相应的错误
             phase_ = Admission::Phase::idle;
-            return std::unexpected(Status{cancelled_ ? Status::Code::cancelled : Status::Code::timeout, "Supervisor connection did not become ready"});
+            return std::unexpected(Status{cancelled_ ? Status::Code::cancelled : Status::Code::timeout, "Pulsar connection did not become ready"});
         }
 
         // 如果通道还未达到 READY 状态, 则继续等待
@@ -149,7 +149,7 @@ std::optional<Result<Admission::Joined>> Admission::poll() {
     return std::nullopt;
 }
 
-// validate: 校验 Supervisor 发回的响应数据.
+// validate: 校验 Pulsar 发回的响应数据.
 // 参数 response: 从 gRPC 接收到的 RegistrationResponse 对象引用.
 Result<Admission::Joined> Admission::validate(proto::orbit::v1::RegistrationResponse& response) {
 
@@ -157,7 +157,7 @@ Result<Admission::Joined> Admission::validate(proto::orbit::v1::RegistrationResp
     std::string pulse_endpoint;
     if (!response.pulse_endpoint().empty()) {
         // endpoint 为受信控制面提供的 Pulse 地址解析结果, 不接受非法主机和端口.
-        auto endpoint = Config::format_supervisor(response.pulse_endpoint());
+        auto endpoint = Config::format_pulsar(response.pulse_endpoint());
         if (!endpoint) {
             return Status::identity("Invalid Pulse endpoint");
         }
@@ -171,7 +171,7 @@ Result<Admission::Joined> Admission::validate(proto::orbit::v1::RegistrationResp
         return Status::capacity("Admission list exceeds role capacity");
     }
 
-    // 对原始准入字节验签并核对部署. 首次接受 Supervisor 签发的身份, 后续刷新不得更换它.
+    // 对原始准入字节验签并核对部署. 首次接受 Pulsar 签发的身份, 后续刷新不得更换它.
     // 调用身份类的 verify 进行公钥验签和解析
     auto local = identity_->verify(std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(response.admission().data()), response.admission().size()), std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(response.signature().data()), response.signature().size()));
     // 确保验签通过, 并且其内容与当前节点的配置预期一致; 如果是刷新请求, 还要保证与先前的身份不变

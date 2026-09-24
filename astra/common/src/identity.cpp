@@ -2,6 +2,7 @@
 // 签名(Ed25519)的强校验, 使用 yyjson 库安全解析 JSON, 使用 gRPC API 生成并包装网络凭证.
 #include "identity.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <grpcpp/security/tls_credentials_options.h>
 #include <openssl/curve25519.h>
@@ -41,7 +42,7 @@ Result<std::string> read_identity(const std::filesystem::path& path) {
     return bytes;
 }
 
-// 公布端点必须拥有有效服务端证书, 在向 Supervisor 登记前检查链, 用途, IP SAN 和私钥匹配.
+// 公布端点必须拥有有效服务端证书, 在向 Pulsar 登记前检查链, 用途, IP SAN 和私钥匹配.
 // - ca (const std::string&): CA 证书内容.
 // - cert (const std::string&): 服务端公钥证书内容.
 // - key (const std::string&): 服务端私钥内容.
@@ -148,7 +149,7 @@ proto::orbit::v1::Member Identity::encode(const Member& member) {
     proto::orbit::v1::Member result;
     result.set_galaxy(member.galaxy);
     result.set_id(member.id);
-    result.set_principal(member.principal.text());
+    result.set_principal(member.principal.bytes.data(), member.principal.bytes.size());
     result.set_advertise(member.address.text());
     result.set_epoch(member.epoch.value);
     result.set_role(role(member.role));
@@ -162,19 +163,23 @@ Result<Member> decode_member(const proto::orbit::v1::Member& value) {
 
     // id 仅借用生成消息中的不透明标识, 成功返回的 Member 会独立复制它.
     const auto& id = value.id();
-    // principal 为严格小写十六进制解码结果, 不接受同值的编码别名.
-    auto principal = Principal::parse(value.principal());
+    // principal 为原始 32 字节部署摘要, 不接受十六进制文本或其他编码别名.
+    Principal principal;
+    if (value.principal().size() != principal.bytes.size()) {
+        return Status::identity("Invalid encoded member");
+    }
+    std::ranges::copy(value.principal(), principal.bytes.begin());
     // address 为可连接的规范数值端点, 不允许零端口和通配地址.
     auto address = Endpoint::parse(value.advertise());
 
     // role 是明确角色转换结果, 失败时不产生任何默认角色的半初始化成员.
     const auto role = Identity::role(value.role());
-    if (!Member::valid_id(id) || !principal || !address || address->text() != value.advertise() || !role) {
+    if (!Member::valid_id(id) || !address || address->text() != value.advertise() || !role) {
         return Status::identity("Invalid encoded member");
     }
 
     // 初始化 Member 数据结构
-    Member result{value.galaxy(), id, *principal, *address, Member::Epoch{value.epoch()}, *role, value.group()};
+    Member result{value.galaxy(), id, principal, *address, Member::Epoch{value.epoch()}, *role, value.group()};
 
     // 再次调用验证函数校验结构整体的合理性
     if (auto valid = result.validate(); !valid) {

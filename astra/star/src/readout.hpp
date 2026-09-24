@@ -3,6 +3,7 @@
 #include "gateway.hpp"
 #include "library.hpp"
 #include "progress.hpp"
+#include "watch_kernel.hpp"
 #include <chrono>
 #include <functional>
 #include <map>
@@ -86,10 +87,8 @@ private:
 
     // 地址只保存有活动流的范围, 空范围在最后一条流退出后回收.
     std::map<Scope, Group> streams_;
-    Progress<Stream> progress_; // 只调度有提交的 Scope, 每次 pump 有界轮转, 不读 RPC 的 I/O 状态.
-    // 就绪链表首尾, 指向 streams_ 仍拥有的对象, 初始空.
-    Stream* head_{};
-    Stream* tail_{};
+    Progress<Stream> progress_;  // 只调度有提交的 Scope, 每次 pump 有界轮转, 不读 RPC 的 I/O 状态.
+    astra::Watch<Stream> queue_; // 两条侵入式链分别管理就绪与在途, 每页发送不分配索引节点.
     // 活动流总数与全局已占用字节, 都由 mutex_ 保护.
     std::size_t count_{};
     std::size_t bytes_{};

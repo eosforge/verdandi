@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -29,7 +30,7 @@ func text(value string, maximum int) bool {
 // position 对浏览器将 uint64 始终编码为十进制字符串, 避免 JavaScript Number 损失高位.
 // value 为权威确认的位置; 返回范围与版本的可序列化投影.
 func position(value *polaris.Position) map[string]string {
-	return map[string]string{"sector": value.Scope.Sector, "spectrum": value.Scope.Spectrum, "version": strconv.FormatUint(value.Version, 10)}
+	return map[string]string{"sector": string(value.Scope.Sector), "spectrum": string(value.Scope.Spectrum), "version": strconv.FormatUint(value.Version, 10)}
 }
 
 // almanac 的 GET 无副作用, POST 恰好提交一个完整 Set/Delete, 不保存发布工作流或自动重试.
@@ -49,8 +50,8 @@ func (server *Server) almanac(response http.ResponseWriter, request *http.Reques
 			server.inventory(response, request)
 			return
 		}
-		scope := &comet.Scope{Sector: values.Get("sector"), Spectrum: values.Get("spectrum")}
-		if !text(scope.Sector, 128) || !text(scope.Spectrum, 128) {
+		scope := &comet.Scope{Sector: []byte(values.Get("sector")), Spectrum: []byte(values.Get("spectrum"))}
+		if !text(string(scope.Sector), 128) || !text(string(scope.Spectrum), 128) {
 			problem(response, http.StatusBadRequest, "input", "unapplied")
 			return
 		}
@@ -95,7 +96,7 @@ func (server *Server) commit(response http.ResponseWriter, request *http.Request
 		// 删除分支构造擦除动作, 无载荷.
 		change.Action = &comet.AlmanacChange_Erase{Erase: &comet.Empty{}}
 	}
-	server.submit(response, request, &comet.Scope{Sector: input.Sector, Spectrum: input.Spectrum}, change, version)
+	server.submit(response, request, &comet.Scope{Sector: []byte(input.Sector), Spectrum: []byte(input.Spectrum)}, change, version)
 }
 
 // submit 是普通内容与凭据管理唯一的实际写入点, 不重复提交不确定操作, 不返回任何载荷或秘密.
@@ -111,7 +112,7 @@ func (server *Server) submit(response http.ResponseWriter, request *http.Request
 		return
 	}
 	// 确认位置必须与请求范围版本一致, 否则视为网关协议错误, 不向浏览器伪造成功.
-	if result == nil || result.Scope == nil || result.Scope.Sector != scope.Sector || result.Scope.Spectrum != scope.Spectrum || result.Version != version {
+	if result == nil || result.Scope == nil || !bytes.Equal(result.Scope.Sector, scope.Sector) || !bytes.Equal(result.Scope.Spectrum, scope.Spectrum) || result.Version != version {
 		problem(response, http.StatusBadGateway, "protocol", "unknown")
 		return
 	}
@@ -138,11 +139,11 @@ func (server *Server) inventory(response http.ResponseWriter, request *http.Requ
 	positions := make([]map[string]string, 0, len(result.Positions))
 	seen := make(map[[2]string]bool, len(result.Positions))
 	for _, value := range result.Positions {
-		if value == nil || value.Scope == nil || !text(value.Scope.Sector, 128) || !text(value.Scope.Spectrum, 128) || seen[[2]string{value.Scope.Sector, value.Scope.Spectrum}] {
+		if value == nil || value.Scope == nil || !text(string(value.Scope.Sector), 128) || !text(string(value.Scope.Spectrum), 128) || seen[[2]string{string(value.Scope.Sector), string(value.Scope.Spectrum)}] {
 			problem(response, http.StatusBadGateway, "protocol", "unapplied")
 			return
 		}
-		seen[[2]string{value.Scope.Sector, value.Scope.Spectrum}] = true
+		seen[[2]string{string(value.Scope.Sector), string(value.Scope.Spectrum)}] = true
 		positions = append(positions, position(value))
 	}
 	respond(response, map[string]any{"positions": positions, "complete": true})
@@ -167,11 +168,11 @@ func (server *Server) load(response http.ResponseWriter, request *http.Request, 
 	encoder := json.NewEncoder(response)
 	seen := make(map[string]bool) // 已发送键去重, 上限 65536, 防止超大范围耗尽内存.
 	var version uint64            // 快照版本号, 全流必须一致.
-	var bytes int                 // 累计转发字节, 上限 64 MiB.
+	var forwarded int             // 累计转发字节, 上限 64 MiB.
 	started, complete, wrote, disconnected := false, false, false, false
 	err := server.backend.Load(ctx, scope, func(page *polaris.Snapshot) error {
 		// 页级校验: 范围一致、版本一致、非空页必须有条目、结束后不再收页.
-		if page == nil || page.Scope == nil || page.Scope.Sector != scope.Sector || page.Scope.Spectrum != scope.Spectrum || page.Version == nil || complete || started && version != page.GetVersion() || !page.Complete && len(page.Entries) == 0 {
+		if page == nil || page.Scope == nil || !bytes.Equal(page.Scope.Sector, scope.Sector) || !bytes.Equal(page.Scope.Spectrum, scope.Spectrum) || page.Version == nil || complete || started && version != page.GetVersion() || !page.Complete && len(page.Entries) == 0 {
 			return errInput
 		}
 		version, started = page.GetVersion(), true
@@ -184,13 +185,13 @@ func (server *Server) load(response http.ResponseWriter, request *http.Request, 
 			if !ok || value == nil || len(value.Value) > 1<<20 || version == 0 {
 				return errInput
 			}
-			bytes += len(entry.Key) + len(value.Value)
-			if bytes > 64<<20 {
+			forwarded += len(entry.Key) + len(value.Value)
+			if forwarded > 64<<20 {
 				return errInput
 			}
 			seen[entry.Key] = true
 			row := map[string]any{"key": entry.Key}
-			if scope.Sector == "__auth" && scope.Spectrum == "comet" {
+			if string(scope.Sector) == "__auth" && string(scope.Spectrum) == "comet" {
 				var credential orbit.Credential
 				if !text(entry.Key, 128) || proto.Unmarshal(value.Value, &credential) != nil || len(credential.Secret) == 0 || len(credential.Secret) > 4096 {
 					return errInput

@@ -1,26 +1,26 @@
 # 当前实现进度
 
-本轮完成 Catalog/Ephemeris 分页和读取同步边界抽取, 共用 Pagination/Reading, 保留不同的业务提交与 SDK 写入生命周期; 详见 [复用审核](review.md#动态域复用边界). 新增对应边界用例, **尚未构建或测试**. 此前就绪队列、多页缓存和 Catalog 2048 字节用例的通过证据只对应 [validation.md](../testkit/validation.md) 中的已测源码清单.
+当前 alpha HEAD `b47db21` 加工作副本. 最新工作是分阶段性能测量, 主项目 824 项构建输入和生产 Star 二进制未改. 隔离诊断构建及 3/3 相关 CTest 通过. 此前 Watch 到期后取扫描锁的修正与其 4/4 回归依据继续保留, 本轮未重跑完整回归. 已删除 Go Supervisor, 共享夹具收敛到 Pulsar; 协议二进制化、旧成员库恢复和无分配在途索引继续保留. 详见 [审核](review.md).
 
-当前远端 Replica 独立准备锁、域锁外原生候选、同范围下行批次/在途页共享及 Ephemeris 恢复覆盖修复已完成普通 Release 构建/回归. 三 Star 新旧产物对照均通过最终数据核验, 性能有收益也有退化, 不能称为全面加速. 实际源码身份、逐场数字与边界统一见 [validation.md](../testkit/validation.md).
+最新性能验证使用 3 Star、Catalog 2048 B 与 Ephemeris visible, 每类四组普通/计时产物交替对照, **16/16 正式样本通过**, 另有 2/2 单列诊断、2/2 冒烟通过. Star 入队到出队 p99.9 约 1.65–1.67 ms, SDK 收包到消费约 0.63–0.70 ms, 投影安装约 0.08 ms. 计时带来小幅吞吐扰动, 不把阶段分位数相加或伪称端到端根因已经定位. 数据与边界统一见 [validation.md](../testkit/validation.md), 本轮不含 Redis 或 6 Star 对照.
 
 本文件仅保留当前状态. 设计见 [架构](architecture.md), 语义见 [协议](../proto/README.md), 用例见 [验收规约](../testkit/comet.md), 实际执行证据见 [validation.md](../testkit/validation.md).
 
 ## 范围与验证边界
 
-本轮范围为 Pulsar、Polaris、Star 三域存储及多 Star 复制、原生 Comet C++、必要 Go Astrolabe 与 Admin 管理适配. Moon、Planet、其他语言 SDK 和完整 Orrery 继续搁置. 不恢复旧 Redis SDK 或旧 Supervisor 的开发.
+本轮范围为 Pulsar、Polaris、Star 三域存储及多 Star 复制、原生 Comet C++、必要 Go Astrolabe 与 Admin 管理适配. Moon、Planet、其他语言 SDK 和完整 Orrery 继续搁置. 不恢复旧 Redis SDK 的开发. 已删除的 Go Supervisor 只从 Git 历史查阅.
 
-当前为 alpha 工作副本. 抽取前源码的 57/57 CTest、Go 八个活动包及两端 Python 基线执行器通过; 本轮公共层和新增边界尚未验证. 实际执行范围只在 [验证记录](../testkit/validation.md) 维护. 未下载、提交或推送; 未运行 Sanitizer. 性能比较使用相同三 Star 配置的前后产物, 选测配置不代表重跑完整基线库; 未复测的冻结 Redis SDK 失败场景仍不宣称解决.
+当前公共层已有此前回归基线, 本轮仅验证隔离诊断产物的相关三项及三 Star 可见性能. 实际执行范围只在 [验证记录](../testkit/validation.md) 维护. 未下载、提交或推送; 未运行 Sanitizer/长期测试. 本轮未重跑 Admin 前端或冻结 Redis SDK, 不宣称其历史问题已经解决. 暂存切片与完整工作副本的区别仍需在提交前检查.
 
 ## 当前实现
 
 SDK 保留共享连接/准入、固定范围 Watch、最后完整游标和不可变视图. 完成事件定向推进 Activity, 到期/共享身份/关闭仍唤醒. Star 自有来源导出独立且不触发 GC, 公开读取在下一整拍前共享. 远端原生候选改用独立来源锁在域锁外准备, 最终水位/投影/期限/预算提交仍在域锁内; 忙碌来源的到期等待释放域锁, 公开读取在完整推进后才返回. 同范围订阅共享不可变批次和仍在途的同页, 每流确认及预算独立. 具体边界见 [并发复核](review.md#sdk-与-scope-并发复核).
 
-已有优化覆盖 Comet 调度工作空间和 expected 工厂交接、Table 计量/脏页/名称拥有、三域单项去重快路径、Star 写入复核和分页比较、Exchange 重复大小计算. Astrolabe/Admin 已取消独立 64 节点指标上限, 改为完整 Star 目录展示和有界并发采样, 复用连接并用目录索引拒绝旧实例结果; 指标地址仍需部署映射. C++/Go 部分纳入本轮普通回归, Admin 前端未重跑. 具体已改项、其余待归因候选统一见 [当前审核](review.md).
+已有优化覆盖 Comet 调度工作空间和 expected 工厂交接、Table 计量/脏页/名称拥有、三域单项去重快路径、Star 写入复核和分页比较、Exchange 重复大小计算. Astrolabe/Admin 已取消独立 64 节点指标上限, 改为完整 Star 目录展示和有界并发采样, 复用连接并用目录索引拒绝旧实例结果; 指标地址仍需部署映射. C++/Go 部分纳入此前普通回归基线, Admin 前端未重跑. 具体已改项、其余待归因候选统一见 [当前审核](review.md).
 
-Scene 字符串所有权和 Edit 回滚由共享拥有与 RAII 保证, 相关异常/移动用例已纳入回归. Scene/Origin 允许重放超龄但仍连续保留的历史, 年龄只在写入裁剪时生效, 不延长业务 TTL. 两动态域的 expected 读取方法使用私有 execute, 保持锁和回收次序; requires 表达模板记录要求. 当前 execute 的忙来源等待分支及已有机制均已通过本轮普通回归, 不由固定交错用例推出全部并发安全已证明.
+Scene 字符串所有权和 Edit 回滚由共享拥有与 RAII 保证, 相关异常/移动用例已纳入回归. Scene/Origin 允许重放超龄但仍连续保留的历史, 年龄只在写入裁剪时生效, 不延长业务 TTL. 两动态域的 expected 读取方法使用私有 execute, 保持锁和回收次序; requires 表达模板记录要求. 当前 execute 的忙来源等待分支及已有机制均已通过此前普通回归基线, 不由固定交错用例推出全部并发安全已证明.
 
-当前 [审核](review.md) 中的未知范围配额、共享 Client 关闭可见性、Go 单调时间新鲜度修复, 连同 Edition 有序后缀、Polaris 历史前缀裁剪、共享批次和锁外准备, 已包含在本轮相应普通回归. 按 Scope 扫描订阅和重复 TTL 调度仍是优化候选, 不把理论收益当成实测结果.
+当前 [审核](review.md) 中的未知范围配额、共享 Client 关闭可见性、Go 单调时间新鲜度修复, 连同 Edition 有序后缀、Polaris 历史前缀裁剪、共享批次和锁外准备, 已包含在此前相应普通回归基线. 范围进度排空和重复 TTL 调度仍是优化候选, 不把理论收益当成实测结果.
 
 | 组件 | 已写入源码的能力 | 主要入口 |
 | --- | --- | --- |
@@ -53,10 +53,10 @@ Scene 字符串所有权和 Edit 回滚由共享拥有与 RAII 保证, 相关异
 
 ## 已知限制与后续验证
 
-业务 RPC 批量化已完成静态评估: 保留现有单目标协议, 将共享 Client 续租密度和多精确 Watch 开销纳入 [性能矩阵 B10/B11](../testkit/comet.md#rpc-batching), 确认热点后再决定是否扩展. 已保留协议边界并增加可复现的 [性能入口](../astra/bench/README.md), 未修改 Schema/生成代码; 不宣称已有批量续租、多目标订阅或跨 Key 原子发布.
+业务 RPC 批量化已完成静态评估: 保留现有单目标协议, 将共享 Client 续租密度和多精确 Watch 开销纳入 [性能矩阵 B10/B11](../testkit/comet.md#rpc-batching), 确认热点后再决定是否扩展. 已保留协议边界并增加可复现的 [性能入口](../astra/bench/README.md), 当前 Schema 仅变更标识字段编码并同步生成代码; 不宣称已有批量续租、多目标订阅或跨 Key 原子发布.
 
-1. 当前改动已完成普通构建/回归及相同三 Star 性能对照. 大范围恢复与部分扇出/高并发提交有改善, 全订阅可见仍是主要短板; 具体退化及较长窗口复核见验证页. 后续先测关键路径, 不自动启动长期或无限测试.
+1. SDK/Star 下行分阶段测量已完成, 生产实现未改. 下一步应对同一变更关联本地提交、来源导出、远端安装及最后一个订阅可见, 补齐对等复制关键路径; 单独量出索引锁内 StartWrite 时长和 Runtime 各阶段耗时后再决定缩短临界区或调整调度. 本轮没有证明全部尾延迟根因, 不自动启动长期或无限测试.
 2. 来源安装按 Scope 分步, 原生准备已移出域锁, 最终合并/投影/预算仍串行; 单条远端增量未全部移出. 下行共享不消除逐订阅 pending 收集, gRPC 仍可能逐流序列化. 缺少本次持锁/分配实测, 不宣称完全拆锁或零复制. 逻辑预算不等于进程 RSS, 未采集覆盖率百分比.
 3. 当前指标为实际已实现的固定状态 gauge, 未伪造请求计数、延迟直方图或每 Scope 安装进度. Admin 当前以表格管理和观测, 完整实时 3D 拓扑仍属后续 Orrery.
 4. 本轮未重跑 Admin、Debug、Sanitizer/race, 不将此前通过记录当作新增代码的当前证据; 既有第三方/前端提示不因本轮普通测试通过而自动消失.
-5. 当前普通回归、三 Star 前后/Redis 基线、原生恢复对照及 CPU/RSS 采样在 build/scope-review. 前后 Comet/Pulsar/Polaris 产物相同, 仅 Star 变化. 失败样本完整保留, 最新人工汇总仅维护 validation.md; 不将已测结论套用到后续未测源码.
+5. 最新阶段测量、诊断源码补丁、原始计时与产物清单在 build/stage-probe, 当前主项目 824 项构建输入核验未变. 早期解析重叠的样本保留并单列, 补测后保持四组平衡对照. 此前回归和局部 A/B 证据仍在 build/review-repair 与 build/watch-ab/evidence.zip; 最新汇总仅维护 validation.md, 不将已测结论套用到后续未测源码.

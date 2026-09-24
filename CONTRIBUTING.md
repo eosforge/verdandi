@@ -10,4 +10,4 @@ Astra 使用 [MIT License](LICENSE), 当前为开发中的服务骨架. 先阅�
 6. 当前事实更新到所属稳定文档, 最新执行结果写入 [validation.md](testkit/validation.md), 不新增逐轮日期化 MD 或持续工作日志. 不把历史成绩转记给新代码.
 
 缓存、产物、原始日志和临时分析放在 `build/`; 不提交部署秘密、数据库或个人环境. 不修改用户/系统配置, 不在未获指令时提交或推送.
-组件细则见 [C++ 维护指南](astra/CONTRIBUTING.md)、[Supervisor](supervisor/README.md)、[Admin](admin/CONTRIBUTING.md). 旧 SDK 的使用说明仅适用于 [冻结代码](legacy-sdk.md).
+组件细则见 [C++ 维护指南](astra/CONTRIBUTING.md)、[Admin](admin/CONTRIBUTING.md). 旧 SDK 的使用说明仅适用于 [冻结代码](legacy-sdk.md).

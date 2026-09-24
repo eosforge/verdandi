@@ -61,7 +61,7 @@ void blocked(const std::shared_ptr<Identity>& identity, std::string address, boo
     Config config;
     config.galaxy = "alpha";
     config.advertise = *Endpoint::parse("127.0.0.1:7443");
-    config.supervisor = std::move(address);
+    config.pulsar = std::move(address);
     config.connect_timeout = Milliseconds(300);
     config.handshake_timeout = Milliseconds(600);
     Admission client(config, identity, [] {});

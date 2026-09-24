@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"strings"
@@ -12,10 +13,10 @@ import (
 
 // 只验证目录投影与旧观察寿命, 不把它冒充真实准入/Polaris RPC 运行证据.
 func TestObservation(t *testing.T) {
-	member := &orbit.Member{Id: "node", Role: orbit.Role_ROLE_STAR, Galaxy: "test", Group: "region", Advertise: "127.0.0.1:4000", Epoch: math.MaxUint64, Principal: "private-principal"}
+	member := &orbit.Member{Id: []byte("node"), Role: orbit.Role_ROLE_STAR, Galaxy: "test", Group: "region", Advertise: "127.0.0.1:4000", Epoch: math.MaxUint64, Principal: bytes.Repeat([]byte{0x61}, 32)}
 	backend := &Backend{nodes: []node{describe(member)}, observed: time.Now()}
 	old := backend.Nodes()
-	member.Id = "changed" // 捕获的是固定字段, 不保留可变 Protobuf 指针.
+	member.Id = []byte("changed") // 捕获的是固定字段, 不保留可变 Protobuf 指针.
 	backend.mutex.Lock()
 	backend.nodes = []node{describe(member)}
 	backend.stale = true

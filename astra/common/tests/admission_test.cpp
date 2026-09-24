@@ -93,7 +93,8 @@ public:
         member.set_role(request->role());
         member.set_group(scenario_ == Scenario::wrong_identity ? "wrong" : request->group());
         member.set_epoch(1);
-        member.set_principal(identity_->principal(member.galaxy(), member.advertise()).text());
+        const auto digest = identity_->principal(member.galaxy(), member.advertise());
+        member.set_principal(digest.bytes.data(), digest.bytes.size());
         response->set_admission(member.SerializeAsString());
         response->set_signature(test::sign(response->admission()));
         {
@@ -196,7 +197,7 @@ struct Fixture {
         Config config;
         config.galaxy = "alpha";
         config.advertise = *Endpoint::parse("127.0.0.1:7443");
-        config.supervisor = address + ":" + std::to_string(port);
+        config.pulsar = address + ":" + std::to_string(port);
         config.max_members = 4;
         if (scenario == Scenario::reply_limit) {
             config.max_admission_response_bytes = 1024;

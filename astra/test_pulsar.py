@@ -146,7 +146,7 @@ def run(binaries, polaris):
         sequence = 0
         # 只扩充本次独占夹具的账号角色, 不修改仓库公开夹具或部署账号.
         identity = directory / "pulsar-identity"
-        shutil.copytree(ROOT / "cluster/tests/fixtures/supervisor", identity)
+        shutil.copytree(ROOT / "cluster/tests/fixtures/pulsar", identity)
         accounts = json.loads((identity / "accounts.json").read_text(encoding="utf-8"))
         for account in accounts:
             if account["username"] == "stars":

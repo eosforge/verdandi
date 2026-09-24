@@ -19,8 +19,8 @@ Astra 是开发中的分布式服务发现与状态同步项目. Star 构成 Gal
 
 ## 活动目录
 
-`astra/` 为 Linux/GCC 16.2 的 C++26 服务; `supervisor/` 保留 Go 准入服务; `proto/` 为协议与生成工具; `admin/` 为管理界面; `testkit/` 为测试工具.
-Go Supervisor 与 C++ Pulsar 均可提供现有 Orbit 登记接口, 持久文件不互换. 需要 Pulse 对时的 Star 使用 Pulsar 的登记入口.
+`astra/` 为 Linux/GCC 16.2 的 C++26 服务; `proto/` 为协议与生成工具; `admin/` 为管理界面; `testkit/` 为测试工具.
+Pulsar 提供 Orbit 登记与 Pulse 对时, 持久文件格式见其 README. 需要 Pulse 对时的 Star 使用 Pulsar 的登记入口.
 
 构建仅消费已经准备的工具和依赖:
 

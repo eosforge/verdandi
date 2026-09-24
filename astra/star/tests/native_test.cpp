@@ -11,6 +11,8 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <vector>
+#include <string>
 
 namespace {
 using namespace std::chrono_literals;
@@ -90,12 +92,13 @@ void ephemeris() {
     error(Ephemeris::renew(maximum, UINT64_MAX, edge), Ephemeris::Error::exhausted);
 }
 
-// 字符串契约含版本和 variant, 生成只发生在创建阶段, 后续检查不格式化.
+// 二进制契约含版本和 variant 位, 生成只发生在创建阶段, 后续检查不格式化.
 void uuid() {
 
-    const std::string valid = "00112233-4455-4677-8899-aabbccddeeff";
+    const std::string valid("\x00\x11\x22\x33\x44\x55\x46\x77\x88\x99\xaa\xbb\xcc\xdd\xee\xff", 16);
     CHECK(Ephemeris::valid(valid));
-    for (const auto text : {"", "00112233445546778899aabbccddeeff", "00112233-4455-4677-8899-AABBCCDDEEFF", "00112233-4455-1677-8899-aabbccddeeff", "00112233-4455-4677-7899-aabbccddeeff", "00112233-4455-4677-c899-aabbccddeeff"}) {
+    const std::vector<std::string> invalid({"", "00112233445546778899aabbccddeeff", std::string("\x00\x11\x22\x33\x44\x55\x46\x77\x88\x99\xaa\xbb\xcc\xdd\xee\xff", 15), std::string("\x00\x11\x22\x33\x44\x55\x16\x77\x88\x99\xaa\xbb\xcc\xdd\xee\xff", 16), std::string("\x00\x11\x22\x33\x44\x55\x46\x77\x78\x99\xaa\xbb\xcc\xdd\xee\xff", 16), std::string("\x00\x11\x22\x33\x44\x55\x46\x77\xc8\x99\xaa\xbb\xcc\xdd\xee\xff", 16)});
+    for (const auto& text : invalid) {
         CHECK(!Ephemeris::valid(text));
     }
     std::set<std::string> generated; // 有界样本只检验格式和碰撞检查路径, 不声称证明随机源统计性质.

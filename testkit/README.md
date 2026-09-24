@@ -4,7 +4,7 @@
 
 ## 服务回归
 
-当前核心链路使用下列 Linux 入口, 离线构建 C++ Star/Pulsar/Comet 和 Go Polaris/Astrolabe, 不调用退休 Supervisor/Planet 的综合场景:
+当前核心链路使用下列 Linux 入口, 离线构建 C++ Star/Pulsar/Comet 和 Go Polaris/Astrolabe, 不调用已删除 Supervisor/Planet 的综合场景:
 
 ```bash
 bash astra/build.sh regression --profile debug
@@ -16,11 +16,13 @@ bash astra/build.sh regression --profile tsan
 每个 regression 先配置与构建, 顺序执行 Go 包测试、CTest 和 C++/Go 协议生成逐字节比较. CTest 包含原生三域、RPC/SDK、独立 SDK 消费、Pulsar 进程及多 Star 恢复夹具. 项目数量以实际 CTest 清单为准, 不沿用旧连接骨架的 21 项统计.
 ASan 同时启用 UBSan 与泄漏检测; TSan 使用已有独立插桩依赖. 不下载、安装或升级缺失工具. 测试数量不是代码覆盖率, 存储单元通过不替代真实进程验收.
 
-当前 C++26 只支持 Linux/GCC 16.2, 不声称 MSVC 已通过. 本轮活动 Go 模块为 astra/go.mod; 旧 Supervisor 不属于新链路验证. Windows Admin 的验证入口见其 README.
+当前 C++26 只支持 Linux/GCC 16.2, 不声称 MSVC 已通过. 本轮活动 Go 模块为 astra/go.mod. Windows Admin 的验证入口见其 README.
 
 ## 长时、规模与实验
 
 长时与规模必须在授权范围内显式选择. 当前 build.py 明确拒绝旧 soak/scale, 待迁移到新四件套后再开放; 不用旧场景冒充新业务压力验证. 普通 regression 不因内部 duration 默认值而自动变成长测, 不恢复已经停止的无限测试任务.
+
+`bash scripts/test-services.sh --mode=regression` 转交当前 Release 构建与回归, 可传 `--jobs=N --test-jobs=N` 降低资源预算. `--skip-checks` 仅省略协议生成比较, 仍必须执行实际构建和测试. 已退休的 soak/scale、duration、远端旧服务参数及未知选项明确失败, 不忽略后报告成功. `check-services.sh` 不再接受已删除的 Go Supervisor race/fuzz 选项. Windows PowerShell 服务入口明确报告 Linux 要求, 不返回空检查成功.
 当前三域与真实 Comet 的有限性能入口见 [bench/README](../astra/bench/README.md), 实际结果见 [性能记录](validation.md#performance). `--benchmarks` 仅启用探针编译, `--measure-allocations` 使用独立 Release 目录; 分配统计不用于正常性能排名. core-only 只证明其子集, 不能替代真实 RPC/进程验收.
 旧 Redis 与当前 Comet 的同口径应用比较见 [统一基线](baseline/README.md), 覆盖多注册/Selector、多 Publisher/Subscriber、独立范围和共享 Client. 其轮询可见性口径与原有回调探针分开报告.
 

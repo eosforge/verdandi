@@ -111,7 +111,8 @@ void signatures(const Identity& identity) {
     member.set_galaxy("alpha");
     member.set_group("default");
     member.set_id("format-vNext/星体\"\nidentity");
-    member.set_principal(identity.principal("alpha", "127.0.0.1:7443").text());
+    const auto digest = identity.principal("alpha", "127.0.0.1:7443");
+    member.set_principal(digest.bytes.data(), digest.bytes.size());
     member.set_advertise("127.0.0.1:7443");
     member.set_epoch(1);
     member.set_role(proto::orbit::v1::ROLE_STAR);
@@ -152,6 +153,17 @@ void signatures(const Identity& identity) {
     CHECK(!decode_member(member));
     CHECK(Identity::role(static_cast<Member::Role>(99)) == proto::orbit::v1::ROLE_UNSPECIFIED);
     member.set_role(proto::orbit::v1::ROLE_STAR);
+    // bytes 不再由 Protobuf 拒绝畸形 UTF-8, 验签成功仍必须执行跨语言一致的身份形状校验.
+    for (const auto& invalid : {std::string("\xff", 1), std::string("\xc0\x80", 2), std::string("\xed\xa0\x80", 3), std::string("\xf4\x90\x80\x80", 4), std::string("\xe4\xb8", 2)}) {
+        member.set_id(invalid);
+        value = member.SerializeAsString();
+        CHECK(!Member::valid_id(invalid));
+        CHECK(!identity.verify(as_bytes(value), as_bytes(test::sign(value))));
+    }
+    // embedded 包含 NUL, 是合法 UTF-8 身份字节, 不按 C 字符串截断也不新增限制.
+    const std::string embedded("a\0b", 3);
+    member.set_id(embedded);
+    CHECK(decode_member(member) && decode_member(member)->id == embedded);
     member.set_advertise("127.0.0.1:07443");
     CHECK(!decode_member(member));
 }

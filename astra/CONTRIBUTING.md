@@ -4,7 +4,7 @@
 
 从仓库根目录操作. 项目约定见 [coding.md](../coding.md), 协议与范围见
 [当前架构](../docs/architecture.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
-Pulsar 使用 C++ 提供独立登记与对时, Polaris/Astrolabe 使用 Go. 旧 Supervisor 冻结, 数据库不互换.
+Pulsar 使用 C++ 提供独立登记与对时, Polaris/Astrolabe 使用 Go. 各服务数据库不互换, 已删除的 Go Supervisor 只从 Git 历史查阅.
 旧 Rust Star 已废弃; 当前准入见[协议契约](../proto/README.md#admission),
 当前实现与部署边界见 [Pulsar](pulsar/README.md).
 时间模型与单一期限规则见 [Store](common/README.md), 最新执行结果见 [验证记录](../testkit/validation.md).

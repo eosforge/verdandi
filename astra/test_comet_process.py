@@ -55,7 +55,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path):
     with tempfile.TemporaryDirectory(prefix="comet-process-", dir=root) as temporary, failure_logs(Path(temporary)), ExitStack() as stack:
         directory = Path(temporary)
         identity = directory / "pulsar-identity"
-        shutil.copytree(fixtures / "supervisor", identity)
+        shutil.copytree(fixtures / "pulsar", identity)
         accounts = json.loads((identity / "accounts.json").read_text(encoding="utf-8"))
         for account in accounts:
             if account["username"] == "stars":
