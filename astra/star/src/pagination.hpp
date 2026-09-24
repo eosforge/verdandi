@@ -169,8 +169,12 @@ private:
     static bool append(Reply& page, std::size_t& bytes, std::string_view key, const Content* record, bool data) {
 
         const auto payload = Encoding::payload(key, record, data); // 只读标量长度, 不分配中间编码.
-        const auto cost = key.size() + payload + 48;               // 保守包含嵌套字段/长度, 领域载荷仍受既有业务上限约束.
-        if (cost > 8 * 1024 * 1024 - bytes) {
+        constexpr std::size_t hard = 8 * 1024 * 1024;              // 单页硬上限, 与调用方预算一致.
+        if (key.size() > hard || payload > hard) {
+            throw std::length_error("Projection record exceeds page budget");
+        }
+        const auto cost = key.size() + payload + 48; // 保守包含嵌套字段/长度, 领域载荷仍受既有业务上限约束.
+        if (bytes >= hard || cost > hard - bytes) {
             throw std::length_error("Projection record exceeds page budget");
         }
         if (page.changes_size() != 0 && (page.changes_size() >= 256 || cost > 256 * 1024 - std::min(bytes, std::size_t{256 * 1024}))) {

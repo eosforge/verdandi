@@ -61,6 +61,8 @@ Selection::~Selection() {
     }
 }
 
+// Selection::discard 丢弃候选与去重状态, 保留已确认视图与游标.
+// 失败路径调用, 成功提交后同样调用以释放准备资源.
 void Selection::discard() noexcept {
     draft_.reset();
     std::unordered_set<std::string>{}.swap(seen_); // 不保留曾经大快照的桶数组高水线.
@@ -71,6 +73,8 @@ void Selection::discard() noexcept {
     }
 }
 
+// Selection::begin 开始新实例的候选, 记录期望实例, 清空旧候选.
+// expected 为期望实例, 跨实例即全量替换.
 void Selection::begin(std::string expected) {
     discard();
     expected_ = std::move(expected);
@@ -217,6 +221,8 @@ Result<std::optional<Observer::View>> Selection::accept(const proto::comet::v1::
 } // namespace comet::detail
 
 namespace comet::detail {
+// Selection::valid 校验 UUID 文本形状, 不分配临时字符串.
+// uuid 为待校验文本; 规范小写才合法.
 bool Selection::valid(std::string_view uuid) noexcept {
     if (uuid.size() != 36 || uuid[14] != '4' || (uuid[19] != '8' && uuid[19] != '9' && uuid[19] != 'a' && uuid[19] != 'b')) {
         return false;
@@ -234,6 +240,8 @@ bool Selection::valid(std::string_view uuid) noexcept {
     return true;
 }
 
+// Selection::repair 历史不足时单对象恢复, 只允许一次, 不触发共享切换.
+// code 为失败分类; 返回是否可恢复.
 bool Selection::repair(Error::Code code) noexcept {
     if (code != Error::Code::history || repaired_) {
         return false;
@@ -243,6 +251,8 @@ bool Selection::repair(Error::Code code) noexcept {
     return true;
 }
 
+// Selection::resume 返回是否可恢复游标, 新实例或修复后不可恢复.
+// 未经历全量替换即可带游标恢复.
 bool Selection::resume() const noexcept {
     return !fresh_;
 }

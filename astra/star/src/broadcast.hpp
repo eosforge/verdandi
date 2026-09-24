@@ -44,6 +44,16 @@ public:
         return seed_;
     }
 
+    // 缓存命中次数, 只能由推进 next 的同一控制线程读取; 非原子计数不增加页面热路径同步.
+    std::uint64_t hits() const noexcept {
+        return hits_;
+    }
+
+    // 未命中包含首次构造与弱引用释放后的重建, 两者都不复用已释放正文.
+    std::uint64_t misses() const noexcept {
+        return misses_;
+    }
+
     // 每个页号独立缓存, 快慢订阅交错不覆盖彼此; 仅保存弱引用, 无流使用时立即释放正文.
     std::shared_ptr<const Page> next(Edition& cursor, std::size_t offset, std::string_view instance) {
 
@@ -54,6 +64,7 @@ public:
         if (offset == pages_.size())
             pages_.emplace_back(); // 先准备弱槽, 分配失败不会提前消费当前游标; 最多一槽对应一个实际请求页.
         if (auto cached = pages_[offset].lock()) {
+            ++hits_; // 命中采纳已编码位置, 不重新执行领域分页.
             cursor = cached->after;
             return cached;
         }
@@ -62,6 +73,7 @@ public:
         const auto bytes = message.ByteSizeLong();
         auto page = std::make_shared<const Page>(std::move(message), cursor, bytes);
         pages_[offset] = page;
+        ++misses_;
         return page;
     }
 
@@ -70,5 +82,7 @@ private:
     const std::optional<std::uint64_t> since_;     // 区分 reset 与从零位置恢复, 不以零作哨兵.
     const std::string target_;                     // 固定目标, 一份批次内不更改过滤条件.
     std::vector<std::weak_ptr<const Page>> pages_; // 页号索引, 元数据随冻结批次页数增长并随批次释放; 不强持有已完成页正文.
+    std::uint64_t hits_{};                         // 弱缓存命中次数, 初始零.
+    std::uint64_t misses_{};                       // 首次构造与释放后重建次数, 初始零.
 };
 } // namespace astra

@@ -57,6 +57,9 @@ bool unhex(std::string_view value, std::span<std::uint8_t> output) {
 }
 } // namespace
 
+// Authority::load 加载签发者全部材料: 证书、签名密钥、账号集合.
+// directory 为身份目录; admission/pulse 为两个监听端点 (证书必须同时授权).
+// 返回签发者, 材料非法时返回身份错误.
 Result<std::unique_ptr<Authority>> Authority::load(const std::filesystem::path& directory, const Endpoint& admission, const Endpoint& pulse) {
 
     try {
@@ -234,6 +237,8 @@ grpc::Status Authority::authenticate(grpc::ServerContext& context, const proto::
     return (account.roles & role) != 0 ? grpc::Status::OK : grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Role not authorized");
 }
 
+// Authority::sign 用 Ed25519 私钥签署登记应答, 签名覆盖应答全部字节.
+// member/response 为成员与待签应答; 签名失败直接抛异常, 不返回半签应答.
 void Authority::sign(const proto::orbit::v1::Member& member, proto::orbit::v1::RegistrationResponse& response) const {
 
     if (!member.SerializeToString(response.mutable_admission())) {
@@ -254,6 +259,8 @@ const Identity& Authority::identity() const {
     return *identity_;
 }
 
+// Authority::key_id 返回签名公钥的 SHA256 十六进制, 供目录核对签发者身份.
+// 返回值独立拥有, 调用后长期有效.
 std::string Authority::key_id() const {
     return key_id_.text();
 }

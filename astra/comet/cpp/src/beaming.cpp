@@ -21,6 +21,8 @@ Error Beaming::error(Error::Code code, Error::Effect effect) {
     return Error{code, effect, {}, {}, {}};
 }
 
+// Beaming::settle 结算待定请求, 成功发布回执, 失败发布错误.
+// pending 为待定项; result 为 RPC 结果.
 void Beaming::settle(const std::shared_ptr<Pending>& pending, Result<Beacon::Receipt> result) {
     if (pending && pending->result) {
         pending->result->set_value(std::move(result));
@@ -43,6 +45,8 @@ Beacon::State Beaming::state() const {
     return result;
 }
 
+// Beaming::update 提交数据更新, 返回 future 回执, 超时未确认即失败.
+// data 为更新载荷; timeout 为等待确认期限.
 std::future<Result<Beacon::Receipt>> Beaming::update(Value data, std::chrono::milliseconds timeout) {
 
     auto pending = std::make_shared<Pending>(nullptr, std::move(data)); // 先准备结果通道, 失败不替换已接纳期望.
@@ -88,14 +92,17 @@ std::future<Result<Beacon::Receipt>> Beaming::update(Value data, std::chrono::mi
     return future;
 }
 
+// Beaming::closed 返回是否已关闭, 关闭后不再接受新更新.
 bool Beaming::closed() const noexcept {
     return closed_.load(std::memory_order_acquire);
 }
 
+// Beaming::finished 返回是否已结束, 待定全部结算且无在途即结束.
 bool Beaming::finished() const noexcept {
     return finished_.load(std::memory_order_acquire);
 }
 
+// Beaming::close 关闭信标, 幂等, 待定按取消结算.
 void Beaming::close() noexcept {
     bool first; // 与通知开始使用同一短锁, 不反向持锁释放 Core 应用拥有数.
     {
@@ -112,6 +119,7 @@ void Beaming::close() noexcept {
     }
 }
 
+// Beaming::wait 等待结束, 超时返回 false, 回调内禁止等待.
 bool Beaming::wait(std::chrono::milliseconds timeout) const {
     if (Core::notifying()) {
         throw std::logic_error("Cannot wait inside a Comet callback");
@@ -121,6 +129,8 @@ bool Beaming::wait(std::chrono::milliseconds timeout) const {
 }
 
 template <class Call>
+// Beaming::prepare 按绑定与期限准备一元调用, 优先级影响队列顺序.
+// binding/deadline/priority 为绑定、截止与优先级; 返回调用句柄.
 std::shared_ptr<Call> Beaming::prepare(const std::shared_ptr<const Binding>& binding, Core::Time deadline, bool priority) {
     if (!binding || deadline <= std::chrono::steady_clock::now()) {
         return {};
@@ -141,6 +151,8 @@ std::shared_ptr<Call> Beaming::prepare(const std::shared_ptr<const Binding>& bin
 }
 
 template <class Call>
+// Beaming::admit 接纳调用进入发送队列, 超限返回 false.
+// call 为待发送调用.
 bool Beaming::admit(const std::shared_ptr<Call>& call) {
     const auto bytes = sizeof(Call) + call->request.SpaceUsedLong() + (call->pending ? call->pending->data->size() : 0); // 在途旧期望与编码副本同时计费.
     if (!core_->resize(0, bytes)) {
@@ -156,6 +168,8 @@ bool Beaming::admit(const std::shared_ptr<Call>& call) {
 }
 
 template <class Call>
+// Beaming::complete 调用完成, 按状态结算待定并释放名额.
+// call/status 为调用与 gRPC 状态.
 void Beaming::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
     call->code = status.error_code(); // 不复制任意远端 message/details, 控制轮再解析白名单 metadata.
     call->done.store(true, std::memory_order_release);
@@ -167,20 +181,27 @@ Error Beaming::failure(const std::shared_ptr<Call>& call) {
     return Core::failure(grpc::Status(call->code, ""), call->context);
 }
 
+// Beaming::same 返回身份是否一致, 不一致触发重建.
+// identity 为待比对身份.
 bool Beaming::same(const std::optional<Beacon::Identity>& identity) const {
     return identity && state_.identity && *identity == *state_.identity;
 }
 
+// Beaming::target 返回绑定是否属于本信标目标.
+// binding 为待检查绑定.
 bool Beaming::target(const Binding& binding) const {
     return identity_ && identity_->endpoint == binding.endpoint && (binding.instance.empty() || (state_.identity && binding.instance == state_.identity->instance));
 }
 
+// Beaming::publish 发布阶段与错误, 相同状态不重复通知.
+// phase/error 为阶段与错误.
 void Beaming::publish(Beacon::Phase phase, std::optional<Error> error) {
     dirty_ = dirty_ || state_.phase != phase || state_.error.has_value() != error.has_value() || (error && state_.error && error->code != state_.error->code);
     state_.phase = phase;
     state_.error = std::move(error);
 }
 
+// Beaming::forget 清除已记忆身份, 下次按新身份重建.
 void Beaming::forget() {
     if (updating_) {
         updating_->context.TryCancel();
@@ -198,6 +219,8 @@ void Beaming::forget() {
     dirty_ = true;
 }
 
+// Beaming::failed 处理绑定失败, 创建期失败与续期失败分别结算.
+// binding/failure/creation/pending 为绑定、失败、是否创建期与待定项.
 void Beaming::failed(const std::shared_ptr<const Binding>& binding, Error failure, bool creation, const std::shared_ptr<Pending>& pending) {
 
     if (failure.code == Error::Code::transport || failure.code == Error::Code::session || failure.code == Error::Code::instance) {
@@ -221,6 +244,8 @@ void Beaming::failed(const std::shared_ptr<const Binding>& binding, Error failur
             std::move(failure));
 }
 
+// Beaming::consume 按绑定与时间推进创建/续期/发送, 只在控制轮调用.
+// binding/now 为绑定与当前时间.
 void Beaming::consume(const std::shared_ptr<const Binding>& binding, Core::Time now) {
 
     const auto retry = [&] { failures_ = std::min(failures_ + 1, 32U); return now + core_->delay(failures_); }; // 只有完整确认才归零失败轮次.
@@ -282,6 +307,8 @@ void Beaming::consume(const std::shared_ptr<const Binding>& binding, Core::Time 
     }
 }
 
+// Beaming::create 发起创建调用, 缺 Attr 时先恢复再创建.
+// binding/now/time 为绑定、当前时间与生命时间.
 void Beaming::create(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time) {
 
     auto call = prepare<Creating>(binding, now + core_->options_.timeout, false);
@@ -304,6 +331,8 @@ void Beaming::create(const std::shared_ptr<const Binding>& binding, Core::Time n
     binding->ephemeris->async()->Create(&call->context, &call->request, &call->reply, std::move(callback));
 }
 
+// Beaming::renew 发起续期调用, 独立更新 order, 不合并其他信标.
+// binding/now/time 为绑定、当前时间与生命时间.
 void Beaming::renew(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time) {
 
     // 原重试预算已经耗尽时用新 order 重新请求实际租约, 不从旧重复确认制造新 TTL.
@@ -337,6 +366,8 @@ void Beaming::renew(const std::shared_ptr<const Binding>& binding, Core::Time no
     binding->ephemeris->async()->Renew(&call->context, &call->request, &call->reply, std::move(callback));
 }
 
+// Beaming::send 发送待定更新, 按确认期限推进, 超时即失败.
+// binding/now 为绑定与当前时间.
 void Beaming::send(const std::shared_ptr<const Binding>& binding, Core::Time now) {
 
     if (wanted_->order == 0) {
@@ -367,6 +398,8 @@ void Beaming::send(const std::shared_ptr<const Binding>& binding, Core::Time now
     binding->ephemeris->async()->Update(&call->context, &call->request, &call->reply, std::move(callback));
 }
 
+// Beaming::remove 注销信标, 尽力发送删除, 失败不阻塞关闭.
+// binding 为绑定.
 void Beaming::remove(const std::shared_ptr<const Binding>& binding) {
     auto call = prepare<Removing>(binding, close_at_, true);
     if (!call) {
@@ -385,6 +418,8 @@ void Beaming::remove(const std::shared_ptr<const Binding>& binding) {
     binding->ephemeris->async()->Remove(&call->context, &call->request, &call->reply, std::move(callback));
 }
 
+// Beaming::notify 在持有锁时唤醒等待者, 退出临界区后不重复通知.
+// lock 为调用方持有的锁, 通知后继续持有.
 void Beaming::notify(std::unique_lock<std::mutex>& lock) {
     if (!dirty_ || !changed_ || closed() || !core_->notification()) {
         return;
@@ -525,6 +560,8 @@ Beacon::State Beacon::state() const {
     return beaming_ ? beaming_->state() : State{Phase::closed, {}, {}};
 }
 
+// Beacon::update 提交字节更新, 返回 future 回执.
+// data 为更新载荷; timeout 为确认期限.
 std::future<Result<Beacon::Receipt>> Beacon::update(std::vector<std::uint8_t> data, std::chrono::milliseconds timeout) {
     if (data.size() > 1024 * 1024) {
         return update(Value{}, timeout);
@@ -532,6 +569,8 @@ std::future<Result<Beacon::Receipt>> Beacon::update(std::vector<std::uint8_t> da
     return update(std::make_shared<const std::vector<std::uint8_t>>(std::move(data)), timeout);
 }
 
+// Beacon::update 提交区间更新, 不复制载荷, 调用期间保持有效.
+// data 为更新区间; timeout 为确认期限.
 std::future<Result<Beacon::Receipt>> Beacon::update(std::span<const std::uint8_t> data, std::chrono::milliseconds timeout) {
     // 和 Publisher 一样在复制 span 前拒绝超限, 不因重载不同绕过准备内存边界.
     if (data.size() > 1024 * 1024) {
@@ -540,6 +579,8 @@ std::future<Result<Beacon::Receipt>> Beacon::update(std::span<const std::uint8_t
     return update(std::vector<std::uint8_t>(data.begin(), data.end()), timeout);
 }
 
+// Beacon::update 提交共享值更新, 只共享所有权不复制字节.
+// data 为更新值; timeout 为确认期限.
 std::future<Result<Beacon::Receipt>> Beacon::update(Value data, std::chrono::milliseconds timeout) {
     if (beaming_) {
         return beaming_->update(std::move(data), timeout);

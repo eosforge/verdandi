@@ -53,8 +53,12 @@ Edition::Edition(Almanac::Replay replay, std::string_view target) : mode_(proto:
 bool Edition::append(proto::comet::v1::AlmanacWatchReply& page, std::size_t& bytes, std::string_view key, const Almanac::Value& value) {
 
     // cost 保守计入嵌套字段/长度编码, 不对整页反复 ByteSizeLong, 避免二次方遍历.
+    constexpr std::size_t hard = 8 * 1024 * 1024; // 单页硬上限, 与动态域分页一致.
+    if (key.size() > hard || (value && value->size() > hard)) {
+        throw std::length_error("Almanac record exceeds message budget");
+    }
     const auto cost = key.size() + (value ? value->size() : 0) + 32;
-    if (cost > 8 * 1024 * 1024 - bytes) {
+    if (bytes >= hard || cost > hard - bytes) {
         throw std::length_error("Almanac record exceeds message budget");
     }
     if (page.changes_size() != 0 && (page.changes_size() >= 256 || cost > 256 * 1024 - std::min(bytes, std::size_t{256 * 1024}))) {

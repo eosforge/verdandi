@@ -104,7 +104,8 @@ Result<void> Exchange::Pipe<Domain>::changes(const Changes& message, Steady::tim
         return {};
     }
     const auto bytes = message.ByteSizeLong() + sizeof(Pending); // 除正文外也计入空包队列节点.
-    if (pending_.size() == 64 || bytes > 8 * 1024 * 1024 - bytes_ || !budget_.acquire(bytes)) {
+    constexpr std::size_t backlog = 8 * 1024 * 1024;             // 单域在途积压硬上限, 与发送包容量一致.
+    if (pending_.size() == 64 || bytes > backlog || bytes_ > backlog - bytes || !budget_.acquire(bytes)) {
         return Status::capacity("Peer recovery backlog exceeded");
     }
     try {
@@ -478,9 +479,10 @@ Result<void> Exchange::receive(const Packet& packet, Steady::time_point now) {
         if (!prepared) {
             return prepared;
         }
-        const auto encoded = response.ByteSizeLong();  // 当前响应未再修改, 线长和持有预算共用一次遍历结果.
-        const auto bytes = encoded + sizeof(Response); // 额外计入回补队列节点, 与线帧容量分别约束.
-        if (encoded > capacity_ || bytes > 16 * 1024 * 1024 - response_bytes_ || !budget_.acquire(bytes)) {
+        const auto encoded = response.ByteSizeLong();     // 当前响应未再修改, 线长和持有预算共用一次遍历结果.
+        const auto bytes = encoded + sizeof(Response);    // 额外计入回补队列节点, 与线帧容量分别约束.
+        constexpr std::size_t replies = 16 * 1024 * 1024; // 未取走回补响应合计硬上限, 先判基数再比较差额.
+        if (encoded > capacity_ || bytes > replies || response_bytes_ > replies - bytes || !budget_.acquire(bytes)) {
             return Status::capacity("Peer repair response budget exceeded");
         }
         try {

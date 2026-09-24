@@ -5,6 +5,7 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/server_builder.h>
 #include <iostream>
+#include <memory>
 #include <thread>
 
 namespace {
@@ -179,6 +180,30 @@ void baselines() {
     CHECK(erased.version() == 4 && erased.changes_size() == 1 && erased.changes(0).action_case() == proto::comet::v1::AlmanacChange::kErase);
 }
 
+// 精确目标只向命中桶收集正文; 无关订阅仍获得空 apply, 不因减少扫描而失去进度.
+void fanout() {
+
+    Fixture fixture;
+    fixture.fill();
+    std::vector<std::unique_ptr<Watching>> watches; // 八条无关精确目标加一条命中目标, 同范围共享一次 changed 遍历.
+    for (unsigned index = 0; index < 8; ++index)
+        watches.push_back(std::make_unique<Watching>(fixture, "probe-" + std::to_string(index)));
+    auto hit = std::make_unique<Watching>(fixture, "wanted");
+    for (const auto& watch : watches)
+        CHECK(watch->complete().changes().empty());
+    CHECK(hit->complete().changes().empty());
+    const auto before = fixture.readout.delivery();
+    CHECK(fixture.library.apply({"routes", "main"}, 2, "wanted", Almanac::Buffer{1}));
+    const auto after = fixture.readout.delivery();                                 // 提交通知同步到达收集器, 快照无需等待网络 pump.
+    CHECK(after.scans == before.scans + 1 && after.matched == before.matched + 1); // 精确索引只访问命中桶的一条流; 八条无关订阅由 pump 心跳推进, 不占提交锁.
+    const auto matched = hit->complete();                                          // 不能只用计数证明成功, 必须收到真实业务页.
+    CHECK(matched.mode() == proto::comet::v1::MODE_APPLY && matched.version() == 2 && matched.changes_size() == 1 && matched.changes(0).key() == "wanted");
+    for (const auto& watch : watches) {
+        const auto empty = watch->complete();
+        CHECK(empty.mode() == proto::comet::v1::MODE_APPLY && empty.version() == 2 && empty.changes().empty());
+    }
+}
+
 // 恢复只在同实例且历史完整时 apply; Almanac 的最低权威版本跨实例仍不可回退.
 void recovery() {
 
@@ -249,6 +274,20 @@ void discontinuity() {
     fixture.fill(10);
     CHECK(watch.rejected().error_code() == grpc::StatusCode::OUT_OF_RANGE);
 
+    {
+        Fixture broken; // 模拟上游通知漏掉一个版本, 不能因精确目标不匹配而掩盖断档.
+        broken.fill();
+        Watching exact(broken, "missing");
+        CHECK(exact.complete().version() == 1);
+        {
+            const std::lock_guard pause(broken.control);                       // 两个通知收集完毕再运行发送, 不依赖线程时序.
+            const auto key = std::make_shared<const std::string>("unrelated"); // 与订阅无关, 仍必须检查范围连续性.
+            broken.readout.changed({"routes", "main"}, {.key = key, .value = {}, .version = 2});
+            broken.readout.changed({"routes", "main"}, {.key = key, .value = {}, .version = 4});
+        }
+        CHECK(exact.rejected().error_code() == grpc::StatusCode::OUT_OF_RANGE);
+    }
+
     Readout::Limits limits; // 较小的合并预算只用于确定性触发资源错误.
     limits.pending = 4096;
     Fixture limited(false, 0, limits);
@@ -316,6 +355,7 @@ void revocation() {
 int main() {
     try {
         baselines();
+        fanout();
         recovery();
         suffix();
         discontinuity();

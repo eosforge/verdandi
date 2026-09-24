@@ -2,8 +2,12 @@
 #include "edition.hpp"
 #include "gateway.hpp"
 #include "library.hpp"
+#include "progress.hpp"
 #include <chrono>
 #include <functional>
+#include <map>
+#include <set>
+#include <string>
 
 namespace astra {
 // Almanac 公共下行. gRPC 回调仅提交 I/O 结果, 既有控制循环有界 pump, 不创建每订阅线程.
@@ -32,12 +36,21 @@ public:
     grpc::ServerWriteReactor<proto::comet::v1::AlmanacWatchReply>* Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) override;
     // Library 在 writer_ 内按提交顺序调用; 只合并不可变引用, 错误关闭受影响流而不撤回已提交写入.
     void changed(const Scope& scope, const Almanac::Change& change) noexcept;
-    // 唯一控制线程推进最多 maximum 个就绪任务, 默认 32; 不等待网络, 不遍历空闲订阅.
+    // 唯一控制线程推进最多 maximum 个就绪任务, 默认 32; 另有最多 maximum 条进度通知及每秒写超时扫描, 不等待网络.
     void pump(std::chrono::steady_clock::time_point now, std::size_t maximum = 32);
     // 禁止新订阅并唤醒现有流取消; 仍须继续 pump, 直到全部 OnDone 被回收.
     void stop() noexcept;
     // 已没有本服务拥有的 RPC, 只表示 OnDone 已回收, 不代表整个 Server 停止.
     bool empty() const;
+
+    // 只读分发计数快照, 全部初始零, 由 mutex_ 保护累加; 仅用于归因测量, 不影响预算或调度.
+    struct Delivery {
+        std::uint64_t scans{};   // changed 访问过的同范围流数, 不含无关精确目标.
+        std::uint64_t matched{}; // 实际接纳变化进入后缀的流数, 不含重置/过滤事件.
+    };
+
+    // 返回正文收集访问与接纳次数, 不计范围进度通知及实际网络发送; 调用只取 mutex_ 快照.
+    Delivery delivery() const;
 
 private:
     // 共享拥有 reactor 的活动流, 实现中严格分开回调状态锁和合并后缀锁.
@@ -64,14 +77,25 @@ private:
     const Limits limits_;
     // 保护路由、就绪队列、计费及每流后缀; 不在此锁内编码或等待网络, 最终许可只跨非阻塞提交.
     mutable std::mutex mutex_;
+
+    // 地址只保存活动流的拥有者, 另加全范围/精确目标的非拥有视图与范围水位, 心跳下沉 pump.
+    struct Group : Progress<Stream>::Group {
+        std::set<Stream*> broadcast;                                   // 全范围流的非拥有视图, 每次提交都遍历.
+        std::map<std::string, std::set<Stream*>, std::less<>> precise; // 精确目标到流的非拥有视图.
+    };
+
     // 地址只保存有活动流的范围, 空范围在最后一条流退出后回收.
-    std::map<Scope, std::map<Stream*, std::shared_ptr<Stream>>> streams_;
+    std::map<Scope, Group> streams_;
+    Progress<Stream> progress_; // 只调度有提交的 Scope, 每次 pump 有界轮转, 不读 RPC 的 I/O 状态.
     // 就绪链表首尾, 指向 streams_ 仍拥有的对象, 初始空.
     Stream* head_{};
     Stream* tail_{};
     // 活动流总数与全局已占用字节, 都由 mutex_ 保护.
     std::size_t count_{};
     std::size_t bytes_{};
+    // changed 累计扫描与后缀接纳, 初始零, 只追加不重置; 用于核对精确目标的正文收集成本.
+    std::uint64_t scans_{};
+    std::uint64_t matched_{};
     // stop 可跨线程调用, 在 mutex_ 内单向设为 true.
     bool stopped_{};
     // 仅控制线程使用的低频写超时扫描截止, 不轮询所有空闲订阅的版本.

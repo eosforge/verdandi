@@ -5,12 +5,17 @@
 #include "identity.hpp"
 #include <array>
 #include <atomic>
+#include <charconv>
+#include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/server_builder.h>
 #include <iostream>
 #include <map>
+#include <string_view>
 #include <thread>
+#include <vector>
 
 namespace {
 using namespace std::chrono_literals;
@@ -449,6 +454,112 @@ void editions() {
         }
     }
 }
+
+// 精确索引限制正文扇出, 真实流同时核对命中 Data-only 与未命中的空进度页.
+void delivery() {
+
+    Fixture fixture(false);
+    const astra::Scope scope{"service", "main"};
+    const auto attr = std::make_shared<const Ephemeris::Buffer>(8, 1);
+    const auto first = fixture.state.create(scope, attr, std::make_shared<const Ephemeris::Buffer>(8, 2), 1000);
+    const auto second = fixture.state.create(scope, attr, std::make_shared<const Ephemeris::Buffer>(8, 3), 1000);
+    CHECK(first && second);
+    std::array<std::unique_ptr<Watching>, 4> watches; // 两条命中目标, 两条无关精确目标, 同范围共享一次 changed 遍历.
+    for (std::size_t index = 0; index < watches.size(); ++index) {
+        watches[index] = std::make_unique<Watching>(fixture, index < 2 ? first->uuid : second->uuid);
+        CHECK(watches[index]->next().version() == 2);
+    }
+    const auto before = fixture.service.delivery();
+    CHECK(fixture.state.update(scope, first->uuid, std::make_shared<const Ephemeris::Buffer>(8, 4), 1));
+    const auto after = fixture.service.delivery();                                 // 提交通知同步到达收集器, 快照无需等待网络 pump.
+    CHECK(after.scans == before.scans + 2 && after.matched == before.matched + 2); // 精确索引只访问命中桶的两条流; 未命中流的水位与心跳由 pump 懒推进.
+    for (std::size_t index = 0; index < watches.size(); ++index) {
+        const auto page = watches[index]->next(); // 零历史窗口下也要由活动流通知保留完整进度.
+        CHECK(page.mode() == proto::comet::v1::MODE_APPLY && page.version() == 3);
+        if (index < 2) {
+            CHECK(page.changes_size() == 1 && page.changes(0).uuid() == first->uuid && page.changes(0).has_data() && page.changes(0).data() == std::string(8, '\4'));
+        } else {
+            CHECK(page.changes().empty());
+        }
+    }
+}
+
+// 定向扇出模型: 大量空闲精确订阅中只有一条命中, 断言扫描/命中比例并打印单次提交通知的扇出耗时.
+// 仅显式设置 VERDANDI_FANOUT_LOAD=1..4096 时执行归因负载, 普通回归保留上方有限功能用例.
+void load() {
+
+    const char* sized = std::getenv("VERDANDI_FANOUT_LOAD"); // 可选归因负载, 未提供时不启动额外规模测试.
+    if (!sized) {
+        return;
+    }
+    const std::string_view input(sized); // 不复制环境值, 完整消费才算有效配置.
+    unsigned total{};                    // 上限与当前 Service 默认流配额一致, 不静默接受部分数字或溢出.
+    const auto [end, error] = std::from_chars(input.data(), input.data() + input.size(), total);
+    if (error != std::errc{} || end != input.data() + input.size() || total == 0 || total > 4096) {
+        throw std::invalid_argument("VERDANDI_FANOUT_LOAD must be an integer in 1..4096");
+    }
+    Fixture fixture(false);
+    const astra::Scope scope{"service", "main"};
+    const auto attr = std::make_shared<const Ephemeris::Buffer>(8, 1);
+    std::vector<std::string> uuids;
+    uuids.reserve(total);
+    for (unsigned index = 0; index < total; ++index) {
+        auto created = fixture.state.create(scope, attr, std::make_shared<const Ephemeris::Buffer>(8, 2), 1000);
+        CHECK(created);
+        uuids.push_back(created->uuid);
+    }
+    std::vector<std::unique_ptr<Watching>> watches;
+    watches.reserve(total);
+    for (const auto& uuid : uuids) {
+        watches.push_back(std::make_unique<Watching>(fixture, uuid));
+        CHECK(watches.back()->next().version() == total);
+    }
+    const auto before = fixture.service.delivery();
+    const auto started = std::chrono::steady_clock::now();
+    CHECK(fixture.state.update(scope, uuids.front(), std::make_shared<const Ephemeris::Buffer>(8, 4), 1));
+    const auto elapsed = std::chrono::steady_clock::now() - started;
+    const auto after = fixture.service.delivery();                                 // 提交通知同步到达收集器, 快照与耗时都不等待网络 pump.
+    CHECK(after.scans == before.scans + 1 && after.matched == before.matched + 1); // 每个 UUID 独占一桶, 单次更新只访问命中的一条流, 其余由 pump 心跳推进.
+    std::cout << "fanout load: streams=" << total << " update_us=" << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count() << " scans=" << after.scans - before.scans << " matched=" << after.matched - before.matched << '\n';
+}
+
+// 显式归因模式下的提交耗时三路分解: (a) 无订阅纯核心, (b) 命中精确流 (合并+入队), (c) 未命中精确流 (定位+跳过).
+// 每路 200 次取平均, 耗时只打印不断言; scans/matched 差值精确断言, 证明未命中零访问.
+void split() {
+
+    if (!std::getenv("VERDANDI_FANOUT_LOAD")) {
+        return;
+    }
+    Fixture fixture(false);
+    const astra::Scope scope{"service", "main"};
+    const auto attr = std::make_shared<const Ephemeris::Buffer>(8, 1);
+    const auto data = std::make_shared<const Ephemeris::Buffer>(8, 2);
+    const auto first = fixture.state.create(scope, attr, data, 1000);
+    const auto second = fixture.state.create(scope, attr, data, 1000);
+    CHECK(first && second);
+    constexpr unsigned rounds = 200;
+    const auto content = [](unsigned order) { return std::make_shared<const Ephemeris::Buffer>(8, static_cast<std::uint8_t>(order % 251)); };
+    const auto time = [&](auto&& work) {
+        const auto started = std::chrono::steady_clock::now();
+        for (unsigned order = 1; order <= rounds; ++order)
+            work(order);
+        const auto elapsed = std::chrono::steady_clock::now() - started;
+        return static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count()) / static_cast<double>(rounds) / 1000.0;
+    };
+    // 每轮正文都不同, 同正文新 order 会绕开 Scene 提交与通知, 必须避免.
+    const auto idle = time([&](unsigned order) { CHECK(fixture.state.update(scope, first->uuid, content(order), order)); });
+    Watching watch(fixture, first->uuid);
+    const auto initial = watch.next();
+    CHECK(initial.complete() && initial.has_version());
+    const auto before = fixture.service.delivery();
+    const auto hit = time([&](unsigned order) { CHECK(fixture.state.update(scope, first->uuid, content(order), rounds + order)); });
+    const auto middle = fixture.service.delivery();
+    const auto miss = time([&](unsigned order) { CHECK(fixture.state.update(scope, second->uuid, content(order), order)); });
+    const auto after = fixture.service.delivery();
+    std::cout << "split: idle_us=" << idle << " hit_us=" << hit << " miss_us=" << miss << " dscans_b=" << (middle.scans - before.scans) << " dmatch_b=" << (middle.matched - before.matched) << " dscans_c=" << (after.scans - middle.scans) << '\n';
+    CHECK(middle.scans == before.scans + rounds && middle.matched == before.matched + rounds);
+    CHECK(after.scans == middle.scans && after.matched == middle.matched);
+}
 } // namespace
 
 // 有限真实回环测试, 不启动部署进程或长期压力, 资源由 Fixture 明确持有.
@@ -460,6 +571,9 @@ int main() {
         streaming();
         resume();
         fanout();
+        delivery();
+        load();
+        split();
         std::cout << "Ephemeris RPC tests passed\n";
         return 0;
     } catch (const std::exception& error) {

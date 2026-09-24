@@ -25,6 +25,8 @@ Error Publishing::error(Error::Code code, Error::Effect effect) {
     return Error{code, effect, {}, {}, {}};
 }
 
+// Publishing::settle 结算待定发布, 成功发布回执, 失败发布错误.
+// pending 为待定项; result 为 RPC 结果.
 void Publishing::settle(const std::shared_ptr<Pending>& pending, Result<Publisher::Receipt> result) {
     if (pending && pending->result) {
         pending->result->set_value(std::move(result));
@@ -36,6 +38,8 @@ void Publishing::settle(const std::shared_ptr<Pending>& pending, Result<Publishe
     }
 }
 
+// Publishing::publish 提交版本发布, 返回 future 回执, 版本冲突即失败.
+// version/value/timeout 为期望版本、载荷与确认期限.
 std::future<Result<Publisher::Receipt>> Publishing::publish(std::uint64_t version, Value value, std::chrono::milliseconds timeout) {
 
     auto pending = std::make_shared<Pending>(nullptr, version, std::move(value)); // 先准备结果, 失败不替换旧期望.
@@ -104,14 +108,17 @@ Publisher::State Publishing::state() const {
     return state;
 }
 
+// Publishing::closed 返回是否已关闭, 关闭后不再接受新发布.
 bool Publishing::closed() const noexcept {
     return closed_.load(std::memory_order_acquire);
 }
 
+// Publishing::finished 返回是否已结束, 待定全部结算且无在途即结束.
 bool Publishing::finished() const noexcept {
     return finished_.load(std::memory_order_acquire);
 }
 
+// Publishing::close 关闭发布器, 幂等, 待定按取消结算.
 void Publishing::close() noexcept {
     bool first; // 请求结果与停止门一起定序, 对象析构前完成未发送的 future.
     {
@@ -132,6 +139,7 @@ void Publishing::close() noexcept {
     }
 }
 
+// Publishing::wait 等待结束, 超时返回 false, 回调内禁止等待.
 bool Publishing::wait(std::chrono::milliseconds timeout) const {
     if (Core::notifying()) {
         throw std::logic_error("Cannot wait inside a Comet callback");
@@ -140,22 +148,30 @@ bool Publishing::wait(std::chrono::milliseconds timeout) const {
     return condition_.wait_for(lock, timeout, [this] { return finished() && !notifying_; });
 }
 
+// Publishing::target 返回绑定是否属于本发布目标.
+// binding 为待检查绑定.
 bool Publishing::target(const Binding& binding) const {
     return binding_ && state_.confirmed && binding_->endpoint == binding.endpoint && (binding.instance.empty() || binding.instance == state_.confirmed->instance);
 }
 
+// Publishing::report 发布阶段与失败, 相同状态不重复通知.
+// phase/failure 为阶段与失败.
 void Publishing::report(Publisher::Phase phase, std::optional<Error> failure) {
     dirty_ = dirty_ || state_.phase != phase || state_.error.has_value() != failure.has_value() || (failure && state_.error && failure->code != state_.error->code);
     state_.phase = phase;
     state_.error = std::move(failure);
 }
 
+// Publishing::complete 调用完成, 按状态结算待定并释放名额.
+// call/status 为调用与 gRPC 状态.
 void Publishing::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
     call->code = status.error_code();
     call->done.store(true, std::memory_order_release);
     call->owner->core_->wake(call->owner.get());
 }
 
+// Publishing::consume 按绑定与时间推进发送, 只在控制轮调用.
+// binding/now 为绑定与当前时间.
 void Publishing::consume(const std::shared_ptr<const Binding>& binding, Core::Time now) {
 
     if (!call_ || !call_->done.load(std::memory_order_acquire)) {
@@ -217,6 +233,8 @@ void Publishing::consume(const std::shared_ptr<const Binding>& binding, Core::Ti
     }
 }
 
+// Publishing::send 发送待定发布, 版本冲突本地即失败, 不发网络.
+// binding/now/time/renewal 为绑定、当前时间、生命时间与是否续期.
 void Publishing::send(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time, bool renewal) {
 
     auto call = std::make_shared<Call>(); // 只在有内容且允许发送时构造, 不为等待状态预分配 RPC.
@@ -273,6 +291,8 @@ void Publishing::send(const std::shared_ptr<const Binding>& binding, Core::Time 
                call->message);
 }
 
+// Publishing::notify 在持有锁时唤醒等待者, 退出临界区后不重复通知.
+// lock 为调用方持有的锁.
 void Publishing::notify(std::unique_lock<std::mutex>& lock) {
     if (!dirty_ || !changed_ || closed() || !core_->notification()) {
         return;
@@ -375,6 +395,8 @@ Publisher::State Publisher::state() const {
     return publishing_ ? publishing_->state() : State{Phase::closed, {}, {}};
 }
 
+// Publisher::publish 提交字节发布, 返回 future 回执.
+// version/value/timeout 为期望版本、载荷与确认期限.
 std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, std::vector<std::uint8_t> value, std::chrono::milliseconds timeout) {
     if (value.size() > 1024 * 1024) {
         return publish(version, Value{}, timeout);
@@ -382,6 +404,8 @@ std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version
     return publish(version, std::make_shared<const std::vector<std::uint8_t>>(std::move(value)), timeout);
 }
 
+// Publisher::publish 提交区间发布, 不复制载荷, 调用期间保持有效.
+// version/value/timeout 为期望版本、载荷区间与确认期限.
 std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, std::span<const std::uint8_t> value, std::chrono::milliseconds timeout) {
     // 借用输入先验限, 拒绝超限时不复制潜在巨大的调用方缓冲.
     if (value.size() > 1024 * 1024) {
@@ -390,6 +414,8 @@ std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version
     return publish(version, std::vector<std::uint8_t>(value.begin(), value.end()), timeout);
 }
 
+// Publisher::publish 提交共享值发布, 只共享所有权不复制字节.
+// version/value/timeout 为期望版本、共享载荷与确认期限.
 std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, Value value, std::chrono::milliseconds timeout) {
     if (publishing_) {
         return publishing_->publish(version, std::move(value), timeout);
@@ -400,12 +426,14 @@ std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version
     return future;
 }
 
+// Publisher::close 关闭发布器, 幂等, 待定按取消结算.
 void Publisher::close() noexcept {
     if (publishing_) {
         publishing_->close();
     }
 }
 
+// Publisher::wait 等待结束, 超时返回 false, 回调内禁止等待.
 bool Publisher::wait(std::chrono::milliseconds timeout) const {
     return !publishing_ || publishing_->wait(timeout);
 }

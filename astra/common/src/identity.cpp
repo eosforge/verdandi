@@ -112,6 +112,8 @@ Result<void> validate_certificate(const std::string& ca, const std::string& cert
 }
 } // namespace
 
+// Identity::role 转换协议角色枚举为内部角色, 未知值拒绝.
+// value 为协议角色; 返回内部角色, 未知返回身份错误.
 Result<Member::Role> Identity::role(proto::orbit::v1::Role value) {
     switch (value) {
     case proto::orbit::v1::ROLE_STAR:

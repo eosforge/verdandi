@@ -159,6 +159,7 @@ Result<std::shared_ptr<Core>> Core::prepare(Client::Options options) {
     return std::shared_ptr<Core>(new Core(std::move(options), std::move(credentials), std::move(secret)));
 }
 
+// Core::connect 返回当前已确认绑定的共享引用, 无绑定返回空.
 std::shared_ptr<Binding> Core::connect() const {
 
     auto binding = std::make_shared<Binding>(); // 只有这一个当前端点的两种传输, 不按 Watch 数扩大连接池.
@@ -181,6 +182,7 @@ std::shared_ptr<Binding> Core::connect() const {
     return binding;
 }
 
+// Core::schedule 请求在指定时间推进, 已有更早期限不提前.
 void Core::schedule(Time time) {
     const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(time - std::chrono::steady_clock::now(), Time::duration::zero())).count();
     scheduled_ = true;
@@ -192,11 +194,13 @@ void Core::schedule(Time time) {
     });
 }
 
+// Core::start 启动控制循环, 幂等, 重复调用无副作用.
 void Core::start() {
     const std::lock_guard lock(mutex_);
     schedule(std::chrono::steady_clock::now());
 }
 
+// Core::wake 标记对象就绪并唤醒控制轮, 空指针只唤醒不标记.
 void Core::wake(Activity* activity) noexcept {
 
     const std::lock_guard lock(mutex_);
@@ -216,6 +220,7 @@ void Core::wake(Activity* activity) noexcept {
     }
 }
 
+// Core::release 释放一次持有引用, 归零即允许关闭完成.
 void Core::release() noexcept {
     const std::lock_guard lock(mutex_);
     if (owners_ != 0 && --owners_ == 0) {
@@ -229,6 +234,7 @@ void Core::release() noexcept {
     }
 }
 
+// Core::close 停止接纳并开始有序关闭, 幂等.
 void Core::close() noexcept {
     const std::lock_guard lock(mutex_);
     stopped_.store(true, std::memory_order_release);
@@ -240,6 +246,7 @@ void Core::close() noexcept {
     }
 }
 
+// Core::wait 等待关闭完成, 超时返回 false.
 bool Core::wait(std::chrono::milliseconds timeout) const {
     if (notifying()) {
         throw std::logic_error("Cannot wait inside a Comet callback");
@@ -248,19 +255,23 @@ bool Core::wait(std::chrono::milliseconds timeout) const {
     return condition_.wait_for(lock, timeout, [this] { return complete_; });
 }
 
+// Core::notifying 返回是否在用户回调中, 回调内禁止等待.
 bool Core::notifying() noexcept {
     return callback;
 }
 
+// Core::notify 设置回调活跃标志, 进入/退出回调时成对调用.
 void Core::notify(bool active) noexcept {
     callback = active;
 }
 
+// Core::notification 返回是否有待投递通知.
 bool Core::notification() const noexcept {
     const std::lock_guard lock(mutex_);
     return !closing_; // 该锁的取得是通知开始点; 后来的 close 只等待其自然结束, 不撤回已开始回调.
 }
 
+// Core::exception 标记内部异常, 后续控制轮据此关闭.
 void Core::exception() noexcept {
     auto count = exceptions_.load(std::memory_order_relaxed); // 诊断不参与数据发布排序, 到 uint64 上限停止增长.
     while (count != std::numeric_limits<std::uint64_t>::max() && !exceptions_.compare_exchange_weak(count, count + 1, std::memory_order_relaxed)) {
@@ -269,6 +280,12 @@ void Core::exception() noexcept {
 
 std::uint64_t Core::exceptions() const noexcept {
     return exceptions_.load(std::memory_order_relaxed);
+}
+
+Core::Schedule Core::schedule() const {
+
+    const std::lock_guard lock(mutex_);
+    return {.directory = directory_rounds_, .ready = ready_rounds_, .polled = polled_};
 }
 
 Core::Time Core::session(Time now) {
@@ -359,6 +376,7 @@ Core::Time Core::session(Time now) {
     return retry_;
 }
 
+// Core::recovered 确认绑定恢复, 重置失败计数并恢复订阅.
 void Core::recovered(const std::shared_ptr<const Binding>& binding) {
     const std::lock_guard lock(mutex_);
     if (binding_ == binding && !closing_) {
@@ -421,6 +439,7 @@ Core::Time Core::dial(Time now) {
     return now + options_.timeout;
 }
 
+// Core::tick 单步推进控制循环, 至多八轮, 无事件即休眠.
 void Core::tick() {
 
     // Alarm 的回调只用于一条控制路径. wake 在本轮执行时合并为 awakened_, 不并发进入另一轮.
@@ -459,6 +478,7 @@ void Core::tick() {
                 polling_.reserve(readers_.size());                   // 应用目录已有数量上限, 稳态复用容量而非每次网络唤醒重新分配.
                 const bool refresh = std::exchange(refresh_, false); // 只有共享状态变更才广播到整个活动集.
                 if (refresh || now >= due_) {
+                    ++directory_rounds_; // 全目录维护轮, 含到期与共享状态广播, 与就绪轮区分统计.
                     // 到期或共享状态变化才遍历目录. 同轮就绪对象由目录一并捕获, 不重复推进.
                     ready_.clear();
                     due_ = Time::max();
@@ -478,6 +498,7 @@ void Core::tick() {
                         return false;
                     });
                 } else {
+                    ++ready_rounds_; // 普通网络完成只走就绪队列, 本轮未扫描空闲对象.
                     // 普通网络完成只解析实际入队的 K 个对象, 不为一个事件扫描 N 个空闲订阅.
                     for (const auto& weak : ready_) {
                         if (auto reader = weak.lock()) {
@@ -508,6 +529,7 @@ void Core::tick() {
             next = std::min(next, due_); // 即使本轮没有到期对象, 仍按原期限调度, 不退化成每秒检查.
             {
                 const std::lock_guard lock(mutex_);
+                polled_ += polling_.size(); // 合并进已有临界区, 统计不额外争抢一次控制锁.
                 // 回调期间工厂可能接纳了本轮快照之外的新对象. 必须检查实际目录, 否则 close
                 // 可能在这些对象尚未清理时错误地完成, 使它们的 wait 永久等不到通知.
                 const bool cleaned = closing_ && std::ranges::all_of(readers_, [](const auto& weak) { const auto reader = weak.lock(); return !reader || reader->finished(); });
@@ -539,6 +561,7 @@ void Core::tick() {
     }
 }
 
+// Core::delay 按失败次数退避, 上限封顶, 不抛异常.
 std::chrono::milliseconds Core::delay(unsigned failures) const noexcept {
     const auto base = std::min<std::uint64_t>(5000, std::uint64_t{100} << std::min(failures, 6U));
     const auto jitter = std::hash<std::string>{}(options_.endpoints[endpoint_]) % (base / 4 + 1);
@@ -605,6 +628,8 @@ Result<std::shared_ptr<Publishing>> Core::publisher(Scope scope, std::string key
     return accept(object).transform([&object] { return std::move(object); });
 }
 
+// Core::outgoing 占用外发名额, 满时返回 false.
+// priority/automatic 区分优先级与自动流量, 配额独立.
 bool Core::outgoing(bool priority, bool automatic) noexcept {
     auto& counter = priority ? maintenance_ : automatic ? recovery_
                                                         : unary_; // 后台恢复不占尽保活 16 槽.
@@ -619,6 +644,7 @@ bool Core::outgoing(bool priority, bool automatic) noexcept {
     return false;
 }
 
+// Core::returning 归还外发名额, 与 outgoing 成对.
 void Core::returning(bool priority, bool automatic) noexcept {
     const auto previous = (priority ? maintenance_ : automatic ? recovery_
                                                                : unary_)
@@ -628,6 +654,7 @@ void Core::returning(bool priority, bool automatic) noexcept {
         wake(); // 只有从满额变为可用才广播给等待者, 普通完成由所属 Activity 独立唤醒.
 }
 
+// Core::admitting 返回是否仍接纳新对象, 关闭后拒绝.
 bool Core::admitting() noexcept {
     auto count = admitted_.load(std::memory_order_relaxed);
     while (count < 256) {
@@ -638,10 +665,13 @@ bool Core::admitting() noexcept {
     return false;
 }
 
+// Core::settled 标记目录已稳定, 唤醒等待者.
 void Core::settled() noexcept {
     admitted_.fetch_sub(1, std::memory_order_relaxed);
 }
 
+// Core::accept 接纳新活动对象, 超限返回错误.
+// activity 为待接纳对象, 容量不足即拒绝.
 Result<void> Core::accept(const std::shared_ptr<Activity>& activity) {
 
     const std::lock_guard lock(mutex_);
@@ -688,6 +718,8 @@ Result<void> Core::accept(const std::shared_ptr<Activity>& activity) {
     return {};
 }
 
+// Core::secret 替换本 Client 后续登录材料并取消旧登录; 服务端其他会话不由本地换密直接撤销.
+// value 为新凭据字节, 使用后调用方应清零.
 Result<void> Core::secret(std::vector<std::uint8_t> value) {
 
     if (!options_.auth || value.empty() || value.size() > 4096) {
@@ -714,6 +746,7 @@ Result<void> Core::secret(std::vector<std::uint8_t> value) {
     return {};
 }
 
+// Core::claim 占用 Watch 名额, 满时返回 false.
 bool Core::claim() noexcept {
     auto count = calls_.load(std::memory_order_relaxed);
     while (count < options_.readers) {
@@ -724,11 +757,14 @@ bool Core::claim() noexcept {
     return false;
 }
 
+// Core::relinquish 归还 Watch 名额, 与 claim 成对.
 void Core::relinquish() noexcept {
     if (calls_.fetch_sub(1, std::memory_order_relaxed) == options_.readers)
         wake(); // 实际 OnDone 归还满额 Watch 名额后, 唤醒尚未建流的对象.
 }
 
+// Core::resize 调整共享预算, 超限返回 false.
+// previous 为旧预算, requested 为新预算, 只允许有界增长.
 bool Core::resize(std::size_t previous, std::size_t requested) noexcept {
     auto total = bytes_.load(std::memory_order_relaxed);
     do {
@@ -739,6 +775,8 @@ bool Core::resize(std::size_t previous, std::size_t requested) noexcept {
     return true;
 }
 
+// Core::lost 标记绑定失效, 依附对象进入恢复流程.
+// binding 为失效绑定; error 为失败原因.
 void Core::lost(const std::shared_ptr<const Binding>& binding, Error error) {
 
     std::shared_ptr<Login> login;

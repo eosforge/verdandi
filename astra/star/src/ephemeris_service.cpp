@@ -26,6 +26,10 @@ bool Ephemeris::Service::empty() const {
     return feed_->empty();
 }
 
+Downstream<Ephemeris>::Delivery Ephemeris::Service::delivery() const {
+    return feed_->delivery();
+}
+
 grpc::ServerWriteReactor<proto::comet::v1::EphemerisWatchReply>* Ephemeris::Service::Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) {
     return feed_->Watch(context, request);
 }

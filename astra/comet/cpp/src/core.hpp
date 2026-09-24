@@ -80,6 +80,16 @@ public:
     void exception() noexcept;                 // 只累计观察者异常数量, 不记录应用数据或异常正文.
     std::uint64_t exceptions() const noexcept; // 当前共享 Client 的观察者异常诊断计数.
 
+    // 只读调度计数快照, 全部初始零, 由 mutex_ 保护累加; 仅用于归因测量, 不改变唤醒或推进语义.
+    struct Schedule {
+        std::uint64_t directory{}; // 走全目录维护的轮数, 含到期/共享状态广播.
+        std::uint64_t ready{};     // 只消费就绪队列的轮数, 不扫描空闲对象.
+        std::uint64_t polled{};    // 累计实际 poll 的对象数, 与轮数相除即平均每轮工作量.
+    };
+
+    // 返回累计目录轮、就绪轮与推进对象数; 调用只取 mutex_ 快照, 不等待网络或用户回调.
+    Schedule schedule() const;
+
 private:
     std::atomic_bool stopped_{}; // 跨对象共享的停止门, close 单向发布, 不由晚到成功清除.
     friend class ::comet::Client;
@@ -141,5 +151,8 @@ private:
     std::atomic_size_t maintenance_{};                            // 实际未释放 Renew/Remove, 默认零.
     std::atomic_size_t bytes_{};                                  // Reading 受控存储总量, 应用额外持有的旧 View 不可强制回收.
     std::atomic_uint64_t exceptions_{};                           // 用户观察者抛出的异常, 饱和累计, 默认 0.
+    std::uint64_t directory_rounds_{};                            // 走全目录维护的轮数, 初始零, 仅控制轮在 mutex_ 内累加.
+    std::uint64_t ready_rounds_{};                                // 只消费就绪队列的轮数, 初始零, 测量普通事件是否扫描目录.
+    std::uint64_t polled_{};                                      // 累计实际 poll 的对象数, 初始零, 与轮数相除即平均工作量.
 };
 } // namespace comet::detail

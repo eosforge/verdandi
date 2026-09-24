@@ -157,8 +157,12 @@ private:
 };
 } // namespace
 
+// Pulse 构造只保存引用, 不启动线程, 实际服务由 Server 装配.
+// authority/ledger/clock 为签发材料、账本与时钟引用, 生命周期由 Server 保证.
 Pulse::Pulse(const Authority& authority, const Ledger& ledger, const Source& clock) : clock_(clock), authority_(authority), ledger_(ledger) {}
 
+// Pulse::Bounce 创建四时间戳对时反应器, 每个连接独立, 断开即销毁.
+// context 为回调上下文; 返回反应器所有权, 由 gRPC 框架驱动.
 grpc::ServerBidiReactor<proto::pulsar::v1::Ping, proto::pulsar::v1::Pong>* Pulse::Bounce(grpc::CallbackServerContext* context) {
 
     // reactor 由最终 OnDone 自释放, 服务 handler 只负责构造和启动, 不再持有所有权.

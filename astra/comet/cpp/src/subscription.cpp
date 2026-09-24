@@ -23,6 +23,7 @@ std::optional<std::uint64_t> Subscriber::View::version() const noexcept {
     return contents_ ? std::optional(contents_->version) : std::nullopt;
 }
 
+// Subscriber::View::size 返回视图记录数, 未就绪返回零.
 std::size_t Subscriber::View::size() const noexcept {
     return contents_ ? contents_->data.size() : 0;
 }
@@ -31,11 +32,15 @@ const std::optional<Error>& Subscriber::View::error() const noexcept {
     return error_;
 }
 
+// Subscriber::View::find 按键点查记录, 只借用本视图拥有的不可变页.
+// key 为查询键; 返回记录, 缺失返回空.
 std::optional<Subscriber::Record> Subscriber::View::find(std::string_view key) const {
     const auto* record = contents_ ? contents_->data.find(key) : nullptr; // 只借用本视图拥有的不可变页.
     return record ? std::optional(record->record) : std::nullopt;
 }
 
+// Subscriber::View::visit 遍历视图全部记录, 回调期间视图保持有效.
+// context/visitor 为上下文与回调, 回调抛错由调用方处理.
 void Subscriber::View::visit(void* context, void (*visitor)(void*, std::string_view, const Record&)) const {
     if (contents_) {
         contents_->data.each([&](std::string_view key, const detail::Publication& record) { visitor(context, key, record.record); });
@@ -56,6 +61,7 @@ Subscription::~Subscription() {
     }
 }
 
+// Subscription::discard 丢弃候选与去重状态, 保留已确认视图与游标.
 void Subscription::discard() noexcept {
     draft_.reset();
     std::unordered_set<std::string>{}.swap(seen_); // 不保留曾经大快照的桶数组高水线.
@@ -66,6 +72,8 @@ void Subscription::discard() noexcept {
     }
 }
 
+// Subscription::begin 开始新实例的候选, 记录期望实例, 清空旧候选.
+// expected 为期望实例.
 void Subscription::begin(std::string expected) {
     discard();
     expected_ = std::move(expected);

@@ -6,6 +6,8 @@
 #include <time.h>
 
 namespace astra {
+// Source::sample 单次物理参考采样, 内核未同步或窗口超限返回空.
+// 夹取 adjtimex 与墙钟, 误差累计内核估计与调度窗口, 超限即拒绝.
 std::optional<Clock::Estimate> Source::sample() {
 
     // 夹住质量查询和墙钟采样, 将可能的调度延迟计入误差. BOOTTIME 暂停时间也参与年龄判断.
@@ -48,6 +50,8 @@ std::optional<Clock::Estimate> Source::sample() {
     return Clock::Estimate{Clock::Time(std::chrono::nanoseconds(wall.tv_sec * 1'000'000'000 + wall.tv_nsec)), after, uncertainty, 0};
 }
 
+// Source 构造即启动采样线程, provider 为空直接抛异常.
+// provider 为参考采样函数, 线程退出由析构负责.
 Source::Source(Provider provider) : provider_(std::move(provider)) {
 
     if (!provider_) {
@@ -56,6 +60,8 @@ Source::Source(Provider provider) : provider_(std::move(provider)) {
     worker_ = std::jthread([this](std::stop_token stop) { run(stop); });
 }
 
+// Source 析构请求线程停止并等待退出, 先停采样再释放成员.
+// 不抛异常, 连接停止后成员才可安全销毁.
 Source::~Source() {
 
     worker_.request_stop();
@@ -64,14 +70,20 @@ Source::~Source() {
     }
 }
 
+// Source::now 返回当前时钟读数, 未校准返回空.
+// 复用内部时钟的短锁推进, 不触发系统采样或等待下一次对时.
 std::optional<Clock::Reading> Source::now() const {
     return clock_.now();
 }
 
+// Source::precision 返回已测本地分辨率 (纳秒), 对时应答用它表示采样误差边界.
+// 不抛异常, 原子读取采样线程发布的结果.
 std::uint64_t Source::precision() const noexcept {
     return precision_.load(std::memory_order_acquire);
 }
 
+// Source::run 采样线程主循环, 按固定周期采样并老化时钟, 停止即退出.
+// stop 为停止令牌; 不抛异常. 采样失败撤销参考同步标记, 已校准时钟仍按 holdover 规则推进.
 void Source::run(std::stop_token stop) noexcept {
 
     try {

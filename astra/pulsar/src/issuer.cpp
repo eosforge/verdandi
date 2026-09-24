@@ -84,8 +84,12 @@ grpc::Status rejected(const Status& error) {
 }
 } // namespace
 
+// Issuer 构造只保存引用, 实际端口由 Server 在 Pulse 启动后传入.
+// galaxy/pulse_endpoint 为集群与对时端点; authority/ledger 为签发材料与账本引用.
 Issuer::Issuer(std::string galaxy, std::string pulse_endpoint, const Authority& authority, Ledger& ledger) : galaxy_(std::move(galaxy)), pulse_endpoint_(std::move(pulse_endpoint)), authority_(authority), ledger_(ledger) {}
 
+// Issuer::Register 处理成员登记, 校验准入、幂等与容量后持久提交并签发应答.
+// context/request/response 为 gRPC 上下文、登记请求与应答; 返回 gRPC 状态.
 grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::v1::RegistrationRequest* request, proto::orbit::v1::RegistrationResponse* response) {
 
     try {
@@ -145,6 +149,8 @@ grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::
     }
 }
 
+// Issuer::List 返回当前成员目录快照, 调用方必须是已准入成员.
+// context/request/response 为 gRPC 上下文、目录请求与应答; 返回 gRPC 状态.
 grpc::Status Issuer::List(grpc::ServerContext* context, const proto::orbit::v1::DirectoryRequest* request, proto::orbit::v1::DirectoryResponse* response) {
 
     try {

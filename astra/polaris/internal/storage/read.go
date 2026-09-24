@@ -7,14 +7,18 @@ import (
 )
 
 // readOnly 限制 SQL 生命周期, 完整载荷准备结束后才返回, 网络发送不得进入本闭包.
+// read 为读事务闭包, 在限时内执行, 返回后即提交读事务释放连接.
 func (store *Store) readOnly(ctx context.Context, read func(*gorm.DB) error) error {
+	// 读锁防关闭中读取.
 	store.life.RLock()
 	defer store.life.RUnlock()
 	if store.closed {
 		return ErrClosed
 	}
+	// 派生限时上下文, 读事务不超配置超时.
 	ctx, cancel := context.WithTimeout(ctx, store.limits.Timeout)
 	defer cancel()
+	// 读前先做 WAL 维护, 维护失败直接拒绝本次读取.
 	if err := store.maintain(ctx); err != nil {
 		return err
 	}
@@ -22,8 +26,10 @@ func (store *Store) readOnly(ctx context.Context, read func(*gorm.DB) error) err
 }
 
 // List 在一个读事务捕获已持久存在的 Scope/版本清单, 不复制全库载荷.
+// 返回范围位置列表, 超限返回容量错误.
 func (store *Store) List(ctx context.Context) (positions []Position, err error) {
 	err = store.readOnly(ctx, func(tx *gorm.DB) error {
+		// 按范围排序全量取, 多取一条用于超限判定.
 		if err := tx.Table("scopes").Select("sector,spectrum,version").Order("sector,spectrum").Limit(int(store.limits.Scopes) + 1).Find(&positions).Error; err != nil {
 			return ErrUnavailable
 		}
@@ -39,6 +45,7 @@ func (store *Store) List(ctx context.Context) (positions []Position, err error) 
 }
 
 // Version 仅查询持久位置, 不为管理读取或快照共享预先装入整个 Scope 的内容.
+// scope 为目标范围; 返回当前版本, 未创建范围返回零.
 func (store *Store) Version(ctx context.Context, scope Scope) (version Version, err error) {
 	if !scope.Valid() {
 		return 0, ErrInput
@@ -52,6 +59,7 @@ func (store *Store) Version(ctx context.Context, scope Scope) (version Version, 
 }
 
 // Load 捕获一个 Scope 的完整一致内容, 合法未创建范围返回版本零空基线.
+// scope 为目标范围; 返回快照, 版本与记录同属一次读事务.
 func (store *Store) Load(ctx context.Context, scope Scope) (snapshot Snapshot, err error) {
 	if !scope.Valid() {
 		return Snapshot{}, ErrInput
@@ -67,12 +75,15 @@ func (store *Store) Load(ctx context.Context, scope Scope) (snapshot Snapshot, e
 }
 
 // snapshot 必须在已取得的读事务中使用, Scope 版本及所有记录不会跨 SQL 快照拼接.
+// tx/scope 为事务与范围; 返回一致快照, 计数与记录核对不符即库损坏.
 func (store *Store) snapshot(tx *gorm.DB, scope Scope) (Snapshot, error) {
+	// 先取范围状态, 未创建范围即零版本空基线.
 	state, _, err := current(tx, scope)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	result := Snapshot{Position: Position{Scope: scope, Version: state.Version}}
+	// 状态计数超限即容量错误, 防止伪造计数.
 	if state.Records > store.limits.Records || state.Bytes > store.limits.Bytes {
 		return Snapshot{}, ErrCapacity
 	}
@@ -82,6 +93,7 @@ func (store *Store) snapshot(tx *gorm.DB, scope Scope) (Snapshot, error) {
 		return Snapshot{}, ErrUnavailable
 	}
 	defer rows.Close()
+	// 逐条校验并与状态计数严格核对, 任何不符均为库损坏.
 	var total int64
 	for rows.Next() {
 		var record Record
@@ -97,6 +109,7 @@ func (store *Store) snapshot(tx *gorm.DB, scope Scope) (Snapshot, error) {
 	if rows.Err() != nil {
 		return Snapshot{}, ErrUnavailable
 	}
+	// 读数必须与状态完全一致, 否则库损坏.
 	if total != state.Bytes || int64(len(result.Records)) != state.Records {
 		return Snapshot{}, ErrCorrupt
 	}
@@ -104,6 +117,7 @@ func (store *Store) snapshot(tx *gorm.DB, scope Scope) (Snapshot, error) {
 }
 
 // Since 获取完整连续后缀, 超前游标不是空成功; 调用方在 ErrHistory 时改取完整快照.
+// scope/after 为目标范围与游标; 返回重放后缀, 缺失历史返回 ErrHistory.
 func (store *Store) Since(ctx context.Context, scope Scope, after Version) (replay Replay, err error) {
 	if !scope.Valid() {
 		return Replay{}, ErrInput
@@ -123,22 +137,28 @@ func (store *Store) Since(ctx context.Context, scope Scope, after Version) (repl
 }
 
 // history 在同一 SQL 快照内验证窗口与连续性, 单次返回受历史条数/字节预算约束.
+// state/after 为范围状态与游标; 返回连续后缀, 窗口外游标返回 ErrHistory, 超前游标返回版本冲突.
 func (store *Store) history(tx *gorm.DB, scope Scope, state group, after Version) (Replay, error) {
+	// 超前游标是版本冲突, 不是空成功.
 	if after > state.Version {
 		return Replay{}, ErrVersion
 	}
+	// 状态保留计数非法即库损坏.
 	if state.Retained < 0 || uint64(state.Retained) > uint64(state.Version) || state.Retained > store.limits.History || state.Backlog < 0 || state.Backlog > store.limits.Backlog {
 		return Replay{}, ErrCorrupt
 	}
+	// 游标落在保留窗口之前, 历史已淘汰.
 	if after < state.Version-Version(state.Retained) {
 		return Replay{}, ErrHistory
 	}
 	result := Replay{Version: state.Version}
+	// 按版本顺序取游标之后的历史, 上限为保留数+1 (超限判定用).
 	rows, err := tx.Table("history").Select("version,key,value,erase,cost").Where("sector=? AND spectrum=? AND version>?", scope.Sector, scope.Spectrum, after).Order("version").Limit(int(state.Retained) + 1).Rows()
 	if err != nil {
 		return Replay{}, ErrUnavailable
 	}
 	defer rows.Close()
+	// 逐条校验连续性与成本, 任何断裂或不符均为库损坏.
 	position := after
 	var total int64
 	for rows.Next() {
@@ -157,6 +177,7 @@ func (store *Store) history(tx *gorm.DB, scope Scope, state group, after Version
 	if rows.Err() != nil {
 		return Replay{}, ErrUnavailable
 	}
+	// 必须恰好到达当前版本, 否则历史不完整.
 	if position != state.Version {
 		return Replay{}, ErrCorrupt
 	}

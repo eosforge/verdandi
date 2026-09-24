@@ -14,6 +14,7 @@ namespace astra {
 template <typename Message>
 struct Mutator;
 
+// Hello 问候代理, 链式设置协议版本、帧上限与准入材料.
 template <>
 struct Mutator<::proto::astra::v1::Hello> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -55,6 +56,7 @@ struct Mutator<::proto::astra::v1::Hello> {
     }
 };
 
+// Astra Ping 代理, 设置会话保活序号, 不参与 Pulsar 四时间戳对时.
 template <>
 struct Mutator<::proto::astra::v1::Ping> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -68,6 +70,7 @@ struct Mutator<::proto::astra::v1::Ping> {
     }
 };
 
+// Astra Pong 代理, 回显会话保活序号, 不携带对时时间戳.
 template <>
 struct Mutator<::proto::astra::v1::Pong> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -81,6 +84,7 @@ struct Mutator<::proto::astra::v1::Pong> {
     }
 };
 
+// Pulsar Ping 代理, 链式设置对时探测字段.
 template <>
 struct Mutator<::proto::pulsar::v1::Ping> {
     // message 借用发送时间采样消息, 代理不拥有也不延长其寿命.
@@ -94,6 +98,7 @@ struct Mutator<::proto::pulsar::v1::Ping> {
     }
 };
 
+// Pulsar Pong 代理, 链式设置对时应答字段.
 template <>
 struct Mutator<::proto::pulsar::v1::Pong> {
     // message 借用四时间戳响应消息, 修改必须避开在途的 gRPC Write.
@@ -142,6 +147,7 @@ struct Mutator<::proto::pulsar::v1::Pong> {
     }
 };
 
+// 协议错误代理, 链式设置错误分类与原因.
 template <>
 struct Mutator<::proto::astra::v1::ProtocolError> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -155,6 +161,7 @@ struct Mutator<::proto::astra::v1::ProtocolError> {
     }
 };
 
+// 会话帧代理, 提供 Hello/Ping/Pong/错误的便捷写入; 其他业务帧直接使用生成接口.
 template <>
 struct Mutator<::proto::astra::v1::SessionPacket> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -189,6 +196,7 @@ struct Mutator<::proto::astra::v1::SessionPacket> {
     }
 };
 
+// 登记请求代理, 链式设置成员描述与请求标识.
 template <>
 struct Mutator<::proto::orbit::v1::RegistrationRequest> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -251,6 +259,7 @@ struct Mutator<::proto::orbit::v1::RegistrationRequest> {
     }
 };
 
+// 登记应答代理, 链式设置成员、目录与签名.
 template <>
 struct Mutator<::proto::orbit::v1::RegistrationResponse> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -278,6 +287,7 @@ struct Mutator<::proto::orbit::v1::RegistrationResponse> {
     }
 };
 
+// 成员描述代理, 链式设置身份、端点、角色与代次.
 template <>
 struct Mutator<::proto::orbit::v1::Member> {
     // message 借用原始消息; 代理及其返回引用不能超过消息的生命周期.
@@ -333,7 +343,8 @@ struct Mutator<::proto::orbit::v1::Member> {
     }
 };
 
-// 创建只借用 message 的代理; 不延长消息寿命, 不进行序列化或分配.
+// mutate 创建只借用 message 的代理; 不延长消息寿命, 不进行序列化或分配.
+// message 为目标消息; 返回链式代理, 寿命不得超过消息.
 template <typename Message>
 inline Mutator<Message> mutate(Message& message) {
     return {message};

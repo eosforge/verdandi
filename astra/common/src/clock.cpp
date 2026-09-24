@@ -27,6 +27,8 @@ constexpr auto maximum = std::numeric_limits<std::int64_t>::max();
 constexpr std::uint64_t freshness = 5'000'000'000;
 } // namespace
 
+// Clock::Elapsed::now 返回单调经过时间, 含系统挂起, 供年龄与窗口判断.
+// 不抛异常, 直接读系统时钟.
 ElapsedTime Clock::Elapsed::now() {
 
     // value 接收内核的秒和纳秒分量, 零初始化只用于输出缓冲, 不表示有效样本.
@@ -100,6 +102,10 @@ Filter::Filter(std::uint64_t local_precision) : local_precision_(local_precision
     }
 }
 
+// Filter::observe 吸收一次四时间戳样本, 非法样本拒绝不改变筛选状态.
+// t0/t1/t2 为发送/服务端收发时间戳, received 为本机接收时刻,
+// precision/uncertainty 为对端精度与不确定度, synchronized 为对端同步标志.
+// 返回是否接受, 拒绝不改变已筛选结果.
 bool Filter::observe(std::uint64_t t0, std::uint64_t t1, std::uint64_t t2, ElapsedTime received, std::uint64_t precision, std::uint64_t uncertainty, bool synchronized) {
 
     // t3 为接收时的本机经过时间, 与 t0 同域; 负值拒绝后才能转换为无符号数.
@@ -141,10 +147,14 @@ bool Filter::observe(std::uint64_t t0, std::uint64_t t1, std::uint64_t t2, Elaps
     return true;
 }
 
+// Filter::result 返回本批筛选后的最优估计, 无有效样本返回空.
+// 只读筛选状态, 不修改.
 std::optional<Clock::Estimate> Filter::result() const {
     return count_ >= 3 ? best_ : std::nullopt;
 }
 
+// Clock::Reading::deadline_after 按存活期限推算截止时间, 溢出或未就绪返回错误.
+// ttl 为存活期限; 返回截止时间, 不修改读数.
 std::expected<Clock::Time, Clock::Error> Clock::Reading::deadline_after(std::chrono::nanoseconds ttl) const noexcept {
 
     // base 为本次读数的 Unix 纳秒坐标, 必须非负; ttl 为调用方给定的非负时长.
@@ -162,6 +172,8 @@ std::expected<Clock::Time, Clock::Error> Clock::Reading::deadline_after(std::chr
     return time + ttl;
 }
 
+// Clock 构造只保存调速上限, 不启动采样, 初始为未同步本地走时.
+// slew_ppm 为最大额外调速 (百万分比).
 Clock::Clock(std::uint32_t slew_ppm) : slew_ppm_(slew_ppm) {
 
     if (slew_ppm == 0 || slew_ppm > 1000) {
@@ -169,6 +181,8 @@ Clock::Clock(std::uint32_t slew_ppm) : slew_ppm_(slew_ppm) {
     }
 }
 
+// Clock::advance 按本地经过推进走时并吸收偏差, 只在锁内调用.
+// local 为本地时间; 返回是否仍有效, 反序或耗尽即永久失败.
 bool Clock::advance(ElapsedTime local) const {
 
     if (failed_ || local < local_) {
@@ -199,6 +213,8 @@ bool Clock::advance(ElapsedTime local) const {
     return true;
 }
 
+// Clock::read 在给定本地时刻读取走时, 只在锁内调用, 不跳跃替换已公开时间.
+// local 为本地时间; 返回读数, 失败返回空.
 std::optional<Clock::Reading> Clock::read(ElapsedTime local) const {
 
     if (!estimate_ || !advance(local)) {
@@ -212,18 +228,24 @@ std::optional<Clock::Reading> Clock::read(ElapsedTime local) const {
     return Clock::Reading{epoch_, uncertainty, estimate_->rtt_ns, estimate_->sampled, true, trusted_ && age <= freshness && uncertainty <= clock_uncertainty_limit_ns};
 }
 
+// Clock::now 取锁后采样本地时间再读取, 避免并发读取制造伪反序.
+// 返回当前读数, 未就绪返回空.
 std::optional<Clock::Reading> Clock::now() const {
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
     std::lock_guard lock(mutex_);
     return read(Clock::Elapsed::now());
 }
 
+// Clock::now(ElapsedTime) 用调用方提供的本地时刻读取, 供测试注入反序.
+// local 为本地时间; 返回读数, 失败返回空.
 std::optional<Clock::Reading> Clock::now(ElapsedTime local) const {
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
     std::lock_guard lock(mutex_);
     return read(local);
 }
 
+// Clock::observe 吸收外部估计, 无效/过期/重复不改变模型, 只在锁内调用.
+// estimate/local 为估计与本地时刻; 返回是否接受, 拒绝不改变状态.
 bool Clock::observe(const Clock::Estimate& estimate, ElapsedTime local) {
 
     // target 是待发布样本的非负 Unix 纳秒值, 仅首次校准直接建立公开锚点.
@@ -264,18 +286,24 @@ bool Clock::observe(const Clock::Estimate& estimate, ElapsedTime local) {
     return true;
 }
 
+// Clock::publish 用当前本地时刻发布估计, 校验并外推至消费时刻.
+// estimate 为外部估计; 返回是否接受.
 bool Clock::publish(const Clock::Estimate& estimate) {
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
     std::lock_guard lock(mutex_);
     return observe(estimate, Clock::Elapsed::now());
 }
 
+// Clock::publish(ElapsedTime) 用指定本地时刻发布, 供测试注入固定相位.
+// estimate/local 为估计与本地时刻; 返回是否接受.
 bool Clock::publish(const Clock::Estimate& estimate, ElapsedTime local) {
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
     std::lock_guard lock(mutex_);
     return observe(estimate, local);
 }
 
+// Clock::revoke 撤销参考源同步质量, 保留本地走时及有限期限能力.
+// 后续有效观测可恢复, 不清除已公开时间.
 void Clock::revoke() {
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
     std::lock_guard lock(mutex_);

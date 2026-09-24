@@ -91,6 +91,8 @@ public:
     // 监听或内部异常向入口传播, 已进入运行阶段的异常先执行 shutdown, 日志不输出异常正文.
     // 参数 signals: 捕获操作系统的终止等信号.
     // 返回值: 进程退出码.
+    // run 为节点控制循环入口, 按信号驱动推进会话、目录与业务, 返回进程退出码.
+    // 参数 signals: 退出信号源; 返回值: 0 正常, 非零故障.
     int run(const Signals& signals) {
 
         grpc::EnableDefaultHealthCheckService(true); // 使用 gRPC 自带标准健康服务, 不增加 Comet Inspect 握手.
@@ -795,6 +797,9 @@ private:
 // 参数 role: 当前要运行为哪个角色(Star/Planet 等).
 // 参数 factory: 产生用于管理会话关系逻辑 Policy 的工厂方法.
 // 返回值: 系统的返回错误码 (0 为正常, 其他为错误).
+// run_node 为 Star/Planet 共用进程入口, 解析角色专属配置后托管运行时.
+// argc/argv 为命令行参数; role 为节点角色; factory 为角色策略工厂.
+// 返回进程退出码, 参数错误返回 2, 运行故障返回 1.
 int run_node(int argc, char** argv, Member::Role role, PolicyFactory factory) {
 
     try {

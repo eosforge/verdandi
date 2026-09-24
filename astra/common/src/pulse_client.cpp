@@ -6,6 +6,8 @@
 #include <grpcpp/create_channel.h>
 
 namespace astra {
+// Sampler 构造即建对时通道并启动采样线程, 端点与身份构造后不变.
+// endpoint/identity/hello 为对时地址、身份与问候; output 为时钟输出.
 Sampler::Sampler(std::string endpoint, std::shared_ptr<Identity> identity, std::shared_ptr<const proto::astra::v1::Hello> hello, Clock& output) : identity_(std::move(identity)), hello_(std::move(hello)), output_(output) {
 
     // arguments 配置专用对时通道, 收发各限 128 字节, 禁用 gRPC 隐式重试.
@@ -19,6 +21,8 @@ Sampler::Sampler(std::string endpoint, std::shared_ptr<Identity> identity, std::
     worker_ = std::jthread([this](std::stop_token stop) { run(stop); });
 }
 
+// Sampler 析构先停线程再撤销输出, 成员按声明逆序销毁.
+// 不抛异常, 连接停止后成员才可安全销毁.
 Sampler::~Sampler() {
 
     stop();
@@ -28,10 +32,14 @@ Sampler::~Sampler() {
     output_.revoke();
 }
 
+// Sampler::stop 请求采样线程停止, 不等待退出, 实际等待由析构完成.
+// 不抛异常, 可重复调用.
 void Sampler::stop() noexcept {
     worker_.request_stop();
 }
 
+// Sampler::sample 执行一批八次四时间戳探测并筛选, 成功即发布时钟估计.
+// stop 为停止令牌; 返回 gRPC 状态, 成功发布估计, 失败按分类返回.
 grpc::Status Sampler::sample(std::stop_token stop) {
 
     // context 覆盖整批八次探测, 使用单调两秒截止, 在流排空后才析构.
@@ -114,6 +122,8 @@ grpc::Status Sampler::sample(std::stop_token stop) {
     return output_.publish(*estimate) ? grpc::Status::OK : grpc::Status(grpc::StatusCode::DATA_LOSS, "Invalid Pulse estimate");
 }
 
+// Sampler::run 采样线程主循环, 抖动启动、失败退避, 异常只撤销同步不终止进程.
+// stop 为停止令牌; 不抛异常, 任何异常都转为撤销输出.
 void Sampler::run(std::stop_token stop) noexcept {
 
     try {
@@ -156,6 +166,8 @@ void Sampler::run(std::stop_token stop) noexcept {
     output_.revoke();
 }
 
+// Sampler::wait 可中断睡眠, 停止令牌触发即提前返回.
+// delay 为等待时长; 返回是否未被停止 (false 表示已停止).
 bool Sampler::wait(std::stop_token stop, Milliseconds delay) {
 
     // lock 配合 stop_token 等待, 取消可唤醒而不必等完整间隔.

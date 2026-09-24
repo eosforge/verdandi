@@ -247,6 +247,8 @@ void queued() {
         eventually([&] { return readers.back()->load().state() == comet::Reader::State::ready; });
     }
     CHECK(core->exceptions() == 0);
+    const auto rounds = core->schedule(); // 定向唤醒已覆盖全部对象, 就绪轮必须实际发生且推进数不少于对象数.
+    CHECK(rounds.ready > 0 && rounds.polled >= readers.size());
 }
 
 // 一条登录流承载多个对象, 分页完整后才可见, 移动/关闭不破坏仍持有的不可变视图.

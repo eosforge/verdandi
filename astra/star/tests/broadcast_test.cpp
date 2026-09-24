@@ -2,9 +2,11 @@
 #include "catalog_edition.hpp"
 #include "check.hpp"
 #include "ephemeris_edition.hpp"
+#include "progress.hpp"
 #include <algorithm>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <unordered_set>
 
 namespace {
@@ -13,6 +15,60 @@ using astra::Catalog;
 using astra::Clock;
 using astra::Ephemeris;
 using astra::Scope;
+
+// Scope 轮转只依赖拥有索引, 不借用 RPC 状态; 覆盖慢范围、公平调度、取消及遍历期间的新提交.
+void progress() {
+
+    using Queue = astra::Progress<unsigned>; // 测试载荷只标识订阅, 不提供 writing/done, 防止通知器耦合 I/O 状态.
+    Queue queue;                             // 所有操作模拟在同一个事件索引锁内执行.
+    Queue::Group zero;                       // 完整空范围的版本零不能被当作未观察到通知.
+    queue.publish(zero, 0, true);
+    CHECK(zero.covers(0) && !queue.pending());
+    queue.publish(zero, 1, false);
+    CHECK(zero.covers(0) && !queue.pending());
+
+    Queue::Group large, small; // 地址稳定的两个范围, 独立版本不会互相污染.
+    for (unsigned index = 0; index < 3; ++index) {
+        auto stream = std::make_shared<unsigned>(index); // 同范围三个独立消费者.
+        large.streams.emplace(stream.get(), stream);
+    }
+    auto solitary = std::make_shared<unsigned>(9); // 小范围不能被大范围的剩余订阅饿死.
+    small.streams.emplace(solitary.get(), solitary);
+    queue.publish(large, 10, false);
+    queue.publish(small, 40, false);
+    CHECK(!large.covers(8) && large.covers(9) && small.covers(39));
+    auto* first = queue.take(); // 指针排序只决定本范围顺序, 测试不依赖分配器返回地址.
+    CHECK(first && large.streams.contains(first));
+    CHECK(queue.take() == solitary.get());
+
+    queue.publish(large, 11, false);        // 已被调度的第一个消费者必须还能获知后来的提交.
+    std::map<unsigned*, unsigned> observed; // 按实际拥有指针统计, 非本范围的重复出队也会失败.
+    for (unsigned remaining = 8; queue.pending(); --remaining) {
+        CHECK(remaining != 0); // 队列必须自行排空, 不依赖下一次业务写入.
+        auto* stream = queue.take();
+        CHECK(stream && large.streams.contains(stream));
+        ++observed[stream];
+    }
+    CHECK(observed.size() == 3 && observed[first] == 1 && queue.take() == nullptr);
+    CHECK(large.covers(10));
+
+    queue.publish(large, 12, false);
+    queue.publish(small, 41, false);
+    queue.erase(large, large.streams.begin()->first); // 删除扫描将要访问的节点, 迭代器必须安全推进.
+    queue.erase(small, solitary.get());               // 删除队尾最后一条流, Scope 可立即被拥有者销毁.
+    while (!large.streams.empty()) {
+        queue.erase(large, large.streams.begin()->first);
+    }
+    CHECK(!queue.pending() && queue.take() == nullptr);
+
+    queue.publish(small, 43, false); // 缺 42, 不得把目标过滤误认为拥有完整历史.
+    CHECK(!small.covers(41) && small.covers(43));
+    queue.publish(small, 44, true); // 全量替换边界之后的基线才可以继续 apply.
+    CHECK(!small.covers(43) && small.covers(44));
+    queue.publish(small, UINT64_MAX, true);
+    CHECK(small.covers(UINT64_MAX) && !small.covers(UINT64_MAX - 1));
+    CHECK(!queue.pending()); // 空范围只更新标量, 不入通知队列.
+}
 
 // 业务缓冲保留不可变所有权, 空载荷仍是合法记录.
 Catalog::Value bytes(std::string_view value) {
@@ -58,6 +114,7 @@ void pages(auto&& write) {
     auto retry = batch.begin(); // 已经发送结束不改变固定起点, 新消费者仍能读取原基线.
     auto replay = batch.next(retry, 0, "star");
     CHECK(replay == one && !retry.complete());
+    CHECK(batch.misses() == 4 && batch.hits() == 6); // 三页首次构造加一次释放后重建, 其余六次均为弱缓存命中.
 }
 
 // 2 KiB 二进制正文按字节预算分页, 缓存命中不能截断零字节、漏项或串用其他页内容.
@@ -94,11 +151,11 @@ void boundaries(std::string key, auto&& content) {
 
     using Edition = typename Domain::Edition;              // 仍通过领域入口验证, 不向测试暴露私有 Encoding.
     using Projection = typename Domain::State::Projection; // 缺项和完整点查采用真实公开结构.
-    Edition missing(key, typename Projection::Point{.version = 7});
+    Edition missing(key, typename Projection::Point{.name = {}, .record = {}, .version = 7});
     const auto empty = missing.next("star"); // 精确缺项也保留捕获时的完整游标.
     CHECK(empty.complete() && empty.version() == 7 && empty.changes().empty());
 
-    Edition zero(key, typename Projection::Point{.record = content(bytes("")), .version = 7});
+    Edition zero(key, typename Projection::Point{.name = {}, .record = content(bytes("")), .version = 7});
     auto copy = zero; // 冻结来源共享, 页位置按值复制, 失败不消费原对象.
     bool invalid{};
     try {
@@ -111,10 +168,10 @@ void boundaries(std::string key, auto&& content) {
     CHECK(present.complete() && present.changes_size() == 1 && !copy.complete());
     CHECK(present.SerializeAsString() == copy.next("star").SerializeAsString());
 
-    Edition large(key, typename Projection::Point{.record = content(bytes(std::string(1024 * 1024, 'x'))), .version = 8});
+    Edition large(key, typename Projection::Point{.name = {}, .record = content(bytes(std::string(1024 * 1024, 'x'))), .version = 8});
     const auto page = large.next("star"); // 合法单条超过软目标, 必须整体放行, 不能形成无进展空页.
     CHECK(page.complete() && page.changes_size() == 1 && page.ByteSizeLong() > 256 * 1024 && page.ByteSizeLong() < 8 * 1024 * 1024);
-    Edition oversized(key, typename Projection::Point{.record = content(bytes(std::string(9 * 1024 * 1024, 'x'))), .version = 9});
+    Edition oversized(key, typename Projection::Point{.name = {}, .record = content(bytes(std::string(9 * 1024 * 1024, 'x'))), .version = 9});
     bool exceeded{}; // 人工破坏上层单正文限制, 分页硬预算仍须兜底并保持位置未完成.
     try {
         static_cast<void>(oversized.next("star"));
@@ -223,6 +280,7 @@ int main() {
     try {
         pages<Catalog>([](auto& state, const Scope& scope, unsigned index) { return state.publish(scope, std::to_string(index), bytes("value"), 1, 1000); });
         pages<Ephemeris>([](auto& state, const Scope& scope, unsigned) { return state.create(scope, bytes("attr"), bytes("data"), 1000); });
+        progress();
         payload();
         boundaries<Catalog>("key", [](Catalog::Value value) { return Catalog::State::Content{1, std::move(value)}; });
         boundaries<Ephemeris>("00112233-4455-4677-8899-aabbccddeeff", [](Ephemeris::Value value) { return Ephemeris::State::Content{bytes("fixed"), std::move(value)}; });

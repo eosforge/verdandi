@@ -399,6 +399,8 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
     return cancelled;
 }
 
+// Session::bind 绑定对端业务数据, 必须在准入后、出错前恰好一次.
+// data 为对端数据; 重复绑定或准入前绑定抛逻辑错误.
 void Session::bind(std::unique_ptr<Data> data) {
     if (!installed_ || data_ || !data || error_) {
         throw std::logic_error("Cannot bind peer data before admission or twice");
@@ -406,18 +408,26 @@ void Session::bind(std::unique_ptr<Data> data) {
     data_ = std::move(data);
 }
 
+// Session::peer 返回已准入对端身份, 未准入返回空.
+// 返回值借用内部成员, 会话销毁后失效.
 const std::optional<Member>& Session::peer() const noexcept {
     return peer_;
 }
 
+// Session::capacity 返回发送窗口上限, 背压依据.
+// 返回最大在途帧数.
 std::size_t Session::capacity() const noexcept {
     return maximum_;
 }
 
+// Session::bound 返回是否已绑定对端业务数据.
+// 绑定后业务帧才能发送.
 bool Session::bound() const noexcept {
     return static_cast<bool>(data_);
 }
 
+// Session::synchronized 返回业务是否就绪同步, 数据就绪且无错误且未结束.
+// 供控制循环判断本会话是否可用.
 bool Session::synchronized() const noexcept {
     return data_ && data_->ready() && !error_ && !done();
 }
@@ -491,10 +501,13 @@ void Session::completed(grpc::Status status) {
     wake();
 }
 
+// Session::done 返回流是否已销毁, 原子读取, 供控制循环回收.
+// 销毁后不得再访问成员 (completed 已转移唤醒).
 bool Session::done() const {
     return done_.load(std::memory_order_acquire);
 }
 
+// Session::installed 返回对端是否已准入, 准入后业务数据才能绑定.
 bool Session::installed() const {
     return installed_;
 }
@@ -522,47 +535,66 @@ std::optional<Status::Code> Session::error() const {
 }
 
 // 工厂函数 connect_session 实例化真正的 client 端反应堆流.
+// config/identity/generation/hello/target/wake 为配置、身份、世代、问候、目标与唤醒回调.
+// 返回出站会话, 所有权由 Runtime 持有.
 std::shared_ptr<Session> connect_session(const Config& config, const Identity& identity, Generation generation, std::shared_ptr<const proto::astra::v1::Hello> hello, Member target, std::function<void()> wake) {
     return std::make_shared<Outbound>(config, identity, generation, std::move(hello), std::move(target), std::move(wake));
 }
 
 // Inbound 成员函数定义
-// 构造函数, 将 direction 写死为 inbound, 因为是服务端连接, 不存在出站的 expected
+// 构造函数, 将 direction 写死为 inbound, 因为是服务端连接, 不存在出站的 expected.
+// context/config/generation/hello/wake 为服务端上下文、配置、世代、问候与唤醒回调.
 Inbound::Inbound(grpc::CallbackServerContext* context, const Config& config, Generation generation, std::shared_ptr<const proto::astra::v1::Hello> hello, std::function<void()> wake) : Session(config, Policy::Direction::inbound, generation, std::move(hello), std::nullopt, std::move(wake)), context_(context) {}
 
+// Inbound::OnReadDone 读完成回调, 转交基类处理, ok 为 false 表示对端关闭.
+// ok 为读取结果, 失败即标记会话结束.
 void Inbound::OnReadDone(bool ok) {
     read_done(ok);
 }
 
+// Inbound::OnWriteDone 写完成回调, 转交基类处理, 释放下一待发帧.
+// ok 为写入结果.
 void Inbound::OnWriteDone(bool ok) {
     write_done(ok);
 }
 
+// Inbound::OnSendInitialMetadataDone 初始元数据发送完成回调, 转交基类.
+// ok 为发送结果.
 void Inbound::OnSendInitialMetadataDone(bool ok) {
     metadata_done(ok);
 }
 
+// Inbound::OnCancel 对端取消回调, 标记服务端侧取消, 不再发送新帧.
 void Inbound::OnCancel() {
     server_cancelled();
 }
 
+// Inbound::OnDone 流销毁回调, 完成会话并释放资源, 唯一释放点.
 void Inbound::OnDone() {
     completed(grpc::Status::OK);
 }
 
+// Inbound::begin_call 开始呼叫, 先发送不含凭证的响应元数据.
+// 让等待 RPC 响应头的客户端能够继续发送自己的 Hello.
 void Inbound::begin_call() {
     // 先发送不含凭证的响应元数据, 让等待 RPC 响应头的客户端能够继续发送自己的 Hello.
     StartSendInitialMetadata();
 }
 
+// Inbound::begin_read 开始读取一帧, message 为接收缓冲, 所有权仍归调用方.
+// message 为接收缓冲, 读完成前不得复用.
 void Inbound::begin_read(proto::astra::v1::SessionPacket* message) {
     StartRead(message);
 }
 
+// Inbound::begin_write 开始写入一帧, message 为发送内容, 完成前不得修改.
+// message 为发送缓冲, 写完成前不得修改.
 void Inbound::begin_write(const proto::astra::v1::SessionPacket* message) {
     StartWrite(message);
 }
 
+// Inbound::request_cancel 请求取消, force 为 true 立即取消底层 RPC.
+// 非强制取消只标记, 由控制循环统一结束.
 void Inbound::request_cancel(bool force) {
 
     if (force) {
@@ -570,6 +602,8 @@ void Inbound::request_cancel(bool force) {
     }
 }
 
+// Inbound::finish_call 按内部错误码结束 RPC, 映射为对外 gRPC 状态.
+// error 为内部错误, 身份错映射无权限, 协议/冲突映射非法参数, 其余取消.
 void Inbound::finish_call(Status::Code error) {
 
     // 将上层会话模块计算出的内部错误转换为 gRPC 对外公开的标准状态码系列以发回对端.

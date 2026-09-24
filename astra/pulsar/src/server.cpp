@@ -7,11 +7,15 @@
 #include <stdexcept>
 
 namespace astra {
+// Config::help 返回固定英文用法文本, 不读取配置或触碰凭据.
+// 返回值借用静态字符串, 调用方不得修改.
 std::string_view Server::Config::help() {
 
     return "Usage: pulsar --listen=IP:PORT --pulse-listen=IP:PORT --galaxy=ID [options]\n" "  --identity=DIR       TLS, admission.key/pub and accounts.json; default=identity\n" "  --state=FILE         Exclusive SQLite database; default=state/pulsar.db\n" "  --init=true|false    Initialize a new database; default=false\n" "  --max-members=N      Capacity per role, 1..4096; default=64\n" "  --max-starts=N       Retained startup records, 1..1000000; default=65536\n" "  --help / --version   Do not load credentials or start services\n" "Listeners require concrete IPs authorized by the TLS certificate. Stop with SIGINT or SIGTERM.\n";
 }
 
+// Config::parse 只解析无秘密的部署参数, 凭据加载与数据库打开由 Server 构造完成.
+// arguments 为命令行参数视图; 返回校验后的配置, 非法时返回配置错误.
 Result<Server::Config> Server::Config::parse(std::span<const std::string_view> arguments) {
 
     // names 定义此解析器支持的固定选项顺序, seen 使用相同索引识别重复.
@@ -157,6 +161,7 @@ void Server::stop() {
 
     // deadline 是两个监听器共用的单调五秒关闭期限, 第二个不重新获得预算.
     const auto deadline = gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_seconds(5, GPR_TIMESPAN));
+    // 先请求两个监听器在期限内关闭, 再等待并释放, 最后撤销签发器.
     if (pulse_server_) {
         pulse_server_->Shutdown(deadline);
     }
@@ -174,14 +179,19 @@ void Server::stop() {
     issuer_.reset();
 }
 
+// admission_endpoint 返回准入监听地址文本, 供日志与目录播报.
+// 脉冲与准入地址分别返回, 不合并为单个端点.
 std::string Server::admission_endpoint() const {
     return config_.listen.text();
 }
 
+// pulse_endpoint 返回脉冲监听地址文本, 供 Star 连接时钟源.
 std::string Server::pulse_endpoint() const {
     return config_.pulse_listen.text();
 }
 
+// time 返回物理时钟当前读数, 时钟未就绪返回空.
+// 只读物理时钟, 不触碰账本或准入状态.
 std::optional<Clock::Reading> Server::time() const {
     return clock_->now();
 }

@@ -23,6 +23,7 @@ std::optional<std::uint64_t> Reader::View::version() const noexcept {
     return contents_ ? std::optional(contents_->version) : std::nullopt;
 }
 
+// Reader::View::size 返回视图记录数, 未就绪返回零.
 std::size_t Reader::View::size() const noexcept {
     return contents_ ? contents_->data.size() : 0;
 }
@@ -36,6 +37,8 @@ Value Reader::View::find(std::string_view key) const {
     return record ? record->value : nullptr;
 }
 
+// Reader::View::visit 遍历视图全部记录, 只共享所有权不复制字节.
+// context/visitor 为上下文与回调.
 void Reader::View::visit(void* context, void (*visitor)(void*, std::string_view, const Value&)) const {
     if (contents_) {
         contents_->data.each([&](std::string_view key, const detail::Datum& record) { visitor(context, key, record.value); });
@@ -56,6 +59,7 @@ Projection::~Projection() {
     }
 }
 
+// Projection::discard 丢弃候选与去重状态, 保留已确认视图与游标.
 void Projection::discard() noexcept {
     draft_.reset();
     std::unordered_set<std::string>{}.swap(seen_); // 不保留曾经大快照的桶数组高水线.
@@ -66,6 +70,8 @@ void Projection::discard() noexcept {
     }
 }
 
+// Projection::begin 开始新实例的候选, 记录期望实例, 清空旧候选.
+// expected 为期望实例.
 void Projection::begin(std::string expected) {
     discard();
     expected_ = std::move(expected);

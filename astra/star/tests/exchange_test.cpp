@@ -202,6 +202,27 @@ void rejection() {
     }
     CHECK(node.budget.used == 0);
 }
+
+// 全局恢复额度不足时不安装半份数据并归还占用; 此例不注入内部账本损坏.
+void backlog() {
+
+    Node node;
+    const auto time = astra::Steady::now();
+    const Scope scope{"one", "main"};
+    auto receiver = node.connect("source", time);
+    Exchange::Packet packet;
+    auto* changes = packet.mutable_catalog_changes();
+    changes->set_head(1);
+    auto* entry = changes->add_entries();
+    entry->set_position(1);
+    astra::Parcel::scope(*entry->mutable_scope(), scope);
+    entry->set_key("key");
+    astra::Parcel::record(*entry->mutable_record(), Catalog::Record{1, bytes("v"), Clock::Time(10s)});
+    node.budget.maximum = 1; // 极小全局额度必须拒绝本次合法但无容量的增量.
+    const auto refused = receiver->receive(packet, time);
+    CHECK(!refused && refused.error().code == astra::Status::Code::capacity && node.catalog.received("source") == 0 && !node.catalog.find(scope, "key")->record);
+    CHECK(node.budget.used == 0);
+}
 } // namespace
 
 // 来源消息闭环组件用例, 不建立实际 gRPC 连接, 网络故障仍须由独立进程测试验证.
@@ -212,6 +233,7 @@ int main() {
         repair();
         snapshot();
         rejection();
+        backlog();
         std::cout << "peer exchanges: ok\n";
         return 0;
     } catch (const std::exception& failure) {

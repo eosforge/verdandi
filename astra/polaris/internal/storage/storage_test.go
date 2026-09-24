@@ -34,6 +34,27 @@ func fixture(t *testing.T, limits Limits) (*Store, string, Binding) {
 	return store, path, binding
 }
 
+// TestDatabasePath 验证恢复入口不跟随别名绕过按路径加锁, 拒绝失败不影响原库的活动连接.
+func TestDatabasePath(t *testing.T) {
+	t.Parallel()
+	original, path, binding := fixture(t, Default())
+	alias := filepath.Join(t.TempDir(), "alias.db")
+	if err := os.Symlink(path, alias); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := Open(t.Context(), alias, binding, Default(), false)
+	if opened != nil {
+		opened.Close()
+		t.Fatal("database symlink unexpectedly accepted")
+	}
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatal("database symlink did not fail before SQLite access", err)
+	}
+	if _, err := original.Load(t.Context(), Scope{"routes", "main"}); err != nil {
+		t.Fatal("rejected alias changed the original database", err)
+	}
+}
+
 // requireCommit 同时核对持久回执版本, 不把 nil 错误当作唯一证据.
 func requireCommit(t *testing.T, store *Store, scope Scope, change Change) {
 	t.Helper()

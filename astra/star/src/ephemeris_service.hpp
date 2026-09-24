@@ -1,4 +1,5 @@
 #pragma once
+#include "ephemeris_feed.hpp"
 #include "ephemeris_state.hpp"
 #include "gateway.hpp"
 
@@ -18,6 +19,8 @@ public:
     void stop() noexcept;
     // Watch 的全部 OnDone 已回收, unary 的最终清理由 Server::Wait 完成.
     bool empty() const;
+    // 只读下行分发计数快照, 仅用于归因测量; 调用只取快照, 不推进发送或改变预算.
+    Feed::Delivery delivery() const;
     // 复用本服务的固定状态和 Gateway, 首次 reset 与连续 apply 均按 complete 提交.
     grpc::ServerWriteReactor<proto::comet::v1::EphemerisWatchReply>* Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) override;
     // 创建完整 Attr/Data, 请求可省略首次 instance, 成功回复实际实例/新 UUID/固定 TTL.
