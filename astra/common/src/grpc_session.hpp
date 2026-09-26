@@ -3,6 +3,7 @@
 #include "astra.grpc.pb.h"
 #include "identity.hpp"
 #include <astra/policy.hpp>
+#include <astra/profile.hpp>
 
 #include <atomic>
 #include <functional>
@@ -17,7 +18,8 @@ public:
     class Data {
     public:
         virtual ~Data() = default; // 流停止后释放私有恢复候选, 不撤销已安装来源.
-        // 接收一个有界已解码消息, 失败由 Session 关闭当前流并以已确认位置恢复.
+        // 接收一个有界已解码消息, 只在本次调用内借用 packet, 返回后不能保留其字段地址.
+        // 失败由 Session 关闭当前流并以已确认位置恢复; 成功后可立即释放消息并挂起下一次读取.
         virtual Result<void> receive(const proto::astra::v1::SessionPacket& packet, Steady::time_point now) = 0;
         // 准备至多一个待发包, nullptr 表示无尾部; 不提前移动发送位置.
         virtual Result<const proto::astra::v1::SessionPacket*> prepare(Steady::time_point now) = 0;
@@ -56,7 +58,8 @@ public:
     // 析构函数: 允许基类指针释放具体 reactor; 仅在最终完成已发布后销毁, 析构不是取消操作.
     virtual ~Session() = default;
 
-    // pump 函数: 每轮最多消费一个接收消息. 返回因合法成员替换而需要在其他会话上执行的取消动作.
+    // pump 函数: 每轮最多消费一个接收消息, 成功后先重新挂起读取再准备发送, 两者不共用缓冲.
+    // 返回因合法成员替换而需要在其他会话上执行的取消动作.
     // 仅由控制循环调用, policy/identity 仅在调用期间借用, now 为单调时间.
     // 协议错误转换为本会话取消状态, 返回的旧代次取消由 Runtime 执行, 不在回调线程推进.
     // 参数 policy: 控制成员接纳与驱逐的策略对象.
@@ -182,6 +185,8 @@ private:
     bool read_inflight_{};
     // read_ready_: 默认值 false, 标记是否有新读入的完整消息尚未被业务提取消费.
     bool read_ready_{};
+    ASTRA_PROFILE_STAMP(profile_write_); // mutex_ 保护唯一在途写, 诊断构建记录提交到完成回调的间隔.
+    ASTRA_PROFILE_STAMP(profile_ready_); // 仅诊断构建存在, mutex_ 保护接收完成到消费的间隔.
     // read_failed_: 默认值 false, 标记读操作是否遇到了致命异常或断流.
     bool read_failed_{};
     // write_inflight_: 默认值 false, 标记是否有写操作正在排队等待网络层执行完毕.

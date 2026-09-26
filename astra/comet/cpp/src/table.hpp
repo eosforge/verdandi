@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <astra/profile.hpp>
 #include <bit>
 #include <cstdint>
 #include <functional>
@@ -105,6 +106,8 @@ public:
         // 载荷由 Record 自己共享/拥有, 本页第一次变化才复制其他条目.
         void set(std::string_view key, Record record) {
 
+            ASTRA_PROFILE_SCOPE("comet.cpp.table.set");
+
             // 在复制页面之前检查单记录加法, 非法长度不引起整页分配.
             const auto payload = record.bytes(); // Record 只报告自身载荷, Key 单独计量.
             if (payload > SIZE_MAX - key.size()) {
@@ -137,6 +140,8 @@ public:
         // 缺失 Delete 无变化, 不复制空页; 删除完成后空页回收, 不保留历史桶水线.
         void erase(std::string_view key) {
 
+            ASTRA_PROFILE_SCOPE("comet.cpp.table.erase");
+
             // 原页缺失键不创建修改页; 已有独占页直接进入一次 find, 不先 contains 再 find.
             const auto slot = Hash{}(key) & 255;
             if (!dirty_[slot] && (!pages_[slot] || !pages_[slot]->contains(key))) {
@@ -156,6 +161,8 @@ public:
 
         // 发布只读页面, 成功后消费候选, 不再允许调用 set/erase/finish.
         Table finish() && {
+
+            ASTRA_PROFILE_SCOPE("comet.cpp.table.finish");
 
             // 先移交旧根, 然后仅处理四个占用字和其中实际修改的页.
             Table result;
@@ -186,6 +193,8 @@ public:
     private:
         // 只复制第一次命中的页, 不将可写指针交给旧 Table 或公开 View.
         Page& edit(std::size_t slot) {
+
+            ASTRA_PROFILE_SCOPE("comet.cpp.table.edit");
             if (!dirty_[slot]) {
                 // 哈希表复制不承诺保留桶数, 必须以新页的实际空间替换原页计量.
                 auto page = pages_[slot] ? std::make_shared<Page>(*pages_[slot]) : std::make_shared<Page>();

@@ -1,4 +1,5 @@
 #include "catalog_state.hpp"
+#include <astra/profile.hpp>
 #include <cassert>
 #include <utility>
 
@@ -98,8 +99,12 @@ void Catalog::State::notify(Notify notify, void* context) {
 
 std::expected<Clock::Reading, Catalog::State::Error> Catalog::State::reading() {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.reading");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_100, "star.catalog_state.Catalog.State.reading.wait.timing");
     const std::lock_guard timing(timing_); // 共享读者仍按调用顺序验证注入时钟, 不并发修改 observed_.
-    auto value = time_();                  // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
+    ASTRA_PROFILE_END(profile_lock_100);
+    auto value = time_(); // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
     if (!value || !value->ready || value->time.time_since_epoch().count() < 0 || (observed_ && value->time < *observed_)) {
         return std::unexpected(Error::clock);
     }
@@ -140,6 +145,8 @@ std::size_t Catalog::State::allowance(const Projection& scene) const {
 }
 
 void Catalog::State::publish(Projection& scene, std::size_t before, const Projection::Event& event) noexcept {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.publish");
     history_ = history_ - before + scene.history(); // Edit 已结束, 计费与来源状态同边界可见.
     if (notify_) {
         notify_(context_, *event.name->scope, event);
@@ -147,6 +154,8 @@ void Catalog::State::publish(Projection& scene, std::size_t before, const Projec
 }
 
 std::expected<void, Catalog::State::Error> Catalog::State::publish(const Scope& scope, std::string_view key, Value value, std::uint64_t version, std::uint32_t ttl) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.publish");
     return change(scope, key, std::move(value), version, ttl, false);
 }
 
@@ -156,18 +165,24 @@ std::expected<void, Catalog::State::Error> Catalog::State::renew(const Scope& sc
 
 std::expected<void, Catalog::State::Error> Catalog::State::change(const Scope& scope, std::string_view key, Value value, std::uint64_t version, std::uint32_t ttl, bool renewal) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.change");
+
     if (!scope.valid() || !Scope::text(key, 1024)) {
         return std::unexpected(Error::input);
     }
     std::vector<Retired> expired; // 全部旧引用在提交锁外释放, 不持锁销毁最终大正文.
     Retired retired;
+    ASTRA_PROFILE_BEGIN(profile_lock_163, "star.catalog_state.Catalog.State.change.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_163);
     auto stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
     advance(stamp->time, expired);
+    ASTRA_PROFILE_BEGIN(profile_lock_169, "star.catalog_state.Catalog.State.change.wait.origin_lock");
     const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
+    ASTRA_PROFILE_END(profile_lock_169);
     const auto old = source_.find(scope, key), known = merged_.find(scope, key);
     const auto* current = old ? &*old : nullptr;
     const auto* highest = known ? &*known : nullptr;
@@ -256,6 +271,8 @@ std::expected<void, Catalog::State::Error> Catalog::State::change(const Scope& s
 
 std::expected<Catalog::State::Retired, Catalog::State::Error> Catalog::State::expire(const Scope& scope, std::string_view key, Clock::Time time, bool projected) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.expire");
+
     auto& source = projected ? merged_ : source_; // 两份期限不可混用, 本机来源到期并不撤销远端同版本保活.
     auto& timers = projected ? deadlines_ : timers_;
     const auto old = source.find(scope, key);
@@ -306,6 +323,8 @@ std::expected<Catalog::State::Retired, Catalog::State::Error> Catalog::State::ex
 
 std::shared_ptr<Catalog::State::Replica> Catalog::State::advance(Clock::Time now, std::vector<Retired>& retired, Replica* held) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.advance");
+
     std::shared_ptr<Replica> blocked; // 返回仍有到期/退役责任的忙来源, 公开读取稍后在域锁外等待.
     if (now < due_)
         return {}; // 本轮无任何时间轮能前进, 不再逐来源遍历; 不是 max_ticks 或时间截断.
@@ -332,7 +351,9 @@ std::shared_ptr<Catalog::State::Replica> Catalog::State::advance(Clock::Time now
         });
     };
     {
+        ASTRA_PROFILE_BEGIN(profile_lock_334, "star.catalog_state.Catalog.State.advance.wait.origin_lock");
         const std::unique_lock origin_lock(*export_);
+        ASTRA_PROFILE_END(profile_lock_334);
         advance(source_, agenda_.get(), false);
     } // 本机维护结束立即释放导出锁, 不覆盖下方远端维护.
 
@@ -344,7 +365,9 @@ std::shared_ptr<Catalog::State::Replica> Catalog::State::advance(Clock::Time now
             ++current;
             continue; // 已持非递归来源锁, 不能再次 try_lock, 更不能访问正在编辑的原生目录.
         }
+        ASTRA_PROFILE_BEGIN(profile_lock_346, "star.catalog_state.Catalog.State.advance.wait.preparing");
         const std::unique_lock preparing(replica.mutex, std::try_to_lock); // 持域锁时只尝试, 禁止等待形成反向锁序.
+        ASTRA_PROFILE_END(profile_lock_346);
         if (!preparing.owns_lock()) {
             if (!blocked && (replica.retired || (replica.agenda && replica.agenda->next() <= now)))
                 blocked = current->second;
@@ -376,8 +399,12 @@ std::shared_ptr<Catalog::State::Replica> Catalog::State::advance(Clock::Time now
 
 void Catalog::State::tick() {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.tick");
+
     std::vector<Retired> retired; // 等待/回收不持域锁, 失败仍保留之前已经完成的到期删除.
+    ASTRA_PROFILE_BEGIN(profile_lock_379, "star.catalog_state.Catalog.State.tick.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_379);
     if (!agenda_ && !outlook_ && replicas_.empty())
         return; // 尚无任何清理责任时允许 Clock 尚未初始化.
     for (;;) {
@@ -397,6 +424,8 @@ auto Catalog::State::execute(auto&& action) {
 
 std::expected<Catalog::State::Projection::View, Catalog::State::Error> Catalog::State::capture(const Scope& scope) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.capture");
+
     if (!scope.valid()) {
         return std::unexpected(Error::input);
     }
@@ -410,6 +439,8 @@ std::expected<Catalog::State::Projection::View, Catalog::State::Error> Catalog::
 
 std::expected<Catalog::State::Projection::Point, Catalog::State::Error> Catalog::State::find(const Scope& scope, std::string_view key) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.find");
+
     if (!scope.valid() || !Scope::text(key, 1024)) {
         return std::unexpected(Error::input);
     }
@@ -422,6 +453,8 @@ std::expected<Catalog::State::Projection::Point, Catalog::State::Error> Catalog:
 }
 
 std::expected<std::vector<Catalog::State::Projection::Event>, Catalog::State::Error> Catalog::State::changes(const Scope& scope, std::uint64_t since) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.changes");
 
     if (!scope.valid()) {
         return std::unexpected(Error::input);
@@ -440,17 +473,29 @@ std::expected<std::vector<Catalog::State::Projection::Event>, Catalog::State::Er
 }
 
 Catalog::State::Source::View Catalog::State::source() {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.source");
+    ASTRA_PROFILE_BEGIN(profile_lock_442, "star.catalog_state.Catalog.State.source.wait.lock");
     const std::shared_lock lock(*export_); // 来源事实自带 deadline, 接收端自行过期; 导出不触发任何域 GC.
+    ASTRA_PROFILE_END(profile_lock_442);
     return source_.capture();
 }
 
 std::expected<std::vector<Catalog::State::Source::Event>, Catalog::State::Error> Catalog::State::events(std::uint64_t since) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.events");
+    ASTRA_PROFILE_BEGIN(profile_lock_447, "star.catalog_state.Catalog.State.events.wait.lock");
     const std::shared_lock lock(*export_);
+    ASTRA_PROFILE_END(profile_lock_447);
     return source_.replay(since).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 
 std::expected<Catalog::State::Source::Delivery, Catalog::State::Error> Catalog::State::deliver(std::uint64_t since, std::size_t count, std::size_t bytes) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.deliver");
+    ASTRA_PROFILE_BEGIN(profile_lock_452, "star.catalog_state.Catalog.State.deliver.wait.lock");
     const std::shared_lock lock(*export_); // 快照/后缀捕获不等待远端安装、公开投影准备或其他来源 GC.
+    ASTRA_PROFILE_END(profile_lock_452);
     return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 

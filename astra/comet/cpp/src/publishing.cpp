@@ -1,5 +1,6 @@
 #include "publishing.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 #include <grpc/support/time.h>
 
@@ -42,6 +43,8 @@ void Publishing::settle(const std::shared_ptr<Pending>& pending, Result<Publishe
 // version/value/timeout 为期望版本、载荷与确认期限.
 std::future<Result<Publisher::Receipt>> Publishing::publish(std::uint64_t version, Value value, std::chrono::milliseconds timeout) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publishing.publish");
+
     auto pending = std::make_shared<Pending>(nullptr, version, std::move(value)); // 先准备结果, 失败不替换旧期望.
     pending->result.emplace();
     auto future = pending->result->get_future();
@@ -51,7 +54,9 @@ std::future<Result<Publisher::Receipt>> Publishing::publish(std::uint64_t versio
     }
     pending->deadline = std::chrono::steady_clock::now() + timeout;
     {
+        ASTRA_PROFILE_BEGIN(profile_lock_53, "comet.cpp.publishing.Publishing.publish.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_53);
         if (closed() || core_->stopped()) {
             settle(pending, std::unexpected(error(Error::Code::closed)));
             return future;
@@ -165,6 +170,8 @@ void Publishing::report(Publisher::Phase phase, std::optional<Error> failure) {
 // Publishing::complete 调用完成, 按状态结算待定并释放名额.
 // call/status 为调用与 gRPC 状态.
 void Publishing::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publishing.complete");
     call->code = status.error_code();
     call->done.store(true, std::memory_order_release);
     call->owner->core_->wake(call->owner.get());
@@ -315,10 +322,14 @@ void Publishing::notify(std::unique_lock<std::mutex>& lock) {
 
 Core::Time Publishing::poll(Core::Time now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& blocked, bool closing) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publishing.poll");
+
     if ((closing || core_->stopped()) && !closed()) {
         close();
     }
+    ASTRA_PROFILE_BEGIN(profile_lock_320, "comet.cpp.publishing.Publishing.poll.wait.lock");
     std::unique_lock lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_320);
     consume(binding, now);
     if (wanted_ && wanted_->result && (!call_ || call_->pending != wanted_) && now >= wanted_->deadline) {
         settle(wanted_, std::unexpected(error(Error::Code::timeout)));
@@ -398,6 +409,8 @@ Publisher::State Publisher::state() const {
 // Publisher::publish 提交字节发布, 返回 future 回执.
 // version/value/timeout 为期望版本、载荷与确认期限.
 std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, std::vector<std::uint8_t> value, std::chrono::milliseconds timeout) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publisher.publish");
     if (value.size() > 1024 * 1024) {
         return publish(version, Value{}, timeout);
     }
@@ -407,6 +420,8 @@ std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version
 // Publisher::publish 提交区间发布, 不复制载荷, 调用期间保持有效.
 // version/value/timeout 为期望版本、载荷区间与确认期限.
 std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, std::span<const std::uint8_t> value, std::chrono::milliseconds timeout) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publisher.publish");
     // 借用输入先验限, 拒绝超限时不复制潜在巨大的调用方缓冲.
     if (value.size() > 1024 * 1024) {
         return publish(version, Value{}, timeout);
@@ -417,6 +432,8 @@ std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version
 // Publisher::publish 提交共享值发布, 只共享所有权不复制字节.
 // version/value/timeout 为期望版本、共享载荷与确认期限.
 std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, Value value, std::chrono::milliseconds timeout) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publisher.publish");
     if (publishing_) {
         return publishing_->publish(version, std::move(value), timeout);
     }

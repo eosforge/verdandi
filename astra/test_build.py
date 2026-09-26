@@ -34,6 +34,9 @@ class BuildEntryTests(unittest.TestCase):
             ["soak", "--duration", "604801"],
             ["build", "--jobs", "-1"],
             ["test", "--test-jobs", "257"],
+            ["build", "--probes", "--profile", "tsan"],
+            ["build", "--probes", "--profile", "asan"],
+            ["build", "--probes", "--profile", "release", "--measure-allocations"],
         ):
             with self.subTest(arguments=arguments), contextlib.redirect_stderr(
                 io.StringIO()
@@ -49,6 +52,7 @@ class BuildEntryTests(unittest.TestCase):
             ["soak", "--duration", "60", "--profile", "release"],
             ["scale", "--measure-allocations", "--profile", "release"],
             ["check-generated"],
+            ["build", "--probes", "--profile", "release"],
         ):
             with self.subTest(arguments=arguments):
                 self.assertEqual(build.parse_options(arguments).command, arguments[0])

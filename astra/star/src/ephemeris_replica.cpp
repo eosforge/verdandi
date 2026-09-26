@@ -1,4 +1,5 @@
 #include "ephemeris_state.hpp"
+#include <astra/profile.hpp>
 
 namespace astra {
 Ephemeris::State::Guard Ephemeris::State::acquire(std::string_view id, std::unique_lock<std::shared_mutex>& domain) const {
@@ -51,7 +52,11 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::admit(std::string
 }
 
 void Ephemeris::State::retire(std::string_view id) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.retire");
+    ASTRA_PROFILE_BEGIN(profile_lock_53, "star.ephemeris_replica.Ephemeris.State.retire.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_53);
     const auto found = replicas_.find(id);
     if (found != replicas_.end()) {
         found->second->retired = true;
@@ -68,7 +73,11 @@ std::expected<std::uint64_t, Ephemeris::State::Error> Ephemeris::State::received
 
 std::expected<Ephemeris::State::Source::Draft, Ephemeris::State::Error> Ephemeris::State::prepare(std::string_view id, std::uint64_t position) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.prepare");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_70, "star.ephemeris_replica.Ephemeris.State.prepare.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_70);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -84,10 +93,14 @@ std::expected<Ephemeris::State::Source::Draft, Ephemeris::State::Error> Ephemeri
 
 std::expected<std::optional<Ephemeris::Record>, Ephemeris::State::Error> Ephemeris::State::replica(std::string_view id, const Scope& scope, std::string_view uuid) const {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.replica");
+
     if (!scope.valid() || !Ephemeris::valid(uuid)) {
         return std::unexpected(Error::input);
     }
+    ASTRA_PROFILE_BEGIN(profile_lock_89, "star.ephemeris_replica.Ephemeris.State.replica.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_89);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -143,18 +156,24 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::apply(std::string
 }
 
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::repair(std::string_view id, std::uint64_t position, const Scope& scope, std::string_view uuid, std::optional<Record> record) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.repair");
     const auto form = record ? Source::Form::record : Source::Form::erase;
     return receive(id, position, scope, uuid, std::move(record), form, true);
 }
 
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::string_view id, std::uint64_t position, const Scope& scope, std::string_view uuid, std::optional<Record> record, Source::Form form, bool repair) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.receive");
+
     if (!scope.valid() || !Ephemeris::valid(uuid) || position == 0 || (record && (!Ephemeris::valid(*record) || record->deadline.time_since_epoch().count() == 0)) || (form == Source::Form::erase) != !record) {
         return std::unexpected(Error::input);
     }
     std::vector<Retired> expired;
     Retired retired;
+    ASTRA_PROFILE_BEGIN(profile_lock_156, "star.ephemeris_replica.Ephemeris.State.receive.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_156);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -314,7 +333,11 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
 
 std::expected<Ephemeris::State::Recovery, Ephemeris::State::Error> Ephemeris::State::restore(std::string_view id, Source::Draft&& draft) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.restore");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_316, "star.ephemeris_replica.Ephemeris.State.restore.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_316);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get())
         return std::unexpected(Error::input);
@@ -348,7 +371,11 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::replace(std::stri
 
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::finish(std::string_view id, std::uint64_t position) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.finish");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_350, "star.ephemeris_replica.Ephemeris.State.finish.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_350);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get())
         return std::unexpected(Error::input);
@@ -361,6 +388,8 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::finish(std::strin
 
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::install(std::string_view id, const Source::Draft& draft, const Scope& scope) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.install");
+
     // 所有大块旧资源在 gate 外回收, 包括来源根、投影根和被替换的整组调度器.
     std::optional<Source::Tree> old_source;
     std::vector<std::unique_ptr<Timer>> old_timers;      // 本范围被替换的钩子在锁外析构.
@@ -368,7 +397,9 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::install(std::stri
 
     std::unordered_map<const Source::Name*, std::unique_ptr<Timer>> timers;
     std::vector<Retired> expired;
+    ASTRA_PROFILE_BEGIN(profile_lock_370, "star.ephemeris_replica.Ephemeris.State.install.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_370);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -566,6 +597,8 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::install(std::stri
 }
 
 void Ephemeris::State::advance(Replica& replica, Clock::Time now, std::vector<Retired>& retired) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_replica.Ephemeris.State.advance");
 
     if (!replica.agenda) {
         return;

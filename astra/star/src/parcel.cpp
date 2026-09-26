@@ -1,4 +1,5 @@
 #include "parcel.hpp"
+#include <astra/profile.hpp>
 #include <limits>
 #include <stdexcept>
 
@@ -34,6 +35,8 @@ bool Parcel::valid(const proto::astra::v1::EphemerisRecord& message) noexcept {
 
 void Parcel::record(proto::astra::v1::CatalogRecord& message, const Catalog::Record& value) {
 
+    ASTRA_PROFILE_SCOPE("star.parcel.Parcel.record");
+
     if (!Catalog::valid(value)) {
         throw std::logic_error("Invalid native Catalog record");
     }
@@ -50,6 +53,8 @@ void Parcel::record(proto::astra::v1::CatalogRecord& message, const Catalog::Rec
 
 std::optional<Catalog::Record> Parcel::record(const proto::astra::v1::CatalogRecord& message) {
 
+    ASTRA_PROFILE_SCOPE("star.parcel.Parcel.record");
+
     if (!valid(message)) {
         return std::nullopt;
     }
@@ -57,6 +62,8 @@ std::optional<Catalog::Record> Parcel::record(const proto::astra::v1::CatalogRec
 }
 
 void Parcel::record(proto::astra::v1::EphemerisRecord& message, const Ephemeris::Record& value) {
+
+    ASTRA_PROFILE_SCOPE("star.parcel.Parcel.record");
 
     if (!value.attr || !value.data || value.attr->size() > 1024 * 1024 || value.data->size() > 1024 * 1024 || value.ttl < 1000 || value.ttl > 600000 || value.deadline.time_since_epoch().count() <= 0) {
         throw std::logic_error("Invalid native Ephemeris record");
@@ -72,6 +79,8 @@ void Parcel::record(proto::astra::v1::EphemerisRecord& message, const Ephemeris:
 
 std::optional<Ephemeris::Record> Parcel::record(const proto::astra::v1::EphemerisRecord& message) {
 
+    ASTRA_PROFILE_SCOPE("star.parcel.Parcel.record");
+
     if (!valid(message)) {
         return std::nullopt;
     }
@@ -79,6 +88,8 @@ std::optional<Ephemeris::Record> Parcel::record(const proto::astra::v1::Ephemeri
 }
 
 void Parcel::delta(proto::astra::v1::CatalogDelta& message, const Origin<Catalog::Record>::Event& event) {
+
+    ASTRA_PROFILE_SCOPE("star.parcel.Parcel.delta");
 
     using Source = Origin<Catalog::Record>; // 只有完整发布与续期进入 Catalog 广播.
     if (!event.name || !event.name->scope || !event.name->scope->valid() || !Scope::text(event.name->key, 1024) || event.position == 0 || !event.record || !Catalog::valid(*event.record)) {
@@ -99,6 +110,8 @@ void Parcel::delta(proto::astra::v1::CatalogDelta& message, const Origin<Catalog
 }
 
 void Parcel::delta(proto::astra::v1::EphemerisDelta& message, const Origin<Ephemeris::Record, true>::Event& event) {
+
+    ASTRA_PROFILE_SCOPE("star.parcel.Parcel.delta");
 
     using Source = Origin<Ephemeris::Record, true>; // 根据事件形式只编码实际改变的原生字段.
     if (!event.name || !event.name->scope || !event.name->scope->valid() || !Ephemeris::valid(event.name->key) || event.position == 0 || (event.form == Source::Form::erase) != !event.record) {

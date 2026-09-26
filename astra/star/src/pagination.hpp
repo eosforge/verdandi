@@ -1,6 +1,7 @@
 #pragma once
 #include "comet.pb.h"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -115,6 +116,8 @@ public:
 
     // 软目标 256 KiB/256 项, 单项可独占大页, 硬上限 8 MiB. 失败不消费当前分页位置.
     Reply next(std::string_view instance) {
+
+        ASTRA_PROFILE_SCOPE("star.pagination.next");
 
         if (complete_) {
             throw std::logic_error("Projection edition already completed");

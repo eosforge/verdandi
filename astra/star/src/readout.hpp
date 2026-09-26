@@ -37,7 +37,7 @@ public:
     grpc::ServerWriteReactor<proto::comet::v1::AlmanacWatchReply>* Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) override;
     // Library 在 writer_ 内按提交顺序调用; 只合并不可变引用, 错误关闭受影响流而不撤回已提交写入.
     void changed(const Scope& scope, const Almanac::Change& change) noexcept;
-    // 唯一控制线程推进最多 maximum 个就绪任务, 默认 32; 另有最多 maximum 条进度通知及每秒写超时扫描, 不等待网络.
+    // 唯一控制线程最多推进 maximum 次, 默认 32; 每次先转交至多一条范围进度, 再处理一个就绪任务. 写超时每秒扫描, 不等待网络.
     void pump(std::chrono::steady_clock::time_point now, std::size_t maximum = 32);
     // 禁止新订阅并唤醒现有流取消; 仍须继续 pump, 直到全部 OnDone 被回收.
     void stop() noexcept;
@@ -62,7 +62,7 @@ private:
     void enqueue(Stream& stream) noexcept;
     // I/O 回调唤醒本流, 只取得 mutex_, 不访问 Library/Access.
     void signal(Stream& stream) noexcept;
-    // 取得第一批完整投影; 调用时持本流 I/O 锁及认证许可, 不持全局队列锁.
+    // 取得第一批完整投影; 持本流 I/O 锁, 已释放初检许可及全局队列锁; 发送前重新取得最终许可.
     std::expected<Edition, grpc::Status> initial(Stream& stream);
     // 单任务推进, 当前 reactor 的上下文直到 OnDone 取得同一 I/O 锁前始终有效.
     void advance(Stream& stream, std::chrono::steady_clock::time_point now);
@@ -76,7 +76,7 @@ private:
     const std::function<void()> wake_;
     // 不在运行中变更计费规则.
     const Limits limits_;
-    // 保护路由、就绪队列、计费及每流后缀; 不在此锁内编码或等待网络, 最终许可只跨非阻塞提交.
+    // 保护路由、就绪队列、计费及每流后缀; 接受页面后解锁再 StartWrite, 最终认证许可仍覆盖该提交.
     mutable std::mutex mutex_;
 
     // 地址只保存活动流的拥有者, 另加全范围/精确目标的非拥有视图与范围水位, 心跳下沉 pump.

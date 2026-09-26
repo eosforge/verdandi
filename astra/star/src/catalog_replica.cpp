@@ -1,4 +1,5 @@
 #include "catalog_state.hpp"
+#include <astra/profile.hpp>
 
 namespace astra {
 Catalog::State::Guard Catalog::State::acquire(std::string_view id, std::unique_lock<std::shared_mutex>& domain) const {
@@ -52,7 +53,11 @@ std::expected<void, Catalog::State::Error> Catalog::State::admit(std::string_vie
 }
 
 void Catalog::State::retire(std::string_view id) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.retire");
+    ASTRA_PROFILE_BEGIN(profile_lock_54, "star.catalog_replica.Catalog.State.retire.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_54);
     const auto found = replicas_.find(id);
     if (found != replicas_.end()) {
         found->second->retired = true;
@@ -69,7 +74,11 @@ std::expected<std::uint64_t, Catalog::State::Error> Catalog::State::received(std
 
 std::expected<Catalog::State::Source::Draft, Catalog::State::Error> Catalog::State::prepare(std::string_view id, std::uint64_t position) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.prepare");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_71, "star.catalog_replica.Catalog.State.prepare.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_71);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -83,10 +92,14 @@ std::expected<Catalog::State::Source::Draft, Catalog::State::Error> Catalog::Sta
 
 std::expected<std::optional<Catalog::Record>, Catalog::State::Error> Catalog::State::replica(std::string_view id, const Scope& scope, std::string_view key) const {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.replica");
+
     if (!scope.valid() || !Scope::text(key, 1024)) {
         return std::unexpected(Error::input);
     }
+    ASTRA_PROFILE_BEGIN(profile_lock_88, "star.catalog_replica.Catalog.State.replica.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_88);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -142,17 +155,23 @@ std::expected<void, Catalog::State::Error> Catalog::State::apply(std::string_vie
 }
 
 std::expected<void, Catalog::State::Error> Catalog::State::repair(std::string_view id, std::uint64_t position, const Scope& scope, std::string_view key, std::optional<Record> record) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.repair");
     return receive(id, position, scope, key, std::move(record), Source::Form::record, true);
 }
 
 std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_view id, std::uint64_t position, const Scope& scope, std::string_view key, std::optional<Record> record, Source::Form form, bool repair) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.receive");
 
     if (!scope.valid() || !Scope::text(key, 1024) || position == 0 || (record && !Catalog::valid(*record)) || (!repair && !record) || (form != Source::Form::record && form != Source::Form::renew)) {
         return std::unexpected(Error::input);
     }
     std::vector<Retired> expired; // 所有大块旧引用在 gate 之后析构.
     Retired retired;
+    ASTRA_PROFILE_BEGIN(profile_lock_154, "star.catalog_replica.Catalog.State.receive.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_154);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -327,7 +346,11 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
 
 std::expected<Catalog::State::Recovery, Catalog::State::Error> Catalog::State::restore(std::string_view id, Source::Draft&& draft) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.restore");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_329, "star.catalog_replica.Catalog.State.restore.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_329);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get())
         return std::unexpected(Error::input);
@@ -361,7 +384,11 @@ std::expected<void, Catalog::State::Error> Catalog::State::replace(std::string_v
 
 std::expected<void, Catalog::State::Error> Catalog::State::finish(std::string_view id, std::uint64_t position) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.finish");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_363, "star.catalog_replica.Catalog.State.finish.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_363);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get())
         return std::unexpected(Error::input);
@@ -374,6 +401,8 @@ std::expected<void, Catalog::State::Error> Catalog::State::finish(std::string_vi
 
 std::expected<void, Catalog::State::Error> Catalog::State::install(std::string_view id, const Source::Draft& draft, const Scope& scope) {
 
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.install");
+
     // 所有旧根/旧轮/旧节点保持到释放提交锁后, 候选失败则保持已经安装的三个根不变.
     std::optional<Source::Tree> old_source;
     std::vector<std::unique_ptr<Timer>> old_timers; // 本范围被替换的钩子在锁外析构.
@@ -383,7 +412,9 @@ std::expected<void, Catalog::State::Error> Catalog::State::install(std::string_v
 
     std::unordered_map<const Source::Name*, std::unique_ptr<Timer>> timers;
     std::vector<Retired> expired;
+    ASTRA_PROFILE_BEGIN(profile_lock_385, "star.catalog_replica.Catalog.State.install.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_385);
     auto borrowed = acquire(id, lock); // 来源忙时不占住本地提交锁.
     if (!borrowed.get()) {
         return std::unexpected(Error::input);
@@ -573,6 +604,8 @@ std::expected<void, Catalog::State::Error> Catalog::State::install(std::string_v
 }
 
 void Catalog::State::advance(Replica& replica, Clock::Time now, std::vector<Retired>& retired) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_replica.Catalog.State.advance");
 
     if (!replica.agenda) {
         return;

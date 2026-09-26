@@ -200,6 +200,11 @@ def parse_options(arguments=None):
     parser.add_argument(
         "--profile", choices=["debug", "release", "asan", "tsan"], default="debug"
     )
+    parser.add_argument(
+        "--probes",
+        action="store_true",
+        help="Compile scoped diagnostics in a separate build directory",
+    )
     parser.add_argument("--duration", type=int, default=3600)
     parser.add_argument(
         "--jobs",
@@ -249,6 +254,12 @@ def parse_options(arguments=None):
         parser.error("Core-only mode has no service allocation or benchmark targets")
     if options.measure_allocations and options.profile != "release":
         parser.error("Allocation measurement requires the release profile")
+    if options.probes and (
+        options.measure_allocations or options.profile in {"asan", "tsan"}
+    ):
+        parser.error(
+            "Performance probes require a build separate from sanitizers and allocation interception"
+        )
     return options
 
 
@@ -302,6 +313,7 @@ def main():
             + options.profile
             + ("-contracts-ignore" if options.contracts == "ignore" else "")
             + ("-allocations" if options.measure_allocations else "")
+            + ("-probes" if options.probes else "")
         )
     )
     go = ROOT / "build/tools/go-1.27.1/bin/go"
@@ -342,6 +354,7 @@ def main():
         # 显式覆盖调用者曾手工设置的 OFF 缓存; 测试入口不能因缓存而变为零测试成功.
         "-DBUILD_TESTING=ON",
         "-DASTRA_CORE_ONLY=" + ("ON" if options.core_only else "OFF"),
+        "-DASTRA_PROFILE=" + ("ON" if options.probes else "OFF"),
         "-DASTRA_SANITIZER="
         + {"asan": "address,undefined", "tsan": "thread"}.get(options.profile, ""),
         "-DASTRA_CONTRACT_SEMANTIC=" + options.contracts,

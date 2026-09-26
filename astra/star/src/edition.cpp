@@ -1,5 +1,6 @@
 #include "edition.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <ranges>
 #include <stdexcept>
 #include <tuple>
@@ -76,6 +77,8 @@ bool Edition::append(proto::comet::v1::AlmanacWatchReply& page, std::size_t& byt
 }
 
 proto::comet::v1::AlmanacWatchReply Edition::next(std::string_view instance) {
+
+    ASTRA_PROFILE_SCOPE("star.edition.Edition.next");
 
     if (complete_) {
         throw std::logic_error("Almanac edition already completed");

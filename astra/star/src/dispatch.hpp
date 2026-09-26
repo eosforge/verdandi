@@ -2,6 +2,7 @@
 #include "catalog_state.hpp"
 #include "ephemeris_state.hpp"
 #include "parcel.hpp"
+#include <astra/profile.hpp>
 #include <bit>
 #include <concepts>
 
@@ -58,6 +59,8 @@ public:
     // 每次从来源真实头部重新判断, 唤醒合并不能丢失最后一次提交; 不等 ACK 才发送下一包.
     std::expected<const Packet*, Error> prepare() {
 
+        ASTRA_PROFILE_SCOPE("star.dispatch.prepare");
+
         if (!opened_) {
             return std::unexpected(Error::input);
         }
@@ -96,6 +99,8 @@ public:
     // 返回对象由会话保持到 OnWriteDone, 取消后也不能提早释放实际在途字节.
     Packet dispatched() {
 
+        ASTRA_PROFILE_SCOPE("star.dispatch.dispatched");
+
         if (!packet_) {
             throw std::logic_error("No prepared peer packet");
         }
@@ -120,6 +125,8 @@ public:
 
     // 累计确认不能回退/超过已交给 gRPC 的完整边界, 重复确认无副作用且不触发 ACK 的 ACK.
     bool acknowledge(std::uint64_t position) noexcept {
+
+        ASTRA_PROFILE_SCOPE("star.dispatch.acknowledge");
         if (!opened_ || position < acknowledged_ || position > sent_) {
             return false;
         }
@@ -144,6 +151,8 @@ private:
 
     // 有界前缀按实际序列化大小装包, 超目标的合法单条独占一包, 不跳过或拆分原子提交.
     std::expected<void, Error> changes(const typename Source::Delivery& delivery) {
+
+        ASTRA_PROFILE_SCOPE("star.dispatch.changes");
 
         Packet packet; // 未完成编码前不占用 packet_, 异常保留原 sent_ 和基线位置.
         auto* body = [&] { if constexpr (std::same_as<Domain, Catalog>) return packet.mutable_catalog_changes(); else return packet.mutable_ephemeris_changes(); }();
@@ -174,6 +183,8 @@ private:
 
     // 通过带行数索引的稳定根分页, 每页不重扫已有前缀; 所有页都使用同一基线位置.
     std::expected<void, Error> snapshot() {
+
+        ASTRA_PROFILE_SCOPE("star.dispatch.snapshot");
 
         Packet packet;
         auto* body = [&] { if constexpr (std::same_as<Domain, Catalog>) return packet.mutable_catalog_snapshot(); else return packet.mutable_ephemeris_snapshot(); }();

@@ -1,4 +1,5 @@
 #include "library.hpp"
+#include <astra/profile.hpp>
 #include <stdexcept>
 
 namespace astra {
@@ -52,6 +53,8 @@ std::shared_ptr<const Almanac> Library::find(const Scope& scope) const {
 
 std::expected<Library::Draft, Almanac::Error> Library::prepare(Scope scope, std::uint64_t version) {
 
+    ASTRA_PROFILE_SCOPE("star.library.Library.prepare");
+
     if (!scope.valid()) {
         return std::unexpected(Almanac::Error::input);
     }
@@ -63,7 +66,9 @@ std::expected<Library::Draft, Almanac::Error> Library::prepare(Scope scope, std:
             return std::unexpected(Almanac::Error::version);
         }
     } else {
+        ASTRA_PROFILE_BEGIN(profile_lock_65, "star.library.Library.prepare.wait.lock");
         const std::lock_guard lock(writer_); // 新候选占用前检查完整分组容量, 提交时再检查.
+        ASTRA_PROFILE_END(profile_lock_65);
         if (scopes_ >= limits_.scopes) {
             return std::unexpected(Almanac::Error::capacity);
         }
@@ -74,11 +79,15 @@ std::expected<Library::Draft, Almanac::Error> Library::prepare(Scope scope, std:
 
 std::expected<bool, Almanac::Error> Library::reset(Draft&& draft) {
 
+    ASTRA_PROFILE_SCOPE("star.library.Library.reset");
+
     if (draft.owner_ != this || !draft.book_) {
         return std::unexpected(Almanac::Error::input);
     }
     // writer 串行全局计费, 不阻塞现有 Scope 的点查和不可变遍历.
+    ASTRA_PROFILE_BEGIN(profile_lock_80, "star.library.Library.reset.wait.writer");
     const std::lock_guard writer(writer_);
+    ASTRA_PROFILE_END(profile_lock_80);
     const auto existing = locate(draft.scope_);
     if (existing && existing != draft.book_) {
         return std::unexpected(Almanac::Error::version);
@@ -90,7 +99,9 @@ std::expected<bool, Almanac::Error> Library::reset(Draft&& draft) {
 
     if (!existing) {
         // 新分组先准备两级路由分配, 持锁期间读者看不到未完成条目; 原生安装失败则回滚路由.
+        ASTRA_PROFILE_BEGIN(profile_lock_92, "star.library.Library.reset.wait.lock");
         const std::unique_lock lock(mutex_); // 新对象没有旧内容, 提交只交换已准备的根.
+        ASTRA_PROFILE_END(profile_lock_92);
         const auto [sector, created] = books_.try_emplace(draft.scope_.sector);
         try {
             sector->second.emplace(draft.scope_.spectrum, draft.book_);
@@ -127,10 +138,14 @@ std::expected<bool, Almanac::Error> Library::reset(Draft&& draft) {
 
 std::expected<bool, Almanac::Error> Library::apply(const Scope& scope, std::uint64_t version, std::string key, std::optional<Almanac::Buffer> value) {
 
+    ASTRA_PROFILE_SCOPE("star.library.Library.apply");
+
     if (!scope.valid() || !Scope::text(key, 1024)) {
         return std::unexpected(Almanac::Error::input);
     }
+    ASTRA_PROFILE_BEGIN(profile_lock_132, "star.library.Library.apply.wait.writer");
     const std::lock_guard writer(writer_); // 唯一发布流在此维护所有分组计费, 不持路由锁.
+    ASTRA_PROFILE_END(profile_lock_132);
     const auto book = locate(scope);
     if (!book) {
         return std::unexpected(Almanac::Error::unready);
@@ -166,9 +181,15 @@ std::expected<bool, Almanac::Error> Library::apply(const Scope& scope, std::uint
 
 std::vector<Library::Position> Library::positions() const {
 
+    ASTRA_PROFILE_SCOPE("star.library.Library.positions");
+
     // writer 固定版本交界, lock 固定两层索引; 不在此复制载荷或调用外部函数.
+    ASTRA_PROFILE_BEGIN(profile_lock_169, "star.library.Library.positions.wait.writer");
     const std::lock_guard writer(writer_);
+    ASTRA_PROFILE_END(profile_lock_169);
+    ASTRA_PROFILE_BEGIN(profile_lock_170, "star.library.Library.positions.wait.lock");
     const std::shared_lock lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_170);
     std::vector<Position> positions;
     positions.reserve(scopes_);
     for (const auto& [sector, spectra] : books_) {

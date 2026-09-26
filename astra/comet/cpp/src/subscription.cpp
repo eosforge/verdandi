@@ -1,4 +1,5 @@
 #include "subscription.hpp"
+#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 
 namespace comet {
@@ -98,6 +99,8 @@ Subscriber::View Subscription::view(Subscriber::State state, std::optional<Error
 }
 
 Result<std::optional<Subscriber::View>> Subscription::accept(const proto::comet::v1::CatalogWatchReply& page) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.subscription.Subscription.accept");
 
     // 所有批次只在完整尾页出现位置, 非尾空页没有业务意义, 禁止用它构造无限无进展流.
     if (!valid_ || (page.mode() != proto::comet::v1::MODE_RESET && page.mode() != proto::comet::v1::MODE_APPLY) || page.complete() != page.has_version() || page.complete() != !page.instance().empty() || (!page.complete() && page.changes().empty()) || page.ByteSizeLong() > 8 * 1024 * 1024) {

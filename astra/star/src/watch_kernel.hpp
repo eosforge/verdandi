@@ -1,4 +1,5 @@
 #pragma once
+#include "progress.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -30,17 +31,22 @@ public:
         return used > hard || cost > hard - used;
     }
 
-    // stream 由拥有索引保活, 重复通知合并; 不分配, 不取得流的 I/O 锁.
-    void enqueue(Stream& stream) noexcept {
-        if (!stream.queued) {
-            stream.queued = true;
-            if (tail_) {
-                tail_->next = &stream;
-            } else {
-                head_ = &stream;
-            }
-            tail_ = &stream;
+    // stream 由拥有索引保活; 新入队返回 true, 已排队返回 false, 调用者可合并重复唤醒.
+    // 不分配, 不取得流的 I/O 锁; 回调状态仍须先在所属锁内发布, 不能因合并而跳过.
+    bool enqueue(Stream& stream) noexcept {
+
+        if (stream.queued) {
+            return false;
         }
+
+        stream.queued = true;
+        if (tail_) {
+            tail_->next = &stream;
+        } else {
+            head_ = &stream;
+        }
+        tail_ = &stream;
+        return true;
     }
 
     // 空队列返回空引用, 成功弹出前先保活. 调用者释放索引锁后仍可安全进入该流的 I/O 锁.
@@ -58,6 +64,17 @@ public:
         held->queued = false;
         held->next = nullptr;
         return held;
+    }
+
+    // 在同一次索引锁内转交至多一个范围通知再弹出就绪流. 保留 FIFO 和 Scope 轮转,
+    // 同流已就绪时合并通知, 空就绪队列也能当轮处理进度, 不等待下一次 pump.
+    std::shared_ptr<Stream> pop(Progress<Stream>& progress) noexcept {
+
+        if (auto* stream = progress.take()) { // 裸指针始终由范围索引保活, 不跨解锁借用.
+            enqueue(*stream);
+        }
+
+        return pop();
     }
 
     // 只判断就绪队列; 在途流等待回调或低频超时扫描, 不引起空转.

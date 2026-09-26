@@ -1,4 +1,5 @@
 #include "gateway.hpp"
+#include <astra/profile.hpp>
 #include <astra/types.hpp>
 #include <stdexcept>
 
@@ -170,6 +171,8 @@ grpc::ServerWriteReactor<proto::comet::v1::SessionReply>* Gateway::Session(grpc:
 }
 
 std::expected<std::optional<Access::Permit>, grpc::Status> Gateway::enter(grpc::CallbackServerContext& context) const {
+
+    ASTRA_PROFILE_SCOPE("star.gateway.Gateway.enter");
 
     if (!ready_.load(std::memory_order_acquire) || stop_.stop_requested()) {
         return std::unexpected(error(context, grpc::StatusCode::UNAVAILABLE, proto::comet::v1::REASON_BUSY, "Star is not accepting business requests"));

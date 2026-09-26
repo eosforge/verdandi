@@ -20,7 +20,9 @@ ASan 同时启用 UBSan 与泄漏检测; TSan 使用已有独立插桩依赖. �
 
 ## 长时、规模与实验
 
-长时与规模必须在授权范围内显式选择. 当前 build.py 明确拒绝旧 soak/scale, 待迁移到新四件套后再开放; 不用旧场景冒充新业务压力验证. 普通 regression 不因内部 duration 默认值而自动变成长测, 不恢复已经停止的无限测试任务.
+编译期开关、采样、开销对照和离线分层分析见 [C++ 性能探针](profile.md). `--probes` 默认关闭, 使用独立构建目录; 不将开启探针的测量直接作为生产吞吐基线.
+
+长时与规模必须在授权范围内显式选择. 当前长测入口为 [soak.py](soak.py), 方法、故障轮换、资源记录与停止规则见 [三 Star 长测](soak.md). build.py 继续明确拒绝旧 soak/scale, 不用退休场景冒充新业务压力验证. 普通 regression 不因内部 duration 默认值而自动变成长测, 不恢复已经停止的无限测试任务.
 
 `bash scripts/test-services.sh --mode=regression` 转交当前 Release 构建与回归, 可传 `--jobs=N --test-jobs=N` 降低资源预算. `--skip-checks` 仅省略协议生成比较, 仍必须执行实际构建和测试. 已退休的 soak/scale、duration、远端旧服务参数及未知选项明确失败, 不忽略后报告成功. `check-services.sh` 不再接受已删除的 Go Supervisor race/fuzz 选项. Windows PowerShell 服务入口明确报告 Linux 要求, 不返回空检查成功.
 当前三域与真实 Comet 的有限性能入口见 [bench/README](../astra/bench/README.md), 实际结果见 [性能记录](validation.md#performance). `--benchmarks` 仅启用探针编译, `--measure-allocations` 使用独立 Release 目录; 分配统计不用于正常性能排名. core-only 只证明其子集, 不能替代真实 RPC/进程验收.

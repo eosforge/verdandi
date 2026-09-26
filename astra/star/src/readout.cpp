@@ -1,6 +1,7 @@
 #include "readout.hpp"
 #include "watch_kernel.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <atomic>
 #include <stdexcept>
 #include <utility>
@@ -40,7 +41,12 @@ public:
 
     // 每次 Write 完成只发布结果, 不在 gRPC 回调编码下一页.
     void OnWriteDone(bool ok) override {
+
+        ASTRA_PROFILE_SCOPE("star.readout.OnWriteDone");
+        ASTRA_PROFILE_BEGIN(profile_lock_42, "star.readout.OnWriteDone.wait.lock");
         const std::lock_guard lock(io);
+        ASTRA_PROFILE_END(profile_lock_42);
+        ASTRA_PROFILE_CONSUME(profile_write, "star.readout.write_to_callback");
         writing = false;
         written = ok;
         failed = failed || !ok;
@@ -70,6 +76,7 @@ public:
     const std::string instance;                                  // 请求恢复的 Star ID, 不作认证凭据.
     const std::optional<std::uint64_t> requested;                // 未提供和显式零不同.
     std::mutex io;                                               // I/O 回调与 pump 的上下文生命周期边界.
+    ASTRA_PROFILE_STAMP(profile_write);                          // io 保护提交到完成回调的间隔, 关闭构建无成员.
     bool writing{};                                              // 一次最多一个 StartWrite, 完成回调才清除.
     bool written{};                                              // 尚未被 pump 消费的成功写入结果.
     bool failed{};                                               // gRPC 取消或失败, 单向置位.
@@ -108,12 +115,20 @@ void Readout::enqueue(Stream& stream) noexcept {
 }
 
 void Readout::signal(Stream& stream) noexcept {
-    const std::lock_guard lock(mutex_);
-    enqueue(stream);
-    wake_();
+
+    bool scheduled{}; // 已排队流会消费最新 I/O 状态, 重复回调不再重复唤醒控制轮.
+    {
+        const std::lock_guard lock(mutex_);
+        scheduled = queue_.enqueue(stream);
+    }
+    if (scheduled) {
+        wake_(); // 索引锁外通知, 与动态域保持同一调度规则.
+    }
 }
 
 grpc::ServerWriteReactor<proto::comet::v1::AlmanacWatchReply>* Readout::Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) {
+
+    ASTRA_PROFILE_SCOPE("star.readout.Readout.Watch");
 
     try {
         // 许可先于事件索引锁取得, 撤销安装同样遵循 Access -> Library -> 事件索引, 不反向加锁.
@@ -128,7 +143,9 @@ grpc::ServerWriteReactor<proto::comet::v1::AlmanacWatchReply>* Readout::Watch(gr
         const auto token = permit->has_value() ? permit->value().stopped() : std::stop_token{};
         auto stream = std::make_shared<Stream>(*this, *context, *request, token);
         {
+            ASTRA_PROFILE_BEGIN(profile_lock_130, "star.readout.Readout.Watch.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_130);
             if (stopped_ || count_ == limits_.streams) {
                 return new Rejected(gateway_.error(*context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Almanac watch capacity unavailable"));
             }
@@ -167,7 +184,11 @@ grpc::ServerWriteReactor<proto::comet::v1::AlmanacWatchReply>* Readout::Watch(gr
 
 void Readout::changed(const Scope& scope, const Almanac::Change& change) noexcept {
 
+    ASTRA_PROFILE_SCOPE("star.readout.Readout.changed");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_169, "star.readout.Readout.changed.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_169);
     const auto group = streams_.find(scope);
     if (group == streams_.end()) {
         return;
@@ -181,8 +202,9 @@ void Readout::changed(const Scope& scope, const Almanac::Change& change) noexcep
         ++scans_; // 只有实际访问的流才计入; 空闲精确流的跳过由 pump 心跳覆盖, 不再消耗提交锁.
         // 节点与第二份索引键也计入预算, 同 Key 高频变动只保留一个共享最终值.
         const auto cost = change.bytes() + change.key->size() + 64;
-        const auto old = stream.pending.find(*change.key);
-        const auto previous = old == stream.pending.end() ? 0 : old->second.bytes() + old->first.size() + 64;
+        const auto old = stream.pending.lower_bound(*change.key); // 同次查找复用现有条目或准确插入位置.
+        const bool exists = old != stream.pending.end() && old->first == *change.key;
+        const auto previous = exists ? old->second.bytes() + old->first.size() + 64 : 0;
         if (previous > stream.bytes || previous > bytes_) {
             stream.overflow = true; // 内部账本不一致直接拒绝, 不归零后继续做会回绕的减法.
             enqueue(stream);
@@ -194,7 +216,11 @@ void Readout::changed(const Scope& scope, const Almanac::Change& change) noexcep
             stream.overflow = true;
         } else {
             try {
-                stream.pending.insert_or_assign(*change.key, change);
+                if (exists) {
+                    old->second = change; // 只替换不可变事件引用, 不再次查找和复制键.
+                } else {
+                    stream.pending.emplace_hint(old, *change.key, change);
+                }
                 stream.bytes = held + cost;
                 bytes_ = total + cost;
                 ++matched_; // 只有真正进入后缀的目标才算命中, 溢出与过滤都不计入.
@@ -225,6 +251,8 @@ Readout::Delivery Readout::delivery() const {
 }
 
 std::expected<Edition, grpc::Status> Readout::initial(Stream& stream) {
+
+    ASTRA_PROFILE_SCOPE("star.readout.Readout.initial");
 
     const auto book = library_.find(stream.scope); // 共享分组所有权, 不跨网络持路由锁.
     const auto version = book ? book->usage().version : std::optional<std::uint64_t>{0};
@@ -270,10 +298,16 @@ void Readout::retire(Stream& stream) {
 
 void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now) {
 
+    ASTRA_PROFILE_SCOPE("star.readout.Readout.advance");
+
     // io 排除 OnDone, 保证下面取得登录许可和发起 gRPC 操作时 context 仍有效.
+    ASTRA_PROFILE_BEGIN(profile_lock_273, "star.readout.Readout.advance.wait.io");
     const std::lock_guard io(stream.io);
+    ASTRA_PROFILE_END(profile_lock_273);
     if (stream.done) {
+        ASTRA_PROFILE_BEGIN(profile_lock_275, "star.readout.Readout.advance.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_275);
         // OnDone 可能在本任务弹出之后再次入队; 留给最后那个位置回收, 不悬挂链表指针.
         if (!stream.queued) {
             retire(stream);
@@ -286,7 +320,9 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
     if (stream.writing) {
         bool stopping; // 关闭不等待页面的正常超时预算, 立即请求 gRPC 取消.
         {
+            ASTRA_PROFILE_BEGIN(profile_lock_288, "star.readout.Readout.advance.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_288);
             stopping = stopped_ || stream.overflow;
         }
         if (stopping || now >= stream.deadline) {
@@ -302,10 +338,14 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
     }
     permit->reset(); // 准备大页不占认证锁, 发送前再取最终许可, 撤销仍可立即使准备失效.
     {
-        const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_BEGIN(profile_lock_304, "star.readout.Readout.advance.wait.lock");
+        std::unique_lock lock(mutex_); // 只保护停止/预算状态, 不跨错误编码和 gRPC 调用.
+        ASTRA_PROFILE_END(profile_lock_304);
         if (stream.failed || stopped_ || stream.overflow) {
+            const bool overflow = stream.overflow; // 解锁前固定拒绝原因, 后续通知仍可修改 overflow.
+            lock.unlock();
             stream.finished = true;
-            stream.Finish(gateway_.error(stream.context, stream.overflow ? grpc::StatusCode::RESOURCE_EXHAUSTED : grpc::StatusCode::CANCELLED, stream.overflow ? proto::comet::v1::REASON_BUSY : proto::comet::v1::REASON_SESSION, "Almanac watch cannot continue"));
+            stream.Finish(gateway_.error(stream.context, overflow ? grpc::StatusCode::RESOURCE_EXHAUSTED : grpc::StatusCode::CANCELLED, overflow ? proto::comet::v1::REASON_BUSY : proto::comet::v1::REASON_SESSION, "Almanac watch cannot continue"));
             return;
         }
     }
@@ -316,7 +356,9 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
             if (stream.edition->complete()) {
                 stream.cursor = stream.edition->version(); // 只有完整页实际写成功才推进此流位置.
                 {
+                    ASTRA_PROFILE_BEGIN(profile_lock_320, "star.readout.Readout.advance.wait.lock");
                     const std::lock_guard lock(mutex_);
+                    ASTRA_PROFILE_END(profile_lock_320);
                     bytes_ -= stream.held;
                     stream.held = 0;
                 }
@@ -324,7 +366,9 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
             }
             proto::comet::v1::AlmanacWatchReply{}.Swap(&stream.page); // 回收实际页分配, 不让 Clear 保留大容量却计费为零.
             {
+                ASTRA_PROFILE_BEGIN(profile_lock_328, "star.readout.Readout.advance.wait.lock");
                 const std::lock_guard lock(mutex_);
+                ASTRA_PROFILE_END(profile_lock_328);
                 bytes_ -= stream.encoded;
                 stream.encoded = 0;
                 queue_.settle(stream);
@@ -339,7 +383,9 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
             }
             stream.edition.emplace(std::move(*edition));
             stream.started = true;
+            ASTRA_PROFILE_BEGIN(profile_lock_343, "star.readout.Readout.advance.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_343);
             // 已被捕获基线覆盖的通知不重复发出, 更高的全量替换则不能伪装为连续 apply.
             const auto baseline = stream.edition->version();
             for (auto entry = stream.pending.begin(); entry != stream.pending.end();) {
@@ -365,10 +411,13 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
         std::map<std::string, Almanac::Change, std::less<>> pending; // 移出的后缀仍由 held 计费, 析构发生在 mutex_ 外.
         std::optional<std::uint64_t> preparing;                      // 有值时本轮需要构造新的固定 apply, 零也是合法版本.
         {
-            const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_BEGIN(profile_lock_369, "star.readout.Readout.advance.wait.lock");
+            std::unique_lock lock(mutex_); // 失败路径先释放范围索引, 再提交 RPC 终止.
+            ASTRA_PROFILE_END(profile_lock_369);
             const auto& group = streams_.find(stream.scope)->second; // 索引锁内固定进度与后缀的同一提交边界.
             const auto baseline = stream.edition ? stream.edition->version() : stream.cursor;
             if (stream.overflow || !group.covers(baseline)) {
+                lock.unlock();
                 stream.finished = true;
                 stream.Finish(gateway_.error(stream.context, grpc::StatusCode::OUT_OF_RANGE, proto::comet::v1::REASON_HISTORY, "Almanac watch requires a new baseline"));
                 return;
@@ -392,7 +441,9 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
             }
             stream.edition.emplace(std::move(replay), stream.target);
             pending.clear(); // 归还旧索引节点不持事件锁.
+            ASTRA_PROFILE_BEGIN(profile_lock_397, "star.readout.Readout.advance.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_397);
             bytes_ -= stream.held;
             stream.held = 0;
             const auto held = stream.edition->bytes(); // 只用已校验的减法判断剩余额度, 不靠累加后的回绕比较.
@@ -413,10 +464,13 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
             stream.Finish(sending.error());
             return;
         }
-        const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_BEGIN(profile_lock_418, "star.readout.Readout.advance.wait.lock");
+        std::unique_lock lock(mutex_); // 最终接受页面与计费同锁完成, gRPC 提交不占此锁.
+        ASTRA_PROFILE_END(profile_lock_418);
         const auto over_total = astra::Watch<Stream>::exceeds(bytes_, encoded, limits_.bytes); // 全局已超限时不再用减法比较, 避免回绕放行.
         const auto over_stream = astra::Watch<Stream>::exceeds(stream.bytes, encoded, limits_.pending);
         if (stream.overflow || stopped_ || !streams_.find(stream.scope)->second.covers(stream.edition->version()) || over_total || over_stream) {
+            lock.unlock();
             proto::comet::v1::AlmanacWatchReply{}.Swap(&stream.page); // 此页尚未进入在途, 不保留未计费的大编码缓冲.
             stream.finished = true;
             stream.Finish(gateway_.error(stream.context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Almanac send budget unavailable"));
@@ -428,7 +482,14 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
         stream.writing = true;
         stream.busy.store(true, std::memory_order_release);
         queue_.write(stream);
+        // 页面至此已接受并计入在途. io 和 sending 仍保护缓冲寿命与认证边界;
+        // 后续停止/断档按在途处理, 不能解锁后再读取索引字段或撤回已接受页面.
+        lock.unlock();
+        ASTRA_PROFILE_MARK(stream.profile_write);
+        ASTRA_PROFILE_COUNT("star.readout.submitted_bytes", stream.encoded);
+        ASTRA_PROFILE_BEGIN(submission, "star.readout.submit");
         stream.StartWrite(&stream.page);
+        ASTRA_PROFILE_END(submission);
     } catch (...) {
         stream.finished = true;
         stream.Finish(gateway_.error(stream.context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Almanac page preparation failed"));
@@ -437,33 +498,33 @@ void Readout::advance(Stream& stream, std::chrono::steady_clock::time_point now)
 
 void Readout::pump(std::chrono::steady_clock::time_point now, std::size_t maximum) {
 
+    ASTRA_PROFILE_SCOPE("star.readout.Readout.pump");
+
     // 扫描期限仅由串行控制循环读写, 未到期时不取得订阅索引锁.
     if (now >= sweep_) {
+        ASTRA_PROFILE_BEGIN(profile_lock_448, "star.readout.Readout.pump.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_448);
         queue_.sweep(now, sweep_, wake_);
     }
 
+    // count 同时限制范围通知和实际推进次数, 每次释放索引锁, 不整批占锁扫描 Scope.
     for (std::size_t count = 0; count < maximum; ++count) {
         std::shared_ptr<Stream> stream; // 弹出后保活, OnDone 回收索引不会释放当前栈使用的对象.
         {
+            ASTRA_PROFILE_BEGIN(profile_lock_456, "star.readout.Readout.pump.wait.lock");
             const std::lock_guard lock(mutex_);
-            stream = queue_.pop();
+            ASTRA_PROFILE_END(profile_lock_456);
+            stream = queue_.pop(progress_);
             if (!stream) {
                 break;
             }
         }
         advance(*stream, now);
     }
-    // 每次只安排 maximum 条范围进度通知, Scope 间轮转; 每条释放索引锁, 写入不会等待整范围扫描.
-    for (std::size_t count = 0; count < maximum; ++count) {
-        const std::lock_guard lock(mutex_);
-        auto* stream = progress_.take(); // 裸指针只在本锁内交给已有就绪队列, 不访问 I/O 字段.
-        if (!stream) {
-            break;
-        }
-        enqueue(*stream); // 已在写/结束的流也安全入队, advance 在 io 锁内判定, 不倒置锁序.
-    }
+    ASTRA_PROFILE_BEGIN(profile_lock_464, "star.readout.Readout.pump.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_464);
     if (!queue_.idle() || progress_.pending()) {
         wake_(); // 孤立的一次无关提交也会被排空, 不依赖下一次更新或低频兜底.
     }

@@ -1,5 +1,6 @@
 #include "issuer.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <stdexcept>
@@ -92,6 +93,8 @@ Issuer::Issuer(std::string galaxy, std::string pulse_endpoint, const Authority& 
 // context/request/response 为 gRPC 上下文、登记请求与应答; 返回 gRPC 状态.
 grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::v1::RegistrationRequest* request, proto::orbit::v1::RegistrationResponse* response) {
 
+    ASTRA_PROFILE_SCOPE("pulsar.issuer.Issuer.Register");
+
     try {
         // role 显式解码所有基础设施身份, 仅 Planet 的旧候选协议允许非零轮次.
         const auto role = Identity::role(request->role());
@@ -152,6 +155,8 @@ grpc::Status Issuer::Register(grpc::ServerContext* context, const proto::orbit::
 // Issuer::List 返回当前成员目录快照, 调用方必须是已准入成员.
 // context/request/response 为 gRPC 上下文、目录请求与应答; 返回 gRPC 状态.
 grpc::Status Issuer::List(grpc::ServerContext* context, const proto::orbit::v1::DirectoryRequest* request, proto::orbit::v1::DirectoryResponse* response) {
+
+    ASTRA_PROFILE_SCOPE("pulsar.issuer.Issuer.List");
 
     try {
         if (request->ByteSizeLong() != 0) {

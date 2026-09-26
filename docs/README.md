@@ -24,6 +24,8 @@
 | [Comet 验收](../testkit/comet.md) | 首版业务场景、预期结果与用例映射; 执行结果统一见验证记录 |
 | [Testkit](../testkit/README.md) / [最新验证](../testkit/validation.md) | 测试方法与实际执行结果, 两者分开维护 |
 | [性能测量](../astra/bench/README.md) | 当前三域、真实 Comet 推流和 Polaris 的有界离线测量方法; 结果仍在验证记录 |
+| [分层探针](../testkit/profile.md) | C++ 编译开关、采样开销、源码站点与离线分析边界 |
+| [三 Star 长测](../testkit/soak.md) | 真实四件套故障轮换、常驻数据核对、资源记录及清理 |
 | [冻结组件](../legacy-sdk.md) | 旧 SDK 的边界与必要使用说明 |
 
 ## 维护约定

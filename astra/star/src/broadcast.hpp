@@ -1,4 +1,5 @@
 #pragma once
+#include <astra/profile.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -57,6 +58,8 @@ public:
     // 每个页号独立缓存, 快慢订阅交错不覆盖彼此; 仅保存弱引用, 无流使用时立即释放正文.
     std::shared_ptr<const Page> next(Edition& cursor, std::size_t offset, std::string_view instance) {
 
+        ASTRA_PROFILE_SCOPE("star.broadcast.next");
+
         if (cursor.complete())
             throw std::logic_error("Publication cursor already completed");
         if (offset > pages_.size())
@@ -64,6 +67,7 @@ public:
         if (offset == pages_.size())
             pages_.emplace_back(); // 先准备弱槽, 分配失败不会提前消费当前游标; 最多一槽对应一个实际请求页.
         if (auto cached = pages_[offset].lock()) {
+            ASTRA_PROFILE_COUNT("star.broadcast.hit", 1);
             ++hits_; // 命中采纳已编码位置, 不重新执行领域分页.
             cursor = cached->after;
             return cached;
@@ -71,6 +75,8 @@ public:
 
         auto message = cursor.next(instance); // 异常只终止当前流, 其他流的游标和已发布消息不变.
         const auto bytes = message.ByteSizeLong();
+        ASTRA_PROFILE_COUNT("star.broadcast.miss", 1);
+        ASTRA_PROFILE_COUNT("star.broadcast.encoded_bytes", bytes);
         auto page = std::make_shared<const Page>(std::move(message), cursor, bytes);
         pages_[offset] = page;
         ++misses_;

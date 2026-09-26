@@ -46,6 +46,5 @@ export const demoGalaxy: GalaxyData = {
   centerStarId: "star-pulsar",
   links: ordinaryStars.flatMap((source, index) => ordinaryStars.slice(index + 1).map((target) => ({ source: source.id, target: target.id }))),
   sourceLabel: "演示",
-  description:
-    "连接与属性均为本地演示数据, 未接入准入服务. 正常恒星与黑洞状态的 Orion 共同围绕 Pulsar 公转并参与等权质心布局. Pulsar 与 Orion 无行星和连线.",
+  description: "连接与属性均为本地演示数据, 未接入准入服务. 正常恒星与黑洞状态的 Orion 共同围绕 Pulsar 公转并参与等权质心布局. Pulsar 与 Orion 无行星和连线.",
 };

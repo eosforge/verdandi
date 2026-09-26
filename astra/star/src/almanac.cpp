@@ -1,4 +1,5 @@
 #include "almanac.hpp"
+#include <astra/profile.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -68,6 +69,8 @@ Almanac::Draft& Almanac::Draft::operator=(Draft&&) noexcept = default;
 
 std::expected<void, Almanac::Error> Almanac::Draft::set(std::string key, Buffer value) {
 
+    ASTRA_PROFILE_SCOPE("star.almanac.Almanac.Draft.set");
+
     if (!state_ || !Almanac::valid(key, &value)) {
         return std::unexpected(Error::input);
     }
@@ -113,10 +116,14 @@ Almanac::Almanac(Limits limits) : limits_(limits), state_(std::make_unique<State
 Almanac::~Almanac() = default;
 
 Almanac::Draft Almanac::prepare(std::uint64_t version) const {
+
+    ASTRA_PROFILE_SCOPE("star.almanac.Almanac.prepare");
     return Draft(version, limits_);
 }
 
 std::expected<bool, Almanac::Error> Almanac::reset(Draft&& draft) {
+
+    ASTRA_PROFILE_SCOPE("star.almanac.Almanac.reset");
 
     if (!draft.state_) {
         return std::unexpected(Error::input);
@@ -128,7 +135,9 @@ std::expected<bool, Almanac::Error> Almanac::reset(Draft&& draft) {
     // retired/history 先于 lock 构造. 根、Map 和旧历史的最后引用均在解锁后销毁.
     std::unique_ptr<State> retired;
     std::deque<Change> history;
+    ASTRA_PROFILE_BEGIN(profile_lock_130, "star.almanac.Almanac.reset.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_130);
     if (ready_ && draft.state_->version < state_->version) {
         return std::unexpected(Error::version);
     }
@@ -147,6 +156,8 @@ std::expected<bool, Almanac::Error> Almanac::reset(Draft&& draft) {
 
 std::expected<bool, Almanac::Error> Almanac::apply(std::uint64_t version, std::string key, std::optional<Buffer> value, std::size_t retention, Change* committed) {
 
+    ASTRA_PROFILE_SCOPE("star.almanac.Almanac.apply");
+
     if (!valid(key, value ? &*value : nullptr)) {
         return std::unexpected(Error::input);
     }
@@ -160,7 +171,9 @@ std::expected<bool, Almanac::Error> Almanac::apply(std::uint64_t version, std::s
     // retired/previous 先于 lock 构造, 避免覆盖/淘汰时在业务锁内回收最后一份大正文.
     std::vector<Change> retired;
     Value previous;
+    ASTRA_PROFILE_BEGIN(profile_lock_162, "star.almanac.Almanac.apply.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_162);
     if (!ready_) {
         return std::unexpected(Error::unready);
     }
@@ -282,7 +295,11 @@ std::expected<Almanac::Point, Almanac::Error> Almanac::find(std::string_view key
 
 std::expected<Almanac::Replay, Almanac::Error> Almanac::replay(std::uint64_t since) const {
 
+    ASTRA_PROFILE_SCOPE("star.almanac.Almanac.replay");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_284, "star.almanac.Almanac.replay.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_284);
     if (!ready_) {
         return std::unexpected(Error::unready);
     }

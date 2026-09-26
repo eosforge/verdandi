@@ -264,6 +264,33 @@ void suffix() {
     CHECK(changes.at("added")->action_case() == proto::comet::v1::AlmanacChange::kValue && changes.at("added")->value().empty());
 }
 
+// 不同插入位置及同键替换共用一次查找, 保留最终动作与精确预算, 不误覆盖相邻键.
+void coalescing() {
+
+    Fixture fixture(false, 0); // 关闭历史, 只能通过活动流待发后缀保存变化.
+    fixture.fill();
+    Watching watch(fixture);
+    CHECK(watch.complete().version() == 1);
+    {
+        const std::lock_guard pause(fixture.control); // 同批构造首部/中间/末尾插入和多次替换.
+        std::uint64_t version = 1;                    // 每个合法写入推进一次权威版本.
+        for (const auto key : {"b", "d", "a", "c", "e"}) {
+            CHECK(fixture.library.apply({"routes", "main"}, ++version, key, Almanac::Buffer(10, 1)));
+        }
+        CHECK(fixture.library.apply({"routes", "main"}, ++version, "c", Almanac::Buffer(20, 2)));
+        CHECK(fixture.library.apply({"routes", "main"}, ++version, "b", std::nullopt));
+        CHECK(fixture.library.apply({"routes", "main"}, ++version, "a", Almanac::Buffer{}));
+    }
+
+    const auto delta = watch.complete(); // 五个键各保留最终动作, 删除与空正文不能混淆.
+    CHECK(delta.mode() == proto::comet::v1::MODE_APPLY && delta.version() == 9 && delta.changes_size() == 5);
+    CHECK(delta.changes(0).key() == "a" && delta.changes(0).has_value() && delta.changes(0).value().empty());
+    CHECK(delta.changes(1).key() == "b" && delta.changes(1).has_erase());
+    CHECK(delta.changes(2).key() == "c" && delta.changes(2).value() == std::string(20, '\2'));
+    CHECK(delta.changes(3).key() == "d" && delta.changes(3).value() == std::string(10, '\1'));
+    CHECK(delta.changes(4).key() == "e" && delta.changes(4).value() == std::string(10, '\1'));
+}
+
 // 新完整替换不能偷偷混入旧流 apply, 字节超额也不能继续发送假 complete.
 void discontinuity() {
 
@@ -358,6 +385,7 @@ int main() {
         fanout();
         recovery();
         suffix();
+        coalescing();
         discontinuity();
         boundaries();
         revocation();

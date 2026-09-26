@@ -1,4 +1,5 @@
 #include "exchange.hpp"
+#include <astra/profile.hpp>
 #include <cassert>
 
 namespace astra {
@@ -62,6 +63,8 @@ const std::string& Exchange::Pipe<Domain>::key(const Delta& delta) {
 
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::resume(std::uint64_t position) {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.resume");
     const auto result = dispatch_.resume(position);
     if (!result) {
         return std::unexpected(failure(result.error()));
@@ -72,11 +75,15 @@ Result<void> Exchange::Pipe<Domain>::resume(std::uint64_t position) {
 
 template <typename Domain>
 bool Exchange::Pipe<Domain>::acknowledge(std::uint64_t position) {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.acknowledge");
     return dispatch_.acknowledge(position);
 }
 
 template <typename Domain>
 void Exchange::Pipe<Domain>::acknowledge() {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.acknowledge");
     const auto position = state_.received(peer_); // 不能直接拿远端 head 或回补 R 当作 ACK.
     if (!position) {
         throw std::logic_error("Admitted source disappeared during replication");
@@ -92,6 +99,8 @@ bool Exchange::Pipe<Domain>::ready() const noexcept {
 
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::changes(const Changes& message, Steady::time_point now) {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.changes");
 
     if (landing_ || recovery_ || !Parcel::valid(message) || (message.entries().empty() ? message.head() != seen_ : (seen_ == UINT64_MAX || message.entries(0).position() != seen_ + 1))) {
         return Status::protocol("Non-contiguous peer changes");
@@ -121,6 +130,8 @@ Result<void> Exchange::Pipe<Domain>::changes(const Changes& message, Steady::tim
 
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::snapshot(const Snapshot& page, Steady::time_point now) {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.snapshot");
 
     if (recovery_)
         return Status::protocol("Peer snapshot installation is still in progress");
@@ -169,6 +180,8 @@ Result<void> Exchange::Pipe<Domain>::snapshot(const Snapshot& page, Steady::time
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::missing(const Delta& delta, Steady::time_point now) {
 
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.missing");
+
     proto::astra::v1::Repair request; // 关联只用本源、本域、地址、目标和触发位置.
     request.set_domain(domain);
     request.mutable_scope()->CopyFrom(delta.scope());
@@ -185,6 +198,8 @@ Result<void> Exchange::Pipe<Domain>::missing(const Delta& delta, Steady::time_po
 
 template <typename Domain>
 Result<bool> Exchange::Pipe<Domain>::apply(const Delta& delta, Steady::time_point now) {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.apply");
 
     const auto scope = Parcel::scope(delta.scope()); // 整包已验证, 仍使用拥有的 Scope 避免借用临时文本.
     if (!scope) {
@@ -269,6 +284,8 @@ Result<bool> Exchange::Pipe<Domain>::apply(const Delta& delta, Steady::time_poin
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::drain(Steady::time_point now) {
 
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.drain");
+
     unsigned remaining = 256; // 每轮最多一包的提交数, 避免一次回补后垄断整个 Runtime.
     while (!repair_ && !pending_.empty() && remaining != 0) {
         auto& pending = pending_.front();
@@ -338,6 +355,8 @@ Result<void> Exchange::Pipe<Domain>::repaired(const proto::astra::v1::Repaired& 
 template <typename Domain>
 Result<void> Exchange::Pipe<Domain>::repair(const proto::astra::v1::Repair& request, Packet& response) {
 
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.repair");
+
     const auto scope = Parcel::scope(request.scope());
     if (!scope || request.domain() != domain || request.trigger() == 0 || (std::same_as<Domain, Catalog> ? request.version() == 0 : request.version() != 0)) {
         return Status::protocol("Invalid peer repair request");
@@ -369,6 +388,8 @@ bool Exchange::Pipe<Domain>::expired(Steady::time_point now) const noexcept {
 
 template <typename Domain>
 Result<const Exchange::Packet*> Exchange::Pipe<Domain>::prepare(Steady::time_point now) {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.prepare");
 
     if (expired(now)) {
         return Status::timeout("Peer synchronization made no progress");
@@ -423,6 +444,8 @@ Result<const Exchange::Packet*> Exchange::Pipe<Domain>::prepare(Steady::time_poi
 
 template <typename Domain>
 Exchange::Packet Exchange::Pipe<Domain>::take() {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.take");
     if (dispatched_) {
         dispatched_ = false;
         return dispatch_.dispatched();
@@ -440,6 +463,10 @@ Exchange::~Exchange() {
 }
 
 Result<void> Exchange::receive(const Packet& packet, Steady::time_point now) {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.receive");
+    ASTRA_PROFILE_COUNT("star.exchange.received", 1);
+    ASTRA_PROFILE_COUNT("star.exchange.received_ack", packet.has_ack());
 
     using enum proto::astra::v1::Domain;
     if (packet.has_resume()) {
@@ -499,6 +526,8 @@ Result<void> Exchange::receive(const Packet& packet, Steady::time_point now) {
 
 Result<const Exchange::Packet*> Exchange::prepare(Steady::time_point now) {
 
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.prepare");
+
     if (catalog_.expired(now) || ephemeris_.expired(now)) {
         return Status::timeout("Peer synchronization made no progress");
     }
@@ -524,6 +553,8 @@ Result<const Exchange::Packet*> Exchange::prepare(Steady::time_point now) {
 }
 
 Exchange::Packet Exchange::take() {
+
+    ASTRA_PROFILE_SCOPE("star.exchange.Exchange.take");
 
     if (selected_ == 3) {
         auto packet = std::move(responses_.front().packet);

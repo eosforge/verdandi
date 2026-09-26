@@ -1,6 +1,7 @@
 #pragma once
 #include "broadcast.hpp"
 #include "gateway.hpp"
+#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 
 #include "progress.hpp"
@@ -46,7 +47,7 @@ public:
     grpc::ServerWriteReactor<Reply>* Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request);
     // State 在 域提交锁 内按提交顺序调用; 只合并不可变引用, 错误关闭受影响流而不撤回已提交写入.
     void changed(const Scope& scope, const Event& change) noexcept;
-    // 唯一控制线程推进最多 maximum 个就绪任务, 默认 32; 另有最多 maximum 条进度通知及每秒写超时扫描, 不等待网络.
+    // 唯一控制线程最多推进 maximum 次, 默认 32; 每次先转交至多一条范围进度, 再处理一个就绪任务. 写超时每秒扫描, 不等待网络.
     void pump(std::chrono::steady_clock::time_point now, std::size_t maximum = 32);
     // 禁止新订阅并唤醒现有流取消; 仍须继续 pump, 直到全部 OnDone 被回收.
     void stop() noexcept;
@@ -83,7 +84,7 @@ private:
     void enqueue(Stream& stream) noexcept;
     // I/O 回调唤醒本流, 只取得 mutex_, 不访问 State/Access.
     void signal(Stream& stream) noexcept;
-    // 取得第一批完整投影; 调用时持本流 I/O 锁及认证许可, 不持全局队列锁.
+    // 取得第一批完整投影; 持本流 I/O 锁, 已释放初检许可及全局队列锁; 发送前重新取得最终许可.
     std::expected<Edition, grpc::Status> initial(Stream& stream);
     // 单任务推进, 当前 reactor 的上下文直到 OnDone 取得同一 I/O 锁前始终有效.
     void advance(Stream& stream, std::chrono::steady_clock::time_point now);
@@ -97,7 +98,7 @@ private:
     const std::function<void()> wake_;
     // 不在运行中变更计费规则.
     const Limits limits_;
-    // 保护路由、就绪队列、计费及每流后缀; 不在此锁内编码或等待网络, 最终许可只跨非阻塞提交.
+    // 保护路由、就绪队列、计费及每流后缀; 接受页面后解锁再 StartWrite, 最终认证许可仍覆盖该提交.
     mutable std::mutex mutex_;
     // 地址只保存有活动流的范围, 空范围在最后一条流退出后回收.
     std::map<Scope, Group> streams_;
@@ -151,7 +152,12 @@ public:
 
     // 每次 Write 完成只发布结果, 不在 gRPC 回调编码下一页.
     void OnWriteDone(bool ok) override {
+
+        ASTRA_PROFILE_SCOPE("star.downstream.OnWriteDone");
+        ASTRA_PROFILE_BEGIN(profile_lock_153, "star.downstream.OnWriteDone.wait.lock");
         const std::lock_guard lock(io);
+        ASTRA_PROFILE_END(profile_lock_153);
+        ASTRA_PROFILE_CONSUME(profile_write, "star.downstream.write_to_callback");
         writing = false;
         written = ok;
         failed = failed || !ok;
@@ -181,6 +187,7 @@ public:
     const std::string instance;                         // 请求恢复的 Star ID, 不作认证凭据.
     const std::optional<std::uint64_t> requested;       // 未提供和显式零不同.
     std::mutex io;                                      // I/O 回调与 pump 的上下文生命周期边界.
+    ASTRA_PROFILE_STAMP(profile_write);                 // io 保护提交到完成回调的间隔, 关闭构建无成员.
     bool writing{};                                     // 一次最多一个 StartWrite, 完成回调才清除.
     bool written{};                                     // 尚未被 pump 消费的成功写入结果.
     bool failed{};                                      // gRPC 取消或失败, 单向置位.
@@ -229,13 +236,21 @@ void Downstream<Domain>::enqueue(Stream& stream) noexcept {
 
 template <class Domain>
 void Downstream<Domain>::signal(Stream& stream) noexcept {
-    const std::lock_guard lock(mutex_);
-    enqueue(stream);
-    wake_();
+
+    bool scheduled{}; // 新的队列位置需要唤醒; 已排队流由原通知或 pump 的剩余任务通知覆盖.
+    {
+        const std::lock_guard lock(mutex_);
+        scheduled = queue_.enqueue(stream);
+    }
+    if (scheduled) {
+        wake_(); // 不把 Wakeup 的锁竞争延伸到全体订阅的索引锁内.
+    }
 }
 
 template <class Domain>
 grpc::ServerWriteReactor<typename Downstream<Domain>::Reply>* Downstream<Domain>::Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) {
+
+    ASTRA_PROFILE_SCOPE("star.downstream.Downstream_Domain.Watch");
 
     try {
         // 许可先于事件索引锁取得, 撤销安装同样遵循 Access -> State -> 事件索引, 不反向加锁.
@@ -253,7 +268,9 @@ grpc::ServerWriteReactor<typename Downstream<Domain>::Reply>* Downstream<Domain>
         const auto token = permit->has_value() ? permit->value().stopped() : std::stop_token{};
         auto stream = std::make_shared<Stream>(*this, *context, *request, token);
         {
+            ASTRA_PROFILE_BEGIN(profile_lock_255, "star.downstream.Downstream_Domain.Watch.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_255);
             if (stopped_ || count_ == limits_.streams) {
                 return new Rejected(gateway_.error(*context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Dynamic watch capacity unavailable"));
             }
@@ -293,7 +310,11 @@ grpc::ServerWriteReactor<typename Downstream<Domain>::Reply>* Downstream<Domain>
 template <class Domain>
 void Downstream<Domain>::changed(const Scope& scope, const Event& change) noexcept {
 
+    ASTRA_PROFILE_SCOPE("star.downstream.Downstream_Domain.changed");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_295, "star.downstream.Downstream_Domain.changed.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_295);
     const auto group = streams_.find(scope);
     if (group == streams_.end()) {
         return;
@@ -307,8 +328,9 @@ void Downstream<Domain>::changed(const Scope& scope, const Event& change) noexce
         ++scans_; // 只有实际访问的流才计入; 空闲精确流的跳过由 pump 心跳覆盖, 不再消耗提交锁.
         // 节点与第二份索引键也计入预算, 同 Key 高频变动只保留一个共享最终值.
         const auto cost = change.bytes + change.name->key.size() + 64;
-        const auto old = stream.pending.find(change.name->key);
-        const auto previous = old == stream.pending.end() ? 0 : old->second.bytes + old->first.size() + 64;
+        const auto old = stream.pending.lower_bound(change.name->key); // 一次查找同时确定已有项和新项的插入位置.
+        const bool exists = old != stream.pending.end() && old->first == change.name->key;
+        const auto previous = exists ? old->second.bytes + old->first.size() + 64 : 0;
         if (previous > stream.bytes || previous > bytes_) {
             stream.overflow = true; // 内部账本不一致直接拒绝, 不归零后继续做会回绕的减法.
             enqueue(stream);
@@ -320,7 +342,11 @@ void Downstream<Domain>::changed(const Scope& scope, const Event& change) noexce
             stream.overflow = true;
         } else {
             try {
-                stream.pending.insert_or_assign(change.name->key, old == stream.pending.end() ? change : Edition::merge(old->second, change));
+                if (exists) {
+                    old->second = Edition::merge(old->second, change); // 保留 Ephemeris 完整 Attr 的合并依据, 不重新查找或复制索引键.
+                } else {
+                    stream.pending.emplace_hint(old, change.name->key, change); // lower_bound 提供准确位置, 只有新键分配节点.
+                }
                 stream.bytes = held + cost;
                 bytes_ = total + cost;
                 ++matched_; // 只有真正进入后缀的目标才算命中, 溢出与过滤都不计入.
@@ -354,6 +380,8 @@ typename Downstream<Domain>::Delivery Downstream<Domain>::delivery() const {
 template <class Domain>
 std::expected<typename Downstream<Domain>::Edition, grpc::Status> Downstream<Domain>::initial(Stream& stream) {
 
+    ASTRA_PROFILE_SCOPE("star.downstream.Downstream_Domain.initial");
+
     // 动态游标只在同一实例内恢复, 不把 Dynamic 跨 Star 的权威版本下限套用到本地投影.
     if (stream.requested && stream.instance == gateway_.instance()) {
         auto replay = state_.changes(stream.scope, *stream.requested);
@@ -379,7 +407,11 @@ std::expected<typename Downstream<Domain>::Edition, grpc::Status> Downstream<Dom
 template <class Domain>
 std::shared_ptr<typename Downstream<Domain>::Batch> Downstream<Domain>::freeze(Stream& stream, Edition edition, std::optional<std::uint64_t> since) {
 
+    ASTRA_PROFILE_SCOPE("star.downstream.Downstream_Domain.freeze");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_381, "star.downstream.Downstream_Domain.freeze.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_381);
     auto& group = streams_.find(stream.scope)->second; // 当前流在 OnDone 回收前始终拥有该范围入口.
     if (auto batch = group.batch.lock(); batch && batch->matches(since, edition.version(), stream.target))
         return batch;
@@ -411,10 +443,16 @@ void Downstream<Domain>::retire(Stream& stream) {
 template <class Domain>
 void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time_point now) {
 
+    ASTRA_PROFILE_SCOPE("star.downstream.Downstream_Domain.advance");
+
     // io 排除 OnDone, 保证下面取得登录许可和发起 gRPC 操作时 context 仍有效.
+    ASTRA_PROFILE_BEGIN(profile_lock_414, "star.downstream.Downstream_Domain.advance.wait.io");
     const std::lock_guard io(stream.io);
+    ASTRA_PROFILE_END(profile_lock_414);
     if (stream.done) {
+        ASTRA_PROFILE_BEGIN(profile_lock_416, "star.downstream.Downstream_Domain.advance.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_416);
         // OnDone 可能在本任务弹出之后再次入队; 留给最后那个位置回收, 不悬挂链表指针.
         if (!stream.queued) {
             retire(stream);
@@ -427,7 +465,9 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
     if (stream.writing) {
         bool stopping; // 关闭不等待页面的正常超时预算, 立即请求 gRPC 取消.
         {
+            ASTRA_PROFILE_BEGIN(profile_lock_429, "star.downstream.Downstream_Domain.advance.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_429);
             stopping = stopped_ || stream.overflow;
         }
         if (stopping || now >= stream.deadline) {
@@ -443,10 +483,14 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
     }
     permit->reset(); // 准备大页不占认证锁, 发送前再取最终许可, 撤销仍可立即使准备失效.
     {
-        const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_BEGIN(profile_lock_445, "star.downstream.Downstream_Domain.advance.wait.lock");
+        std::unique_lock lock(mutex_); // 只保护停止/预算状态, 不跨错误编码和 gRPC 调用.
+        ASTRA_PROFILE_END(profile_lock_445);
         if (stream.failed || stopped_ || stream.overflow) {
+            const bool overflow = stream.overflow; // 解锁前固定拒绝原因, 后续通知仍可修改 overflow.
+            lock.unlock();
             stream.finished = true;
-            stream.Finish(gateway_.error(stream.context, stream.overflow ? grpc::StatusCode::RESOURCE_EXHAUSTED : grpc::StatusCode::CANCELLED, stream.overflow ? proto::comet::v1::REASON_BUSY : proto::comet::v1::REASON_SESSION, "Dynamic watch cannot continue"));
+            stream.Finish(gateway_.error(stream.context, overflow ? grpc::StatusCode::RESOURCE_EXHAUSTED : grpc::StatusCode::CANCELLED, overflow ? proto::comet::v1::REASON_BUSY : proto::comet::v1::REASON_SESSION, "Dynamic watch cannot continue"));
             return;
         }
     }
@@ -457,7 +501,9 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
             if (stream.edition->complete()) {
                 stream.cursor = stream.edition->version(); // 只有完整页实际写成功才推进此流位置.
                 {
+                    ASTRA_PROFILE_BEGIN(profile_lock_461, "star.downstream.Downstream_Domain.advance.wait.lock");
                     const std::lock_guard lock(mutex_);
+                    ASTRA_PROFILE_END(profile_lock_461);
                     bytes_ -= stream.held;
                     stream.held = 0;
                 }
@@ -467,7 +513,9 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
             }
             stream.page.reset(); // 回收实际页分配, 不让 Clear 保留大容量却计费为零.
             {
+                ASTRA_PROFILE_BEGIN(profile_lock_471, "star.downstream.Downstream_Domain.advance.wait.lock");
                 const std::lock_guard lock(mutex_);
+                ASTRA_PROFILE_END(profile_lock_471);
                 bytes_ -= stream.encoded;
                 stream.encoded = 0;
                 queue_.settle(stream);
@@ -484,7 +532,9 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
             stream.batch = freeze(stream, std::move(*edition), since);
             stream.edition.emplace(stream.batch->begin());
             stream.started = true;
+            ASTRA_PROFILE_BEGIN(profile_lock_488, "star.downstream.Downstream_Domain.advance.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_488);
             // 已被捕获基线覆盖的通知不重复发出, 更高的全量替换则不能伪装为连续 apply.
             const auto baseline = stream.edition->version();
             for (auto entry = stream.pending.begin(); entry != stream.pending.end();) {
@@ -510,10 +560,13 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
         std::map<std::string, Event, std::less<>> pending; // 私有旧后缀, 析构时不持 mutex_.
         std::optional<std::uint64_t> preparing;            // 本次冻结的末游标, 后续通知可以继续追加到新后缀.
         {
-            const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_BEGIN(profile_lock_514, "star.downstream.Downstream_Domain.advance.wait.lock");
+            std::unique_lock lock(mutex_); // 失败路径先释放范围索引, 再提交 RPC 终止.
+            ASTRA_PROFILE_END(profile_lock_514);
             const auto& group = streams_.find(stream.scope)->second; // 索引锁内固定进度与后缀的同一提交边界.
             const auto baseline = stream.edition ? stream.edition->version() : stream.cursor;
             if (stream.overflow || !group.covers(baseline)) {
+                lock.unlock();
                 stream.finished = true;
                 stream.Finish(gateway_.error(stream.context, grpc::StatusCode::OUT_OF_RANGE, proto::comet::v1::REASON_HISTORY, "Dynamic watch requires a new baseline"));
                 return;
@@ -523,7 +576,7 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
                 if (frontier <= stream.cursor)
                     return;
                 preparing = frontier;
-                auto cached = streams_.find(stream.scope)->second.batch.lock(); // 同区间命中时连事件向量也不重复构造.
+                auto cached = group.batch.lock(); // 同区间命中时连事件向量也不重复构造, 复用本锁内已定位的范围.
                 if (cached && cached->prefix(stream.cursor, *preparing, stream.target)) {
                     preparing = cached->version(); // 新事件不使公共前缀失效, 更高版本继续保留在当前流后缀.
                     stream.batch = std::move(cached);
@@ -557,7 +610,9 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
                 stream.edition.emplace(stream.batch->begin());
             }
             pending.clear(); // 归还节点/键发生在事件索引锁外.
+            ASTRA_PROFILE_BEGIN(profile_lock_562, "star.downstream.Downstream_Domain.advance.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_562);
             bytes_ -= stream.held;
             stream.held = 0;
             const auto held = stream.edition->bytes(); // 私有后缀同样逐流保守计费, 比较时避免无符号回绕.
@@ -578,10 +633,13 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
             stream.Finish(sending.error());
             return;
         }
-        const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_BEGIN(profile_lock_583, "star.downstream.Downstream_Domain.advance.wait.lock");
+        std::unique_lock lock(mutex_); // 最终接受页面与计费同锁完成, gRPC 提交不占此锁.
+        ASTRA_PROFILE_END(profile_lock_583);
         const auto over_total = astra::Watch<Stream>::exceeds(bytes_, encoded, limits_.bytes); // 全局已超限时不再用减法比较, 避免回绕放行.
         const auto over_stream = astra::Watch<Stream>::exceeds(stream.bytes, encoded, limits_.pending);
         if (stream.overflow || stopped_ || !streams_.find(stream.scope)->second.covers(stream.edition->version()) || over_total || over_stream) {
+            lock.unlock();
             stream.page.reset(); // 此页尚未进入在途, 不保留未计费的大编码缓冲.
             stream.finished = true;
             stream.Finish(gateway_.error(stream.context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Dynamic send budget unavailable"));
@@ -593,7 +651,14 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
         stream.writing = true;
         stream.busy.store(true, std::memory_order_release);
         queue_.write(stream);
+        // 页面至此已接受并计入在途. io 和 sending 仍保护缓冲寿命与认证边界;
+        // 后续停止/断档按在途处理, 不能解锁后再读取索引字段或撤回已接受页面.
+        lock.unlock();
+        ASTRA_PROFILE_MARK(stream.profile_write);
+        ASTRA_PROFILE_COUNT("star.downstream.submitted_bytes", stream.page->bytes);
+        ASTRA_PROFILE_BEGIN(submission, "star.downstream.submit");
         stream.StartWrite(&stream.page->message);
+        ASTRA_PROFILE_END(submission);
     } catch (...) {
         stream.finished = true;
         stream.Finish(gateway_.error(stream.context, grpc::StatusCode::RESOURCE_EXHAUSTED, proto::comet::v1::REASON_BUSY, "Dynamic page preparation failed"));
@@ -603,33 +668,33 @@ void Downstream<Domain>::advance(Stream& stream, std::chrono::steady_clock::time
 template <class Domain>
 void Downstream<Domain>::pump(std::chrono::steady_clock::time_point now, std::size_t maximum) {
 
+    ASTRA_PROFILE_SCOPE("star.downstream.Downstream_Domain.pump");
+
     // 扫描期限仅由串行控制循环读写, 未到期时不取得订阅索引锁.
     if (now >= sweep_) {
+        ASTRA_PROFILE_BEGIN(profile_lock_614, "star.downstream.Downstream_Domain.pump.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_614);
         queue_.sweep(now, sweep_, wake_);
     }
 
+    // count 同时限制范围通知和实际推进次数, 每次释放索引锁, 不整批占锁扫描 Scope.
     for (std::size_t count = 0; count < maximum; ++count) {
         std::shared_ptr<Stream> stream; // 弹出后保活, OnDone 回收索引不会释放当前栈使用的对象.
         {
+            ASTRA_PROFILE_BEGIN(profile_lock_622, "star.downstream.Downstream_Domain.pump.wait.lock");
             const std::lock_guard lock(mutex_);
-            stream = queue_.pop();
+            ASTRA_PROFILE_END(profile_lock_622);
+            stream = queue_.pop(progress_);
             if (!stream) {
                 break;
             }
         }
         advance(*stream, now);
     }
-    // 每次只安排 maximum 条范围进度通知, Scope 间轮转; 每条释放索引锁, 写入不会等待整范围扫描.
-    for (std::size_t count = 0; count < maximum; ++count) {
-        const std::lock_guard lock(mutex_);
-        auto* stream = progress_.take(); // 裸指针只在本锁内交给已有就绪队列, 不访问 I/O 字段.
-        if (!stream) {
-            break;
-        }
-        enqueue(*stream); // 已在写/结束的流也安全入队, advance 在 io 锁内判定, 不倒置锁序.
-    }
+    ASTRA_PROFILE_BEGIN(profile_lock_630, "star.downstream.Downstream_Domain.pump.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_630);
     if (!queue_.idle() || progress_.pending()) {
         wake_(); // 孤立的一次无关提交也会被排空, 不依赖下一次更新或低频兜底.
     }

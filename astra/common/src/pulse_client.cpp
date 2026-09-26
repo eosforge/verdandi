@@ -1,6 +1,7 @@
 #include "pulse_client.hpp"
 #include "clock_filter.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <condition_variable>
 #include <grpc/support/time.h>
 #include <grpcpp/create_channel.h>
@@ -41,6 +42,8 @@ void Sampler::stop() noexcept {
 // Sampler::sample 执行一批八次四时间戳探测并筛选, 成功即发布时钟估计.
 // stop 为停止令牌; 返回 gRPC 状态, 成功发布估计, 失败按分类返回.
 grpc::Status Sampler::sample(std::stop_token stop) {
+
+    ASTRA_PROFILE_SCOPE("common.pulse_client.Sampler.sample");
 
     // context 覆盖整批八次探测, 使用单调两秒截止, 在流排空后才析构.
     grpc::ClientContext context;

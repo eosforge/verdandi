@@ -1,6 +1,7 @@
 #pragma once
 #include "core.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 
 namespace comet::detail {
 // 一个应用 Reader 的私有状态, 网络 RPC 可以延长清理寿命, 不能延长应用自动订阅意图.
@@ -74,6 +75,8 @@ public:
 
     // 成员与请求已稳定拥有, 外部控制路径的读取由唯一 hold 保护.
     void start() {
+
+        ASTRA_PROFILE_SCOPE("comet.cpp.watching.start");
         stub_->async()->Watch(&context_, &request_, this);
         this->AddHold();
         held_ = true;
@@ -91,7 +94,12 @@ public:
 
     // 一个完整 Read 的结果只发布给 Core, 不在 gRPC 线程解码安装或调用用户观察者.
     void OnReadDone(bool ok) override {
+
+        ASTRA_PROFILE_SCOPE("comet.cpp.watching.OnReadDone");
+        ASTRA_PROFILE_BEGIN(profile_lock_93, "comet.cpp.watching.OnReadDone.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_93);
+        ASTRA_PROFILE_MARK(profile_ready_);
         stage_ = ok ? Stage::ready : Stage::ended;
         if (ok) {
             const auto bytes = page_.SpaceUsedLong(); // 消息解码后才可观察真实拥有空间, 不把它遗漏在所有 Reader 的全局预算之外.
@@ -107,7 +115,11 @@ public:
 
     // context 是本 Stream 自己拥有的客户端对象, 可在 OnDone 后读取其 trailing metadata.
     void OnDone(const grpc::Status& status) override {
+
+        ASTRA_PROFILE_SCOPE("comet.cpp.watching.OnDone");
+        ASTRA_PROFILE_BEGIN(profile_lock_109, "comet.cpp.watching.OnDone.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_109);
         code_ = status.error_code(); // 不复制可能含任意远端正文的 message/details.
         done_ = true;
         owner_->core_->wake(owner_.get());
@@ -129,6 +141,7 @@ private:
         overflow
     };
 
+    ASTRA_PROFILE_STAMP(profile_ready_);      // Stream::mutex_ 保护, 仅记录成功页面从回调到控制轮的排队.
     Stage stage_ = Stage::reading;            // 只在 mutex_ 内转换; 每次 OnReadDone 结束一个 reading 阶段.
     Core::Time deadline_ = Core::Time::max(); // 首批/半批无进展期限, 完整就绪的空闲流没有总 deadline.
     bool timed_{};                            // 本地无进展取消, 不能误报为凭据撤销.
@@ -175,7 +188,11 @@ bool Watching<Policy>::reserve(std::size_t requested) noexcept {
 
 template <class Policy>
 typename Watching<Policy>::View Watching<Policy>::load() const {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.watching.Watching_Policy.load");
+    ASTRA_PROFILE_BEGIN(profile_lock_177, "comet.cpp.watching.Watching_Policy.load.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_177);
     auto view = view_; // 有界状态字段拥有副本, 大内容只共享不可变根.
     if (closed() || core_->stopped()) {
         view.state_ = State::closed;
@@ -217,6 +234,8 @@ bool Watching<Policy>::wait(std::chrono::milliseconds timeout) const {
 
 template <class Policy>
 bool Watching<Policy>::publish(State state, std::optional<Error> error) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.watching.Watching_Policy.publish");
     // 相同状态和相同原因无需重复通知, 每个完整数据批次另行标记 dirty.
     const bool changed = view_.state() != state || view_.error().has_value() != error.has_value() || (error && view_.error() && error->code != view_.error()->code);
     view_ = projection_->view(state, std::move(error));
@@ -226,6 +245,8 @@ bool Watching<Policy>::publish(State state, std::optional<Error> error) {
 
 template <class Policy>
 void Watching<Policy>::start(const std::shared_ptr<const Binding>& binding) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.watching.Watching_Policy.start");
 
     proto::comet::v1::WatchRequest request; // 只有这个对象自己的完整位置可以用于同范围恢复.
     request.mutable_scope()->set_sector(scope_.sector);
@@ -250,7 +271,11 @@ void Watching<Policy>::start(const std::shared_ptr<const Binding>& binding) {
 template <class Policy>
 Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& error, bool closing) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.watching.Watching_Policy.poll");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_252, "comet.cpp.watching.Watching_Policy.poll.wait.lock");
     std::unique_lock lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_252);
     if (closing || core_->stopped()) {
         // 显式 Client 关闭由本轮落实到对象, 实际取消/准备释放不放在应用析构路径.
         if (!closed_.exchange(true, std::memory_order_acq_rel)) {
@@ -284,7 +309,9 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
 
     if (stream_) {
         auto stream = stream_; // 释放父级引用时保留当前访问, 避免销毁仍被本栈加锁的 mutex.
+        ASTRA_PROFILE_BEGIN(profile_lock_286, "comet.cpp.watching.Watching_Policy.poll.wait.io");
         std::unique_lock io(stream->mutex_);
+        ASTRA_PROFILE_END(profile_lock_286);
         if (stream->done_) {
             io.unlock();
             stream_.reset();
@@ -321,6 +348,7 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
         } else if (stream->stage_ == Stream::Stage::ended) {
             stream->release();
         } else if (stream->stage_ == Stream::Stage::ready && !stopped && binding_ == binding && !failed_) {
+            ASTRA_PROFILE_CONSUME(stream->profile_ready_, "comet.watch.ready_to_consume");
             auto page = std::move(stream->page_); // 独占当前完整页, 解析期间不继续读入下一页.
             stream->stage_ = Stream::Stage::consumed;
             io.unlock();
@@ -359,7 +387,9 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
                 stream->cancel();
             }
             Reply{}.Swap(&page);
+            ASTRA_PROFILE_BEGIN(profile_lock_361, "comet.cpp.watching.Watching_Policy.poll.wait.consumed");
             const std::lock_guard consumed(stream->mutex_);
+            ASTRA_PROFILE_END(profile_lock_361);
             static_cast<void>(core_->resize(stream->bytes_, 0));
             stream->bytes_ = 0; // 私有解析页已释放, 下一 Read 才能重新占用解码预算.
             // 下一 Read 必须等下面的用户通知返回, 保证单个订阅回调不并发且不引入通知队列.
@@ -386,7 +416,9 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
         dirty_ = false;
     }
     if (stream_ && !closed() && !failed_ && binding_ == binding && !core_->stopped()) {
+        ASTRA_PROFILE_BEGIN(profile_lock_388, "comet.cpp.watching.Watching_Policy.poll.wait.io");
         const std::lock_guard io(stream_->mutex_);
+        ASTRA_PROFILE_END(profile_lock_388);
         if (stream_->stage_ == Stream::Stage::consumed && !stream_->done_ && stream_->held_) {
             // 只有已消费页能回到 reading, 其他控制唤醒不能对同一缓冲重复 StartRead.
             stream_->stage_ = Stream::Stage::reading;

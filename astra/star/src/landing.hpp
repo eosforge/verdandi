@@ -1,5 +1,6 @@
 #pragma once
 #include "parcel.hpp"
+#include <astra/profile.hpp>
 #include <concepts>
 
 namespace astra {
@@ -30,6 +31,8 @@ public:
     // minimum 是当前连续位置及仍有效精确回补覆盖位置的最大值, 每页及最终安装都须重新检查.
     // 任何错误/异常均丢弃私有半份基线, 已安装来源及公共 View 不受影响.
     std::expected<void, Error> append(const Page& page, std::uint64_t minimum) {
+
+        ASTRA_PROFILE_SCOPE("star.landing.append");
 
         try {
             const auto bytes = page.ByteSizeLong(); // 单页预算与整个候选预算分别控制, 不依赖 HTTP/2 窗口.
@@ -86,6 +89,8 @@ public:
 
     // 只在 complete 后转交候选, 外层最终提交失败由 Draft 析构回收, 不保留半公开状态.
     std::expected<typename Source::Draft, Error> take(std::uint64_t minimum) {
+
+        ASTRA_PROFILE_SCOPE("star.landing.take");
 
         if (!complete_ || !draft_ || position_ < minimum) {
             const auto error = position_ < minimum ? Error::version : Error::input;

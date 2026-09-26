@@ -1,6 +1,7 @@
 #include "clock_filter.hpp"
 #include "clock_precision.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <cerrno>
 #include <limits>
 #include <numeric>
@@ -107,6 +108,8 @@ Filter::Filter(std::uint64_t local_precision) : local_precision_(local_precision
 // precision/uncertainty 为对端精度与不确定度, synchronized 为对端同步标志.
 // 返回是否接受, 拒绝不改变已筛选结果.
 bool Filter::observe(std::uint64_t t0, std::uint64_t t1, std::uint64_t t2, ElapsedTime received, std::uint64_t precision, std::uint64_t uncertainty, bool synchronized) {
+
+    ASTRA_PROFILE_SCOPE("common.clock.Filter.observe");
 
     // t3 为接收时的本机经过时间, 与 t0 同域; 负值拒绝后才能转换为无符号数.
     const auto t3 = elapsed_ns(received);
@@ -231,22 +234,32 @@ std::optional<Clock::Reading> Clock::read(ElapsedTime local) const {
 // Clock::now 取锁后采样本地时间再读取, 避免并发读取制造伪反序.
 // 返回当前读数, 未就绪返回空.
 std::optional<Clock::Reading> Clock::now() const {
+
+    ASTRA_PROFILE_SCOPE("common.clock.Clock.now");
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
+    ASTRA_PROFILE_BEGIN(profile_lock_234, "common.clock.Clock.now.wait.lock");
     std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_234);
     return read(Clock::Elapsed::now());
 }
 
 // Clock::now(ElapsedTime) 用调用方提供的本地时刻读取, 供测试注入反序.
 // local 为本地时间; 返回读数, 失败返回空.
 std::optional<Clock::Reading> Clock::now(ElapsedTime local) const {
+
+    ASTRA_PROFILE_SCOPE("common.clock.Clock.now");
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
+    ASTRA_PROFILE_BEGIN(profile_lock_242, "common.clock.Clock.now.wait.lock");
     std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_242);
     return read(local);
 }
 
 // Clock::observe 吸收外部估计, 无效/过期/重复不改变模型, 只在锁内调用.
 // estimate/local 为估计与本地时刻; 返回是否接受, 拒绝不改变状态.
 bool Clock::observe(const Clock::Estimate& estimate, ElapsedTime local) {
+
+    ASTRA_PROFILE_SCOPE("common.clock.Clock.observe");
 
     // target 是待发布样本的非负 Unix 纳秒值, 仅首次校准直接建立公开锚点.
     const auto target = estimate.time.time_since_epoch().count();
@@ -289,16 +302,24 @@ bool Clock::observe(const Clock::Estimate& estimate, ElapsedTime local) {
 // Clock::publish 用当前本地时刻发布估计, 校验并外推至消费时刻.
 // estimate 为外部估计; 返回是否接受.
 bool Clock::publish(const Clock::Estimate& estimate) {
+
+    ASTRA_PROFILE_SCOPE("common.clock.Clock.publish");
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
+    ASTRA_PROFILE_BEGIN(profile_lock_292, "common.clock.Clock.publish.wait.lock");
     std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_292);
     return observe(estimate, Clock::Elapsed::now());
 }
 
 // Clock::publish(ElapsedTime) 用指定本地时刻发布, 供测试注入固定相位.
 // estimate/local 为估计与本地时刻; 返回是否接受.
 bool Clock::publish(const Clock::Estimate& estimate, ElapsedTime local) {
+
+    ASTRA_PROFILE_SCOPE("common.clock.Clock.publish");
     // lock 串行保护锚点,残余偏差和资格状态; 默认入口在持锁后采样, 避免伪反序.
+    ASTRA_PROFILE_BEGIN(profile_lock_300, "common.clock.Clock.publish.wait.lock");
     std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_300);
     return observe(estimate, local);
 }
 

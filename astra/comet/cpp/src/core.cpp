@@ -7,6 +7,7 @@
 #include "subscribing.hpp"
 #include <algorithm>
 #include <astra/config.hpp>
+#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 #include <fstream>
 #include <grpc/support/time.h>
@@ -162,6 +163,8 @@ Result<std::shared_ptr<Core>> Core::prepare(Client::Options options) {
 // Core::connect 返回当前已确认绑定的共享引用, 无绑定返回空.
 std::shared_ptr<Binding> Core::connect() const {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.connect");
+
     auto binding = std::make_shared<Binding>(); // 只有这一个当前端点的两种传输, 不按 Watch 数扩大连接池.
     binding->endpoint = options_.endpoints[endpoint_];
     grpc::ChannelArguments arguments;
@@ -184,6 +187,8 @@ std::shared_ptr<Binding> Core::connect() const {
 
 // Core::schedule 请求在指定时间推进, 已有更早期限不提前.
 void Core::schedule(Time time) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.schedule");
     const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(time - std::chrono::steady_clock::now(), Time::duration::zero())).count();
     scheduled_ = true;
     alarm_.Set(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)), [owner = shared_from_this()](bool) mutable {
@@ -203,7 +208,11 @@ void Core::start() {
 // Core::wake 标记对象就绪并唤醒控制轮, 空指针只唤醒不标记.
 void Core::wake(Activity* activity) noexcept {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.wake");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_205, "comet.cpp.core.Core.wake.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_205);
     if (activity) {
         // 调用者只保证本次调用期间存活. 队列持弱引用, 重复事件合并, 不保存裸指针或建立拥有环.
         if (!activity->ready_ && !activity->self_.expired()) {
@@ -284,7 +293,11 @@ std::uint64_t Core::exceptions() const noexcept {
 
 Core::Schedule Core::schedule() const {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.schedule");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_286, "comet.cpp.core.Core.schedule.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_286);
     return {.directory = directory_rounds_, .ready = ready_rounds_, .polled = polled_};
 }
 
@@ -378,7 +391,11 @@ Core::Time Core::session(Time now) {
 
 // Core::recovered 确认绑定恢复, 重置失败计数并恢复订阅.
 void Core::recovered(const std::shared_ptr<const Binding>& binding) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.recovered");
+    ASTRA_PROFILE_BEGIN(profile_lock_380, "comet.cpp.core.Core.recovered.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_380);
     if (binding_ == binding && !closing_) {
         failures_ = 0;
     }
@@ -442,9 +459,13 @@ Core::Time Core::dial(Time now) {
 // Core::tick 单步推进控制循环, 至多八轮, 无事件即休眠.
 void Core::tick() {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.tick");
+
     // Alarm 的回调只用于一条控制路径. wake 在本轮执行时合并为 awakened_, 不并发进入另一轮.
     {
+        ASTRA_PROFILE_BEGIN(profile_lock_446, "comet.cpp.core.Core.tick.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_446);
         scheduled_ = false;
         running_ = true;
         awakened_ = false;
@@ -456,7 +477,9 @@ void Core::tick() {
         // 至多八轮后交还 callback 线程; 没有新事件立即休眠, 不用空轮制造低延迟假象.
         for (unsigned round = 0; round < 8; ++round) {
             {
+                ASTRA_PROFILE_BEGIN(profile_lock_458, "comet.cpp.core.Core.tick.wait.lock");
                 const std::lock_guard lock(mutex_);
+                ASTRA_PROFILE_END(profile_lock_458);
                 awakened_ = false; // 本轮会消费已标记的对象, 后到事件重新置位.
             }
 
@@ -474,10 +497,13 @@ void Core::tick() {
             next = std::min(next, session(now));
             next = std::min(next, dial(now));
             {
+                ASTRA_PROFILE_BEGIN(profile_lock_476, "comet.cpp.core.Core.tick.wait.lock");
                 const std::lock_guard lock(mutex_);
+                ASTRA_PROFILE_END(profile_lock_476);
                 polling_.reserve(readers_.size());                   // 应用目录已有数量上限, 稳态复用容量而非每次网络唤醒重新分配.
                 const bool refresh = std::exchange(refresh_, false); // 只有共享状态变更才广播到整个活动集.
                 if (refresh || now >= due_) {
+                    ASTRA_PROFILE_COUNT("comet.core.directory_items", readers_.size());
                     ++directory_rounds_; // 全目录维护轮, 含到期与共享状态广播, 与就绪轮区分统计.
                     // 到期或共享状态变化才遍历目录. 同轮就绪对象由目录一并捕获, 不重复推进.
                     ready_.clear();
@@ -498,6 +524,7 @@ void Core::tick() {
                         return false;
                     });
                 } else {
+                    ASTRA_PROFILE_COUNT("comet.core.ready_items", ready_.size());
                     ++ready_rounds_; // 普通网络完成只走就绪队列, 本轮未扫描空闲对象.
                     // 普通网络完成只解析实际入队的 K 个对象, 不为一个事件扫描 N 个空闲订阅.
                     for (const auto& weak : ready_) {
@@ -517,7 +544,9 @@ void Core::tick() {
                 std::optional<Error> error;
                 bool closing;
                 {
+                    ASTRA_PROFILE_BEGIN(profile_lock_519, "comet.cpp.core.Core.tick.wait.lock");
                     const std::lock_guard lock(mutex_);
+                    ASTRA_PROFILE_END(profile_lock_519);
                     // 前一个 Reader 可能已经报告全局会话失效, 后续对象不能使用轮首的陈旧绑定.
                     binding = binding_;
                     error = blocked_;
@@ -528,7 +557,10 @@ void Core::tick() {
             }
             next = std::min(next, due_); // 即使本轮没有到期对象, 仍按原期限调度, 不退化成每秒检查.
             {
+                ASTRA_PROFILE_BEGIN(profile_lock_530, "comet.cpp.core.Core.tick.wait.lock");
                 const std::lock_guard lock(mutex_);
+                ASTRA_PROFILE_END(profile_lock_530);
+                ASTRA_PROFILE_COUNT("comet.core.polled_items", polling_.size());
                 polled_ += polling_.size(); // 合并进已有临界区, 统计不额外争抢一次控制锁.
                 // 回调期间工厂可能接纳了本轮快照之外的新对象. 必须检查实际目录, 否则 close
                 // 可能在这些对象尚未清理时错误地完成, 使它们的 wait 永久等不到通知.
@@ -543,7 +575,9 @@ void Core::tick() {
                     condition_.notify_all();
                 }
             }
+            ASTRA_PROFILE_BEGIN(profile_lock_545, "comet.cpp.core.Core.tick.wait.lock");
             const std::lock_guard lock(mutex_);
+            ASTRA_PROFILE_END(profile_lock_545);
             if (finished || !awakened_)
                 break; // 截止仍保留在 next, 不为没有工作的新轮继续扫描目录.
         }
@@ -554,7 +588,9 @@ void Core::tick() {
         next = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
     }
 
+    ASTRA_PROFILE_BEGIN(profile_lock_556, "comet.cpp.core.Core.tick.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_556);
     running_ = false;
     if (!finished) {
         schedule(awakened_ ? std::chrono::steady_clock::now() : next);
@@ -631,6 +667,8 @@ Result<std::shared_ptr<Publishing>> Core::publisher(Scope scope, std::string key
 // Core::outgoing 占用外发名额, 满时返回 false.
 // priority/automatic 区分优先级与自动流量, 配额独立.
 bool Core::outgoing(bool priority, bool automatic) noexcept {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.outgoing");
     auto& counter = priority ? maintenance_ : automatic ? recovery_
                                                         : unary_; // 后台恢复不占尽保活 16 槽.
     const std::size_t maximum = priority ? 16 : automatic ? 48
@@ -646,6 +684,8 @@ bool Core::outgoing(bool priority, bool automatic) noexcept {
 
 // Core::returning 归还外发名额, 与 outgoing 成对.
 void Core::returning(bool priority, bool automatic) noexcept {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.returning");
     const auto previous = (priority ? maintenance_ : automatic ? recovery_
                                                                : unary_)
                               .fetch_sub(1, std::memory_order_relaxed); // 真实 callback 释放才归还, 取消不提前释放容量.
@@ -674,7 +714,11 @@ void Core::settled() noexcept {
 // activity 为待接纳对象, 容量不足即拒绝.
 Result<void> Core::accept(const std::shared_ptr<Activity>& activity) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.accept");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_676, "comet.cpp.core.Core.accept.wait.lock");
     const std::lock_guard lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_676);
     if (closing_) {
         return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
     }
@@ -779,9 +823,13 @@ bool Core::resize(std::size_t previous, std::size_t requested) noexcept {
 // binding 为失效绑定; error 为失败原因.
 void Core::lost(const std::shared_ptr<const Binding>& binding, Error error) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.lost");
+
     std::shared_ptr<Login> login;
     {
+        ASTRA_PROFILE_BEGIN(profile_lock_783, "comet.cpp.core.Core.lost.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_783);
         if (binding_ != binding || closing_) {
             return;
         }

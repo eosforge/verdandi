@@ -1,6 +1,7 @@
 #pragma once
 #include "pages.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <cassert>
 #include <chrono>
 #include <deque>
@@ -148,6 +149,8 @@ public:
 
         // 无异常更新内容、查找表、游标和历史; 外层仍在同一域锁内完成来源提交/调度/通知.
         Retired commit() noexcept {
+
+            ASTRA_PROFILE_SCOPE("star.scene.commit");
 
             auto& owner = *owner_;        // 调用一次后失效, 不允许二次 commit.
             auto& event = retired_.event; // 已准备且不会分配的完整新事件.
@@ -302,6 +305,8 @@ public:
         // 所有 Scope/来源/调度候选准备成功后才调用, 无分配交换并发布完整连续变化.
         Retired commit() noexcept {
 
+            ASTRA_PROFILE_SCOPE("star.scene.commit");
+
             assert(owner_ && !failed_);
             owner_->history_.swap(*history_); // 候选容器已提前分配, commit 不默认构造可能分配的 deque.
             Retired retired{std::move(owner_->tree_), std::move(history_), std::move(events_)};
@@ -384,6 +389,8 @@ public:
 
     // 无分配捕获公开根, 外层须先按当前业务时间推进到期并挂入后续观察.
     View capture() const {
+
+        ASTRA_PROFILE_SCOPE("star.scene.capture");
         idle();
         return View(tree_.capture(), version_, bytes_, gate_);
     }
@@ -408,12 +415,16 @@ public:
 
     // 仅内部来源替换使用批量候选, 普通业务写入继续使用单目标 Edit 热路径.
     Batch prepare(std::size_t retention) {
+
+        ASTRA_PROFILE_SCOPE("star.scene.prepare");
         idle();
         return Batch(*this, retention);
     }
 
     // 只为真实内容变化调用; record 空必须对应已有目标. data=true 只允许已有完整记录的更新.
     std::expected<Edit, Error> prepare(Key name, std::optional<Item> record, std::chrono::steady_clock::time_point now, bool data = false, std::size_t retention = std::numeric_limits<std::size_t>::max()) {
+
+        ASTRA_PROFILE_SCOPE("star.scene.prepare");
 
         idle();
         if (!name || name->key.empty() || name->key.size() > 1024) {
@@ -473,6 +484,8 @@ public:
     // 完整连续后缀, 条数/载荷受历史预算限制; 当前游标返回空, 断档不能返回部分成功.
     // since 为调用方完整安装的位置; 年龄仅参与写入裁剪, 不因空闲超时拒绝仍保留的连续历史.
     std::expected<std::vector<Event>, Error> replay(std::uint64_t since) const {
+
+        ASTRA_PROFILE_SCOPE("star.scene.replay");
 
         idle();
         if (since > version_) {

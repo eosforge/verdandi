@@ -40,12 +40,14 @@ void scheduling() {
     CHECK(queue.idle() && !queue.pop());
 
     for (const auto& stream : {first, middle, last}) {
-        queue.enqueue(*stream);
-        queue.enqueue(*stream);
+        CHECK(queue.enqueue(*stream));  // 新位置需要通知控制线程.
+        CHECK(!queue.enqueue(*stream)); // 同位置重复回调只更新状态, 不重复唤醒.
         queue.write(*stream);
         queue.write(*stream);
     }
     CHECK(queue.pop() == first && queue.pop() == middle && queue.pop() == last && queue.idle());
+    CHECK(queue.enqueue(*first)); // 已被弹出后到达的新回调必须重新排队, 不能因历史通知而漏掉.
+    CHECK(!queue.enqueue(*first) && queue.pop() == first && queue.idle());
     queue.settle(*middle); // 移除中间节点, 其余两个仍可扫描.
     queue.settle(*middle); // 幂等清理不误摘除邻居.
     queue.sweep(now, deadline, wake);
@@ -71,6 +73,61 @@ void scheduling() {
     CHECK(!astra::Watch<Pending>::exceeds(3, 4, 7));
     CHECK(astra::Watch<Pending>::exceeds(8, 0, 7));
     CHECK(astra::Watch<Pending>::exceeds(1, std::numeric_limits<std::size_t>::max(), 7));
+}
+
+// 范围通知与就绪弹出共用一次有界调度, 覆盖空队列、重复通知、FIFO、公平性和取消后的寿命.
+void dispatch() {
+
+    astra::Watch<Pending> queue;               // 模拟同一索引锁下的就绪队列, 不启动线程或网络.
+    astra::Progress<Pending> progress;         // 范围通知器, 每次 pop 最多消费一个进度位置.
+    astra::Progress<Pending>::Group one, two;  // 两个独立范围, 地址在整个用例中保持稳定.
+    auto first = std::make_shared<Pending>();  // 第一个范围的订阅.
+    auto second = std::make_shared<Pending>(); // 第二个范围的订阅.
+    one.streams.emplace(first.get(), first);
+    two.streams.emplace(second.get(), second);
+    static_assert(noexcept(queue.pop(progress)));
+    CHECK(!queue.pop(progress));
+
+    // 没有正文命中时仅产生范围进度, 必须在当前调度返回流, 不能留给下一轮.
+    progress.publish(one, 1, false);
+    CHECK(queue.idle() && progress.pending());
+    CHECK(queue.pop(progress) == first);
+    CHECK(queue.idle() && !progress.pending());
+
+    // 正文与进度指向同一已就绪流时合并, 不在完成一次推进后再排一次相同通知.
+    queue.enqueue(*first);
+    progress.publish(one, 2, false);
+    CHECK(queue.pop(progress) == first);
+    CHECK(!queue.pop(progress) && !first->queued);
+
+    // 已就绪的其他流保持 FIFO 优先级. 进度仍只消费一项, 新通知不会插到队首.
+    queue.enqueue(*second);
+    progress.publish(one, 3, false);
+    CHECK(queue.pop(progress) == second);
+    CHECK(first->queued && !progress.pending());
+    CHECK(queue.pop(progress) == first && queue.idle());
+
+    // 一次额度只推进一个范围, 新提交排到另一个待处理范围之后, 不能独占控制轮.
+    progress.publish(one, 4, false);
+    progress.publish(two, 1, false);
+    CHECK(queue.pop(progress) == first && progress.pending());
+    progress.publish(one, 5, false);
+    CHECK(queue.pop(progress) == second && progress.pending());
+    CHECK(queue.pop(progress) == first && !progress.pending());
+
+    // 尚未转交的已取消流可直接摘除; 已弹出流由强引用保活, 不借用随后的索引删除.
+    progress.publish(two, 2, false);
+    progress.erase(two, second.get());
+    CHECK(!queue.pop(progress));
+    progress.publish(one, 6, true);
+    auto held = queue.pop(progress);         // 模拟 advance 持有的局部强引用.
+    std::weak_ptr<Pending> lifetime = first; // 只观察寿命, 不延长已取消对象的存活.
+    progress.erase(one, first.get());
+    first.reset();
+    CHECK(held && !lifetime.expired() && queue.idle() && !progress.pending());
+    CHECK(!held->queued && !held->next);
+    held.reset();
+    CHECK(lifetime.expired());
 }
 
 // Scope 轮转只依赖拥有索引, 不借用 RPC 状态; 覆盖慢范围、公平调度、取消及遍历期间的新提交.
@@ -338,6 +395,7 @@ int main() {
         pages<Catalog>([](auto& state, const Scope& scope, unsigned index) { return state.publish(scope, std::to_string(index), bytes("value"), 1, 1000); });
         pages<Ephemeris>([](auto& state, const Scope& scope, unsigned) { return state.create(scope, bytes("attr"), bytes("data"), 1000); });
         scheduling();
+        dispatch();
         progress();
         payload();
         boundaries<Catalog>("key", [](Catalog::Value value) { return Catalog::State::Content{1, std::move(value)}; });

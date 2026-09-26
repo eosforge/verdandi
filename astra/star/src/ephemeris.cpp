@@ -1,6 +1,7 @@
 #include "ephemeris.hpp"
 #include <algorithm>
 #include <array>
+#include <astra/profile.hpp>
 #include <cerrno>
 #include <chrono>
 #include <sys/random.h>
@@ -59,6 +60,8 @@ std::string Ephemeris::uuid() {
 
 std::expected<Ephemeris::Record, Ephemeris::Error> Ephemeris::create(Value attr, Value data, std::uint32_t ttl, const Clock::Reading& reading) noexcept {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris.Ephemeris.create");
+
     if (!valid(attr) || !valid(data) || ttl < 1000 || ttl > 600000) {
         return std::unexpected(Error::input);
     }
@@ -85,6 +88,8 @@ std::expected<void, Ephemeris::Error> Ephemeris::active(const Record& current, c
 
 std::expected<Ephemeris::Change, Ephemeris::Error> Ephemeris::update(const Record& current, Value data, std::uint64_t order, const Clock::Reading& reading) noexcept {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris.Ephemeris.update");
+
     if (!valid(data) || order == 0) {
         return std::unexpected(Error::input);
     }
@@ -108,6 +113,8 @@ std::expected<Ephemeris::Change, Ephemeris::Error> Ephemeris::update(const Recor
 }
 
 std::expected<Ephemeris::Change, Ephemeris::Error> Ephemeris::renew(const Record& current, std::uint64_t order, const Clock::Reading& reading) noexcept {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris.Ephemeris.renew");
 
     if (order == 0) {
         return std::unexpected(Error::input);

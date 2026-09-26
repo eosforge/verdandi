@@ -1,6 +1,7 @@
 // 详细说明: 这个实现文件为 process.hpp 中的各个系统级和诊断工具类提供了具体的实现逻辑.
 // 主要涉及 Linux signal API 调用, 条件变量配合原子的线程同步, 以及底层 write I/O 系统调用.
 #include "process.hpp"
+#include <astra/profile.hpp>
 
 #include <fcntl.h>
 #include <format>
@@ -113,11 +114,15 @@ std::uint64_t Wakeup::observe() const noexcept {
 // 详细说明: 递增序列号并通知一个等待在条件变量上的线程.
 void Wakeup::notify() {
 
+    ASTRA_PROFILE_SCOPE("common.process.Wakeup.notify");
+
     {
         // 与 wait 的检查/入睡共用一把锁, 消除检查谓词后, 真正入睡前的通知窗口.
         // 如果这里不加锁, 可能发生竞态: 消费者刚判断完谓词发现无需等待但尚未真正进入休眠时,
         // 生产者递增了序列号并发出 notify, 导致消费者永久错过该通知.
+        ASTRA_PROFILE_BEGIN(profile_lock_119, "common.process.Wakeup.notify.wait.lock");
         std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_119);
         sequence_.fetch_add(1, std::memory_order_relaxed);
     }
 
@@ -130,8 +135,12 @@ void Wakeup::notify() {
 // 详细说明: 如果当前的 observe() 不等于 observed, 说明期间有 notify 发生, 立即返回不等待.
 // 否则最多阻塞 10 毫秒, 超时或被唤醒且序列号改变后返回.
 void Wakeup::wait(std::uint64_t observed) {
+
+    ASTRA_PROFILE_SCOPE("common.process.Wakeup.wait");
     // lock 与条件变量配合等待通知, wait 期间释放互斥量.
+    ASTRA_PROFILE_BEGIN(profile_lock_133, "common.process.Wakeup.wait.wait.lock");
     std::unique_lock lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_133);
     condition_.wait_for(lock, Milliseconds(10), [&] { return observe() != observed; });
 }
 

@@ -1,6 +1,7 @@
 #include "pulse.hpp"
 #include <algorithm>
 #include <astra/clock.hpp>
+#include <astra/profile.hpp>
 #include <grpc/support/time.h>
 #include <grpcpp/alarm.h>
 #include <limits>
@@ -70,6 +71,8 @@ private:
     // 每次只有一个 Read 或 Write 在途. 回调只计算标量和提交下一操作, 不等待网络.
     void OnReadDone(bool ok) override {
 
+        ASTRA_PROFILE_SCOPE("pulsar.pulse.OnReadDone");
+
         if (!ok) {
             Finish(context_->IsCancelled() ? grpc::Status(grpc::StatusCode::CANCELLED, "Pulse cancelled") : grpc::Status::OK);
             return;
@@ -108,6 +111,8 @@ private:
 
     // 写完成才允许复用 Pong 或开始下一次 Read; 因而 Finish 从不与写操作重叠.
     void OnWriteDone(bool ok) override {
+
+        ASTRA_PROFILE_SCOPE("pulsar.pulse.OnWriteDone");
 
         if (!ok) {
             Finish(grpc::Status(grpc::StatusCode::CANCELLED, "Pulse write ended"));
@@ -164,6 +169,8 @@ Pulse::Pulse(const Authority& authority, const Ledger& ledger, const Source& clo
 // Pulse::Bounce 创建四时间戳对时反应器, 每个连接独立, 断开即销毁.
 // context 为回调上下文; 返回反应器所有权, 由 gRPC 框架驱动.
 grpc::ServerBidiReactor<proto::pulsar::v1::Ping, proto::pulsar::v1::Pong>* Pulse::Bounce(grpc::CallbackServerContext* context) {
+
+    ASTRA_PROFILE_SCOPE("pulsar.pulse.Pulse.Bounce");
 
     // reactor 由最终 OnDone 自释放, 服务 handler 只负责构造和启动, 不再持有所有权.
     auto* reactor = new Reactor(context, streams_, clock_);

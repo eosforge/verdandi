@@ -1,5 +1,6 @@
 #include "ephemeris_service.hpp"
 #include "ephemeris_feed.hpp"
+#include <astra/profile.hpp>
 #include <cstring>
 
 namespace astra {
@@ -31,6 +32,8 @@ Downstream<Ephemeris>::Delivery Ephemeris::Service::delivery() const {
 }
 
 grpc::ServerWriteReactor<proto::comet::v1::EphemerisWatchReply>* Ephemeris::Service::Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_service.Ephemeris.Service.Watch");
     return feed_->Watch(context, request);
 }
 
@@ -43,6 +46,8 @@ Ephemeris::Value Ephemeris::Service::copy(const std::string& value) {
 }
 
 std::expected<std::optional<Access::Permit>, grpc::Status> Ephemeris::Service::enter(grpc::CallbackServerContext& context, std::string_view instance, const proto::comet::v1::Scope& scope, bool initial) const {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_service.Ephemeris.Service.enter");
 
     auto permit = gateway_.enter(context); // 先做一次逻辑身份检查, 生命周期覆盖全部原生提交.
     if (!permit) {
@@ -124,6 +129,8 @@ grpc::Status Ephemeris::Service::ttl(grpc::CallbackServerContext& context) const
 }
 
 grpc::ServerUnaryReactor* Ephemeris::Service::Create(grpc::CallbackServerContext* context, const proto::comet::v1::CreateRequest* request, proto::comet::v1::CreateReply* reply) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_service.Ephemeris.Service.Create");
     return execute(*context, [&] {
         // 接入先检查字段上限, 大载荷复制在最后许可之前完成, 不让撤销等待正文准备.
         if (auto checked = address(*context, request->scope()); !checked.ok()) {
@@ -156,6 +163,8 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Create(grpc::CallbackServerContext
 }
 
 grpc::ServerUnaryReactor* Ephemeris::Service::Update(grpc::CallbackServerContext* context, const proto::comet::v1::UpdateRequest* request, proto::comet::v1::UpdateReply* reply) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_service.Ephemeris.Service.Update");
     return execute(*context, [&] {
         if (auto checked = address(*context, request->scope()); !checked.ok()) {
             return checked;
@@ -183,6 +192,8 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Update(grpc::CallbackServerContext
 }
 
 grpc::ServerUnaryReactor* Ephemeris::Service::Renew(grpc::CallbackServerContext* context, const proto::comet::v1::RenewRequest* request, proto::comet::v1::RenewReply* reply) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_service.Ephemeris.Service.Renew");
     return execute(*context, [&] {
         if (auto checked = address(*context, request->scope()); !checked.ok()) {
             return checked;
@@ -205,6 +216,8 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Renew(grpc::CallbackServerContext*
 }
 
 grpc::ServerUnaryReactor* Ephemeris::Service::Remove(grpc::CallbackServerContext* context, const proto::comet::v1::RemoveRequest* request, proto::comet::v1::Empty*) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_service.Ephemeris.Service.Remove");
     return execute(*context, [&] {
         if (auto checked = address(*context, request->scope()); !checked.ok()) {
             return checked;

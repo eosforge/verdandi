@@ -1,6 +1,7 @@
 #include "receiver.hpp"
 #include "orbit.pb.h"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <limits>
 #include <stdexcept>
 
@@ -43,6 +44,8 @@ Result<void> Receiver::failure(Almanac::Error error) {
 
 Result<void> Receiver::plan(const proto::polaris::v1::Inventory& page) {
 
+    ASTRA_PROFILE_SCOPE("star.receiver.Receiver.plan");
+
     if (planned_) {
         return Status::protocol("Repeated initial Almanac plan");
     }
@@ -70,6 +73,8 @@ void Receiver::acknowledge(const Scope& scope, std::uint64_t version) {
 }
 
 Result<void> Receiver::snapshot(const proto::polaris::v1::Snapshot& page) {
+
+    ASTRA_PROFILE_SCOPE("star.receiver.Receiver.snapshot");
 
     // scope/version 必须在每页稳定存在, 一页超限在上游 gRPC 解码预算之外再次按业务检查.
     Scope scope{page.scope().sector(), page.scope().spectrum()};
@@ -123,6 +128,8 @@ Result<void> Receiver::snapshot(const proto::polaris::v1::Snapshot& page) {
 
 Result<void> Receiver::updates(const proto::polaris::v1::Updates& page) {
 
+    ASTRA_PROFILE_SCOPE("star.receiver.Receiver.updates");
+
     Scope scope{page.scope().sector(), page.scope().spectrum()}; // 整包只属于同一真实分组.
     if (!scope.valid() || page.patches().empty() || page.patches_size() > 65536 || draft_) {
         return Status::protocol("Invalid Almanac update batch");
@@ -167,6 +174,8 @@ Result<void> Receiver::updates(const proto::polaris::v1::Updates& page) {
 
 Result<void> Receiver::receive(const proto::polaris::v1::Packet& packet) {
 
+    ASTRA_PROFILE_SCOPE("star.receiver.Receiver.receive");
+
     if (failed_) {
         return Status::protocol("Almanac receiver is closed");
     }
@@ -185,6 +194,8 @@ Result<void> Receiver::receive(const proto::polaris::v1::Packet& packet) {
 }
 
 Result<void> Receiver::process(const proto::polaris::v1::Packet& packet) {
+
+    ASTRA_PROFILE_SCOPE("star.receiver.Receiver.process");
 
     if (packet.ByteSizeLong() > 8 * 1024 * 1024) {
         return Status::capacity("Almanac packet exceeds receive budget");
@@ -225,6 +236,8 @@ Result<void> Receiver::process(const proto::polaris::v1::Packet& packet) {
 }
 
 std::optional<proto::polaris::v1::Packet> Receiver::next(std::size_t maximum) {
+
+    ASTRA_PROFILE_SCOPE("star.receiver.Receiver.next");
 
     if (maximum < 1024 || maximum > 8 * 1024 * 1024) {
         throw std::invalid_argument("Invalid Almanac negotiated send capacity");

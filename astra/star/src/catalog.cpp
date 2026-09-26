@@ -1,5 +1,6 @@
 #include "catalog.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <chrono>
 
 namespace astra {
@@ -51,6 +52,8 @@ std::expected<void, Catalog::Error> Catalog::check(const Record* current, std::u
 
 std::expected<Catalog::Record, Catalog::Error> Catalog::publish(const Record* source, const Record* merged, Value value, std::uint64_t version, std::uint32_t ttl, const Clock::Reading& reading) noexcept {
 
+    ASTRA_PROFILE_SCOPE("star.catalog.Catalog.publish");
+
     if (!valid(source, merged) || !value || value->size() > 1024 * 1024 || version == 0 || ttl < 1000 || ttl > 600000) {
         return std::unexpected(Error::input);
     }
@@ -76,6 +79,8 @@ std::expected<Catalog::Record, Catalog::Error> Catalog::publish(const Record* so
 }
 
 std::expected<Catalog::Record, Catalog::Error> Catalog::renew(const Record* source, const Record* merged, std::uint64_t version, std::uint32_t ttl, const Clock::Reading& reading) noexcept {
+
+    ASTRA_PROFILE_SCOPE("star.catalog.Catalog.renew");
 
     if (!valid(source, merged) || version == 0 || ttl < 1000 || ttl > 600000) {
         return std::unexpected(Error::input);
@@ -115,6 +120,8 @@ bool Catalog::visible(const Record* current, const Record& candidate) noexcept {
 }
 
 std::expected<Catalog::Change, Catalog::Error> Catalog::merge(const Record* current, const Record& incoming, Clock::Time now) noexcept {
+
+    ASTRA_PROFILE_SCOPE("star.catalog.Catalog.merge");
 
     if (!valid(current, &incoming) || now.time_since_epoch().count() < 0) {
         return std::unexpected(Error::input);

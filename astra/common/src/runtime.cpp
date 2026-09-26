@@ -1,4 +1,5 @@
 // 该文件实现了整个 Astra 节点的核心运行时环境, 它包含监听外部会话的 gRPC 服务端处理, 并管理所有主动拨出和被动接收的会话生命周期.
+#include <astra/profile.hpp>
 #include <astra/runtime.hpp>
 
 #include "admission.hpp"
@@ -56,9 +57,13 @@ public:
     // 返回值: 新分配的流处理器反应器对象.
     grpc::ServerBidiReactor<proto::astra::v1::SessionPacket, proto::astra::v1::SessionPacket>* OpenSession(grpc::CallbackServerContext* context) override {
 
+        ASTRA_PROFILE_SCOPE("common.runtime.OpenSession");
+
         try {
             // 使用锁保护接收缓冲队列, 因为该调用运行在 gRPC 的工作线程上.
+            ASTRA_PROFILE_BEGIN(profile_lock_60, "common.runtime.OpenSession.wait.lock");
             std::lock_guard lock(incoming_mutex_);
+            ASTRA_PROFILE_END(profile_lock_60);
             // 如果不在接纳状态或当前节点根本不是 Star(如 Planet 角色不能接受连接), 返回拒绝会话.
             if (!accepting_ || config_.role != Member::Role::star) {
                 return new Rejection(grpc::StatusCode::UNAVAILABLE);
@@ -177,8 +182,12 @@ private:
     // collect: 在入站登记锁内把 handler 创建的会话移入控制循环集合, 不改变在途计数或推进协议.
     void collect() {
 
+        ASTRA_PROFILE_SCOPE("common.runtime.collect");
+
         // lock 协调 gRPC 接纳回调与控制循环的队列和接纳状态, 不在此执行网络等待.
+        ASTRA_PROFILE_BEGIN(profile_lock_180, "common.runtime.collect.wait.lock");
         std::lock_guard lock(incoming_mutex_);
+        ASTRA_PROFILE_END(profile_lock_180);
         // 使用 move_iterator 高效转移数据所有权
         sessions_.insert(sessions_.end(), std::make_move_iterator(incoming_.begin()), std::make_move_iterator(incoming_.end()));
         incoming_.clear();
@@ -188,6 +197,8 @@ private:
     // 入站容量在此释放, 避免取消尚未最终完成的 RPC 过早让出槽位.
     // 参数 now: 用于更新策略模块中失败时间记录的时间点.
     void reap(Steady::time_point now) {
+
+        ASTRA_PROFILE_SCOPE("common.runtime.reap");
 
         std::erase_if(sessions_, [&](const std::shared_ptr<Session>& session) {
             // 未完成的会话保留在容器中
@@ -212,7 +223,9 @@ private:
             // 释放入站容量计数槽位
             if (session->direction() == Policy::Direction::inbound) {
                 // lock 协调 gRPC 接纳回调与控制循环的队列和接纳状态, 不在此执行网络等待.
+                ASTRA_PROFILE_BEGIN(profile_lock_214, "common.runtime.reap.wait.lock");
                 std::lock_guard lock(incoming_mutex_);
+                ASTRA_PROFILE_END(profile_lock_214);
                 --inbound_;
             }
 
@@ -224,6 +237,8 @@ private:
     // pump_sessions: 用同一单调时间推进当前会话, 执行合法替换返回的旧代次取消, 最后回收已完成对象.
     // 参数 now: 统一使用的推进逻辑单调时钟时间.
     void pump_sessions(Steady::time_point now) {
+
+        ASTRA_PROFILE_SCOPE("common.runtime.pump_sessions");
 
         for (const auto& session : sessions_) {
             // installed 保存推进前状态, 用于只在本轮首次安装身份时记录连接事件.
@@ -253,6 +268,8 @@ private:
     // 来源身份只接受受信名单/已验签 Hello, 保持每个部署最高代次, 不因断线或 TTL 清理忘记旧实例禁入.
     Result<void> observe(const Member& member) {
 
+        ASTRA_PROFILE_SCOPE("common.runtime.observe");
+
         if (member.role != Member::Role::star || member.id == id_) {
             return {};
         }
@@ -280,6 +297,8 @@ private:
     // 为已经安装的当前 Star 会话连接业务复制, 旧会话只取消不再推进数据, Planet 保持冻结控制路径.
     void bind(const std::shared_ptr<Session>& session, Steady::time_point now) {
 
+        ASTRA_PROFILE_SCOPE("common.runtime.bind");
+
         if (!catalog_ || !ephemeris_ || !session->installed() || session->bound() || session->error() || !session->peer() || session->peer()->role != Member::Role::star) {
             return;
         }
@@ -305,6 +324,8 @@ private:
 
     // 首轮来源恢复采用 30 s 有界等待; 超时只允许明确降级开放, 不将缺失来源或半份基线标为成功.
     void ready(Steady::time_point now, bool clock) {
+
+        ASTRA_PROFILE_SCOPE("common.runtime.ready");
 
         if (business_ready_ || !clock || !almanac_ready_ || config_.role != Member::Role::star) {
             return;
@@ -336,6 +357,8 @@ private:
     // 参数 now: 当前时钟时间.
     void advance_admission(Steady::time_point now) {
 
+        ASTRA_PROFILE_SCOPE("common.runtime.advance_admission");
+
         // 如果注册任务已有结果
         if (auto result = admission_->poll()) {
             if (*result) {
@@ -366,7 +389,9 @@ private:
                 // 首次连接成功, 设置核心凭证对象
                 if (!hello_) {
                     // lock 协调 gRPC 接纳回调与控制循环的队列和接纳状态, 不在此执行网络等待.
+                    ASTRA_PROFILE_BEGIN(profile_lock_368, "common.runtime.advance_admission.wait.lock");
                     std::lock_guard lock(incoming_mutex_);
+                    ASTRA_PROFILE_END(profile_lock_368);
                     id_ = joined.local.id;
                     hello_ = joined.hello;
                     accepting_ = config_.role != Member::Role::star;
@@ -492,6 +517,8 @@ private:
     // clock 表示本进程绝对时间已建立, 后续 holdover 不撤销已完成的启动资格.
     void advance_almanac(Steady::time_point now, bool clock) {
 
+        ASTRA_PROFILE_SCOPE("common.runtime.advance_almanac");
+
         if (config_.role != Member::Role::star || !hello_ || !almanac_) {
             return;
         }
@@ -518,13 +545,17 @@ private:
             intake_ = std::make_unique<Intake>(identity_, *hello_, *polaris_, *almanac_, *access_, notifier());
         }
         if (almanac_ready_ && clock) {
+            ASTRA_PROFILE_BEGIN(profile_lock_520, "common.runtime.advance_almanac.wait.lock");
             const std::lock_guard lock(incoming_mutex_); // 初始底稿完成后才接纳 Star 对等流.
+            ASTRA_PROFILE_END(profile_lock_520);
             accepting_ = true;
         }
     }
 
     // 显式业务端口只挂公共服务. 与内部端口完全独立的 TLS/消息预算, 不注册 Orbit/Pulse/Polaris 写入.
     void open_comet() {
+
+        ASTRA_PROFILE_SCOPE("common.runtime.open_comet");
 
         auto credentials = config_.tls ? Identity::external(config_.comet_identity) : Result<std::shared_ptr<grpc::ServerCredentials>>(grpc::InsecureServerCredentials());
         if (!credentials) {
@@ -565,6 +596,8 @@ private:
     // 参数 now: 当前时钟.
     void dial(Steady::time_point now) {
 
+        ASTRA_PROFILE_SCOPE("common.runtime.dial");
+
         if (hello_ && (config_.role != Member::Role::star || almanac_ready_) && now >= next_dial_) {
             // 计算当前尚未建立起稳定通信(即正在连接/握手中的)外呼会话的数量
             const auto pending = std::count_if(sessions_.begin(), sessions_.end(), [](const auto& session) { return session->direction() == Policy::Direction::outbound && !session->installed(); });
@@ -583,6 +616,8 @@ private:
 
     // step: 控制循环是协议和角色状态的唯一推进者. 顺序为回收完成, 准入, 拨号, 诊断.
     void step() {
+
+        ASTRA_PROFILE_SCOPE("common.runtime.step");
 
         // now 是本控制轮共用的单调时间, 用于会话截止,退避和历史保留.
         const auto now = Steady::now();

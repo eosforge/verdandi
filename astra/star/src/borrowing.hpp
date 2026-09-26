@@ -1,4 +1,5 @@
 #pragma once
+#include <astra/profile.hpp>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -16,7 +17,7 @@ public:
             return;
         lock_ = std::unique_lock(owner_->mutex, std::try_to_lock);
         if (!lock_.owns_lock()) {
-            outside(domain, [&] { lock_.lock(); }); // 等待远端准备结束时允许本地 RPC 提交.
+            outside(domain, [&] { ASTRA_PROFILE_SCOPE("star.borrowing.wait.source"); lock_.lock(); }); // 等待远端准备结束时允许本地 RPC 提交.
         }
     }
 
@@ -37,13 +38,17 @@ public:
     // action 的私有候选在外层构造, 不得在释放域锁期间发布共享投影、期限或计费.
     static void outside(std::unique_lock<std::shared_mutex>& domain, auto&& action) {
 
+        ASTRA_PROFILE_SCOPE("star.borrowing.outside");
         domain.unlock();
         try {
+            ASTRA_PROFILE_SCOPE("star.borrowing.prepare");
             std::forward<decltype(action)>(action)();
         } catch (...) {
+            ASTRA_PROFILE_SCOPE("star.borrowing.wait.domain.failure");
             domain.lock();
             throw;
         }
+        ASTRA_PROFILE_SCOPE("star.borrowing.wait.domain");
         domain.lock();
     }
 

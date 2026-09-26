@@ -1,5 +1,6 @@
 #include "intake.hpp"
 #include <astra/policy.hpp>
+#include <astra/profile.hpp>
 #include <grpcpp/create_channel.h>
 
 namespace astra {
@@ -39,11 +40,15 @@ std::optional<Status::Code> Intake::error() const noexcept {
 }
 
 void Intake::OnReadDone(bool ok) {
+
+    ASTRA_PROFILE_SCOPE("star.intake.Intake.OnReadDone");
     read_.store(ok ? 1 : -1, std::memory_order_release);
     wake_();
 }
 
 void Intake::OnWriteDone(bool ok) {
+
+    ASTRA_PROFILE_SCOPE("star.intake.Intake.OnWriteDone");
     write_.store(ok ? 1 : -1, std::memory_order_release);
     wake_();
 }
@@ -72,6 +77,8 @@ void Intake::cancel(Status::Code cause) {
 
 Result<void> Intake::receive() {
 
+    ASTRA_PROFILE_SCOPE("star.intake.Intake.receive");
+
     if (authenticated_) {
         return receiver_.receive(input_);
     }
@@ -93,6 +100,8 @@ Result<void> Intake::receive() {
 }
 
 void Intake::pump(Steady::time_point now) {
+
+    ASTRA_PROFILE_SCOPE("star.intake.Intake.pump");
 
     if (done() || error_) {
         return;

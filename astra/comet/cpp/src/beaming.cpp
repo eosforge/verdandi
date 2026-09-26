@@ -1,5 +1,6 @@
 #include "beaming.hpp"
 #include "selection.hpp"
+#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 #include <grpc/support/time.h>
 #include <utility>
@@ -49,6 +50,8 @@ Beacon::State Beaming::state() const {
 // data 为更新载荷; timeout 为等待确认期限.
 std::future<Result<Beacon::Receipt>> Beaming::update(Value data, std::chrono::milliseconds timeout) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.update");
+
     auto pending = std::make_shared<Pending>(nullptr, std::move(data)); // 先准备结果通道, 失败不替换已接纳期望.
     pending->result.emplace();
     auto future = pending->result->get_future();
@@ -58,7 +61,9 @@ std::future<Result<Beacon::Receipt>> Beaming::update(Value data, std::chrono::mi
     }
     pending->deadline = std::chrono::steady_clock::now() + timeout;
     {
+        ASTRA_PROFILE_BEGIN(profile_lock_60, "comet.cpp.beaming.Beaming.update.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_60);
         if (closed() || core_->stopped()) {
             settle(pending, std::unexpected(error(Error::Code::closed)));
             return future;
@@ -171,6 +176,8 @@ template <class Call>
 // Beaming::complete 调用完成, 按状态结算待定并释放名额.
 // call/status 为调用与 gRPC 状态.
 void Beaming::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.complete");
     call->code = status.error_code(); // 不复制任意远端 message/details, 控制轮再解析白名单 metadata.
     call->done.store(true, std::memory_order_release);
     call->owner->core_->wake(call->owner.get());
@@ -335,6 +342,8 @@ void Beaming::create(const std::shared_ptr<const Binding>& binding, Core::Time n
 // binding/now/time 为绑定、当前时间与生命时间.
 void Beaming::renew(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.renew");
+
     // 原重试预算已经耗尽时用新 order 重新请求实际租约, 不从旧重复确认制造新 TTL.
     if (renewal_sent_ && (time < *renewal_sent_ || time - *renewal_sent_ >= ttl_.count())) {
         renewal_sent_.reset();
@@ -442,10 +451,14 @@ void Beaming::notify(std::unique_lock<std::mutex>& lock) {
 
 Core::Time Beaming::poll(Core::Time now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& blocked, bool closing) {
 
+    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.poll");
+
     if ((closing || core_->stopped()) && !closed()) {
         close(); // 此时尚未取得对象锁, 关闭不会反向取得自身锁.
     }
+    ASTRA_PROFILE_BEGIN(profile_lock_447, "comet.cpp.beaming.Beaming.poll.wait.lock");
     std::unique_lock lock(mutex_);
+    ASTRA_PROFILE_END(profile_lock_447);
     consume(binding, now);
     if (wanted_->result && (!updating_ || updating_->pending != wanted_) && now >= wanted_->deadline) {
         settle(wanted_, std::unexpected(error(Error::Code::timeout))); // 明确这个 Update 尚未发出, 最新期望仍保留.
@@ -563,6 +576,8 @@ Beacon::State Beacon::state() const {
 // Beacon::update 提交字节更新, 返回 future 回执.
 // data 为更新载荷; timeout 为确认期限.
 std::future<Result<Beacon::Receipt>> Beacon::update(std::vector<std::uint8_t> data, std::chrono::milliseconds timeout) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beacon.update");
     if (data.size() > 1024 * 1024) {
         return update(Value{}, timeout);
     }
@@ -572,6 +587,8 @@ std::future<Result<Beacon::Receipt>> Beacon::update(std::vector<std::uint8_t> da
 // Beacon::update 提交区间更新, 不复制载荷, 调用期间保持有效.
 // data 为更新区间; timeout 为确认期限.
 std::future<Result<Beacon::Receipt>> Beacon::update(std::span<const std::uint8_t> data, std::chrono::milliseconds timeout) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beacon.update");
     // 和 Publisher 一样在复制 span 前拒绝超限, 不因重载不同绕过准备内存边界.
     if (data.size() > 1024 * 1024) {
         return update(Value{}, timeout);
@@ -582,6 +599,8 @@ std::future<Result<Beacon::Receipt>> Beacon::update(std::span<const std::uint8_t
 // Beacon::update 提交共享值更新, 只共享所有权不复制字节.
 // data 为更新值; timeout 为确认期限.
 std::future<Result<Beacon::Receipt>> Beacon::update(Value data, std::chrono::milliseconds timeout) {
+
+    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beacon.update");
     if (beaming_) {
         return beaming_->update(std::move(data), timeout);
     }

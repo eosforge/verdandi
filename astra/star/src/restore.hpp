@@ -1,4 +1,5 @@
 #pragma once
+#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 #include <expected>
 #include <optional>
@@ -21,6 +22,8 @@ public:
 
     // true 代表所有范围和来源确认完成, false 代表仍有工作; 失败后只返回原错误, 不继续部分执行.
     std::expected<bool, Error> step() {
+
+        ASTRA_PROFILE_SCOPE("star.restore.step");
 
         if (failure_)
             return std::unexpected(*failure_);

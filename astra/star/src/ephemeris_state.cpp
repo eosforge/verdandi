@@ -1,4 +1,5 @@
 #include "ephemeris_state.hpp"
+#include <astra/profile.hpp>
 #include <cassert>
 #include <utility>
 
@@ -95,8 +96,12 @@ void Ephemeris::State::notify(Notify notify, void* context) {
 
 std::expected<Clock::Reading, Ephemeris::State::Error> Ephemeris::State::reading() {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.reading");
+
+    ASTRA_PROFILE_BEGIN(profile_lock_97, "star.ephemeris_state.Ephemeris.State.reading.wait.timing");
     const std::lock_guard timing(timing_); // 共享读者仍按调用顺序验证注入时钟, 不并发修改 observed_.
-    auto value = time_();                  // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
+    ASTRA_PROFILE_END(profile_lock_97);
+    auto value = time_(); // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
     if (!value || !value->ready || value->time.time_since_epoch().count() < 0 || (observed_ && value->time < *observed_)) {
         return std::unexpected(Error::clock);
     }
@@ -137,6 +142,8 @@ std::size_t Ephemeris::State::allowance(const Projection& scene) const {
 }
 
 void Ephemeris::State::publish(Projection& scene, std::size_t before, const Projection::Event& event) noexcept {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.publish");
     history_ = history_ - before + scene.history(); // Edit 已结束, 计费与来源状态同边界可见.
     if (notify_) {
         notify_(context_, *event.name->scope, event);
@@ -145,13 +152,17 @@ void Ephemeris::State::publish(Projection& scene, std::size_t before, const Proj
 
 std::expected<Ephemeris::State::Receipt, Ephemeris::State::Error> Ephemeris::State::create(const Scope& scope, Value attr, Value data, std::uint32_t ttl) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.create");
+
     if (!scope.valid()) {
         return std::unexpected(Error::input);
     }
     std::vector<Retired> expired;  // 先于域锁构造, 批量到期的旧资源在解锁后释放.
     Retired retired;               // 本次提交的通知与旧资源同样在锁外析构.
     auto uuid = Ephemeris::uuid(); // 随机源/格式化仅在 Create 且位于域锁外执行.
+    ASTRA_PROFILE_BEGIN(profile_lock_153, "star.ephemeris_state.Ephemeris.State.create.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_153);
     auto stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
@@ -161,7 +172,9 @@ std::expected<Ephemeris::State::Receipt, Ephemeris::State::Error> Ephemeris::Sta
         return std::unexpected(error(record.error()));
     }
     advance(stamp->time, expired);
+    ASTRA_PROFILE_BEGIN(profile_lock_163, "star.ephemeris_state.Ephemeris.State.create.wait.origin_lock");
     const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
+    ASTRA_PROFILE_END(profile_lock_163);
     if (source_.find(scope, uuid)) {
         return std::unexpected(Error::conflict);
     } // 碰撞明确拒绝, 不在锁内重复读取随机源.
@@ -229,19 +242,25 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::renew(const Scope
 
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, bool renewal) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.change");
+
     if (!scope.valid() || !Ephemeris::valid(uuid)) {
         return std::unexpected(Error::input);
     }
     std::vector<Retired> expired; // 追赶产生的旧载荷在锁外批量析构.
     Retired retired;
+    ASTRA_PROFILE_BEGIN(profile_lock_236, "star.ephemeris_state.Ephemeris.State.change.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_236);
     auto stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
     advance(stamp->time, expired);
+    ASTRA_PROFILE_BEGIN(profile_lock_242, "star.ephemeris_state.Ephemeris.State.change.wait.origin_lock");
     const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
-    const auto old = source_.find(scope, uuid);   // 只查询自有来源, 副本不能成为可续租本机注册.
+    ASTRA_PROFILE_END(profile_lock_242);
+    const auto old = source_.find(scope, uuid); // 只查询自有来源, 副本不能成为可续租本机注册.
     if (!old) {
         return std::unexpected(Error::ended);
     }
@@ -366,18 +385,24 @@ std::expected<Ephemeris::State::Retired, Ephemeris::State::Error> Ephemeris::Sta
 
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::remove(const Scope& scope, std::string_view uuid) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.remove");
+
     if (!scope.valid() || !Ephemeris::valid(uuid)) {
         return std::unexpected(Error::input);
     }
     std::vector<Retired> expired;
     std::optional<Retired> retired; // 声明早于锁, 删除资源在解锁后回收.
+    ASTRA_PROFILE_BEGIN(profile_lock_373, "star.ephemeris_state.Ephemeris.State.remove.wait.lock");
     const std::lock_guard lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_373);
     const auto stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
     advance(stamp->time, expired);
+    ASTRA_PROFILE_BEGIN(profile_lock_379, "star.ephemeris_state.Ephemeris.State.remove.wait.origin_lock");
     const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
+    ASTRA_PROFILE_END(profile_lock_379);
     auto removed = erase(scope, uuid, std::chrono::steady_clock::now(), true);
     if (!removed) {
         return std::unexpected(removed.error());
@@ -387,6 +412,8 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::remove(const Scop
 }
 
 std::shared_ptr<Ephemeris::State::Replica> Ephemeris::State::advance(Clock::Time now, std::vector<Retired>& retired, Replica* held) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.advance");
 
     std::shared_ptr<Replica> blocked; // 返回仍有到期/退役责任的忙来源, 公开读取稍后在域锁外等待.
     if (now < due_)
@@ -398,7 +425,9 @@ std::shared_ptr<Ephemeris::State::Replica> Ephemeris::State::advance(Clock::Time
             ++item;
             continue; // 已持非递归来源锁, 不能再次 try_lock, 更不能访问正在编辑的原生目录.
         }
+        ASTRA_PROFILE_BEGIN(profile_lock_400, "star.ephemeris_state.Ephemeris.State.advance.wait.preparing");
         const std::unique_lock preparing(replica.mutex, std::try_to_lock); // 持域锁时只尝试, 禁止等待形成反向锁序.
+        ASTRA_PROFILE_END(profile_lock_400);
         if (!preparing.owns_lock()) {
             if (!blocked && (replica.retired || (replica.agenda && replica.agenda->next() <= now)))
                 blocked = item->second;
@@ -412,7 +441,9 @@ std::shared_ptr<Ephemeris::State::Replica> Ephemeris::State::advance(Clock::Time
             ++item;
         }
     }
+    ASTRA_PROFILE_BEGIN(profile_lock_414, "star.ephemeris_state.Ephemeris.State.advance.wait.origin_lock");
     const std::unique_lock origin_lock(*export_); // 远端清理已经结束, 只为本机来源维护获取导出锁.
+    ASTRA_PROFILE_END(profile_lock_414);
     if (agenda_)
         agenda_->advance(now, [&](Agenda::Node* hook, Clock::Time boundary) {
             auto& timer = *static_cast<Timer*>(hook); // 钩子仅由本 State 分配, 不接受外部任意节点.
@@ -447,8 +478,12 @@ std::shared_ptr<Ephemeris::State::Replica> Ephemeris::State::advance(Clock::Time
 
 void Ephemeris::State::tick() {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.tick");
+
     std::vector<Retired> retired; // 等待/回收不持域锁, 失败仍保留之前已经完成的到期删除.
+    ASTRA_PROFILE_BEGIN(profile_lock_450, "star.ephemeris_state.Ephemeris.State.tick.wait.lock");
     std::unique_lock lock(*gate_);
+    ASTRA_PROFILE_END(profile_lock_450);
     if (!agenda_ && replicas_.empty())
         return; // 尚无任何清理责任时允许 Clock 尚未初始化.
     for (;;) {
@@ -468,6 +503,8 @@ auto Ephemeris::State::execute(auto&& action) {
 
 std::expected<Ephemeris::State::Projection::View, Ephemeris::State::Error> Ephemeris::State::capture(const Scope& scope) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.capture");
+
     if (!scope.valid()) {
         return std::unexpected(Error::input);
     }
@@ -481,6 +518,8 @@ std::expected<Ephemeris::State::Projection::View, Ephemeris::State::Error> Ephem
 
 std::expected<Ephemeris::State::Projection::Point, Ephemeris::State::Error> Ephemeris::State::find(const Scope& scope, std::string_view uuid) {
 
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.find");
+
     if (!scope.valid() || !Ephemeris::valid(uuid)) {
         return std::unexpected(Error::input);
     }
@@ -493,6 +532,8 @@ std::expected<Ephemeris::State::Projection::Point, Ephemeris::State::Error> Ephe
 }
 
 std::expected<std::vector<Ephemeris::State::Projection::Event>, Ephemeris::State::Error> Ephemeris::State::changes(const Scope& scope, std::uint64_t since) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.changes");
 
     if (!scope.valid()) {
         return std::unexpected(Error::input);
@@ -511,17 +552,29 @@ std::expected<std::vector<Ephemeris::State::Projection::Event>, Ephemeris::State
 }
 
 Ephemeris::State::Source::View Ephemeris::State::source() {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.source");
+    ASTRA_PROFILE_BEGIN(profile_lock_513, "star.ephemeris_state.Ephemeris.State.source.wait.lock");
     const std::shared_lock lock(*export_); // 来源事实自带 deadline, 接收端自行过期; 导出不触发任何域 GC.
+    ASTRA_PROFILE_END(profile_lock_513);
     return source_.capture();
 }
 
 std::expected<std::vector<Ephemeris::State::Source::Event>, Ephemeris::State::Error> Ephemeris::State::events(std::uint64_t since) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.events");
+    ASTRA_PROFILE_BEGIN(profile_lock_518, "star.ephemeris_state.Ephemeris.State.events.wait.lock");
     const std::shared_lock lock(*export_);
+    ASTRA_PROFILE_END(profile_lock_518);
     return source_.replay(since).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 
 std::expected<Ephemeris::State::Source::Delivery, Ephemeris::State::Error> Ephemeris::State::deliver(std::uint64_t since, std::size_t count, std::size_t bytes) {
+
+    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.deliver");
+    ASTRA_PROFILE_BEGIN(profile_lock_523, "star.ephemeris_state.Ephemeris.State.deliver.wait.lock");
     const std::shared_lock lock(*export_); // 快照/后缀捕获不等待远端安装、公开投影准备或其他来源 GC.
+    ASTRA_PROFILE_END(profile_lock_523);
     return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 

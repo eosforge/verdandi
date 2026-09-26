@@ -79,6 +79,10 @@ flowchart TD
 `read_inflight_` 和 `read_ready_` 分别表示 gRPC 与控制循环拥有缓冲区, 再提交读取时必须同时检查两者.
 写消息直到 `OnWriteDone` 才可复用. 不嵌套持有策略锁和会话锁, 不在回调里处理角色或签名校验.
 
+成功消费的局部接收消息在发送准备前释放, 随后重新挂起唯一读取, 允许下一包与当前发送准备重叠.
+本轮仍最多消费一包; 发送准备期间到达的新包只能由下一轮接走, 不能重复挂读覆盖它.
+业务 `Data::receive` 只借用消息到调用返回, 需要跨调用保留的内容必须取得独立所有权.
+
 `cancel` 只提出关闭请求. 控制循环继续推进 Finish / RemoveHold, 收到 OnDone 后才能回收 reactor.
 `completed` 发布 done 之后不能再访问成员, 回调只使用独立持有的 `Wakeup`.
 `Admission` 禁止搬移, 因为 gRPC 借用了它的请求地址. 退出先停止接纳、取消并排空 RPC, 再关闭服务器.
@@ -116,7 +120,7 @@ bash astra/build.sh regression --profile debug
 | `bench` 调度或采样 | 历史实验当前缺少可用比较接收器, 恢复前不以它作为生产性能门槛 |
 | 准备或发布二进制 | 核对锁定来源、许可证、实际动态运行库和安装树, 在目标环境运行 |
 
-`test` 与 `regression` 先构建 C++/Go 再执行 Go 和 CTest. 旧 `soak`/`scale` 当前明确拒绝, 不替代新链路验收. 入口重新启用
+`test` 与 `regression` 先构建 C++/Go 再执行 Go 和 CTest. 旧 `soak`/`scale` 当前明确拒绝; 新链路使用 [三 Star 长测](../testkit/soak.md) 的独立有界入口. 入口重新启用
 `BUILD_TESTING` 并拒绝零测试成功. 直接用 CMake 时仍可设置 `BUILD_TESTING=OFF` 构建纯服务,
 但这种产物不能作为通过回归的证据. 不兼容的 core-only、分配测量和 sanitizer 组合直接失败.
 

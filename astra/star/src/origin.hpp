@@ -1,6 +1,7 @@
 #pragma once
 #include "pages.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 #include <chrono>
 #include <cstdint>
@@ -245,6 +246,8 @@ public:
         // 无异常发布来源根、查找表、位置、历史和计费. 外层在同一 gate 内发布投影, 再释放返回的旧资源.
         Retired commit() noexcept {
 
+            ASTRA_PROFILE_SCOPE("star.origin.commit");
+
             auto& owner = *owner_; // 单个仍有效的所属来源; 二次 commit 属于内部调用错误.
             if (record_) {
                 owner.tree_.set(slot_, added_ ? name_ : nullptr, std::move(*record_));
@@ -393,6 +396,8 @@ public:
 
         // 无分配发布候选根/计费, 返回旧根须在域锁外释放, 不更改来源位置/历史.
         Tree commit() noexcept {
+
+            ASTRA_PROFILE_SCOPE("star.origin.commit");
             assert(owner_ && !failed_);
             auto old = std::move(owner_->tree_);
             owner_->tree_ = std::move(tree_);
@@ -625,6 +630,8 @@ public:
 
     // O(1) 捕获整个来源/域, 不是逐 Scope 复制快照向量.
     View capture() const {
+
+        ASTRA_PROFILE_SCOPE("star.origin.capture");
         idle();
         return View(tree_.capture(), position_, bytes_ + directory_, gate_);
     }
@@ -680,6 +687,8 @@ public:
     // 准备一次单目标事实. position 非空必须是严格 +1; nullopt 仅供 Catalog/副本本地 TTL 维护, 不写来源历史.
     // 原生校验及最终计时由外层完成, 本类只验证地址/容量/连续位置. 失败不发布半个记录或预占版本.
     std::expected<Edit, Error> prepare(const Scope& scope, std::string_view key, std::optional<Item> record, std::optional<std::uint64_t> position, std::chrono::steady_clock::time_point now, Form form = Form::record) {
+
+        ASTRA_PROFILE_SCOPE("star.origin.prepare");
 
         idle();
         if (!scope.valid() || !valid_key(key)) {
@@ -759,11 +768,15 @@ public:
 
     // 在目标锁外创建空候选, 只读取构造后固定的计费/容量; 不隐式把新来源位置设为快照版本.
     Draft prepare(std::uint64_t position) const {
+
+        ASTRA_PROFILE_SCOPE("star.origin.prepare");
         return Draft(position, measure_, limits_);
     }
 
     // 仅远端/合并容器可准备内部保留式合并, 本机来源必须逐项连续编号.
     Batch prepare() {
+
+        ASTRA_PROFILE_SCOPE("star.origin.prepare");
         idle();
         if (local_) {
             throw std::logic_error("Local source cannot bypass ordered commits");
@@ -792,6 +805,8 @@ public:
     // 完整候选一次交换, 用于仍要求整个容器原子的内部调用; 分步恢复只复用 validate.
     std::expected<Replaced, Error> reset(Draft&& draft) {
 
+        ASTRA_PROFILE_SCOPE("star.origin.reset");
+
         const auto valid = validate(draft);
         if (!valid) {
             return std::unexpected(valid.error());
@@ -814,6 +829,8 @@ public:
     // since 为调用方完整安装的位置; 历史年龄只影响写入裁剪, 不在读取时使完整后缀失效.
     std::expected<std::vector<Event>, Error> replay(std::uint64_t since) const {
 
+        ASTRA_PROFILE_SCOPE("star.origin.replay");
+
         idle();
         if (since > position_) {
             return std::unexpected(Error::version);
@@ -834,6 +851,8 @@ public:
     // 捕获至多 count 项/bytes 逻辑字节的完整连续前缀. 首项超限明确 capacity, 不静默跳过或拆分提交.
     // 历史不足返回 O(1) 全来源基线, 未被裁剪的超龄历史仍可发送. 不提前增长 since, 网络发送和编码须在调用者释放 gate 后进行.
     std::expected<Delivery, Error> deliver(std::uint64_t since, std::size_t count, std::size_t bytes) const {
+
+        ASTRA_PROFILE_SCOPE("star.origin.deliver");
 
         idle();
         if (!local_ || count == 0 || bytes == 0) {

@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <array>
+#include <astra/profile.hpp>
 #include <bit>
 #include <cassert>
 #include <cstdint>
@@ -80,6 +81,8 @@ public:
         // offset 必须在 0..size, maximum 为零允许只询问空页; 异常由上层丢弃本页并维持旧位置.
         std::size_t page(std::size_t offset, std::size_t maximum, auto&& reader) const {
 
+            ASTRA_PROFILE_SCOPE("common.pages.page");
+
             if (offset > size()) {
                 throw std::out_of_range("Snapshot page position exceeds view");
             }
@@ -148,6 +151,8 @@ public:
     // 创建/复制到指定槽的全部页面. 失败只留下内容相同的私有页, 当前与已捕获视图均不变.
     void prepare(std::uint64_t slot) {
 
+        ASTRA_PROFILE_SCOPE("common.pages.prepare");
+
         // 第 15 层已覆盖全部 uint64 槽号, 不执行超过位宽的右移.
         while (height_ < 15 && (slot >> (6 + height_ * 4)) != 0) {
             // parent 在提交前独立分配, 子树放在第零路以保持所有既有槽号不变.
@@ -170,6 +175,8 @@ public:
 
     // prepare 后提交新值. key 非空表示新有效项; 覆盖已有项传空 Key 并复用原始字符串.
     void set(std::uint64_t slot, Key key, Record record) noexcept {
+
+        ASTRA_PROFILE_SCOPE("common.pages.set");
 
         // added 表示新占用槽位, 只在这种情况下累加沿途 used 并设置位图.
         const bool added = static_cast<bool>(key);
@@ -196,6 +203,8 @@ public:
 
     // prepare 后删除有效槽. 空子树沿路径回收, 不扫描其他页或分配空闲槽列表.
     void erase(std::uint64_t slot) noexcept {
+
+        ASTRA_PROFILE_SCOPE("common.pages.erase");
 
         remove(root_, height_, slot);
         if (!root_) {
@@ -227,8 +236,10 @@ private:
     static void private_page(std::shared_ptr<Node>& link) {
 
         if (!link) {
+            ASTRA_PROFILE_COUNT("common.pages.allocate_bytes", sizeof(Page));
             link = std::make_shared<Page>();
         } else if (link.use_count() != 1) {
+            ASTRA_PROFILE_COUNT("common.pages.clone_bytes", sizeof(Page));
             link = std::make_shared<Page>(static_cast<const Page&>(*link));
         }
     }

@@ -1,5 +1,6 @@
 #include "catalog_service.hpp"
 #include "catalog_feed.hpp"
+#include <astra/profile.hpp>
 #include <cstring>
 
 namespace astra {
@@ -27,6 +28,8 @@ bool Catalog::Service::empty() const {
 }
 
 grpc::ServerWriteReactor<proto::comet::v1::CatalogWatchReply>* Catalog::Service::Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_service.Catalog.Service.Watch");
     return feed_->Watch(context, request);
 }
 
@@ -39,6 +42,8 @@ Catalog::Value Catalog::Service::copy(const std::string& value) {
 }
 
 std::expected<std::optional<Access::Permit>, grpc::Status> Catalog::Service::enter(grpc::CallbackServerContext& context, std::string_view instance, const proto::comet::v1::Scope& scope, bool initial) const {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_service.Catalog.Service.enter");
 
     auto permit = gateway_.enter(context); // 先做一次逻辑身份检查, 生命周期覆盖全部原生提交.
     if (!permit) {
@@ -120,6 +125,8 @@ grpc::Status Catalog::Service::ttl(grpc::CallbackServerContext& context) const {
 }
 
 grpc::ServerUnaryReactor* Catalog::Service::Publish(grpc::CallbackServerContext* context, const proto::comet::v1::PublishRequest* request, proto::comet::v1::PublishReply* reply) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_service.Catalog.Service.Publish");
     return execute(*context, [&] {
         // 不复制超限字段, 通过静态契约后才准备唯一不可变载荷和小响应.
         if (auto checked = address(*context, request->scope()); !checked.ok()) {
@@ -152,6 +159,8 @@ grpc::ServerUnaryReactor* Catalog::Service::Publish(grpc::CallbackServerContext*
 }
 
 grpc::ServerUnaryReactor* Catalog::Service::Renew(grpc::CallbackServerContext* context, const proto::comet::v1::CatalogRenewRequest* request, proto::comet::v1::Empty*) {
+
+    ASTRA_PROFILE_SCOPE("star.catalog_service.Catalog.Service.Renew");
     return execute(*context, [&] {
         if (auto checked = address(*context, request->scope()); !checked.ok()) {
             return checked;

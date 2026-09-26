@@ -1,6 +1,7 @@
 // 本文件实现了 grpc_session.hpp 中的 Session 基类逻辑, 以及内部隐藏的 Outbound(客户端出站逻辑),
 // 同时提供了 factory connect_session 及 Inbound (服务端入站逻辑) 的实现.
 #include "grpc_session.hpp"
+#include <astra/profile.hpp>
 
 #include "rpc_status.hpp"
 #include <algorithm>
@@ -73,12 +74,16 @@ private:
     // begin_read 重载: 借用会话接收缓冲提交读取, OnReadDone 前保持地址稳定.
     // 参数 message: 将收到的下行数据放到会话所给的容器.
     void begin_read(proto::astra::v1::SessionPacket* message) override {
+
+        ASTRA_PROFILE_SCOPE("common.grpc_session.begin_read");
         StartRead(message);
     }
 
     // begin_write 重载: 借用会话发送缓冲提交写入, OnWriteDone 前保持内容不变.
     // 参数 message: 准备发送的数据指针.
     void begin_write(const proto::astra::v1::SessionPacket* message) override {
+
+        ASTRA_PROFILE_SCOPE("common.grpc_session.begin_write");
         StartWrite(message);
     }
 
@@ -114,6 +119,8 @@ Session::Session(const Config& config, Policy::Direction direction, Generation g
 // 如果超出容量 (队列容量固定为4), 返回 false, 保证背压和流量控制.
 bool Session::enqueue(proto::astra::v1::SessionPacket message, Steady::time_point deadline) {
 
+    ASTRA_PROFILE_SCOPE("common.grpc_session.Session.enqueue");
+
     // 检查积压消息是否达到了队列最大容量
     if (queued_ == queue_.size()) {
         return false;
@@ -129,6 +136,8 @@ bool Session::enqueue(proto::astra::v1::SessionPacket message, Steady::time_poin
 
 // receive 函数实现: 分析刚刚读到的通信协议帧, 处理身份检查与心跳 ping-pong, 拦截非预期消息
 Result<std::vector<Generation>> Session::receive(const proto::astra::v1::SessionPacket& packet, Policy& policy, const Identity& identity, Steady::time_point now) {
+
+    ASTRA_PROFILE_SCOPE("common.grpc_session.Session.receive");
 
     // 基础包大小限制检查, 如果对方在协商后的限额之上继续发大包则视为容量超额协议违规
     if (packet.ByteSizeLong() > maximum_) {
@@ -210,6 +219,8 @@ Result<std::vector<Generation>> Session::receive(const proto::astra::v1::Session
 // pump 函数实现: 上层唯一入口, 定期执行, 检测状态, 排队发数据或者获取接收队列的新数据.
 std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, Steady::time_point now) {
 
+    ASTRA_PROFILE_SCOPE("common.grpc_session.Session.pump");
+
     if (done()) {
         return {}; // 已经结束, 直接跳过处理.
     }
@@ -226,7 +237,9 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
         }
 
         // gRPC 允许 StartCall 前准备读写; Runtime 在任何完成回调前已持有此对象.
+        ASTRA_PROFILE_BEGIN(profile_lock_228, "common.grpc_session.Session.pump.wait.lock");
         std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_228);
         started_ = true;
         if (!error_) {
             // 开始安排投递最初的读任务与相应的头/信息
@@ -237,6 +250,7 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
                 write_.mutable_hello()->CopyFrom(*hello_);
                 write_deadline_ = handshake_deadline_;
                 write_inflight_ = true;
+                ASTRA_PROFILE_MARK(profile_write_);
                 begin_write(&write_);
             } else {
                 // 如果是服务端入站, 则首先要送出包含元数据(metadata)的包头部.
@@ -257,12 +271,15 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
 
     {
         // 加锁, 将属于 I/O 线程交互的回调状态信息拷贝至本地控制流判定用
+        ASTRA_PROFILE_BEGIN(profile_lock_259, "common.grpc_session.Session.pump.wait.lock");
         std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_259);
         transport_closed = read_failed_ || write_failed_ || remote_cancelled_;
         // 检查写入动作是否超时, 无论是元数据流阶段还是消息队列帧发送阶段
         write_expired = (write_inflight_ && now >= write_deadline_) || (metadata_inflight_ && now >= handshake_deadline_);
         // 如果当前表明有已经完整从底层收到的封包:
         if (read_ready_) {
+            ASTRA_PROFILE_CONSUME(profile_ready_, "common.session.ready_to_consume");
             message.emplace();
             message->Swap(&read_);
             read_ready_ = false; // 清空本地已就绪标志位, 准备下次接收
@@ -323,16 +340,30 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
         }
     }
 
+    // 当前消息已经验证并移交业务, 锁外释放其解码对象, 不让下一次读取等待发送准备/序列化.
+    // read_ 与局部 message 已通过 Swap 分离; 回调最多交付一份新包, 本轮不递归消费它.
+    message.reset();
+
     // 只有控制队列为空且实际写槽空闲时才准备数据, 不为繁忙流构建额外编码 FIFO.
     bool writable{};
     {
+        ASTRA_PROFILE_BEGIN(profile_lock_328, "common.grpc_session.Session.pump.wait.lock");
         const std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_328);
         writable = !write_inflight_ && !metadata_inflight_ && !read_failed_ && !write_failed_ && !remote_cancelled_;
+        // 仍由控制线程提交读取, 回调只发布结果. 必须同时排除在途/就绪和关闭状态,
+        // 不能覆盖处理发送准备期间已经到达的下一包, 也不能在错误后重新发起读取.
+        if (!error_ && !read_failed_ && !write_failed_ && !remote_cancelled_ && !read_inflight_ && !read_ready_) {
+            read_inflight_ = true;
+            begin_read(&read_);
+        }
     }
     bool prepared{};
     if (!error_ && installed_ && data_ && queued_ == 0 && writable) {
         try {
+            ASTRA_PROFILE_BEGIN(preparation, "common.session.prepare");
             const auto packet = data_->prepare(now);
+            ASTRA_PROFILE_END(preparation);
             if (!packet) {
                 cancel(packet.error().code);
             } else if (*packet) {
@@ -354,7 +385,9 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
 
     {
         // 这里只锁会话的在途标志, 身份验签和 Policy 操作已经在锁外完成.
+        ASTRA_PROFILE_BEGIN(profile_lock_356, "common.grpc_session.Session.pump.wait.lock");
         std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_356);
         if (error_) {
             // 先让正常 Finish 携带明确错误码. 读, 写或最终状态尚未排空时, 最多宽限 250 ms 再强制取消.
             if (now >= cancel_deadline_) {
@@ -376,6 +409,7 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
                 head_ = (head_ + 1) % queue_.size();
                 --queued_;
                 write_inflight_ = true;
+                ASTRA_PROFILE_MARK(profile_write_);
                 begin_write(&write_);
             }
 
@@ -383,15 +417,12 @@ std::vector<Generation> Session::pump(Policy& policy, const Identity& identity, 
                 write_ = data_->take(); // 与 StartWrite 同一步推进来源发送位置, 回调只归还写槽.
                 write_deadline_ = now + config_.pong_timeout;
                 write_inflight_ = true;
+                ASTRA_PROFILE_MARK(profile_write_);
                 begin_write(&write_);
             }
 
-            // 即使等待业务回补也继续接收 Pong/Repair. 积压超限按 capacity 关闭, 不暂停控制读取.
-            // 未消费的 read_ 仍归控制循环, 不能重新交给 gRPC 写入.
-            if (!read_inflight_ && !read_ready_) {
-                read_inflight_ = true;
-                begin_read(&read_); // 让 gRPC 继续向底层拉取下一个协议帧
-            }
+            // 读取已在发送准备前提交. 即使回调此时已完成, 也留给下一轮消费,
+            // 不再 StartRead, 保留唯一接收槽和每轮最多处理一包的公平边界.
         }
     }
 
@@ -445,12 +476,17 @@ void Session::cancel(Status::Code error) {
 // 接收读数据异步完成操作通报给系统事件层.
 void Session::read_done(bool ok) {
 
+    ASTRA_PROFILE_SCOPE("common.grpc_session.Session.read_done");
+
     {
         // lock 只保护回调完成标志和缓冲交接, 退出临界区后再通知控制循环.
+        ASTRA_PROFILE_BEGIN(profile_lock_449, "common.grpc_session.Session.read_done.wait.lock");
         std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_449);
         read_inflight_ = false; // 清除 I/O 在途状态标志
-        read_ready_ = ok;       // 是否得到了完好无损的新包裹
-        read_failed_ = !ok;     // 失败标志为 ok 的反面
+        ASTRA_PROFILE_MARK(profile_ready_);
+        read_ready_ = ok;   // 是否得到了完好无损的新包裹
+        read_failed_ = !ok; // 失败标志为 ok 的反面
     }
     wake_(); // 回调外围总循环继续处理 pump
 }
@@ -458,9 +494,14 @@ void Session::read_done(bool ok) {
 // 接收发数据异步完成通报.
 void Session::write_done(bool ok) {
 
+    ASTRA_PROFILE_SCOPE("common.grpc_session.Session.write_done");
+
     {
         // lock 只保护回调完成标志和缓冲交接, 退出临界区后再通知控制循环.
+        ASTRA_PROFILE_BEGIN(profile_lock_462, "common.grpc_session.Session.write_done.wait.lock");
         std::lock_guard lock(mutex_);
+        ASTRA_PROFILE_END(profile_lock_462);
+        ASTRA_PROFILE_CONSUME(profile_write_, "common.session.write_to_callback");
         write_inflight_ = false;
         write_failed_ = !ok;
     }
@@ -584,12 +625,16 @@ void Inbound::begin_call() {
 // Inbound::begin_read 开始读取一帧, message 为接收缓冲, 所有权仍归调用方.
 // message 为接收缓冲, 读完成前不得复用.
 void Inbound::begin_read(proto::astra::v1::SessionPacket* message) {
+
+    ASTRA_PROFILE_SCOPE("common.grpc_session.Inbound.begin_read");
     StartRead(message);
 }
 
 // Inbound::begin_write 开始写入一帧, message 为发送内容, 完成前不得修改.
 // message 为发送缓冲, 写完成前不得修改.
 void Inbound::begin_write(const proto::astra::v1::SessionPacket* message) {
+
+    ASTRA_PROFILE_SCOPE("common.grpc_session.Inbound.begin_write");
     StartWrite(message);
 }
 

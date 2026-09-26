@@ -2,6 +2,7 @@
 #include "wheel.hpp"
 #include <algorithm>
 #include <astra/clock.hpp>
+#include <astra/profile.hpp>
 #include <chrono>
 #include <cstdint>
 #include <stdexcept>
@@ -58,6 +59,8 @@ public:
     // 先前已完整提交的到期不回滚. 失败时调用方必须停止受影响视图的追平承诺, 不伪装整组推进成功.
     template <typename F>
     void advance(Clock::Time now, F&& fire) {
+
+        ASTRA_PROFILE_SCOPE("star.agenda.advance");
 
         if (now < time_) {
             throw std::invalid_argument("Agenda time cannot move backwards");

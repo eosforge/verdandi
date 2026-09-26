@@ -2,9 +2,13 @@
 #include "fixture.hpp"
 #include "grpc_session.hpp"
 
+#include <functional>
 #include <iostream>
+#include <memory>
+#include <new>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 using namespace astra;
 
@@ -108,6 +112,13 @@ struct Manual final : Session {
         write_done(true);
     }
 
+    // 结束唯一在途读取, 用于模拟发送准备与 EOF 交错; 不能把旧指针留给后续 deliver.
+    void eof() {
+        CHECK(receiving);
+        receiving = nullptr;
+        read_done(false);
+    }
+
     // 人工发布初始元数据发送完成, 解除后续消息发送的等待.
     void acknowledge_metadata() {
         metadata_done(true);
@@ -144,6 +155,48 @@ struct Manual final : Session {
         if (finish_immediately) {
             complete();
         }
+    }
+};
+
+// 控制发送准备期间的交错事件, 只检验 Session 的缓冲交接, 不模拟业务复制算法.
+struct Preparation final : Session::Data {
+    std::function<void()> action;             // prepare 内同步执行的测试动作, 空表示没有交错.
+    proto::astra::v1::SessionPacket outbound; // 本例唯一候选发送包, take 才交接.
+    std::uint64_t received{};                 // 最后接收的测试序号, 初始零; 来自 Repair.trigger.
+    unsigned preparations{}, taken{};         // 准备/实际提交次数, 验证错误不推进发送位置.
+    bool rejected{};                          // true 模拟业务校验拒绝, 默认接纳.
+
+    // 接收序号必须连续; 不保留借用字段, 验证下一轮没有覆盖或重复消费旧缓冲.
+    Result<void> receive(const proto::astra::v1::SessionPacket& packet, Steady::time_point) override {
+
+        CHECK(packet.has_repair() && packet.repair().trigger() == received + 1);
+        if (rejected) {
+            return Status::protocol("Test receive rejection");
+        }
+        received = packet.repair().trigger();
+        return {};
+    }
+
+    // 先交错网络完成, 再返回独占候选; action 允许抛异常以验证取消回滚.
+    Result<const proto::astra::v1::SessionPacket*> prepare(Steady::time_point) override {
+
+        ++preparations;
+        if (action) {
+            action();
+        }
+        outbound.mutable_repair()->set_trigger(1);
+        return &outbound;
+    }
+
+    // Session 只有即将提交 StartWrite 时才能调用, 取消后不得消费此候选.
+    proto::astra::v1::SessionPacket take() override {
+        ++taken;
+        return std::move(outbound);
+    }
+
+    // 本例不模拟初始同步阶段, 返回固定就绪不影响传输交接规则.
+    bool ready() const noexcept override {
+        return true;
     }
 };
 
@@ -345,6 +398,90 @@ int main() {
         }
         CHECK(policy.installations == 4);
         {
+            // 消费第一包后应先重挂读取, 发送准备中到达第二包不允许同轮再次读取/消费.
+            Manual session(config, Policy::Direction::inbound, {9}, greeting, std::nullopt, [] {});
+            start(session);
+            auto data = std::make_unique<Preparation>(); // 所有权移交 Session, 本用例独占测试协作者.
+            auto* preparing = data.get();                // Session 寿命内借用, 仅检查交接计数.
+            data->action = [&] {
+                CHECK(session.receiving);
+                proto::astra::v1::SessionPacket next; // 模拟下一帧已在网络到达, 回调不处理业务.
+                next.mutable_repair()->set_trigger(2);
+                session.deliver(std::move(next));
+            };
+            session.bind(std::move(data));
+            proto::astra::v1::SessionPacket packet; // 第一帧由本轮 pump 消费.
+            packet.mutable_repair()->set_trigger(1);
+            session.deliver(std::move(packet));
+            const auto reads = session.reads; // 固定前值, 一轮最多新增一个读取槽.
+            session.pump(policy, **identity, now);
+            CHECK(preparing->received == 1 && preparing->preparations == 1 && preparing->taken == 1);
+            CHECK(session.reads == reads + 1 && !session.receiving);
+            preparing->action = {}; // 下一轮只消费已就绪的第二帧, 写仍在途不应再次准备.
+            session.pump(policy, **identity, now);
+            CHECK(preparing->received == 2 && preparing->preparations == 1 && session.receiving);
+            CHECK(session.reads == reads + 2 && !session.error());
+            session.cancel();
+            session.eof();
+            session.acknowledge();
+            session.pump(policy, **identity, now);
+            CHECK(session.done() && preparing->taken == 1);
+        }
+        {
+            // 当前包未通过业务校验时禁止预读, 也不能准备或交接新的发送候选.
+            Manual session(config, Policy::Direction::inbound, {10}, greeting, std::nullopt, [] {});
+            start(session);
+            auto data = std::make_unique<Preparation>(); // 本例模拟明确协议错误.
+            auto* preparing = data.get();                // 只借用仍由 Session 持有的协作者.
+            data->rejected = true;
+            session.bind(std::move(data));
+            proto::astra::v1::SessionPacket packet; // 有效传输帧, 由协作者模拟业务拒绝.
+            packet.mutable_repair()->set_trigger(1);
+            session.deliver(std::move(packet));
+            const auto reads = session.reads; // 拒绝前的已提交读取数, 后续必须不变.
+            session.pump(policy, **identity, now);
+            CHECK(session.done() && session.error() == Status::Code::protocol && session.reads == reads);
+            CHECK(!session.receiving && preparing->preparations == 0 && preparing->taken == 0);
+        }
+        {
+            // 读取在 prepare 期间失败, 最终提交检查必须拒绝候选, 下一轮结束流而不覆盖 EOF.
+            Manual session(config, Policy::Direction::inbound, {11}, greeting, std::nullopt, [] {});
+            start(session);
+            auto data = std::make_unique<Preparation>(); // 由 Session 持有直到关闭后销毁.
+            auto* preparing = data.get();                // 观察 EOF 是否阻止候选交接.
+            data->action = [&] { session.eof(); };       // 模拟异步读回调在锁外编码期间发布失败.
+            session.bind(std::move(data));
+            proto::astra::v1::SessionPacket packet; // 当前完整消息, EOF 发生在下一次读取.
+            packet.mutable_repair()->set_trigger(1);
+            session.deliver(std::move(packet));
+            session.pump(policy, **identity, now);
+            CHECK(!session.receiving && preparing->received == 1 && preparing->taken == 0);
+            session.pump(policy, **identity, now);
+            CHECK(session.done() && session.error() == Status::Code::transport && preparing->preparations == 1);
+        }
+        {
+            // 发送准备抛异常时新读取可能仍在途; 保留关闭排空, 不重复 Finish 或交接候选.
+            Manual session(config, Policy::Direction::inbound, {12}, greeting, std::nullopt, [] {});
+            start(session);
+            session.finish_immediately = false;
+            auto data = std::make_unique<Preparation>(); // 在发送准备阶段注入分配异常.
+            auto* preparing = data.get();                // 观察异常后的候选计数, 不延长协作者寿命.
+            data->action = [&] { CHECK(session.receiving); throw std::bad_alloc(); };
+            session.bind(std::move(data));
+            proto::astra::v1::SessionPacket packet; // 成功处理该包后才触发发送准备异常.
+            packet.mutable_repair()->set_trigger(1);
+            session.deliver(std::move(packet));
+            session.pump(policy, **identity, now);
+            CHECK(session.error() == Status::Code::capacity && session.receiving && session.finishes == 1);
+            CHECK(preparing->taken == 0);
+            const auto reads = session.reads; // 已进入取消, 后续读失败不能触发重新读取.
+            session.eof();
+            session.pump(policy, **identity, now);
+            CHECK(!session.done() && session.finishes == 1 && session.reads == reads);
+            session.complete();
+            CHECK(session.done());
+        }
+        {
             // Finish 已投递也不等于 OnDone 已发生. 残留读取或最终状态停滞仍须有取消上限.
             Manual session(config, Policy::Direction::inbound, {7}, greeting, std::nullopt, [] {});
             session.finish_immediately = false;
@@ -369,7 +506,7 @@ int main() {
             }
             CHECK(session.delivered() >= 50000);
         }
-        std::cout << "PASS pre-start cancellation, stale Pong deadline, bounded queue, stalled write and concurrent receive handoff\n";
+        std::cout << "PASS cancellation, deadlines, bounded queue, receive/send overlap and concurrent handoff\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
