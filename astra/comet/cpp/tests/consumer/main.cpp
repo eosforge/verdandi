@@ -17,7 +17,7 @@ int main(int count, char** arguments) {
         return 1;
     }
 
-    comet::Client::Options options; // 无认证, 保留默认 TLS; 包测试将公开 CA 通过 CMake/#embed 编入 SDK.
+    comet::Client::Options options; // 无认证, 保留默认 TLS; 包测试通过 CMake 配置将公开 CA 编入 SDK.
     options.auth = false;
     options.endpoints = {arguments[1]};
     auto encrypted = comet::Client::open(options); // 到达实际根证书提供器校验, 不停在空参数拒绝之前.

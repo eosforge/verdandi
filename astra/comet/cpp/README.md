@@ -14,7 +14,7 @@
 
 公共头文件归属 include/comet, 私有实现 src, 测试 tests, C++ 命名空间 comet. gRPC/Protobuf 类型仅在适配层, 不进入应用签名. 首版交付静态库, 不同时实现共享库、C ABI 或其他语言绑定.
 
-当前目标为 Linux/GCC 16.2 的 C++26 工具链, 遵循 [C++ 规范](../../../cpp-coding.md), 不宣称 MSVC 已支持. 复用现有 gRPC/Protobuf 与配套 BoringSSL, 不引入独立 OpenSSL 或隐式下载依赖. SDK 不承担 Star 复制、日志保留、发布权威裁决或对时.
+SDK 最低语言标准为 C++23, 遵循 [C++ 规范](../../../cpp-coding.md); 服务器继续使用 C++26. 当前 Windows/MSVC 19.51 的 x64 Release 配置已通过 SDK 编译链接、四项本地测试、源码接入和安装包接入; 本机 CMake 将 C++23 映射到 `/std:c++latest`. 当前 C++23 配置尚未执行 Linux 回归, 此前 Linux/GCC 16.2 的 C++26 验证不能直接作为其通过证据. 复用既定 gRPC/Protobuf 与配套 BoringSSL, 不引入独立 OpenSSL 或隐式下载依赖. SDK 不承担 Star 复制、日志保留、发布权威裁决或对时.
 
 ## 公共职责
 
@@ -184,12 +184,12 @@ TLS 与 APIKEY/APISECRET 分别配置. Client 默认启用 TLS, 应用可显式�
 
 Star 的默认值、材料缺失处理和内部链路边界统一见 [运行模式](../../README.md#运行模式与接线), SDK 不复制服务端配置矩阵.
 
-已确定使用 C++26 `#embed` 内嵌 CA 公钥证书, 同时支持外部证书文件覆盖. 此处“公钥”指 TLS 可用的 X.509 CA 证书/信任束, 不是节点 Ed25519 准入公钥, 也不是裸公钥固定. 首版不因此增加双向 TLS 或客户端私钥.
+各平台统一由 CMake 生成私有字节列表, 可选内嵌 CA 公钥证书, 支持外部证书文件覆盖, 不使用 `#embed`. 此处“公钥”指 TLS 可用的 X.509 CA 证书/信任束, 不是节点 Ed25519 准入公钥, 也不是裸公钥固定. 首版不因此增加双向 TLS 或客户端私钥.
 
-- CMake 配置待嵌入的证书文件路径, 构建时由 `#embed` 纳入字节, 不额外编写 PEM 到字符串的生成器. 嵌入长度显式传递给 TLS 接口, 不假设文件自带 NUL 结尾.
+- CMake 通过 `COMET_CA_FILE` 指定公开证书文件, 使用内置十六进制读取生成私有字节列表, 无额外工具依赖, 证书内容变化触发重新配置. 嵌入长度显式传递给 TLS 接口, 不假设文件自带 NUL 结尾.
 - 运行时显式外部文件优先于内嵌默认值. 显式文件缺失或无效时直接报错, 不静默换用另一份信任. 没有外部文件与内嵌证书时, 可使用目标平台可用的默认 CA 信任源, 不声称所有平台自动读取相同证书库.
 - 每个项目可以嵌入自己的自签 CA 或选择外部信任束, 也可使用正规 CA. Star 部署匹配的服务端证书和私钥, 始终验证证书链与目标主机名.
-- Star 服务端私钥、CA 签发私钥和 APISECRET 均不编入 SDK. 可选嵌入路径为空时不得执行一个缺失文件的 `#embed`, 构建应支持无内嵌 CA 的外部加载模式.
+- Star 服务端私钥、CA 签发私钥和 APISECRET 均不编入 SDK. 可选嵌入路径为空时不生成或引用证书字节文件, 支持无内嵌 CA 的外部加载模式.
 
 TLS 和业务 Session 的协议关系见 [业务会话](../../../proto/README.md#session); Comet 的证书配置不更改管理或节点信任.
 
@@ -374,15 +374,37 @@ Almanac 使用权威分组版本, Catalog/Ephemeris 使用接入 Star 的视图�
 | 库与目标 | 静态库名 `comet`, 应用链接 `comet::comet`; 不要求应用直接链接 Astra 的服务端目标 |
 | 源码树接入 | `add_subdirectory` 接入 `astra/comet/cpp/`, 复用同一依赖解析规则; 单独构建 SDK 不连带生成 Star/Pulsar/Astrolabe 可执行程序 |
 | 安装后接入 | `find_package(Comet CONFIG REQUIRED)` 取得同名目标; 包含公共头文件、静态归档、CMake 导出和许可证, 不引用构建机器的源码/缓存绝对路径 |
-| 公开依赖 | 公共头文件只暴露 Comet 类型及所需标准库类型, 不包含 gRPC/Protobuf 生成头; 消费者使用既定 C++26 工具链 |
+| 公开依赖 | 公共头文件只暴露 Comet 类型及所需标准库类型, 不包含 gRPC/Protobuf 生成头; 消费者最低要求 C++23, CMake 导出 `cxx_std_23`; 当前本机 MSVC/CMake 将其映射为 `/std:c++latest` |
 | 链接依赖 | 导出目标传递静态链接实际需要的 gRPC/Protobuf 等依赖; “不暴露生成类型”不等于最终链接不需要第三方库, 不把排列归档顺序留给应用 |
 | 协议生成 | 沿用[统一生成规则](../../../proto/README.md#generation): 生成源码纳入源码版本管理, 仅显式生成/检查时使用匹配工具, 普通库构建不运行 protoc; 安装包使用者无需生成协议或连接 Pulsar |
 | 依赖获取 | 复用已批准版本和项目内缓存; 缺少依赖明确失败并说明, 配置/构建/安装不隐式下载, 不写全局包路径或用户配置 |
 | TLS 材料 | 可选编译嵌入公开 CA 证书, 外部文件覆盖遵循既定规则; 安装包和生成头不含私钥或 APISECRET, 不因静态链接承诺无运行时依赖 |
 
-静态库接入仍要求编译器、标准库、编译选项及依赖 ABI 相容, 首版验证范围沿用 Linux/GCC 16.2, 不承诺跨编译器二进制兼容或 MSVC 支持. 已安装包只分发自身拥有的文件; 第三方依赖由导出的 CMake 依赖查找取得, 若以后要发布包含依赖的完整二进制包, 另行定义其平台和许可证清单.
+静态库接入仍要求编译器、标准库、编译选项及依赖 ABI 相容, 安装包检查构建时的平台与编译器版本, 不允许将 Linux 归档直接用于 Windows. 当前 C++23 配置已验证 Windows/MSVC 19.51 x64 Release 的源码及安装包接入, 尚未执行 Linux 回归; 不据此承诺跨编译器二进制兼容. Windows 暂不启用 Linux 专用探针或 Sanitizer. 已安装包只分发自身拥有的文件; 第三方依赖由导出的 CMake 依赖查找取得, 若以后要发布包含依赖的完整二进制包, 另行定义其平台和许可证清单.
 
 构建脚本按使用者实际选择启用测试与示例, 普通库构建和包接入不暗中运行测试. 独立消费用例分别检查源码树接入与安装包接入, 确认只链接 `comet::comet` 即可完成最小程序, 并检查缺依赖时不会触发网络下载. 嵌入公开 CA、显式外部 CA 和关闭公共 TLS 的配置也纳入该用例; 真实 TLS 握手由 RPC 用例验证, 不由配置成功推断.
+
+## Windows 独立构建
+
+Windows 适配入口只构建 Comet SDK, 不通过 `astra/build.py` 构建服务端. 当前选择 Visual Studio 18/MSVC 19.51、x64 Release 和 `/MD` 运行库; 依赖也必须使用匹配的架构、运行库和构建配置. SDK 和生成协议均要求 C++23, 不继承父级服务器工程的 C++26 设置. 当前本机 MSVC/CMake 将 `cxx_std_23` 映射到 `/std:c++latest`, 固定版本 gRPC 另需下述兼容入口. 工具链版本门槛暂时保留, 更早编译器的支持需独立验证. 实际通过边界以[最新验证记录](../../../testkit/validation.md)为准.
+
+Windows 依赖需要经过 ABI 配套验证. 当前通过组合使用锁定的 gRPC 1.84.0、Protobuf 36.1.0 及配套依赖, C++ 依赖统一配置 `CMAKE_CXX_STANDARD=23`, 架构与运行库为 x64 Release `/MD`. SDK 的生成协议目标显式使用与手写代码相同的模式, 避免 Protobuf 全局类型随标准模式变化导致链接失败. 切换依赖标准时使用新的构建目录或重新生成能力检测缓存, 避免 Abseil 的旧检测结果留在安装头文件中. `build/deps/comet-msvc/install` 已用于本机接入验证, 不代表 Debug、其他工具链或目标机器均已验证.
+
+构建兼容入口 [GrpcMSVC.cmake](cmake/GrpcMSVC.cmake) 已通过原失败文件编译、gRPC 重建及 SDK 接入验证. 配置 Windows gRPC 依赖时追加 `-DCMAKE_PROJECT_grpc_INCLUDE=<仓库绝对路径>/astra/comet/cpp/cmake/GrpcMSVC.cmake`. 入口仅为 `fused_filters.cc` 定义上游开关 `GRPC_NO_FILTER_FUSION=1`, 不改依赖源码、标准模式或其他库; SDK 构建自身添加此开关无法修复已经构建的依赖. 此开关跳过可选融合过滤器注册, 普通认证、压缩和消息大小过滤器链保留; `fuse_filters` 在固定版本中默认关闭, SDK 未主动开启. 当前构建不能再选择融合路径, 以后启用须移除入口并重新验证. 本轮未测量性能, 不据默认配置推断性能差值.
+
+租约时钟在 Windows 使用 `QueryInterruptTimePrecise`, 保留包含系统挂起时间的计时语义; 运行系统要求 Windows 10/Windows Server 2016 或以上, 参见 [Microsoft API 文档](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-queryinterrupttimeprecise)和[时钟语义](https://learn.microsoft.com/en-us/windows/win32/sysinfo/interrupt-time). 不通过墙钟或调整系统计时器精度实现租约预算.
+
+以下命令说明独立构建入口的用法, 从仓库根目录执行; 前提是已获准并准备好 ABI 匹配的 Windows 依赖. 命令本身不会获取依赖, 安装 SDK 也不写入系统目录. 实际验收另使用 `tests/consumer` 检查源码树接入和安装包接入.
+
+```powershell
+cmake -S astra/comet/cpp -B build/comet-msvc/sdk -G "Visual Studio 18 2026" -A x64 "-DCMAKE_PREFIX_PATH=$PWD/build/deps/comet-msvc/install" -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
+cmake --build build/comet-msvc/sdk --config Release --parallel 4
+cmake --install build/comet-msvc/sdk --config Release --prefix "$PWD/build/comet-msvc/install" --component Comet
+```
+
+应用使用 `find_package(Comet CONFIG REQUIRED)` 和 `target_link_libraries(app PRIVATE comet::comet)`, 并把 SDK 安装目录及上述依赖安装目录加入 `CMAKE_PREFIX_PATH`. 不把 SDK 私有头文件或 gRPC 生成头复制进应用. 可选的 `COMET_CA_FILE` 在所有平台使用 CMake 内置字节转换, 不要求编译器支持 `#embed`. 普通构建不运行测试; `COMET_BUILD_TESTS=ON` 以及 CTest 执行仍需当轮明确测试授权.
+
+MSVC SDK 自身采用 `/W4 /WX`, 针对 gRPC 1.84 在 MSVC STL 中实例化旧 TLS 类型产生的 C4996 设有私有例外; SDK 使用的是新的 `InMemoryCertificateProvider`, 此诊断例外不传播给应用. Windows 的探针和 Sanitizer 暂不在支持范围内.
 
 ## 验收准则
 

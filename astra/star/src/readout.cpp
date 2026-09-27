@@ -83,7 +83,7 @@ public:
     bool finished{};                                             // Finish 已调用, 等待 OnDone.
     bool done{};                                                 // OnDone 已到达, 此后禁止访问 context.
     std::atomic_bool busy{};                                     // 仅供低频超时扫描选取正在写的流.
-    std::chrono::steady_clock::time_point deadline{};            // 当前页的单调写截止, io 保护.
+    std::chrono::steady_clock::time_point deadline{};            // 当前页的单调写截止, 写时同时持 io/索引锁, 读时至少持其中之一.
     proto::comet::v1::AlmanacWatchReply page;                    // gRPC 在 writing 时借用, 不提前 Clear/覆盖.
     std::optional<Edition> edition;                              // 唯一控制线程拥有的冻结批次, 不在回调改变.
     bool started{};                                              // 已捕获首批基线, 后续只生成 apply.

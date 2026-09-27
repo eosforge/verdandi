@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <csignal>
 #include <deque>
+#include <grpc/impl/channel_arg_names.h>
 #include <grpcpp/grpcpp.h>
 #include <iostream>
 #include <map>
@@ -38,10 +39,12 @@ struct ProbeConfig {
     // address: TLS 监听地址, 默认 127.0.0.1:0 使用系统端口; 由 gRPC 绑定时校验地址.
     std::string mode = "mixed", address = "127.0.0.1:0";
 };
+
 struct Queued {
     proto::astra::bench::v1::Event event;
     Time::time_point created;
 };
+
 struct Stamp {
     std::uint64_t revision{};
     Time::time_point scheduled;
@@ -76,6 +79,7 @@ struct Hub {
             }
         }
     }
+
     std::string key(proto::astra::bench::v1::Domain domain, std::uint64_t index, bool update = true) const {
         const auto count = domain == proto::astra::bench::v1::DOMAIN_REGISTRY ? config.registries : config.catalogs;
         index %= update && config.hot ? config.hot : count;
@@ -83,6 +87,7 @@ struct Hub {
         number.insert(0, 6 - number.size(), '0');
         return (domain == proto::astra::bench::v1::DOMAIN_REGISTRY ? "registry/service/instance/" : "catalog/config/") + number;
     }
+
     void publish(proto::astra::bench::v1::Event event);
     bool apply(proto::astra::bench::v1::Domain domain, std::string data, Time::time_point scheduled);
     void produce();
@@ -97,6 +102,7 @@ public:
         StartSendInitialMetadata();
         read();
     }
+
     void OnSendInitialMetadataDone(bool ok) override {
         guarded([&] {
             metadata_ = true;
@@ -105,6 +111,7 @@ public:
             pump();
         });
     }
+
     void OnReadDone(bool ok) override {
         guarded([&] {
             reading_ = false;
@@ -121,6 +128,7 @@ public:
             pump();
         });
     }
+
     void OnWriteDone(bool ok) override {
         guarded([&] {
             writing_ = false;
@@ -137,9 +145,11 @@ public:
             read();
         });
     }
+
     void OnCancel() override {
         guarded([&] { fail("session cancelled"); });
     }
+
     void OnDone() override {
         {
             std::lock_guard lock(hub_.mutex);
@@ -195,6 +205,7 @@ public:
         }
         read();
     }
+
     void fail(std::string_view reason) {
         if (!closing_) {
             closing_ = true;
@@ -207,7 +218,8 @@ public:
 
 private:
     // 异常不能越过 gRPC 回调边界; 取消会驱动 OnCancel/OnDone, 释放由它们统一完成.
-    template <class Action> void guarded(Action action) noexcept {
+    template <class Action>
+    void guarded(Action action) noexcept {
         try {
             std::lock_guard lock(hub_.mutex);
             action();
@@ -215,12 +227,14 @@ private:
             context_->TryCancel();
         }
     }
+
     void read() {
         if (!reading_ && !processing_read_ && !closing_ && controls_.size() < 8) {
             reading_ = true;
             StartRead(&input_);
         }
     }
+
     std::uint64_t percentile(double fraction) const {
         const auto target = static_cast<std::uint64_t>(std::ceil(static_cast<double>(samples_) * fraction));
         if (!target)
@@ -233,6 +247,7 @@ private:
         }
         return 10000100;
     }
+
     void control() {
         if (!joined_) {
             if (!input_.has_join() || !input_.join() || hub_.joined >= hub_.config.fanout) {
@@ -298,6 +313,7 @@ private:
         }
         controls_.push_back(std::make_shared<Queued>(Queued{std::move(reply), Time::now()}));
     }
+
     Hub& hub_;
     grpc::CallbackServerContext* context_;
     proto::astra::bench::v1::Control input_;
@@ -316,6 +332,7 @@ void Hub::publish(proto::astra::bench::v1::Event event) {
     for (auto* session : sessions)
         session->pump();
 }
+
 bool Hub::apply(proto::astra::bench::v1::Domain domain, std::string data, Time::time_point scheduled) {
     if (finished)
         return false;
@@ -331,6 +348,7 @@ bool Hub::apply(proto::astra::bench::v1::Domain domain, std::string data, Time::
     publish(std::move(message));
     return true;
 }
+
 void Hub::produce() {
     try {
         std::unique_lock lock(mutex);
@@ -384,6 +402,7 @@ void Hub::produce() {
         shutdown();
     }
 }
+
 void Hub::shutdown() {
     std::lock_guard lock(mutex);
     stop = true;
@@ -411,6 +430,7 @@ public:
         hello.set_admission_signature(test::sign(hello.admission()));
         proof_ = hello.SerializeAsString();
     }
+
     grpc::ServerBidiReactor<proto::astra::bench::v1::Control, proto::astra::bench::v1::Event>* Synchronize(grpc::CallbackServerContext* context) override {
         const auto entry = context->client_metadata().find("hello-bin");
         proto::astra::v1::Hello hello;
@@ -437,12 +457,15 @@ private:
             delete this;
         }
     };
+
     Hub& hub_;
     std::shared_ptr<Identity> identity_;
     std::string proof_;
 };
+
 std::atomic_bool interrupted{};
 static_assert(std::atomic_bool::is_always_lock_free);
+
 void interrupt(int) {
     interrupted.store(true, std::memory_order_relaxed);
 }
@@ -493,7 +516,7 @@ int main(int argc, char** argv) {
         builder.SetMaxReceiveMessageSize(32768);
         builder.SetMaxSendMessageSize(32768);
         builder.AddChannelArgument("grpc.http2.bdp_probe", 0);
-        builder.AddChannelArgument("grpc.http2.stream_lookahead_bytes", 65535);
+        builder.AddChannelArgument(GRPC_ARG_HTTP2_STREAM_LOOKAHEAD_BYTES, 65535);
         builder.AddChannelArgument("grpc.max_concurrent_streams", 1);
         builder.AddChannelArgument("grpc.server_handshake_timeout_ms", 5000);
         builder.RegisterService(&service);
@@ -506,7 +529,8 @@ int main(int argc, char** argv) {
         std::signal(SIGINT, interrupt);
         std::signal(SIGPIPE, SIG_IGN);
         hub.producer = std::jthread([&] { hub.produce(); });
-        std::cout << "{\"ready\":true,\"address\":\"127.0.0.1:" << port << "\"}\n" << std::flush;
+        std::cout << "{\"ready\":true,\"address\":\"127.0.0.1:" << port << "\"}\n"
+                  << std::flush;
         const auto deadline = Time::now() + 60s;
         while (!interrupted.load(std::memory_order_relaxed) && Time::now() < deadline)
             std::this_thread::sleep_for(20ms);

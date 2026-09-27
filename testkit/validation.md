@@ -1,5 +1,22 @@
 # 最新验证记录
 
+## Comet Windows/MSVC SDK 验证
+
+2026-09-27 02:25 (Asia/Shanghai), 分支 `sdk`, 源码基线 `8e9dcc7621d11f297eeccd48d9a38a12d1d0dc19` 加本轮未提交的 SDK 适配. **当前 C++23 配置的 Windows x64 Release SDK 编译链接、四项本地测试、源码接入和安装包接入全部通过.** 本轮已获明确构建/测试授权, 未运行服务端、真实 TLS 握手、Sanitizer、性能或 Linux 回归, 未操作其他任务的长测进程. 没有提交或推送.
+
+- 工具: Visual Studio 18, MSVC 19.51.36257.0, Windows SDK 10.0.22621.0, CMake 4.4.3; x64 Release `/MD`. SDK 与生成协议要求 C++23, 本机 CMake 实际映射到 `/std:c++latest`, 不代表完整 C++26 支持. SDK 使用 `/W4 /WX /permissive- /utf-8 /EHsc`, 私有屏蔽 gRPC 旧 TLS 类型在 MSVC STL 中触发的 C4996; 不传播给消费者. 服务端 C++26 配置未调整.
+- 依赖使用此前明确批准的 `astra/dependencies.lock.json` 固定版本: gRPC 1.84.0、Protobuf 36.1.0、Abseil 20260817.0 及配套 BoringSSL、c-ares、RE2、zlib 和 gRPC 协议源. 原归档经过 SHA-256 校验; 本次验证没有新增下载或修改第三方源码. C++ 依赖统一配置 C++23, BoringSSL 使用 `OPENSSL_NO_ASM=ON`, 本轮不形成性能结论.
+- gRPC 兼容入口 `astra/comet/cpp/cmake/GrpcMSVC.cmake` 经 `CMAKE_PROJECT_grpc_INCLUDE` 注入, 仅对 `fused_filters.cc` 定义上游 `GRPC_NO_FILTER_FUSION=1`. 原失败文件定向编译、gRPC 所需依赖构建安装均返回 0. 此开关排除可选过滤器融合实现, 普通认证、压缩及消息大小检查仍保留; 固定版本的 `fuse_filters` 默认关闭, SDK 未主动开启. 当前构建不能启用融合路径; 不把兼容绕行称为已定位 MSVC 编译器缺陷, 也不声称性能无损.
+- SDK 适配包括 Winsock 地址转换、Windows `QueryInterruptTimePrecise` 租约时钟、各平台统一由 CMake 生成可选 CA 字节列表以移除 `#embed`、消除模板局部变量遮蔽, 以及 Windows CMake 包入口. Windows 本次完整构建包含这些最终改动; 当前 C++23 配置尚未在 Linux 回归.
+- 四项 CTest 全部通过: `cpp_comet_projection`、`cpp_comet_selection`、`cpp_comet_subscription`、`cpp_comet_lifetime`. CTest 使用 2 路并行, 总运行时间 0.31 s. 依赖构建最多 8 个并行编译任务, SDK 构建与消费验证顺序执行.
+- 源码树消费程序和独立安装包消费程序均完成配置、编译、链接并运行返回 0. 用例覆盖空配置拒绝、嵌入公开 CA 配置、显式缺失 CA 文件失败、明文配置及 Client 关闭等待; 使用占用但未监听的本机 TCP 端口, 不验证真实 Star 连接或 TLS 握手.
+- SDK 安装目录 `build/comet-msvc/install` 含 `lib/comet.lib`、七个公开头文件、Comet CMake 包文件和 LICENSE. 未安装协议生成头、私钥或服务端程序. 导出目标保留 `cxx_std_23` 与所需链接依赖, 未发现工作副本绝对路径. `comet.lib` SHA-256: `d8cb021022c6be037b7937d88d9eef533f6ec492a6fb8a5d6bcbb38510b66ac2`.
+- 早期失败原因分别为 C++17 Protobuf 与 SDK 最新模式的全局类型不一致、切换标准后 Abseil 能力缓存陈旧, 以及 gRPC 融合实现的 MSVC 模板实例化错误. 当前结果来自统一标准、重新检测 Abseil 能力并添加上述源文件开关后的重建, 不沿用失败阶段产物的通过声明. 原始失败日志保留用于排查.
+- 证据: `build/comet-msvc/qualification.json` 记录八个步骤全部返回 0; 同目录 `fused-compatible.log`、`grpc-compatible.log`、`source-build.log`、`sdk-unit.log`、`sdk-install.log`、`package-build.log` 及两个消费运行日志记录对应结果. `grpc-compatible.log` 仅提取本次成功的依赖配置、构建和安装段; 更早失败仍在原依赖日志中.
+- 验证输入清单 `build/comet-msvc/verified-inputs.json` 的 SHA-256 为 `920ee01ac9dbcd414ded8da3ede7a7c2e0e89d46d5cc8aae9fd8c6a0d8d3bfa7`. 清单覆盖 SDK 源码和构建配置、相关共享头与基础源码、生成协议、依赖锁和公开 CA 测试材料; 执行前后摘要一致. 本记录不把其他并行任务的工作副本改动、Debug、更早编译器或目标机部署记为通过.
+
+## Linux 发布候选与既有长测
+
 **正式长测运行中, 尚未验收通过.** 2026-09-26 22:55:17 (Asia/Shanghai) 获准启动 Release 三 Star: 两小时轮换故障, 随后十二小时常驻运行; 每台 16 个 Publisher 和 Beacon, 两域各 48 条 2 KiB 记录. 使用下文已验证产物, 启动前重新核对源码及六个二进制摘要. 初始化后已进入三来源写入阶段. Ubuntu 控制记录在 `build/testkit/soak-control`, 事件与日志在 `build/testkit/soak-current`; 控制 PID 97058, 运行 PID 97060, 操作前须再次核对进程身份. 已配置每 15 分钟检查, 阶段变化、异常及完成时反馈; 正常/异常退出由入口清理所属资源. 不将运行时间或启动成功记为长测通过.
 
 最近执行日期: **2026-09-26, Asia/Shanghai**. alpha `2a17172dfe601409c66fa137ff1a535fa069ca57` 加当前工作副本. 本轮是发布审查与三节点基础验收, 用户明确授权普通回归及 Sanitizer, 不恢复性能冲刺、Planet/Moon 或其他语言 SDK 开发.

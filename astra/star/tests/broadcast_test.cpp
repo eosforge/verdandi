@@ -19,10 +19,11 @@ using astra::Scope;
 
 // 只提供调度所需字段, 不依赖 gRPC; 拥有者必须在两个侵入式索引清除后才释放对象.
 struct Pending : std::enable_shared_from_this<Pending> {
-    bool queued{};                      // 就绪标志, 初始未入队.
-    Pending* next{};                    // 就绪后继, 与在途链独立.
-    std::atomic_bool busy{true};        // 模拟未完成的网络写入, false 时扫描不能再次唤醒.
-    astra::Watch<Pending>::Link flight; // 在途链, 初始为空.
+    bool queued{};                                    // 就绪标志, 初始未入队.
+    Pending* next{};                                  // 就绪后继, 与在途链独立.
+    std::atomic_bool busy{true};                      // 模拟未完成的网络写入, false 时扫描不能再次唤醒.
+    std::chrono::steady_clock::time_point deadline{}; // 写截止, 初始零表示已到期; 夹具单线程模拟双锁内发布.
+    astra::Watch<Pending>::Link flight;               // 在途链, 初始为空.
 };
 
 // 重复入队、任意摘除、超时扫描及取消后的残留就绪通知互不破坏生命周期.
@@ -73,6 +74,42 @@ void scheduling() {
     CHECK(!astra::Watch<Pending>::exceeds(3, 4, 7));
     CHECK(astra::Watch<Pending>::exceeds(8, 0, 7));
     CHECK(astra::Watch<Pending>::exceeds(1, std::numeric_limits<std::size_t>::max(), 7));
+}
+
+// 扫描只能唤醒真正到期的在途写, 普通回调仍可在期限前入队, 不依赖超时兜底.
+void deadlines() {
+
+    astra::Watch<Pending> queue;                                                    // 单线程拥有在途和就绪索引.
+    auto first = std::make_shared<Pending>(), second = std::make_shared<Pending>(); // 模拟不同期限的两个在途写.
+    const auto now = std::chrono::steady_clock::now();                              // 固定时间基线, 不休眠.
+    auto scan = now;                                                                // 下一次允许扫描的时间, 与各流写截止独立.
+    unsigned wakes{};                                                               // 只统计扫描产生的唤醒, 不是模拟的网络回调次数.
+    auto wake = [&] { ++wakes; };                                                   // 仅记录通知, 不重入队列.
+    first->deadline = now + 2s;
+    second->deadline = now + 4s;
+    queue.write(*first);
+    queue.write(*second);
+
+    queue.sweep(now, scan, wake);
+    queue.sweep(now + 1s, scan, wake);
+    CHECK(wakes == 0 && queue.idle());
+    CHECK(queue.enqueue(*second) && queue.pop() == second); // 正常完成回调不等待自己的超时.
+    queue.sweep(now + 2s, scan, wake);
+    CHECK(wakes == 1 && queue.pop() == first && queue.idle()); // 精确等于截止即到期.
+    queue.settle(*first);
+
+    second->busy.store(false); // WriteDone 已发布但尚未出链, 超时扫描不能重复调度它.
+    queue.sweep(now + 4s, scan, wake);
+    CHECK(wakes == 1 && queue.idle());
+    queue.settle(*second);
+    second->deadline = now + 8s; // 同节点下一次写必须使用新截止, 不沿用旧页的到期状态.
+    second->busy.store(true);
+    queue.write(*second);
+    queue.sweep(now + 5s, scan, wake);
+    CHECK(wakes == 1 && queue.idle());
+    queue.sweep(now + 8s, scan, wake);
+    CHECK(wakes == 2 && queue.pop() == second && queue.idle());
+    queue.settle(*second);
 }
 
 // 范围通知与就绪弹出共用一次有界调度, 覆盖空队列、重复通知、FIFO、公平性和取消后的寿命.
@@ -395,6 +432,7 @@ int main() {
         pages<Catalog>([](auto& state, const Scope& scope, unsigned index) { return state.publish(scope, std::to_string(index), bytes("value"), 1, 1000); });
         pages<Ephemeris>([](auto& state, const Scope& scope, unsigned) { return state.create(scope, bytes("attr"), bytes("data"), 1000); });
         scheduling();
+        deadlines();
         dispatch();
         progress();
         payload();

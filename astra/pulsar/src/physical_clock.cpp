@@ -1,5 +1,6 @@
 #include "physical_clock.hpp"
 #include <algorithm>
+#include <astra/profile.hpp>
 #include <limits>
 #include <stdexcept>
 #include <sys/timex.h>
@@ -10,6 +11,7 @@ namespace astra {
 // 夹取 adjtimex 与墙钟, 误差累计内核估计与调度窗口, 超限即拒绝.
 std::optional<Clock::Estimate> Source::sample() {
 
+    ASTRA_PROFILE_SCOPE("clock.kernel.sample");
     // 夹住质量查询和墙钟采样, 将可能的调度延迟计入误差. BOOTTIME 暂停时间也参与年龄判断.
     const auto before = Clock::Elapsed::now();
     // state 为只读 adjtimex 查询缓冲, modes 为零, 不提交任何系统时钟修改.
@@ -18,23 +20,35 @@ std::optional<Clock::Estimate> Source::sample() {
     const auto status = ::adjtimex(&state);
     // wall 接收绝对 Unix 秒与纳秒, 校验非负和乘加边界后才能使用.
     timespec wall{};
-    if (status < 0 || status == TIME_ERROR || (state.status & (STA_UNSYNC | STA_CLOCKERR)) != 0 || state.maxerror < 0 || state.esterror < 0 || ::clock_gettime(CLOCK_REALTIME, &wall) != 0) {
+    const auto result = ::clock_gettime(CLOCK_REALTIME, &wall); // 先完成采样窗口再记录探针, 不把写诊断的时间算作内核采样延迟.
+    const auto after = Clock::Elapsed::now();                   // BOOTTIME 窗口终点, 同时用于观察挂起/调度间隔.
+    ASTRA_PROFILE_VALUE("clock.kernel.status", status);
+    ASTRA_PROFILE_VALUE("clock.kernel.flags", state.status);
+    ASTRA_PROFILE_VALUE("clock.kernel.maxerror_us", state.maxerror);
+    ASTRA_PROFILE_VALUE("clock.kernel.esterror_us", state.esterror);
+    ASTRA_PROFILE_VALUE("clock.kernel.offset", state.offset);
+    ASTRA_PROFILE_COUNT("clock.kernel.offset_unit_ns", (state.status & STA_NANO) != 0 ? 1 : 1000);
+    ASTRA_PROFILE_VALUE("clock.kernel.elapsed_ns", elapsed_ns(after));
+    ASTRA_PROFILE_VALUE("clock.kernel.window_ns", (after - before).count());
+    if (status < 0 || status == TIME_ERROR || (state.status & (STA_UNSYNC | STA_CLOCKERR)) != 0 || state.maxerror < 0 || state.esterror < 0 || result != 0) {
+        ASTRA_PROFILE_COUNT("clock.kernel.rejected", 1); // 查询失败/内核未同步, 不将无效字段当作物理质量.
         return std::nullopt;
     }
 
-    // after 为夹取窗口终点, 与 before 同属包含系统挂起时间的 BOOTTIME.
-    const auto after = Clock::Elapsed::now();
     // maximum 为有符号纳秒的可表示上界, 防止秒转纳秒溢出.
     constexpr auto maximum = std::numeric_limits<std::int64_t>::max();
     if (after < before || after - before > std::chrono::milliseconds(20) || wall.tv_sec < 0 || wall.tv_nsec < 0 || wall.tv_nsec >= 1'000'000'000 || wall.tv_sec > (maximum - wall.tv_nsec) / 1'000'000'000) {
+        ASTRA_PROFILE_COUNT("clock.kernel.rejected", 2); // 采样窗口或 Unix 坐标不合法.
         return std::nullopt;
     }
+    ASTRA_PROFILE_VALUE("clock.kernel.unix_ns", wall.tv_sec * 1'000'000'000 + wall.tv_nsec);
 
     // 内核误差字段固定为微秒; offset 由 STA_NANO 决定单位. 先限制范围再换算, 不溢出取绝对值.
     const auto error_us = std::max(state.maxerror, state.esterror);
     // offset_limit 按内核 STA_NANO 标志换算容许偏差, 与 state.offset 使用同一单位.
     const auto offset_limit = static_cast<long>(clock_uncertainty_limit_ns / ((state.status & STA_NANO) != 0 ? 1U : 1000U));
     if (error_us > static_cast<long>(clock_uncertainty_limit_ns / 1000) || state.offset < -offset_limit || state.offset > offset_limit) {
+        ASTRA_PROFILE_COUNT("clock.kernel.rejected", 3); // 原始误差上界或残余偏移已经超限.
         return std::nullopt;
     }
 
@@ -42,9 +56,12 @@ std::optional<Clock::Estimate> Source::sample() {
     const auto offset = static_cast<std::uint64_t>(state.offset < 0 ? -state.offset : state.offset);
     // uncertainty 累计内核估计误差,残余偏差和完整采样窗口, 单位统一为 ns.
     const auto uncertainty = static_cast<std::uint64_t>(error_us) * 1000 + offset * ((state.status & STA_NANO) != 0 ? 1U : 1000U) + static_cast<std::uint64_t>((after - before).count());
+    ASTRA_PROFILE_COUNT("clock.kernel.uncertainty_ns", uncertainty);
     if (uncertainty > clock_uncertainty_limit_ns) {
+        ASTRA_PROFILE_COUNT("clock.kernel.rejected", 4); // 合计误差而非单个字段超限.
         return std::nullopt;
     }
+    ASTRA_PROFILE_COUNT("clock.kernel.rejected", 0); // 本次样本满足物理参考门槛, 仍需 Clock 校正模型接纳.
 
     // 采样墙钟位于 before..after; 全窗口已计入误差, 不假定系统调用在区间正中间完成.
     return Clock::Estimate{Clock::Time(std::chrono::nanoseconds(wall.tv_sec * 1'000'000'000 + wall.tv_nsec)), after, uncertainty, 0};
@@ -89,6 +106,7 @@ void Source::run(std::stop_token stop) noexcept {
     try {
         while (!stop.stop_requested()) {
             try {
+                ASTRA_PROFILE_SCOPE("clock.source.poll");
                 if (precision() == 0) {
                     precision_.store(elapsed_precision_ns(stop), std::memory_order_release);
                 }
@@ -106,10 +124,15 @@ void Source::run(std::stop_token stop) noexcept {
                         sample->uncertainty_ns += precision();
                     }
                 }
-                if (stop.stop_requested() || !sample || !clock_.publish(*sample)) {
+                const bool accepted = !stop.stop_requested() && sample && clock_.publish(*sample); // 保留原短路顺序, 停止或无样本时不发布.
+                ASTRA_PROFILE_COUNT("clock.source.available", sample.has_value());
+                ASTRA_PROFILE_COUNT("clock.source.accepted", accepted);
+                if (!accepted) {
                     clock_.revoke();
                 }
             } catch (...) {
+                ASTRA_PROFILE_SCOPE("clock.source.failure");
+                ASTRA_PROFILE_COUNT("clock.source.exception", 1); // 标定/取时/Provider 异常, 不输出外部异常文本.
                 clock_.revoke();
             }
 

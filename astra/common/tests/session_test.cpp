@@ -7,6 +7,7 @@
 #include <memory>
 #include <new>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 
@@ -234,7 +235,20 @@ private:
     // 唯一交付线程借用 greeting, 所有权由线程闭包保留; stop 随 jthread 析构请求停止.
     void run(std::stop_token stop, const proto::astra::v1::Hello& greeting) {
 
+        unsigned acknowledged{}; // 已完成的响应写入数, 保持每个模拟请求等待对应的网络回执.
         while (!stop.stop_requested()) {
+            // 先完成控制循环提交的响应写入, 再允许模拟对端发送下一条心跳.
+            if (writing_.exchange(false)) {
+                write_done(true);
+                ++acknowledged;
+            }
+
+            // 模拟链路按读写回执施加背压, 不用无限快的假对端人为填满四槽控制队列.
+            if (acknowledged < delivered_.load()) {
+                std::this_thread::yield();
+                continue;
+            }
+
             // packet 取得控制循环发布的独占缓冲, 首条填 Hello, 后续填不同序号 Ping.
             if (auto* packet = reading_.exchange(nullptr)) {
                 if (delivered_ == 0) {
@@ -246,10 +260,7 @@ private:
                 ++delivered_;
             }
 
-            // 每次发布后释放写槽, 保留显式让步以给控制循环机会消费完成状态.
-            if (writing_.exchange(false)) {
-                write_done(true);
-            }
+            // 空闲时让出处理器, 让控制循环提交读取或发送.
             std::this_thread::yield();
         }
     }
@@ -501,7 +512,9 @@ int main() {
             const auto deadline = Steady::now() + std::chrono::seconds(10);
             while (session.delivered() < 50000 && Steady::now() < deadline) {
                 session.pump(policy, **identity, now);
-                CHECK(!session.error());
+                // error 仅在并发基线失败时输出首次关闭原因和已交付数量, 帮助区分协议错误与吞吐超时.
+                if (const auto error = session.error())
+                    throw std::runtime_error("Concurrent session error=" + std::to_string(static_cast<unsigned>(*error)) + ", delivered=" + std::to_string(session.delivered()));
                 std::this_thread::yield();
             }
             CHECK(session.delivered() >= 50000);

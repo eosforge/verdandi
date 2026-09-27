@@ -1,10 +1,19 @@
 cmake_minimum_required(VERSION 3.28)
 project(Comet VERSION 0.1.0 LANGUAGES CXX)
+# SDK 独立采用 C++23, 包括从 C++26 服务端工程接入时; 目录作用域不影响父工程.
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 option(ASTRA_PROFILE "Compile private SDK performance probes" OFF)
 
 # SDK 可以单独配置, 不通过 add_subdirectory(astra) 连带构建服务端或运行工具下载.
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL 16.2.0)
-    message(FATAL_ERROR "Comet currently requires Linux and the pinned GCC 16.2.0 toolchain")
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND MSVC_VERSION GREATER_EQUAL 1951)
+    # Windows 先提供独立 SDK 适配入口, 不扩大服务端和 Linux 专用探针的支持范围.
+    if(ASTRA_PROFILE OR ASTRA_SANITIZER OR COMET_SANITIZER)
+        message(FATAL_ERROR "Comet MSVC builds currently exclude profiling and sanitizers")
+    endif()
+elseif(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR NOT CMAKE_CXX_COMPILER_VERSION VERSION_EQUAL 16.2.0)
+    message(FATAL_ERROR "Comet requires Linux/GCC 16.2.0 or Windows/MSVC 19.51 or newer")
 endif()
 set(FETCHCONTENT_FULLY_DISCONNECTED ON CACHE BOOL "No implicit downloads" FORCE)
 set(ZLIB_USE_STATIC_LIBS ON)
@@ -18,16 +27,28 @@ get_filename_component(comet_common "${CMAKE_CURRENT_SOURCE_DIR}/../../common" A
 set(comet_generated "${comet_common}/src/generated")
 # 只打包公共 Comet 协议. 生成文件不继承手写代码警告或反射/契约选项.
 add_library(comet_protocol OBJECT "${comet_generated}/comet.pb.cc" "${comet_generated}/comet.grpc.pb.cc")
+# Protobuf 的部分类型随标准模式变化, 生成协议与 SDK 使用相同的特性要求.
+target_compile_features(comet_protocol PRIVATE cxx_std_23)
 target_link_libraries(comet_protocol PRIVATE protobuf::libprotobuf gRPC::grpc++)
 target_include_directories(comet_protocol SYSTEM PRIVATE "${comet_generated}")
 set_target_properties(comet_protocol PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_library(comet STATIC src/core.cpp src/reading.cpp src/projection.cpp src/observing.cpp src/selection.cpp src/beaming.cpp src/lifetime.cpp src/subscribing.cpp src/subscription.cpp src/publishing.cpp "${comet_common}/src/types.cpp" "${comet_common}/src/scope.cpp" $<TARGET_OBJECTS:comet_protocol>)
 add_library(comet::comet ALIAS comet)
-target_compile_features(comet PUBLIC cxx_std_26)
+# 公共头使用 expected 和 move_only_function, 把 C++23 最低要求传递给源码及安装包消费者.
+target_compile_features(comet PUBLIC cxx_std_23)
+if(MSVC)
+    target_compile_options(comet PRIVATE /W4 /WX /permissive- /utf-8 /EHsc)
+    # gRPC 1.84 的未使用旧 TLS 重载仍在 MSVC STL 中实例化弃用类型, SYSTEM 头无法隔离 C4996.
+    # SDK 已使用 InMemoryCertificateProvider; 仅本目标屏蔽该编号, 不传递到消费端或关闭其他警告.
+    target_compile_options(comet PRIVATE /wd4996)
+    target_compile_definitions(comet PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(comet PRIVATE ws2_32 mincore)
+else()
+    target_compile_options(comet PRIVATE -Wall -Wextra -Wpedantic -Werror -Wconversion -Wsign-conversion)
+    target_compile_definitions(comet PRIVATE _GLIBCXX_ASSERTIONS=1)
+endif()
 set_target_properties(comet PROPERTIES CXX_EXTENSIONS OFF POSITION_INDEPENDENT_CODE ON)
-target_compile_options(comet PRIVATE -Wall -Wextra -Wpedantic -Werror -Wconversion -Wsign-conversion)
-target_compile_definitions(comet PRIVATE _GLIBCXX_ASSERTIONS=1)
 # 私有模板在同一构建中保持一致; 安装后的公共 SDK 头不暴露诊断类型或强制下游开启.
 target_compile_definitions(comet PUBLIC "$<BUILD_INTERFACE:$<$<BOOL:${ASTRA_PROFILE}>:ASTRA_PROFILE=1>>")
 target_include_directories(comet PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>" PRIVATE src "${comet_common}/include")
@@ -58,7 +79,7 @@ if(COMET_SANITIZER MATCHES "address")
 endif()
 
 # 只编入用户明确指定的公开 CA, 不生成、下载或安装信任材料; 运行期外部 CA 文件优先.
-set(COMET_CA_FILE "" CACHE FILEPATH "Optional public CA PEM embedded with C++26 #embed")
+set(COMET_CA_FILE "" CACHE FILEPATH "Optional public CA PEM embedded in the SDK")
 if(COMET_CA_FILE)
     get_filename_component(comet_ca "${COMET_CA_FILE}" ABSOLUTE)
     if(NOT EXISTS "${comet_ca}" OR IS_DIRECTORY "${comet_ca}" OR comet_ca MATCHES "[\";\n\r]")
@@ -72,8 +93,14 @@ if(COMET_CA_FILE)
     if(comet_ca_content MATCHES "PRIVATE KEY" OR NOT comet_ca_content MATCHES "-----BEGIN CERTIFICATE-----")
         message(FATAL_ERROR "Embed only public CA certificates, never a private key")
     endif()
-    target_compile_definitions(comet PRIVATE "COMET_CA_FILE=\"${comet_ca}\"")
-    set_property(SOURCE src/core.cpp APPEND PROPERTY OBJECT_DEPENDS "${comet_ca}")
+    # 各平台统一由 CMake 转为私有字节列表, 不依赖 C++26 指令或额外工具.
+    file(READ "${comet_ca}" comet_ca_hex HEX)
+    string(REGEX REPLACE "(..)" "0x\\1," comet_ca_bytes "${comet_ca_hex}")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/comet_ca.inc" "${comet_ca_bytes}\n")
+    target_include_directories(comet PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    target_compile_definitions(comet PRIVATE COMET_CA_GENERATED=1)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${comet_ca}")
 endif()
 
 # 只安装自己维护的头文件/静态归档/导出与许可证, 外部依赖由消费端的已准备前缀查找.

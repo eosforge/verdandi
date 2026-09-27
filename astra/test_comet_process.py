@@ -51,7 +51,11 @@ def run(binaries: Path, polaris: Path, astrolabe: Path, soak=None):
             )
     root = ROOT / "build/tmp"
     root.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + 390 + (soak.faults + soak.steady + 240 if soak else 0)
+    deadline = (
+        float("inf")
+        if soak and soak.steady is None
+        else time.monotonic() + 390 + (soak.faults + soak.steady + 240 if soak else 0)
+    )
     ordinary = partial(wait, overall_deadline=deadline)
     fixtures = ROOT / "cluster/tests/fixtures"
     with tempfile.TemporaryDirectory(
@@ -106,7 +110,11 @@ def run(binaries: Path, polaris: Path, astrolabe: Path, soak=None):
             )
 
         def finished(process, seconds):
-            until = min(deadline, time.monotonic() + seconds)
+            until = (
+                min(deadline, time.monotonic() + seconds)
+                if seconds is not None
+                else deadline
+            )
             while process.poll() is None and time.monotonic() < until:
                 if soak:
                     soak.check(owned)
@@ -520,7 +528,7 @@ def run(binaries: Path, polaris: Path, astrolabe: Path, soak=None):
             if cycle >= (3 if soak else 1) and time.monotonic() >= limit:
                 break
 
-        if soak and soak.steady:
+        if soak and (soak.steady is None or soak.steady):
             soak.record("steady", seconds=soak.steady)
             mesh, mesh_log = start(
                 "steady",
@@ -529,15 +537,21 @@ def run(binaries: Path, polaris: Path, astrolabe: Path, soak=None):
                     *(item[3] for item in nodes),
                     fixtures / "star-b/ca.pem",
                     secret_file,
-                    str(soak.steady),
+                    "forever" if soak.steady is None else str(soak.steady),
                     "steady",
                     str(soak.records),
                     str(cycle),
                 ],
             )
             soak.retire(mesh)
-            if finished(mesh, soak.steady + 100) != 0 or not any(
-                event.get("event") == "mesh_replicated" for event in events(mesh_log)
+            soak.watch(mesh_log)
+            if (
+                finished(mesh, None if soak.steady is None else soak.steady + 100) != 0
+                or soak.steady is None
+                or not any(
+                    event.get("event") == "mesh_replicated"
+                    for event in events(mesh_log)
+                )
             ):
                 raise RuntimeError("Resident three-source steady state failed")
 

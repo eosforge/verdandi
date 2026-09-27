@@ -230,6 +230,7 @@ int main() {
         rollback();
         interrupted();
         coverage<Catalog>({1, bytes("old"), Clock::Time(4s)}, {2, bytes("new"), Clock::Time(5s)}, {"first", "second", "third"});
+        capacity<Catalog>({1, bytes("data"), Clock::Time(10s)});
         retired();
         std::cout << "catalog replicas: ok\n";
         return 0;

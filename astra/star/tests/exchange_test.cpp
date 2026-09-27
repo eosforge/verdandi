@@ -1,5 +1,6 @@
 #include "check.hpp"
 #include "exchange.hpp"
+#include <concepts>
 #include <iostream>
 
 namespace {
@@ -203,6 +204,61 @@ void rejection() {
     CHECK(node.budget.used == 0);
 }
 
+// 两域均覆盖首包拒绝、半份候选失败、原生容量拒绝及安装前退役; 失败后不等待流析构才归还工作区.
+template <typename Domain>
+void discarded() {
+
+    const Scope scope{"discarded", "main"}; // 两域使用同一合法范围, 每个场景独立创建节点.
+    const auto time = astra::Steady::now(); // 所有页共享固定接收时刻, 不触发无关的恢复超时.
+    // mode: 0 为空的不完整首包, 1 为重复键, 2 为第二条记录超容量, 3 为收齐前来源退役.
+    for (unsigned mode = 0; mode != 4; ++mode) {
+        Catalog::State::Limits catalog;     // Catalog 的默认领域限额, 下方仅缩小原生记录数.
+        Ephemeris::State::Limits ephemeris; // Ephemeris 同样只容许一条原生记录, 工作区仍遵守正常预算.
+        catalog.source.records = ephemeris.source.records = 1;
+        Node node(catalog, ephemeris);                        // 独立状态与预算, 避免前一个场景的退役影响本次判定.
+        auto& state = [&]() -> typename Domain::State& { if constexpr (std::same_as<Domain, Catalog>) return node.catalog; else return node.ephemeris; }(); // 选择真实领域, 复用同一故障序列.
+        constexpr std::size_t reserved = 4096;                // 模拟另一个接收者的预算, 本流失败不能误归还它.
+        CHECK(node.budget.acquire(reserved));
+        auto receiver = node.connect("source", time); // 保持流存活, 立即释放额度是本用例的关键断言.
+        Exchange::Packet packet;                      // 当前领域的一页输入, complete 之前不安装任何记录.
+        auto& page = [&]() -> auto& { if constexpr (std::same_as<Domain, Catalog>) return *packet.mutable_catalog_snapshot(); else return *packet.mutable_ephemeris_snapshot(); }();
+        page.set_position(1);
+
+        if (mode != 0) {
+            auto* entry = page.add_entries(); // 首条记录仅进入私有 Draft, 不改变公开来源.
+            astra::Parcel::scope(*entry->mutable_scope(), scope);
+            if constexpr (std::same_as<Domain, Catalog>) {
+                entry->set_key("first");
+                astra::Parcel::record(*entry->mutable_record(), Catalog::Record{1, bytes("data"), Clock::Time(10s)});
+            } else {
+                entry->set_uuid(Ephemeris::uuid());
+                astra::Parcel::record(*entry->mutable_record(), Ephemeris::Record{bytes("attr"), bytes("data"), Clock::Time(10s), 0, 0, 1000});
+            }
+            CHECK(receiver->receive(packet, time));
+            CHECK(node.budget.used == reserved + 64 * 1024 * 1024);
+            CHECK(state.received("source") == 0 && state.capture(scope)->size() == 0);
+            page.set_complete(true);
+            if (mode == 2) {
+                if constexpr (std::same_as<Domain, Catalog>)
+                    page.mutable_entries(0)->set_key("second");
+                else
+                    page.mutable_entries(0)->set_uuid(Ephemeris::uuid());
+            } else if (mode == 3) {
+                page.clear_entries(); // 正文完整但准入已撤销, 最终 restore 必须重新拒绝.
+                state.retire("source");
+            }
+        }
+
+        const auto rejected = receiver->receive(packet, time); // mode 1 重发同一条记录, 必须拒绝重复键而不是覆盖.
+        CHECK(!rejected);
+        CHECK(rejected.error().code == (mode == 2 ? astra::Status::Code::capacity : astra::Status::Code::protocol));
+        CHECK(node.budget.used == reserved && state.capture(scope)->size() == 0);
+        receiver.reset(); // 析构不能再次扣除已经由失败分支归还的额度.
+        CHECK(node.budget.used == reserved);
+        node.budget.release(reserved);
+    }
+}
+
 // 全局恢复额度不足时不安装半份数据并归还占用; 此例不注入内部账本损坏.
 void backlog() {
 
@@ -233,6 +289,8 @@ int main() {
         repair();
         snapshot();
         rejection();
+        discarded<Catalog>();
+        discarded<Ephemeris>();
         backlog();
         std::cout << "peer exchanges: ok\n";
         return 0;

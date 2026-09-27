@@ -110,6 +110,9 @@ grpc::Status Sampler::sample(std::stop_token stop) {
 
     // status 是排空后的最终 RPC 结果, 只有成功结束才能发布时钟估计.
     const auto status = stream->Finish();
+    ASTRA_PROFILE_COUNT("clock.client.received", received);
+    ASTRA_PROFILE_VALUE("clock.client.status", status.error_code());
+    ASTRA_PROFILE_COUNT("clock.client.valid", valid);
     if (!valid) {
         return grpc::Status(grpc::StatusCode::DATA_LOSS, "Invalid Pulse response");
     }
@@ -119,10 +122,13 @@ grpc::Status Sampler::sample(std::stop_token stop) {
 
     // estimate 至少包含三个有效观测才能非空, 其误差预算仍由输出时钟检查.
     const auto estimate = filter.result();
+    ASTRA_PROFILE_COUNT("clock.client.estimate", estimate.has_value());
     if (stop.stop_requested() || received != 8 || !estimate) {
         return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Insufficient Pulse samples");
     }
-    return output_.publish(*estimate) ? grpc::Status::OK : grpc::Status(grpc::StatusCode::DATA_LOSS, "Invalid Pulse estimate");
+    const bool accepted = output_.publish(*estimate); // 记录模型接纳与传输成功的区别, 不混淆 DATA_LOSS 和物理时钟偏移.
+    ASTRA_PROFILE_COUNT("clock.client.accepted", accepted);
+    return accepted ? grpc::Status::OK : grpc::Status(grpc::StatusCode::DATA_LOSS, "Invalid Pulse estimate");
 }
 
 // Sampler::run 采样线程主循环, 抖动启动、失败退避, 异常只撤销同步不终止进程.
@@ -145,6 +151,8 @@ void Sampler::run(std::stop_token stop) noexcept {
                 }
                 status = sample(stop);
             } catch (...) {
+                ASTRA_PROFILE_SCOPE("clock.client.failure");
+                ASTRA_PROFILE_COUNT("clock.client.exception", 1); // 与 RPC 返回状态分开, 不记录凭据或外部错误正文.
                 precision_ns_ = 0;
                 output_.revoke();
                 status = grpc::Status(grpc::StatusCode::UNAVAILABLE, "Pulse clock sampling unavailable");

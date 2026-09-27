@@ -103,7 +103,7 @@ private:
     bool permanent_{};                                     // TTL/创建输入或协议永久错误, 不反复请求新 UUID.
     std::size_t bytes_{};                                  // 固定 Attr 与当前期望的受控拥有量.
     std::shared_ptr<const Binding> identity_;              // 当前已确认 UUID 所属端点, 用于同 Star 恢复和关闭.
-    Lifetime lifetime_;                                    // 最近确认的保守本地预算, 使用 CLOCK_BOOTTIME.
+    Lifetime lifetime_;                                    // 最近确认的保守本地预算, 使用包含系统挂起的单调时钟.
     Beacon::State state_;                                  // 最后状态包装, 对外读取时重新核对预算.
     std::move_only_function<void(Beacon::State)> changed_; // 创建时固定, 不在通知执行时销毁.
     bool dirty_{};                                         // 合并状态通知, 不建立回调队列.

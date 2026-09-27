@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 HEADER = struct.Struct("<16Q")
 ENTRY = struct.Struct("<9QII")
 MAGIC = 0x4153545241505246
-MACRO = re.compile(r'ASTRA_PROFILE_(?:SCOPE|BEGIN|COUNT|CONSUME)\([^"\n]*"([^"\n]+)"')
+MACRO = re.compile(r'ASTRA_PROFILE_(?:SCOPE|BEGIN|COUNT|VALUE|CONSUME)\([^"\n]*"([^"\n]+)"')
+FUNCTIONS = ("clock", "storage", "rpc", "replication", "watch", "sdk", "core", "test")
 
 
 def identify(name):
@@ -59,11 +60,12 @@ def distribution(values):
         "mean": sum(ordered) / len(ordered),
         **{name: ordered[max(0, math.ceil(fraction * len(ordered)) - 1)] for name, fraction in (("p50", 0.5), ("p95", 0.95), ("p99", 0.99), ("p999", 0.999))},
         "max": ordered[-1],
+        "min": ordered[0],
         "tail_samples_sufficient": len(ordered) >= 10000,
     }
 
 
-def analyze(path, sites, trace=None):
+def analyze(path, sites, trace=None, clock=None):
     """单文件 mmap 分析, 父记录按槽号直查, 无百万项 Python 父链字典. 进程必须已经退出."""
     groups = {}
     with path.open("rb") as stream:
@@ -71,8 +73,12 @@ def analyze(path, sites, trace=None):
             raise ValueError(f"{path.name}: truncated header")
         with mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as data:
             magic, version, width, capacity, count, missed, errors, sample, cpu, *reserved = HEADER.unpack_from(data)
-            if magic != MAGIC or version != 1 or width != ENTRY.size or any(reserved):
+            if magic != MAGIC or version not in (1, 2) or width != ENTRY.size:
                 raise ValueError(f"{path.name}: unsupported profile format")
+            # v1 无功能选择; v2 复用头部保留区, 其余字节仍必须为零, 不猜测未知扩展.
+            selected, seconds = (255, 0) if version == 1 else reserved[:2]
+            if any(reserved if version == 1 else reserved[2:]) or not 1 <= selected <= 255 or not 0 <= seconds <= 86400:
+                raise ValueError(f"{path.name}: invalid profile selection")
             if (
                 not capacity
                 or capacity % 64
@@ -89,9 +95,11 @@ def analyze(path, sites, trace=None):
                     holes += 1
                     continue  # 线程最后一块未用槽, 也可能是异常终止时的未完成跨度; 不能据此宣称正常退出.
                 start, elapsed, own, used, exclusive, number, parent, site, value, thread, flags = entry
-                if site not in sites or not thread or flags not in (0, 1, 2, 4) or own > elapsed or exclusive > used:
+                if site not in sites or not thread or flags not in ((0, 1, 2, 4) if version == 1 else (0, 1, 2, 4, 10)) or own > elapsed or exclusive > used:
                     raise ValueError(f"{path.name}: invalid record at slot {slot}")
-                kind = "counter" if flags == 2 else "interval" if flags == 4 else "span"
+                kind = "value" if flags == 10 else "counter" if flags == 2 else "interval" if flags == 4 else "span"
+                if flags == 10 and value >= (1 << 63):
+                    value -= 1 << 64  # 有符号数值按二进制补码还原, 不把负偏移显示成巨大正数.
                 if kind == "span":
                     if number != slot + 1 or flags != cpu or value or (not cpu and (used or exclusive)):
                         raise ValueError(f"{path.name}: invalid span at slot {slot}")
@@ -101,11 +109,11 @@ def analyze(path, sites, trace=None):
                         number
                         or used
                         or exclusive
-                        or (kind == "counter" and (elapsed or own or not parent))
+                        or (kind in ("counter", "value") and (elapsed or own or not parent))
                         or (kind == "interval" and (parent or value or own != elapsed))
                     ):
                         raise ValueError(f"{path.name}: invalid event at slot {slot}")
-                    counters += kind == "counter"
+                    counters += kind in ("counter", "value")
                     intervals += kind == "interval"
                 parent_name = None
                 if parent:
@@ -125,10 +133,29 @@ def analyze(path, sites, trace=None):
                 key = (site, parent_name, kind)
                 group = groups.get(key)
                 if group is None:
-                    group = {"wall_ns": array("Q"), "own_ns": array("Q"), "cpu_ns": array("Q"), "cpu_own_ns": array("Q"), "values": array("Q")}
+                    group = {
+                        "wall_ns": array("Q"),
+                        "own_ns": array("Q"),
+                        "cpu_ns": array("Q"),
+                        "cpu_own_ns": array("Q"),
+                        "values": array("q" if kind == "value" else "Q"),
+                    }
                     groups[key] = group
-                if kind == "counter":
+                if kind in ("counter", "value"):
                     group["values"].append(value)
+                    # 单独保留时钟原始数值与所属跨度, 不用聚合均值覆盖误差突升或回拨的先后关系.
+                    if clock and sites[site]["name"].startswith("clock."):
+                        clock(
+                            {
+                                "process": path.stem,
+                                "thread": thread,
+                                "observed_ns": start,
+                                "span": parent,
+                                "scope": parent_name,
+                                "name": sites[site]["name"],
+                                "value": value,
+                            }
+                        )
                 else:
                     group["wall_ns"].append(elapsed)
                     group["own_ns"].append(own)
@@ -140,7 +167,7 @@ def analyze(path, sites, trace=None):
                         {
                             "name": sites[site]["name"],
                             "cat": kind,
-                            "ph": "i" if kind == "counter" else "X",
+                            "ph": "i" if kind in ("counter", "value") else "X",
                             "pid": path.stem,
                             "tid": thread,
                             "ts": start / 1000,
@@ -156,6 +183,9 @@ def analyze(path, sites, trace=None):
         )
     return {
         "file": path.name,
+        "format": version,
+        "functions": [name for bit, name in enumerate(FUNCTIONS) if selected & (1 << bit)],
+        "seconds": seconds,
         "sample": sample,
         "cpu": bool(cpu),
         "reserved": count,
@@ -178,6 +208,7 @@ def main():
     parser.add_argument("--inventory", type=Path, help="只输出静态站点目录, 不运行测试")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--trace", type=Path, help="可选 Chrome Trace JSON, 可能大于原二进制")
+    parser.add_argument("--clock", type=Path, help="额外导出时钟数值 JSONL; 用 observed_ns 对同宿主进程排序, 不将文件槽位顺序当时间顺序")
     options = parser.parse_args()
     sites = inventory(options.source.resolve())
     if options.inventory:
@@ -193,7 +224,10 @@ def main():
         parser.error("No profile files; initialization or collection was not successful")
     # 输出流逐项写, 不在内存构建另一份完整时间线. 离线导出不影响被测服务.
     reports = []
-    with options.trace.open("w", encoding="utf-8") if options.trace else open(os.devnull, "w", encoding="utf-8") as output:
+    with (
+        options.trace.open("w", encoding="utf-8") if options.trace else open(os.devnull, "w", encoding="utf-8") as output,
+        options.clock.open("w", encoding="utf-8") if options.clock else open(os.devnull, "w", encoding="utf-8") as clock_output,
+    ):
         output.write('{"traceEvents":[')
         first = True
 
@@ -202,8 +236,11 @@ def main():
             output.write(("" if first else ",") + json.dumps(record, ensure_ascii=False))
             first = False
 
+        def emit_clock(record):
+            clock_output.write(json.dumps(record, ensure_ascii=False) + "\n")
+
         for path in paths:
-            reports.append(analyze(path, sites, emit if options.trace else None))
+            reports.append(analyze(path, sites, emit if options.trace else None, emit_clock if options.clock else None))
         output.write("]}")
     report = {
         "scope": "sampled synchronous spans and separate asynchronous intervals; not request end-to-end latency",

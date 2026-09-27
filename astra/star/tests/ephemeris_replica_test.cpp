@@ -285,6 +285,7 @@ int main() {
         atomic();
         interrupted();
         coverage<Ephemeris>({bytes("attr"), bytes("old"), Clock::Time(4s), 0, 0, 1000}, {bytes("attr"), bytes("new"), Clock::Time(5s), 1, 1, 1000}, {Ephemeris::uuid(), Ephemeris::uuid(), Ephemeris::uuid()});
+        capacity<Ephemeris>({bytes("attr"), bytes("data"), Clock::Time(10s), 0, 0, 1000});
         repair();
         replacement();
         std::cout << "Ephemeris replicas: ok\n";

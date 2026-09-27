@@ -361,11 +361,11 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
                         publish(view_.version() ? State::stale : State::waiting, accepted.error());
                     } else {
                         failed_ = true;
-                        auto error = accepted.error(); // 缺 Attr 的唯一回退已用完时, 对外明确是协议错误.
-                        if (error.code == Error::Code::history) {
-                            error.code = Error::Code::protocol;
+                        auto failure = accepted.error(); // 缺 Attr 的唯一回退已用完时, 对外明确是协议错误.
+                        if (failure.code == Error::Code::history) {
+                            failure.code = Error::Code::protocol;
                         }
-                        publish(State::failed, std::move(error));
+                        publish(State::failed, std::move(failure));
                     }
                     stream->cancel();
                 } else if (*accepted) {

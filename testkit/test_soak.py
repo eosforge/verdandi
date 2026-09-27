@@ -49,6 +49,28 @@ class Soak(unittest.TestCase):
         )
         self.assertEqual((actual.fault_seconds, actual.steady_seconds, actual.interval), (0, 0, 0))
 
+    def test_explicit_unbounded_steady(self):
+        actual = parse(["--binaries", "build", "--output", "out", "--fault-seconds", "0", "--until-stopped"])
+        self.assertIsNone(actual.steady_seconds)
+        self.assertEqual(actual.fault_seconds, 0)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            parse(["--binaries", "build", "--output", "out", "--until-stopped", "--steady-seconds", "10"])
+
+    def test_progress_requires_new_confirmed_round(self):
+        recorder = Recorder(self.root / "evidence", 0, None, 0)
+        log = self.root / "steady.log"
+        recorder.watch(log)
+        start = recorder.progress[log]["updated"]
+        recorder.observe(log, b'{"event":"mesh_progress","round":100}\n', start + 10)
+        self.assertEqual(recorder.progress[log]["round"], 100)
+        # 重复行、部分行和服务仍存活均不能掩盖业务停滞; 期限是单轮看门狗, 不是总时长.
+        recorder.observe(log, b'{"event":"mesh_progress","round":100}\n{"event":', start + 100)
+        self.assertEqual(recorder.progress[log]["updated"], start + 10)
+        with self.assertRaisesRegex(RuntimeError, "no confirmed progress"):
+            recorder.observe(log, b"", start + 191)
+        with self.assertRaisesRegex(RuntimeError, "backwards"):
+            recorder.observe(log, b'{"event":"mesh_progress","round":99}\n', start + 192)
+
     def test_existing_evidence_is_not_overwritten(self):
         with self.assertRaises(FileExistsError):
             Recorder(self.root, 0, 0, 0)

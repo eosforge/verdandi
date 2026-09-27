@@ -505,7 +505,7 @@ Core::Time Beaming::poll(Core::Time now, const std::shared_ptr<const Binding>& b
     if (creating_ && binding && (creating_->binding->endpoint != binding->endpoint || (!binding->instance.empty() && !creating_->binding->instance.empty() && creating_->binding->instance != binding->instance))) {
         creating_->context.TryCancel();
     }
-    const auto time = Lifetime::now(); // BOOTTIME 用于预算, RPC/退避仍使用参数 now 的 steady_clock.
+    const auto time = Lifetime::now(); // 含挂起的单调时钟用于预算, RPC/退避仍使用参数 now 的 steady_clock.
     if (!time) {
         publish(state_.identity ? Beacon::Phase::uncertain : Beacon::Phase::waiting, error(Error::Code::clock));
     } else if (permanent_) {

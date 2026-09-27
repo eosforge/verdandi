@@ -133,6 +133,18 @@ Result<void> Exchange::Pipe<Domain>::snapshot(const Snapshot& page, Steady::time
 
     ASTRA_PROFILE_SCOPE("star.exchange.Exchange.Pipe_Domain.snapshot");
 
+    // 每页失败即归还接收工作区, 不把释放时机绑到 gRPC 最终 OnDone. 错误仍由 Session 终止逻辑流.
+    struct Guard {
+        Pipe& pipe;  // 借用当前接收器, 本守卫不跨出 snapshot 调用.
+        bool keep{}; // 仅成功接收一页后置真, 错误返回或异常均清理私有候选及其预算.
+
+        ~Guard() { // clear 不抛异常, 已确认来源不会因放弃候选而回退.
+            if (!keep) {
+                pipe.clear();
+            }
+        }
+    } guard{*this}; // 同时覆盖 append 内分配异常和 restore 失败, 不分配新的堆对象.
+
     if (recovery_)
         return Status::protocol("Peer snapshot installation is still in progress");
     if (!landing_) {
@@ -161,6 +173,7 @@ Result<void> Exchange::Pipe<Domain>::snapshot(const Snapshot& page, Steady::time
     }
     deadline_ = now + std::chrono::seconds(30); // 一页必须有真实进展, append 拒绝空的不完整页.
     if (!landing_->complete()) {
+        guard.keep = true;
         return {};
     }
     auto complete = landing_->take(received_);
@@ -174,6 +187,7 @@ Result<void> Exchange::Pipe<Domain>::snapshot(const Snapshot& page, Steady::time
     recovery_.emplace(std::move(*installed));
     landing_.reset();
     seen_ = page.position(); // 仅已接收完整目标, ACK 仍等待所有 Scope 安装完成.
+    guard.keep = true;
     return {};
 }
 

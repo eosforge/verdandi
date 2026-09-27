@@ -32,20 +32,22 @@ class Profile {
         std::uint64_t site;      // 固定探针名称的 FNV-1a 标识, 由源码目录表解析并检查碰撞.
         std::uint64_t value;     // 计数事件的非敏感数值; 普通跨度为零.
         std::uint32_t thread;    // 内核线程号, 用于时间线和父子关系校验.
-        std::uint32_t flags;     // 位 0 为启用 CPU 计时, 位 1 为采样计数事件, 位 2 为独立异步间隔.
+        std::uint32_t flags;     // 位 0 为 CPU 计时, 位 1 为计数, 位 2 为异步间隔, 位 3 表示有符号计数值.
     };
 
     struct Header {
         std::uint64_t magic = 0x4153545241505246ULL; // 固定格式标识, 不与既有临时探针混用.
-        std::uint64_t version = 1;                   // 二进制布局版本.
+        std::uint64_t version = 2;                   // v2 增加功能选择、采集时限和有符号数值, 保持定长布局.
         std::uint64_t width = sizeof(Entry);         // 一条记录的字节数.
         std::uint64_t capacity{};                    // 文件可容纳的记录数, 不在运行中扩容.
         std::atomic_uint64_t count{};                // 按 64 槽分块预留的水位, 包含线程未使用的零槽.
-        std::atomic_uint64_t missed{};               // 满额后直接拒绝的探针数, 不包含随父作用域停采的子树.
+        std::atomic_uint64_t missed{};               // 满额触发停采前的直接拒绝数, 不是全部遗漏事件数量.
         std::atomic_uint64_t errors{};               // 时钟异常/不合法嵌套计数, 非零不得宣称完整剖析.
-        std::uint64_t sample{};                      // 顶层跨度以约 1/N 概率采一棵完整同步调用树.
+        std::uint64_t sample{};                      // 最外层已选中跨度以约 1/N 概率采样, 子调用沿用决定.
         std::uint64_t cpu{};                         // 是否启用额外的线程 CPU 时钟系统调用.
-        std::array<std::uint64_t, 7> reserved{};     // 固定 128 字节头, 后续扩展须提升版本.
+        std::uint64_t groups{};                      // 已启用的功能位集合, 由下方固定名称表定义.
+        std::uint64_t seconds{};                     // 最长采集秒数, 零表示只由文件容量约束.
+        std::array<std::uint64_t, 5> reserved{};     // 固定 128 字节头, 后续扩展须提升版本.
     };
 
     static_assert(sizeof(Header) == 128 && sizeof(Entry) == 80);
@@ -62,10 +64,12 @@ class Profile {
             const char* directory = std::getenv("ASTRA_PROFILE_DIR"); // 缺省不创建文件.
             if (!directory)
                 return;
-            const auto sample = number("ASTRA_PROFILE_SAMPLE", 64, 1, 65536); // 顶层采样间隔, 默认 64.
-            const auto mib = number("ASTRA_PROFILE_MIB", 64, 1, 512);         // 每进程映射预算, 默认 64 MiB.
-            const auto cpu = number("ASTRA_PROFILE_CPU", 0, 0, 1);            // CPU 系统调用需单独开启并测量扰动.
-            if (directory[0] != '/' || sample == UINT64_MAX || mib == UINT64_MAX || cpu == UINT64_MAX) {
+            const auto sample = number("ASTRA_PROFILE_SAMPLE", 64, 1, 65536);   // 顶层采样间隔, 默认 64.
+            const auto mib = number("ASTRA_PROFILE_MIB", 64, 1, 512);           // 每进程映射预算, 默认 64 MiB.
+            const auto cpu = number("ASTRA_PROFILE_CPU", 0, 0, 1);              // CPU 系统调用需单独开启并测量扰动.
+            const auto groups = selection(std::getenv("ASTRA_PROFILE_GROUPS")); // 缺省 all, 非法名称停采, 不默默放大全功能.
+            const auto seconds = number("ASTRA_PROFILE_SECONDS", 0, 0, 86400);  // 灰度窗口至多一天, 零保留原容量模式.
+            if (directory[0] != '/' || sample == UINT64_MAX || mib == UINT64_MAX || cpu == UINT64_MAX || !groups || seconds == UINT64_MAX) {
                 failure();
                 return;
             }
@@ -97,7 +101,47 @@ class Profile {
             header->capacity = (bytes - sizeof(Header)) / sizeof(Entry) / 64 * 64;
             header->sample = sample;
             header->cpu = cpu;
+            header->groups = groups;
+            header->seconds = seconds;
             entries = reinterpret_cast<Entry*>(static_cast<char*>(memory) + sizeof(Header));
+            stop_ = seconds ? now() + seconds * 1'000'000'000 : 0;
+        }
+
+        // 未选中功能不读时钟、不进入 TLS 栈; 到期只原子置停, 不关闭仍可能被在途跨度引用的映射.
+        bool active(std::uint64_t group) noexcept {
+
+            if (!header || !(header->groups & group) || stopped_.load(std::memory_order_relaxed))
+                return false;
+            if (stop_ && now() >= stop_) {
+                stopped_.store(true, std::memory_order_relaxed);
+                return false;
+            }
+            return true;
+        }
+
+        // 仅启动时解析逗号分隔的功能名. 不支持热更环境, 空项/未知项/重复项均拒绝.
+        static std::uint64_t selection(const char* text) noexcept {
+
+            if (!text || std::string_view(text) == "all")
+                return 255;
+            constexpr std::array names{"clock", "storage", "rpc", "replication", "watch", "sdk", "core", "test"}; // 顺序固定为文件头位号.
+            std::string_view remaining(text);                                                                     // 借用启动环境, 不分配或复制配置值.
+            std::uint64_t result{};                                                                               // 已匹配功能位, 零同时作为配置失败标记.
+            do {
+                const auto end = remaining.find(','); // 当前功能名边界, 不接受空白/隐式拼写修复.
+                const auto name = remaining.substr(0, end);
+                std::uint64_t bit{}; // 此项匹配后仅一位为 1, 未知项保持零.
+                for (std::size_t index = 0; index < names.size(); ++index)
+                    if (name == names[index])
+                        bit = std::uint64_t{1} << index;
+                if (!bit || (result & bit))
+                    return 0;
+                result |= bit;
+                if (end == std::string_view::npos)
+                    return result;
+                remaining.remove_prefix(end + 1);
+            } while (!remaining.empty());
+            return 0;
         }
 
         // 解析不带符号的十进制配置. 缺省用 fallback, 空值、越界和非数字返回 UINT64_MAX.
@@ -143,6 +187,7 @@ class Profile {
 
             if (block.full) {
                 header->missed.fetch_add(1, std::memory_order_relaxed);
+                stopped_.store(true, std::memory_order_relaxed); // 容量拒绝后全进程停止新采集, 避免每个热路径持续竞争 missed.
                 return UINT64_MAX;
             }
             return block.next++;
@@ -152,6 +197,10 @@ class Profile {
         void write(std::uint64_t slot, const Entry& entry) noexcept {
             ::new (static_cast<void*>(entries + slot)) Entry(entry);
         }
+
+    private:
+        std::uint64_t stop_{};       // 单调纳秒截止, 初始化后只读, 零表示无时限.
+        std::atomic_bool stopped_{}; // 任一线程观察到时限或容量耗尽后停采, 之后入口不再读时钟.
     };
 
     // 只对已启用的诊断使用进程级固定映射, 不在普通构建中存在此对象.
@@ -192,9 +241,15 @@ class Profile {
     }
 
 public:
+    // 固定站点在编译期完成分类, 热路径只比较功能位, 不扫描/匹配字符串.
+    struct Site {
+        std::uint64_t id;    // 固定名称的 FNV-1a, 与离线目录一致.
+        std::uint64_t group; // 功能单一归属, 与 Header::groups 的位编号一致.
+    };
+
     // 同线程同步作用域的 RAII 跨度. 必须按栈顺序结束, 不跨协程挂起或把对象移到另一线程.
     class Span {
-        inline static thread_local Span* current_{};        // 包括未采样父作用域, 防止子调用自行重复抽样.
+        inline static thread_local Span* current_{};        // 只含已选中功能, 包括未采样父作用域, 防止子调用重复抽样.
         inline static thread_local std::uint32_t random_{}; // 每线程独立的非密码学采样状态, 零为尚未初始化.
         Span* parent_{};                                    // 当前线程的上一作用域, 默认无父.
         Storage* output_{};                                 // 空表示未启用记录; 不拥有映射.
@@ -208,10 +263,10 @@ public:
 
     public:
         // site 为固定文字的编译期散列; 无凭据、地址或正文.
-        explicit Span(std::uint64_t site) noexcept : site_(site) {
+        explicit Span(Site site) noexcept : site_(site.id) {
 
             auto& output = storage(); // 首次打开映射在计时起点之前完成.
-            if (!output.header)
+            if (!output.active(site.group))
                 return;
             parent_ = current_;
             // GCC 16 的内联逃逸检查不识别 finish/析构恢复 TLS 的借用边界. 仅此赋值抑制误报,
@@ -268,8 +323,25 @@ public:
         }
 
         // 固定名称只在编译期处理, 不在热路径格式化字符串.
-        static consteval std::uint64_t label(std::string_view name) noexcept {
-            return identify(name);
+        static consteval Site label(std::string_view name) noexcept {
+
+            // clock 只包含低频校准诊断; 高频 Clock::now 的耗时属于 core, 防止灰度记录被业务读钟淹没.
+            std::uint64_t group = 64;
+            if (name.starts_with("clock.") || name.starts_with("common.pulse_client.") || name.starts_with("common.clock.Filter.") || name.starts_with("common.clock.Clock.observe") || name.starts_with("common.clock.Clock.publish") || name.starts_with("pulsar.pulse."))
+                group = 1;
+            else if (name.starts_with("comet."))
+                group = 32;
+            else if (name.starts_with("profile.test."))
+                group = 128;
+            else if (name.starts_with("star.downstream.") || name.starts_with("star.readout.") || name.starts_with("star.broadcast.") || name.starts_with("star.edition.") || name.starts_with("star.pagination."))
+                group = 16;
+            else if (name.starts_with("star.exchange.") || name.starts_with("star.dispatch.") || name.starts_with("star.landing.") || name.starts_with("star.receiver.") || name.starts_with("star.intake.") || name.starts_with("star.restore.") || name.find("_replica.") != name.npos || name.starts_with("common.grpc_session.") || name.starts_with("common.session."))
+                group = 8;
+            else if (name.starts_with("star.catalog_service.") || name.starts_with("star.ephemeris_service.") || name.starts_with("star.gateway."))
+                group = 4;
+            else if (name.starts_with("star.") || name.starts_with("common.pages."))
+                group = 2;
+            return {identify(name), group};
         }
 
         // 异步标记沿用入口的采样决定, 不把 TLS 父对象传递给另一线程.
@@ -299,14 +371,14 @@ public:
 
     public:
         // 计数只随当前被采样调用树记录, value 为已有的字节数/条数/命中次数, 不是总量估算.
-        static void count(std::uint64_t site, std::uint64_t value) noexcept {
-            if (!current_ || !current_->id_)
+        static void count(Site site, std::uint64_t value, bool signed_value = false) noexcept {
+            if (!current_ || !current_->id_ || !current_->output_->active(site.group))
                 return;
             auto& output = *current_->output_;
             const auto slot = output.reserve(); // 计数事件也使用线程独占槽位, 满额明确报告而不分配额外内存.
             if (slot == UINT64_MAX)
                 return;
-            output.write(slot, {now(), 0, 0, 0, 0, 0, current_->id_, site, value, thread(), 2});
+            output.write(slot, {now(), 0, 0, 0, 0, 0, current_->id_, site.id, value, thread(), signed_value ? 10U : 2U});
         }
     };
 
@@ -321,14 +393,16 @@ public:
         }
 
         // 可由另一线程消费, 但必须与 mark 使用调用者已有锁/发布边界. 间隔不算作本线程 CPU 或同步子调用.
-        void consume(std::uint64_t site) noexcept {
+        void consume(Site site) noexcept {
 
             if (!start_)
                 return;
             const auto start = start_; // 先清除, 同一事件不重复记录.
             start_ = 0;
-            const auto end = now();
             auto& output = storage();
+            if (!output.active(site.group))
+                return;
+            const auto end = now(); // 未选中功能不读取诊断时钟, 只清除已消费标记.
             if (end < start) {
                 output.header->errors.fetch_add(1, std::memory_order_relaxed);
                 return;
@@ -336,7 +410,7 @@ public:
             const auto slot = output.reserve();
             if (slot == UINT64_MAX)
                 return;
-            output.write(slot, {start, end - start, end - start, 0, 0, 0, 0, site, 0, thread(), 4});
+            output.write(slot, {start, end - start, end - start, 0, 0, 0, 0, site.id, 0, thread(), 4});
         }
     };
 };
@@ -355,6 +429,7 @@ public:
     }
 #define ASTRA_PROFILE_END(token) token.finish()
 #define ASTRA_PROFILE_COUNT(name, value) ::astra::Profile::Span::count(::astra::Profile::Span::label(name), static_cast<std::uint64_t>(value))
+#define ASTRA_PROFILE_VALUE(name, value) ::astra::Profile::Span::count(::astra::Profile::Span::label(name), static_cast<std::uint64_t>(static_cast<std::int64_t>(value)), true)
 #define ASTRA_PROFILE_STAMP(token) ::astra::Profile::Stamp token
 #define ASTRA_PROFILE_MARK(token) token.mark()
 #define ASTRA_PROFILE_CONSUME(token, name) token.consume(::astra::Profile::Span::label(name))
@@ -363,6 +438,7 @@ public:
 #define ASTRA_PROFILE_BEGIN(token, name) ((void)0)
 #define ASTRA_PROFILE_END(token) ((void)0)
 #define ASTRA_PROFILE_COUNT(name, value) ((void)0)
+#define ASTRA_PROFILE_VALUE(name, value) ((void)0)
 #define ASTRA_PROFILE_STAMP(token) static_assert(true)
 #define ASTRA_PROFILE_MARK(token) ((void)0)
 #define ASTRA_PROFILE_CONSUME(token, name) ((void)0)

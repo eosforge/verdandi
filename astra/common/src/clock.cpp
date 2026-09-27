@@ -113,9 +113,17 @@ bool Filter::observe(std::uint64_t t0, std::uint64_t t1, std::uint64_t t2, Elaps
 
     // t3 为接收时的本机经过时间, 与 t0 同域; 负值拒绝后才能转换为无符号数.
     const auto t3 = elapsed_ns(received);
+    ASTRA_PROFILE_COUNT("clock.filter.t0_elapsed_ns", t0);
+    ASTRA_PROFILE_COUNT("clock.filter.t1_unix_ns", t1);
+    ASTRA_PROFILE_COUNT("clock.filter.t2_unix_ns", t2);
+    ASTRA_PROFILE_VALUE("clock.filter.t3_elapsed_ns", t3);
+    ASTRA_PROFILE_COUNT("clock.filter.upstream_ns", uncertainty);
+    ASTRA_PROFILE_COUNT("clock.filter.remote_precision_ns", precision);
+    ASTRA_PROFILE_COUNT("clock.filter.local_precision_ns", local_precision_);
     // limit 约束远端无符号字段, 使后续有符号差值和中点运算保持可表示.
     const auto limit = static_cast<std::uint64_t>(maximum);
     if (!synchronized || precision == 0 || precision > 20'000'000 || uncertainty > clock_uncertainty_limit_ns || t0 > limit || t1 > limit || t2 > limit || t3 < 0 || t0 > static_cast<std::uint64_t>(t3) || t2 < t1) {
+        ASTRA_PROFILE_COUNT("clock.filter.rejected", 1); // 输入坐标/质量不合法, 不执行未经限制的无符号减法.
         return false;
     }
 
@@ -123,19 +131,24 @@ bool Filter::observe(std::uint64_t t0, std::uint64_t t1, std::uint64_t t2, Elaps
     const auto elapsed = static_cast<std::uint64_t>(t3) - t0;
     // processing 是服务端两次采样之差, 单位 ns; 不与本机时钟原点直接比较.
     const auto processing = t2 - t1;
+    ASTRA_PROFILE_COUNT("clock.filter.elapsed_ns", elapsed);
+    ASTRA_PROFILE_COUNT("clock.filter.processing_ns", processing);
     if (elapsed > 200'000'000 || processing > 200'000'000) {
+        ASTRA_PROFILE_COUNT("clock.filter.rejected", 2); // 往返或服务端处理时长超限.
         return false;
     }
 
     // 两端底层各 500 ppm + Pulsar 调速 500 ppm; 上游绝对误差不能用来放宽处理时长检查.
     const auto dispersion = local_precision_ + precision + drift(elapsed, 1500);
     if (processing > elapsed && processing - elapsed > 2 * dispersion) {
+        ASTRA_PROFILE_COUNT("clock.filter.rejected", 3); // 两端处理时长不符合可容忍的量化误差.
         return false;
     }
 
     // offset 用四时间戳中点估计 Unix 与本机时间的偏移, midpoint 避免两差相加溢出.
     const auto offset = std::midpoint(static_cast<std::int64_t>(t1) - static_cast<std::int64_t>(t0), static_cast<std::int64_t>(t2) - t3);
     if ((offset > 0 && t3 > maximum - offset) || (offset < 0 && offset < -t3)) {
+        ASTRA_PROFILE_COUNT("clock.filter.rejected", 4); // 坐标映射将越过可表示的 Unix 时间范围.
         return false;
     }
 
@@ -143,6 +156,9 @@ bool Filter::observe(std::uint64_t t0, std::uint64_t t1, std::uint64_t t2, Elaps
     const auto rtt = std::max(elapsed > processing ? elapsed - processing : 0, local_precision_);
     // error 合并上游,量化,漂移与半往返误差, 向上取整并保留中点舍入的 1 ns.
     const auto error = uncertainty + dispersion + (rtt + 1) / 2 + 1;
+    ASTRA_PROFILE_COUNT("clock.filter.rtt_ns", rtt);
+    ASTRA_PROFILE_COUNT("clock.filter.uncertainty_ns", error);
+    ASTRA_PROFILE_COUNT("clock.filter.rejected", 0);
     if (!best_ || rtt <= best_->rtt_ns) {
         best_ = Clock::Estimate{Clock::Time(std::chrono::nanoseconds(t3 + offset)), received, error, rtt};
     }
@@ -263,13 +279,21 @@ bool Clock::observe(const Clock::Estimate& estimate, ElapsedTime local) {
 
     // target 是待发布样本的非负 Unix 纳秒值, 仅首次校准直接建立公开锚点.
     const auto target = estimate.time.time_since_epoch().count();
+    ASTRA_PROFILE_VALUE("clock.model.target_unix_ns", target);
+    ASTRA_PROFILE_VALUE("clock.model.local_elapsed_ns", elapsed_ns(local));
+    ASTRA_PROFILE_COUNT("clock.model.input_uncertainty_ns", estimate.uncertainty_ns);
+    ASTRA_PROFILE_COUNT("clock.model.rtt_ns", estimate.rtt_ns);
+    ASTRA_PROFILE_COUNT("clock.model.initialized", estimate_.has_value());
     if (failed_ || target < 0 || elapsed_ns(estimate.sampled) < 0 || local < estimate.sampled || estimate.uncertainty_ns > 1'000'000'000 || estimate.rtt_ns > 200'000'000 || (estimate_ && estimate.sampled <= estimate_->sampled)) {
+        ASTRA_PROFILE_COUNT("clock.model.rejected", 1); // 输入错误、反序或重复, 不修改连续时间模型.
         return false;
     }
 
     // age 是从采样到消费的经过时长, 先限制为 freshness 再做 Unix 外推.
     const auto age = (local - estimate.sampled).count();
+    ASTRA_PROFILE_VALUE("clock.model.age_ns", age);
     if (static_cast<std::uint64_t>(age) > freshness || target > maximum - age) {
+        ASTRA_PROFILE_COUNT("clock.model.rejected", 2); // 消费延迟超限或外推将溢出.
         return false;
     }
 
@@ -278,12 +302,14 @@ bool Clock::observe(const Clock::Estimate& estimate, ElapsedTime local) {
     if (!estimate_) {
         // 首次校准必须质量达标, 防止以严重错误的值启动后又耗时数小时平滑恢复.
         if (estimate.uncertainty_ns + drift(static_cast<std::uint64_t>(age), 2000) > clock_uncertainty_limit_ns) {
+            ASTRA_PROFILE_COUNT("clock.model.rejected", 3); // 新进程首次校准质量不够, 区别于已运行节点 holdover.
             return false;
         }
         epoch_ = predicted;
         local_ = local;
     } else {
         if (!advance(local)) {
+            ASTRA_PROFILE_COUNT("clock.model.rejected", 4); // 本地推进失败, 不能用新样本掩盖时钟反序.
             return false;
         }
 
@@ -296,6 +322,10 @@ bool Clock::observe(const Clock::Estimate& estimate, ElapsedTime local) {
     }
     estimate_ = estimate;
     trusted_ = true;
+    ASTRA_PROFILE_VALUE("clock.model.epoch_unix_ns", epoch_.time_since_epoch().count());
+    ASTRA_PROFILE_VALUE("clock.model.debt_ns", debt_);
+    ASTRA_PROFILE_COUNT("clock.model.slew_ppm", slew_ppm_);
+    ASTRA_PROFILE_COUNT("clock.model.rejected", 0);
     return true;
 }
 

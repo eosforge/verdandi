@@ -186,14 +186,21 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
     if (!repair && (replica.source.position() == UINT64_MAX || position != replica.source.position() + 1)) {
         return std::unexpected(Error::history);
     }
-    const auto coverage = std::ranges::find_if(replica.coverage, [&](const Replica::Coverage& value) { return *value.name->scope == scope && value.name->key == key; });
-    auto covered = coverage == replica.coverage.end() ? 0 : coverage->position; // 精确补项可晚于范围基线, 取两者最大覆盖位置.
-    for (const auto& value : replica.coverage) {
-        if (*value.name->scope == scope && value.name->key.empty())
+    auto index = replica.coverage.size(); // 精确补项的位置, size 表示未找到; reserve 前只保存索引.
+    std::uint64_t covered{};              // 本目标被范围或精确回补覆盖的最大来源位置, 初始零.
+    std::size_t targets{};                // 全来源精确补项数, 不把范围标记计入 128 项配额.
+    // 一次遍历合并查找、范围覆盖和容量计数; value 是当前候选, item 是其稳定下标.
+    for (std::size_t item = 0; item < replica.coverage.size(); ++item) {
+        const auto& value = replica.coverage[item];
+        targets += !value.name->key.empty();
+        if (*value.name->scope != scope)
+            continue;
+        if (value.name->key == key)
+            index = item;
+        if (value.name->key.empty() || value.name->key == key)
             covered = std::max(covered, value.position);
     }
-    const bool precise = coverage != replica.coverage.end();
-    const auto index = static_cast<std::size_t>(coverage - replica.coverage.begin()); // reserve 前只保留索引.
+    const bool precise = index != replica.coverage.size(); // 后续扩容不能使这个判断依赖旧迭代器.
     if (covered >= position) {
         if (!repair) {
             auto skipped = replica.source.prepare(scope, key, replica.source.find(scope, key), position, std::chrono::steady_clock::now());
@@ -205,7 +212,7 @@ std::expected<void, Catalog::State::Error> Catalog::State::receive(std::string_v
         }
         return {};
     }
-    if (repair && !precise && std::ranges::count_if(replica.coverage, [](const Replica::Coverage& value) { return !value.name->key.empty(); }) >= 128) {
+    if (repair && !precise && targets >= 128) {
         return std::unexpected(Error::capacity);
     }
     auto stamp = reading();

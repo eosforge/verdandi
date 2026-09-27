@@ -10,7 +10,17 @@ python3 testkit/soak.py --binaries build/astra/release \
   --fault-seconds 7200 --steady-seconds 43200 --interval 60 --records 16
 ```
 
-输出目录必须不存在, 防止覆盖旧证据. 总请求时长最多七天. 故障阶段至少完成三轮, 每台 Star 各故障一次; 达到时长后完成正在进行的恢复, 所以实际时间还包括初始化、恢复、TTL 清理和收尾. `--records` 为每台 Star 的 Publisher 和 Beacon 数, 各 1..16 个; 默认两域各 48 条, 每条 Catalog 正文和 Ephemeris Data 都为 2 KiB.
+输出目录必须不存在, 防止覆盖旧证据. 有限时长模式的总请求时长最多七天. 故障阶段至少完成三轮, 每台 Star 各故障一次; 达到时长后完成正在进行的恢复, 所以实际时间还包括初始化、恢复、TTL 清理和收尾. `--records` 为每台 Star 的 Publisher 和 Beacon 数, 各 1..16 个; 默认两域各 48 条, 每条 Catalog 正文和 Ephemeris Data 都为 2 KiB.
+
+只有显式要求手动停止的长测使用以下入口, `--until-stopped` 与 `--steady-seconds` 互斥, 不用一个很大的秒数假装无限. `--fault-seconds 0` 仍依次完成 A/B/C 三轮故障恢复, 随后同一集群和同一批 SDK 对象保持运行, 总运行时间不设上限:
+
+```bash
+python3 testkit/soak.py --binaries build/astra/release \
+  --output build/testkit/soak-current \
+  --fault-seconds 0 --interval 0 --records 16 --until-stopped
+```
+
+不设总时限不等于取消故障检查. 单次 RPC、收敛和恢复仍有期限; 常驻原生探针必须持续输出完成全目标校验后的递增轮次, 超过 180 秒没有新轮次则失败. 重复进度不能刷新看门狗. 意外退出即使返回零也不能把无限模式标记为完成. 资源和日志预算仍生效, 失败后保留本轮证据并排查, 修复后开启新证据目录, 不合并多次运行时长冒充连续通过.
 
 使用一个 Pulsar、一个 Polaris、一个 Astrolabe、三台 Star. 公共链路启用 TLS/APIKEY 登录, 真实 SQLite 仅位于夹具临时目录. Comet 只访问公共业务接口. 三个固定入口的 Client 同时写入, 三个固定入口的 Subscriber/Observer 验证全部来源, 不让观察客户端退避到来源节点来伪装复制成功.
 
@@ -37,4 +47,4 @@ python3 testkit/soak.py --binaries build/astra/release \
 
 这套长测准备好的是现有真实业务链路, 不是所有故障的穷举. 轮换故障时由专用 Publisher/Beacon 检查切换, 多记录并发在故障前稳定窗口和末尾常驻阶段执行; 不声称所有来源在故障全过程都保持满负载. 网络分区/高延迟/丢包、宿主机休眠、系统时钟阶跃、磁盘满/掉电、多机拓扑和大规模慢消费者仍须独立场景. 部分已有组件/RPC 故障注入测试不能替代这些系统级长期证据. Pulsar 停机对时保持和恢复另由 `cpp_pulsar_process` 验证; 本长测不会修改系统 NTP 或宿主机网络规则.
 
-ASan/UBSan、TSan 使用对应已构建目录和明确的运行环境, 与普通版分开执行; Sanitizer 耗时不能作为生产吞吐. 此次准备阶段先跑短时三轮轮换和常驻冒烟, 正式两小时故障加十二小时稳定窗口另行执行并记录.
+ASan/UBSan、TSan 使用对应已构建目录和明确的运行环境, 与普通版分开执行; Sanitizer 耗时不能作为生产吞吐. 有限窗口和持续到手动停止的长测均需分别记录实际参数与结果, 不沿用早期两小时加十二小时的固定验收时长.

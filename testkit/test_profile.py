@@ -26,9 +26,10 @@ class Format(unittest.TestCase):
         self.site = profile.identify("example")
         self.sites = {self.site: {"name": "example"}}
 
-    def write(self, records, *, missed=0, errors=0, cpu=0):
+    def write(self, records, *, missed=0, errors=0, cpu=0, version=1, selected=255, seconds=0):
         """固定一块, 尾部零槽模拟各线程尚未用完的预留区域."""
-        header = profile.HEADER.pack(profile.MAGIC, 1, 80, 64, 64, missed, errors, 1, cpu, *([0] * 7))
+        reserved = [0] * 7 if version == 1 else [selected, seconds, *([0] * 5)]
+        header = profile.HEADER.pack(profile.MAGIC, version, 80, 64, 64, missed, errors, 1, cpu, *reserved)
         entries = b"".join(profile.ENTRY.pack(*record) for record in records)
         self.path.write_bytes(header + entries + bytes((64 - len(records)) * 80))
 
@@ -61,6 +62,27 @@ class Format(unittest.TestCase):
         result = profile.analyze(self.path, self.sites)
         self.assertEqual(result["groups"][0]["cpu_ns"]["sum"], 90)
 
+    def test_signed_and_selection(self):
+        self.sites[self.site]["name"] = "clock.test.offset"
+        self.write(
+            [self.record(), self.record(start=110, elapsed=0, own=0, id=0, parent=1, value=(1 << 64) - 17, flags=10)], version=2, selected=9, seconds=300
+        )
+        events = []
+        result = profile.analyze(self.path, self.sites, clock=events.append)
+        self.assertEqual(result["functions"], ["clock", "replication"])
+        self.assertEqual(result["seconds"], 300)
+        signed = next(group for group in result["groups"] if group["kind"] == "value")
+        self.assertEqual((signed["values"]["min"], signed["values"]["max"]), (-17, -17))
+        self.assertEqual(len(events), 1)
+        self.assertEqual((events[0]["span"], events[0]["observed_ns"], events[0]["value"]), (1, 110, -17))
+
+    def test_invalid_selection(self):
+        for change in ({"selected": 0}, {"selected": 256}, {"seconds": 86401}, {"version": 3}):
+            with self.subTest(change=change):
+                self.write([self.record()], **({"version": 2} | change))
+                with self.assertRaises(ValueError):
+                    profile.analyze(self.path, self.sites)
+
     def test_drop_and_clock_error(self):
         for field in ("missed", "errors"):
             with self.subTest(field=field):
@@ -68,7 +90,7 @@ class Format(unittest.TestCase):
                 self.assertFalse(profile.analyze(self.path, self.sites)["complete"])
 
     def test_invalid_record(self):
-        for change in ({"id": 9}, {"flags": 8}, {"own": 101}, {"cpu": 1}, {"parent": 1}, {"site": 0}, {"thread": 0}):
+        for change in ({"id": 9}, {"flags": 8}, {"flags": 10}, {"own": 101}, {"cpu": 1}, {"parent": 1}, {"site": 0}, {"thread": 0}):
             with self.subTest(change=change):
                 self.write([self.record(**change)])
                 with self.assertRaises(ValueError):
@@ -122,6 +144,28 @@ def binaries(enabled, disabled, root):
             raise AssertionError("Unset directory created records")
         if run("invalid", enabled, ASTRA_PROFILE_SAMPLE="0"):
             raise AssertionError("Invalid sampling accepted")
+        for index, groups in enumerate(("", "clock,", ",clock", "clock,clock", "clock,unknown", "all,clock", "clock, core")):
+            if run(f"invalid-group-{index}", enabled, mode="groups", ASTRA_PROFILE_GROUPS=groups):
+                raise AssertionError("Invalid group selection accepted")
+        for index, seconds in enumerate(("", "-1", "86401", "x")):
+            if run(f"invalid-seconds-{index}", enabled, mode="groups", ASTRA_PROFILE_SECONDS=seconds):
+                raise AssertionError("Invalid recording window accepted")
+        selected = run("clock", enabled, mode="groups", ASTRA_PROFILE_GROUPS="clock")
+        if len(selected) != 1 or not selected[0]["complete"] or selected[0]["functions"] != ["clock"] or selected[0]["spans"] != 1:
+            raise AssertionError("Clock-only sampling leaked unrelated spans or lost its filtered parent")
+        groups = {group["name"]: group for group in selected[0]["groups"]}
+        if set(groups) != {"clock.test.sample", "clock.test.offset", "clock.test.bound"}:
+            raise AssertionError("Clock-only recording leaked other functional groups")
+        if groups["clock.test.offset"]["values"]["min"] != -17 or groups["clock.test.offset"]["values"]["max"] != 23:
+            raise AssertionError("Signed clock offsets changed")
+        if groups["clock.test.bound"]["values"]["min"] != -(1 << 63) or groups["clock.test.bound"]["values"]["max"] != (1 << 63) - 1:
+            raise AssertionError("Signed diagnostic boundaries changed")
+        combined = run("combined", enabled, mode="groups", ASTRA_PROFILE_GROUPS="clock,core,replication")
+        if len(combined) != 1 or not combined[0]["complete"] or combined[0]["spans"] != 3:
+            raise AssertionError("Combined groups lost nesting")
+        window = run("window", enabled, mode="window", ASTRA_PROFILE_GROUPS="clock", ASTRA_PROFILE_SECONDS="1")
+        if len(window) != 1 or not window[0]["complete"] or {group["name"] for group in window[0]["groups"]} != {"clock.test.before"}:
+            raise AssertionError("Expired recording window continued collecting")
         normal = run("normal", enabled)
         if len(normal) != 1 or not normal[0]["complete"] or normal[0]["spans"] != 402 or normal[0]["counters"] != 81 or normal[0]["intervals"] != 1:
             raise AssertionError("Nested/thread/unwind record accounting changed")

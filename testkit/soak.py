@@ -30,6 +30,7 @@ class Recorder:
         self.records = records
         self.expected = {}
         self.offsets = {}
+        self.progress = {}
         self.last = 0.0
         self.output.mkdir(parents=True, exist_ok=False)
 
@@ -52,6 +53,36 @@ class Recorder:
     def retire(self, process):
         self.expected.pop(process.pid, None)
 
+    def watch(self, log):
+        """常驻 SDK 必须持续完成实际业务轮次, 进程存活不能掩盖死锁; 不设置总运行时限."""
+        self.progress[log] = {"round": None, "updated": time.monotonic()}
+
+    def observe(self, log, added, now):
+        """仅消费完整进度行, 重复尾部不延长期限; 同一常驻进程轮次必须单调递增."""
+        if log not in self.progress:
+            return
+        progress = self.progress[log]
+        for line in added.splitlines():
+            try:
+                event = json.loads(line)
+            except (ValueError, UnicodeError):
+                continue
+            if not isinstance(event, dict) or event.get("event") != "mesh_progress":
+                continue
+            current = event.get("round")
+            if (
+                type(current) is not int
+                or current < 1
+                or (progress["round"] is not None and current < progress["round"])
+            ):
+                raise RuntimeError("Resident workload progress moved backwards")
+            if progress["round"] is None or current > progress["round"]:
+                progress.update(round=current, updated=now)
+        if now - progress["updated"] > 180:
+            raise RuntimeError(
+                "Resident workload made no confirmed progress for 180 seconds"
+            )
+
     def check(self, owned, *, force=False):
         """最多每五秒读取一次 /proc 和日志新增字节, Sanitizer/意外退出/资源耗尽都不能被下一轮覆盖."""
         now = time.monotonic()
@@ -60,8 +91,16 @@ class Recorder:
         self.last = now
         for process, name in self.expected.values():
             if process.poll() is not None:
-                raise RuntimeError(f"Resident service exited unexpectedly: {name}, code={process.returncode}")
-        memory = {key: int(value.split()[0]) * 1024 for key, value in (line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines())}
+                raise RuntimeError(
+                    f"Resident service exited unexpectedly: {name}, code={process.returncode}"
+                )
+        memory = {
+            key: int(value.split()[0]) * 1024
+            for key, value in (
+                line.split(":", 1)
+                for line in Path("/proc/meminfo").read_text().splitlines()
+            )
+        }
         if memory["MemAvailable"] < 128 * 1024 * 1024:
             raise RuntimeError("Soak stopped below 128 MiB available host memory")
         samples = []
@@ -73,8 +112,11 @@ class Recorder:
                 raise RuntimeError("Soak log budget exhausted, evidence is incomplete")
             offset = self.offsets.get(log, 0)
             with log.open("rb") as stream:
-                stream.seek(max(0, offset - 64))  # 保留跨块诊断前缀, 不漏掉恰好拆开的 Sanitizer 文本.
+                stream.seek(
+                    max(0, offset - 64)
+                )  # 保留跨块诊断前缀, 不漏掉恰好拆开的 Sanitizer 文本.
                 added = stream.read(size - stream.tell())
+                self.observe(log, added, now)
                 if any(
                     marker in added
                     for marker in (
@@ -94,7 +136,10 @@ class Recorder:
                 continue
             try:
                 path = Path(f"/proc/{process.pid}")
-                status = dict(line.split(":", 1) for line in (path / "status").read_text().splitlines())
+                status = dict(
+                    line.split(":", 1)
+                    for line in (path / "status").read_text().splitlines()
+                )
                 samples.append(
                     {
                         "pid": process.pid,
@@ -108,13 +153,16 @@ class Recorder:
             except (FileNotFoundError, ProcessLookupError):
                 # 在途探针可以正常结束; 常驻服务是否允许结束由 expected 再确认.
                 if process.pid in self.expected:
-                    raise RuntimeError("Resident service disappeared during resource sampling")
+                    raise RuntimeError(
+                        "Resident service disappeared during resource sampling"
+                    )
         self.record(
             "sample",
             available=memory["MemAvailable"],
             swap=memory["SwapTotal"] - memory["SwapFree"],
             logs=total,
             processes=samples,
+            progress={log.name: value["round"] for log, value in self.progress.items()},
         )
 
 
@@ -133,11 +181,17 @@ def parse(arguments=None):
         default=7200,
         help="Rotate through all three Stars at least once; finish the active cycle at the time limit",
     )
-    parser.add_argument(
+    duration = parser.add_mutually_exclusive_group()
+    duration.add_argument(
         "--steady-seconds",
         type=int,
         default=43200,
         help="One resident three-source SDK workload after fault cycles",
+    )
+    duration.add_argument(
+        "--until-stopped",
+        action="store_true",
+        help="No steady duration limit; stop explicitly with SIGINT/SIGTERM, failures still stop and preserve evidence",
     )
     parser.add_argument(
         "--interval",
@@ -152,14 +206,24 @@ def parse(arguments=None):
         help="Per-Star Publishers and Beacons, 1..16 each",
     )
     options = parser.parse_args(arguments)
+    if options.until_stopped:
+        options.steady_seconds = None
     if (
         not 0 <= options.fault_seconds <= 604800
-        or not 0 <= options.steady_seconds <= 604800
-        or options.fault_seconds + options.steady_seconds > 604800
+        or (
+            options.steady_seconds is not None
+            and not 0 <= options.steady_seconds <= 604800
+        )
+        or (
+            options.steady_seconds is not None
+            and options.fault_seconds + options.steady_seconds > 604800
+        )
         or not 0 <= options.interval <= 3600
         or not 1 <= options.records <= 16
     ):
-        parser.error("Total duration must be 0..604800 seconds, interval 0..3600 and records 1..16")
+        parser.error(
+            "Total duration must be 0..604800 seconds, interval 0..3600 and records 1..16"
+        )
     return options
 
 
@@ -200,7 +264,11 @@ def main(arguments=None):
         run(binaries, binaries / "polaris", binaries / "astrolabe", recorder)
     except BaseException as failure:
         recorder.record(
-            ("interrupted" if isinstance(failure, (KeyboardInterrupt, SystemExit)) else "failed"),
+            (
+                "interrupted"
+                if isinstance(failure, (KeyboardInterrupt, SystemExit))
+                else "failed"
+            ),
             reason=type(failure).__name__,
         )
         raise

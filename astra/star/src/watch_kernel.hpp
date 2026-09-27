@@ -112,6 +112,7 @@ public:
     }
 
     // now/deadline 使用 steady_clock. 每秒只扫描在途链, busy 为回调发布的原子状态; wake 不得重入索引锁.
+    // stream.deadline 写入必须同时持有 I/O 锁和索引锁, 扫描只持索引锁读取, 不反向等待 I/O 锁.
     template <class Wake>
     void sweep(std::chrono::steady_clock::time_point now, std::chrono::steady_clock::time_point& deadline, Wake&& wake) {
 
@@ -121,7 +122,7 @@ public:
 
         // stream 借用在途节点, enqueue 仅改变另一条就绪链, 不破坏本次遍历.
         for (auto* stream = active_; stream; stream = stream->flight.next) {
-            if (stream->busy.load(std::memory_order_acquire)) {
+            if (now >= stream->deadline && stream->busy.load(std::memory_order_acquire)) {
                 enqueue(*stream);
             }
         }

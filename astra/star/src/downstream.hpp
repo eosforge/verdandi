@@ -194,7 +194,7 @@ public:
     bool finished{};                                    // Finish 已调用, 等待 OnDone.
     bool done{};                                        // OnDone 已到达, 此后禁止访问 context.
     std::atomic_bool busy{};                            // 仅供低频超时扫描选取正在写的流.
-    std::chrono::steady_clock::time_point deadline{};   // 当前页的单调写截止, io 保护.
+    std::chrono::steady_clock::time_point deadline{};   // 当前页的单调写截止, 写时同时持 io/索引锁, 读时至少持其中之一.
     std::shared_ptr<const typename Batch::Page> page;   // gRPC 在 writing 时借用, 不提前 Clear/覆盖.
     std::shared_ptr<Batch> batch;                       // 共享固定批次, 不共享 RPC 的完成状态.
     std::size_t offset{};                               // 本流下一个页面序号, 每个新批次从零开始.

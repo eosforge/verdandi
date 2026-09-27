@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
+#include <grpc/impl/channel_arg_names.h>
 #include <grpc/support/time.h>
 #include <grpcpp/health_check_service_interface.h>
 #include <grpcpp/server_builder.h>
@@ -566,7 +567,7 @@ private:
         builder.SetMaxSendMessageSize(8 * 1024 * 1024);
         builder.AddChannelArgument("grpc.so_reuseport", 0);
         builder.AddChannelArgument("grpc.server_handshake_timeout_ms", 5000);
-        builder.AddChannelArgument("grpc.http2.min_recv_ping_interval_without_data_ms", 60000);
+        builder.AddChannelArgument(GRPC_ARG_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS, 60000);
         builder.AddChannelArgument("grpc.keepalive_time_ms", 60000);
         builder.AddChannelArgument("grpc.keepalive_timeout_ms", 20000);
         builder.AddChannelArgument("grpc.keepalive_permit_without_calls", 0);
@@ -748,10 +749,12 @@ private:
             public_->Wait();
             public_.reset();
         }
-        const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(deadline - Steady::now(), Steady::duration::zero())).count();
-        server_->Shutdown(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)));
-        server_->Wait();
-        server_.reset();
+        if (server_) {
+            const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(std::max(deadline - Steady::now(), Steady::duration::zero())).count();
+            server_->Shutdown(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)));
+            server_->Wait();
+            server_.reset();
+        }
         admission_.reset();
         pulse_.reset();
         logger_.write("stopped");

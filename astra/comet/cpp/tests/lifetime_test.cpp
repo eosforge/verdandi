@@ -6,6 +6,13 @@ namespace {
 using namespace std::chrono_literals;
 using comet::detail::Lifetime;
 
+// 直接调用真实平台时钟, 确认函数可链接且输出非负、不倒退; 不修改系统时间或挂起宿主.
+void platform() {
+    const auto first = Lifetime::now();  // 第一次系统读时, 失败不得伪装为零.
+    const auto second = Lifetime::now(); // 相邻读时允许相等, 但不能倒退.
+    CHECK(first && second && *first >= 0 && *second >= *first);
+}
+
 // 不休眠模拟发送、重试、迟到、系统 suspend 与新 UUID, 所有边界均使用整数毫秒.
 void budget() {
 
@@ -51,6 +58,7 @@ void cadence() {
 
 int main() {
     try {
+        platform();
         budget();
         cadence();
         std::cout << "local lease budget cases passed\n";

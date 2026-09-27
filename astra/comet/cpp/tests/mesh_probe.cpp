@@ -4,6 +4,7 @@
 #include <comet/client.hpp>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <thread>
 
@@ -82,8 +83,8 @@ bool visible(const comet::Subscriber& subscriber, const comet::Observer& observe
     return catalog.state() == comet::Subscriber::State::ready && services.state() == comet::Observer::State::ready && publication && publication->version == version && *publication->value == value && registration && *registration->attr == std::vector<std::uint8_t>{'a', 't', 't', 'r'} && *registration->data == data;
 }
 
-// 三个固定入口同时提交, 每次都验证九条来源到目标路径. seconds 是额外稳定运行秒数, 零仍执行基本验收.
-void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seconds seconds, std::size_t copies, std::uint64_t base) {
+// 三个固定入口同时提交, 每次都验证九条来源到目标路径. seconds 为有限运行秒数, 零仍验收; continuous 仅供显式长测, 由外层停止进程并清理.
+void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seconds seconds, std::size_t copies, std::uint64_t base, bool continuous = false) {
 
     // 同一 Scope 中每节点拥有 copies (1..16) 个 Key/UUID, 交错编号使相邻键属于不同来源.
     const comet::Scope scope{"mesh", "parallel"};
@@ -136,6 +137,8 @@ void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seco
     const auto deadline = std::chrono::steady_clock::now() + seconds; // 有限单调预算, 不受系统时间回拨影响.
     std::uint64_t version = base;                                     // 跨探针保留单调内容版本, TTL 删除不等于删除来源水位.
     do {
+        if (version == std::numeric_limits<std::uint64_t>::max())
+            throw std::runtime_error("Mesh version exhausted");
         ++version;
         std::vector<std::vector<std::uint8_t>> values(records);                             // 2 KiB 完整正文, 同时编码来源和版本以拒绝旧值.
         std::vector<std::future<comet::Result<comet::Publisher::Receipt>>> writes(records); // 每个发布恰好完成一次.
@@ -178,10 +181,10 @@ void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seco
                 throw std::runtime_error("Silent renewals changed or lost the visible projection");
             }
         }
-        if (version % 100 == 0)
+        if (version % 100 == 0 || version == base + 1)
             std::cout << "{\"event\":\"mesh_progress\",\"round\":" << version << "}" << std::endl;
         std::this_thread::sleep_for(100ms);
-    } while (version < base + 2 || std::chrono::steady_clock::now() < deadline);
+    } while (continuous || version < base + 2 || std::chrono::steady_clock::now() < deadline);
 
     // 所有写者停止后等待三节点删除收敛, 确保下一轮不能继承旧对象或悬挂租约.
     for (std::size_t index = 0; index < records; ++index) {
@@ -213,10 +216,11 @@ int main(int count, char** arguments) {
         std::size_t copies = 1;  // 普通验收每节点一条; 长测可显式要求 1..16 条.
         std::uint64_t base{};    // 长测轮次选择不重叠的内容版本区间, 不靠新增 Scope 隐藏常驻内存增长.
         const bool steady = count >= 8 && std::string_view(arguments[7]) == "steady";
+        const bool continuous = steady && std::string_view(arguments[6]) == "forever"; // 仅显式 steady forever 不设总时限, 保留每次 RPC/收敛的失败期限.
         if (count >= 8) {
             const std::string_view input(arguments[6]); // 不接受负值、尾随垃圾或溢出时长.
             const auto parsed = std::from_chars(input.data(), input.data() + input.size(), seconds);
-            if (parsed.ec != std::errc{} || parsed.ptr != input.data() + input.size() || seconds > 604800 || (!steady && std::string_view(arguments[7]) != "failure"))
+            if ((!continuous && (parsed.ec != std::errc{} || parsed.ptr != input.data() + input.size() || seconds > 604800)) || (!steady && std::string_view(arguments[7]) != "failure"))
                 throw std::runtime_error("Invalid mesh duration or mode");
         }
         if (count >= 9) {
@@ -241,7 +245,7 @@ int main(int count, char** arguments) {
         const Cleanup second_cleanup{second};
         auto third = open({arguments[3]}, arguments[4], credential); // 第三个固定观察节点, 不能退避到正在写入的节点冒充复制.
         const Cleanup third_cleanup{third};
-        replication({&first, &second, &third}, std::chrono::seconds(seconds), copies, base);
+        replication({&first, &second, &third}, std::chrono::seconds(seconds), copies, base, continuous);
         if (steady) {
             if (first.exceptions() || second.exceptions() || third.exceptions())
                 throw std::runtime_error("Steady workload callback failed");

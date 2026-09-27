@@ -81,10 +81,14 @@ private:
             // t1 是接收处理起点的公共时间与质量, 本地走时可用不等于可以向其他节点提供可信新样本.
             const auto t1 = clock_.now();
             if (!t1 || !t1->synchronized) {
+                ASTRA_PROFILE_COUNT("clock.server.ready", t1 && t1->ready);
+                ASTRA_PROFILE_COUNT("clock.server.uncertainty_ns", t1 ? t1->uncertainty_ns : 0);
+                ASTRA_PROFILE_COUNT("clock.server.rejected", 1); // 没有首次校准或旧锚点质量已过期.
                 Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE, "Physical time not synchronized"));
                 return;
             }
             if (ping_.t0() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+                ASTRA_PROFILE_COUNT("clock.server.rejected", 4); // 请求坐标非法, 不归因为物理时源失效.
                 Finish(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid Pulse timestamp"));
                 return;
             }
@@ -97,14 +101,18 @@ private:
             // t2 是填充完成后的公共时间, 与 t1 同域, 两者差覆盖本次处理耗时.
             const auto t2 = clock_.now();
             if (!t2 || !t2->synchronized || t2->time < t1->time || pong_.precision_ns() == 0) {
+                ASTRA_PROFILE_COUNT("clock.server.rejected", 2); // 处理窗口内质量变化、时间反序或精度不可用.
                 Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE, "Physical time not synchronized"));
                 return;
             }
             pong_.set_t2(static_cast<std::uint64_t>(t2->time.time_since_epoch().count()));
             pong_.set_uncertainty_ns(std::max(t1->uncertainty_ns, t2->uncertainty_ns));
             pong_.set_synchronized(true);
+            ASTRA_PROFILE_COUNT("clock.server.uncertainty_ns", pong_.uncertainty_ns());
+            ASTRA_PROFILE_COUNT("clock.server.rejected", 0);
             StartWrite(&pong_);
         } catch (...) {
+            ASTRA_PROFILE_COUNT("clock.server.rejected", 3); // 取时/响应准备异常, 与资格门槛拒绝分开.
             Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE, "Physical time unavailable"));
         }
     }

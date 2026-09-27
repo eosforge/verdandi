@@ -9,7 +9,7 @@ namespace comet::detail {
 // 本地租约确认预算, 只保存最近成功起点, 不存服务端纪元或续租历史.
 class Lifetime {
 public:
-    using Time = std::int64_t;                 // 本进程 CLOCK_BOOTTIME 毫秒, 非负, 包含系统 suspend.
+    using Time = std::int64_t;                 // 系统启动后的单调毫秒, 非负且包含 suspend, 不是墙钟.
     static std::optional<Time> now() noexcept; // 系统读时失败返回空, 不伪造时间或退到墙钟.
 
     explicit Lifetime(std::chrono::milliseconds ttl) : ttl_(ttl >= std::chrono::seconds(1) && ttl <= std::chrono::minutes(10) ? ttl.count() : throw std::invalid_argument("Invalid lease TTL")), period_(ttl_ / 3) {} // 私有边界同样拒绝非法配置.

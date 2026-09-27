@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -47,8 +48,36 @@ int main(int argc, char** argv) {
     if (argc != 2)
         return 2;
     const std::string_view mode(argv[1]); // 借用命令行, 不在热路径复制.
-    if (mode != "normal" && mode != "overflow" && mode != "bench" && mode != "phase")
+    if (mode != "normal" && mode != "overflow" && mode != "bench" && mode != "phase" && mode != "groups" && mode != "window")
         return 2;
+
+    if (mode == "groups") {
+        // 未启用 core 时不压入父栈, clock 子功能应独立采样; 两个功能同时开启时仍保持合法父链.
+        ASTRA_PROFILE_SCOPE("common.runtime.profile_test.outer");
+        {
+            ASTRA_PROFILE_SCOPE("clock.test.sample");
+            ASTRA_PROFILE_VALUE("clock.test.offset", -17);
+            ASTRA_PROFILE_VALUE("clock.test.offset", 23);
+            ASTRA_PROFILE_VALUE("clock.test.bound", std::numeric_limits<std::int64_t>::min());
+            ASTRA_PROFILE_VALUE("clock.test.bound", std::numeric_limits<std::int64_t>::max());
+        }
+        {
+            ASTRA_PROFILE_SCOPE("star.exchange.profile_test.receive");
+            ASTRA_PROFILE_COUNT("star.exchange.profile_test.bytes", 4);
+        }
+        return 0;
+    }
+
+    if (mode == "window") {
+        // 跨过采集截止的父跨度仍正常收尾, 后续子入口/数值停止, 不留悬空父链或强制中断业务.
+        ASTRA_PROFILE_SCOPE("clock.test.before");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+        {
+            ASTRA_PROFILE_SCOPE("clock.test.after");
+            ASTRA_PROFILE_VALUE("clock.test.late", -1);
+        }
+        return 0;
+    }
 
     if (mode == "phase") {
         // 模拟 Runtime 工作/等待的固定交替. 周期抽样会永久漏掉 first, 随机抽样须覆盖两类.
@@ -74,6 +103,7 @@ int main(int argc, char** argv) {
         ASTRA_PROFILE_SCOPE(undefined_name);
         ASTRA_PROFILE_BEGIN(undefined_token, undefined_name);
         ASTRA_PROFILE_END(undefined_token);
+        ASTRA_PROFILE_VALUE(undefined_name, ++evaluated);
         if (evaluated != 0)
             return 3;
 #else

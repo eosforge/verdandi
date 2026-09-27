@@ -4,9 +4,16 @@
 #include <astra/scope.hpp>
 
 #include <algorithm>
-#include <arpa/inet.h>
 #include <charconv>
 #include <ranges>
+
+// SDK 复用端点校验. Windows 使用 Winsock 的地址转换, Linux 保留 POSIX 实现.
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#endif
 
 namespace astra {
 
@@ -150,7 +157,7 @@ Result<Endpoint> Endpoint::parse(std::string_view value, bool local) {
 
     // 将其重新序列化回标准的字符串格式, 消除原来任何多余的前导零或其他小问题.
     std::array<char, INET6_ADDRSTRLEN> normalized{};
-    if (!inet_ntop(family, bytes.data(), normalized.data(), static_cast<socklen_t>(normalized.size()))) {
+    if (!inet_ntop(family, bytes.data(), normalized.data(), static_cast<unsigned>(normalized.size()))) {
         return Status::internal("Address normalization failed");
     }
     return Endpoint{normalized.data(), *port, ipv6, wildcard};
