@@ -1,134 +1,132 @@
-# 开发门禁与首个试点
+# Development Gate and First Pilot
 
-功能 ID: `development-verification`.
+Feature ID: `development-verification`.
 
-状态: 已按用户“可以, 开始吧, 将正式schema 门禁判定 和 试点交付”实施首个本地增量. Schema、工具、反向用例和 Polaris 接入已写入; 尚未运行工具行为自检、Go 构建或试点. 当前不能宣称试点已验收, 规范生效日期仍待实际验收.
+Status: the user authorized formal schemas, gate decisions, and pilot delivery. The initial local increment includes schemas, tools, negative cases, and Polaris integration. Formal collection, gate behavioral self-checks, and pilot acceptance remain unrun. Later ordinary regression ran Go builds/package tests, but cannot replace this evidence loop. No accepted-pilot claim or standard effective date is available yet.
 
-依据为 [开发规范](../development.md) 的配置、证据、门禁及接入要求. 具体执行权限遵循 [AGENTS.md](../../AGENTS.md), 本文获准实施也不自动授予测试、依赖安装或 CI 环境修改权限.
+The [development standard](../development.md) defines configuration/evidence/gating/adoption; [AGENTS.md](../../AGENTS.md) governs execution. Implementation permission does not authorize tests, dependency installation, or CI changes.
 
-## 1. 已核实事实与范围
+## 1. Verified facts and scope
 
-- Astra 现有 [工具入口](../../tools/build.py)、[测试支持](../../tests/support.py) 和 [验证记录](../validation.md) 可提供执行与采集的基础. 当前未发现正式开发配置 Schema、义务门禁程序或仓库 CI 工作流.
-- 现有 [Polaris 存储测试](../../polaris/internal/storage/storage_test.go) 与 [批次测试](../../polaris/internal/storage/batch_test.go) 覆盖提交、重试、历史、取消、并发、SQL 失败回滚和关闭后重开. 它们受 `linux && cgo` 约束; Windows 未执行这些用例不能算作通过.
-- Windows 项目 Python 为 3.14.7, 已有 Black 26.5.1, 未安装 `jsonschema`. Ubuntu 已有 `/usr/bin/python3` 3.14.4 与 `jsonschema` 4.19.2, 本增量复用该现存环境, 不新增安装. 校验使用 Draft202012Validator, 所有引用限于本地 Schema; Windows 缺引擎时明确拒绝, 不自动下载或退化为自写子集.
-- 既有验证记录不能直接升级为新规范通过证据. 缺少义务映射、输入身份或采集信任边界时保持缺口.
+- Existing [build tools](../../tools/build.py), [test support](../../tests/support.py), and [validation](../validation.md) provide foundations. Initial investigation found no formal schema/obligation gate/CI workflow; Section 2 now lists delivered schemas/tools, while CI remains absent.
+- [Storage tests](../../polaris/internal/storage/storage_test.go) and [batch tests](../../polaris/internal/storage/batch_test.go) cover commits, retries, history, cancellation, concurrency, SQL rollback, and reopen. They require linux && cgo; unexecuted Windows cases are not passes.
+- Existing Windows project Python is 3.14.7 with Black 26.5.1 but no jsonschema. Ubuntu has /usr/bin/python3 3.14.4/jsonschema 4.19.2, reused without installation. Use Draft202012Validator/local-only references. Missing Windows engine fails explicitly, without downloading or substituting a handwritten subset.
+- Old validation cannot be upgraded to new-standard evidence without obligation mapping, input identity, and collection boundaries.
 
-交付范围是可复用的配置校验、采集和门禁工具, 加一个 Astra 真实组件的接入. 通用规范规定接入要求, 具体执行入口由本文登记, 不继续向通用正文追加专项事故清单. 本轮不建立多 CI 平台框架, 不改系统部署, 不恢复旧长测, 不把试点结果外推为全仓库可发布.
+Deliver reusable validation/collection/gating and one real component adoption, not a multi-CI framework. Project docs own concrete entries; do not append specialist incidents to common policy. No deployment changes, resumed soak, or repository-wide release extrapolation.
 
-## 2. 文件与职责
+## 2. Files and responsibilities
 
-以下源码入口已交付, 行为验证尚待授权执行:
+These source entries are delivered; behavior checks await authorization:
 
-| 路径 | 职责 |
+| Path | Responsibility |
 | --- | --- |
-| `development.json` | Astra 组件、契约、场景/平台矩阵、命令、预算、设计批准引用及收敛计划 |
-| `tools/schemas/development.schema.json` | 配置的正式结构约束 |
-| `tools/schemas/evidence.schema.json` | 原生记录、证据引用及门禁输入的结构约束 |
-| `tools/schemas/authority.schema.json` | 独立批准记录、精确内容绑定和有期限的逐义务例外 |
-| `tools/schemas/rules.schema.json` | 注册表及显式加载依赖 |
-| `tools/rules.json` | 稳定规则 ID、正文定位、全局常载集合及规则加载依赖 |
-| `tools/verify.py` | `validate`、`collect`、`gate` 三个显式子命令; 只做所选动作, 校验与判定不隐式运行测试 |
-| `tests/test_verify.py` | 正反向校验、合成事件流与 Linux 采集生命周期用例; 夹具在测试内构造, 不保存伪装成真实运行的 JSON |
-| `polaris/internal/storage/verification_test.go` | 四个有限存储契约的实际判定命中; 保留原有全部存储测试 |
-| `build/results/verification/<run-id>/` | 本地原始执行记录、源码/产物清单与门禁输出; 每轮独立, 不覆盖失败 |
+| development.json | Components/contracts/scenario-platform matrix, commands, budgets, design approval, convergence |
+| tools/schemas/development.schema.json | Formal configuration structure |
+| tools/schemas/evidence.schema.json | Native records/evidence/gate input |
+| tools/schemas/authority.schema.json | Independent approvals, exact binding, expiring per-obligation exceptions |
+| tools/schemas/rules.schema.json | Registry/loading dependencies |
+| tools/rules.json | Stable IDs, section locations, global set, loading edges |
+| tools/verify.py | Explicit validate/collect/gate; validation/decisions never implicitly test |
+| tests/test_verify.py | Positive/negative validation, synthetic events, Linux lifecycle cases; fixtures generated inside tests, not fake run JSON |
+| polaris/internal/storage/verification_test.go | Actual hits for four finite contracts, retaining all original storage tests |
+| build/results/verification/<run-id>/ | Separate local native records/source-artifact manifests/gate output; never overwrite failures |
 
-只在实际规模需要时拆分 `verify.py`, 不先建设通用插件系统. 当前设计与交付结论分别维护在本文和 [唯一验证记录](../validation.md), 不新建日期化报告.
+Split verify.py only when scale warrants, not into a speculative plugin system. Keep design here and conclusions in [validation](../validation.md), without dated reports.
 
-## 3. 配置校验与义务来源
+## 3. Configuration validation and obligation sources
 
-正式 Schema 使用 [Draft 2020-12](https://json-schema.org/draft/2020-12). 工具的 `schema_version: 1` 是首次可执行格式, 与规范文档版本独立; 正文旧示意中的版本 2 不是输入格式, 不静默迁移. 对象显式声明必填项和未知字段策略, 见 [对象约束](https://json-schema.org/understanding-json-schema/reference/object). 这两项资料在方案调查中实际查阅, 不由此改写其他参考资料的查阅日期.
+Schemas use [Draft 2020-12](https://json-schema.org/draft/2020-12). Executable schema_version: 1 is independent of policy-document version; conceptual version 2 is not valid input and is not silently migrated. Objects explicitly require fields/reject unknowns under [object constraints](https://json-schema.org/understanding-json-schema/reference/object). These two sources were consulted during design; that does not redate unrelated references.
 
-校验分三层, 错误报告携带文件、字段路径和稳定原因码:
+Errors identify file, field path, and stable reason code through three layers:
 
-1. 严格读取: 拒绝重复 JSON 键、非法数值、超出大小/深度预算的输入及越界路径, 不允许解析时静默覆盖或截断.
-2. Schema: 拒绝未知字段、缺失必填、错误类型/枚举/范围和不支持版本. Schema 与引用打包并锁定内容身份, 运行时不远程下载引用.
-3. 语义: 核验规则/契约/组件 ID、唯一性、交叉引用、最低定级、平台场景矩阵、例外范围、批准来源和配置继承. 未知规则 ID 必须在注册表核对, 不能只检查字符串前缀. 时间有效期与路径实际边界也不由 Schema 代替.
+1. Strict reading rejects duplicate keys, invalid numbers, size/depth excess, and escaping paths, without overwrite/truncation.
+2. Schema rejects unknown/missing fields, wrong types/enums/ranges/versions. Bundle/hash schemas/references; never fetch references at runtime.
+3. Semantics verifies IDs, uniqueness, references, minimum tiers, platform/scenario matrix, exception scope, approved provenance, and inheritance. Check full rule IDs, not prefixes. Expiry/actual path boundaries require more than schemas.
 
-义务集合 O 从获准策略、组件契约及完整矩阵展开, 身份区分规则、契约、组件、平台/配置与场景. 报告只能提供观察, 无权删除 O. 缺少平台、检查适配器或工具能力保留为缺口, 不以空数组、未实现或 `not-applicable` 隐藏.
+Expand O from approved policy, contracts, and the complete matrix, distinguishing rule/contract/component/platform-profile/scenario. Reports provide observations, not permission to delete O. Missing platforms/adapters/tools remain gaps, not empty arrays/unimplemented/not-applicable escapes.
 
-首个配置限定 Polaris 存储、Linux amd64/cgo、L3, 普通构建/用例并行均为 4, 单检查外层 240 秒、Go 内层 180 秒, stdout/stderr 各 8 MiB. 运行前结合 affinity、可用内存与 cgroup 预算核验; 不满足固定预算时拒绝启动, 不自动扩大资源或修改策略. 目标缺口为 0, 未测基线和未批准期限为 null. 运行授权、例外批准及可信策略引用不能由待测配置自己签发.
+Initial configuration is Polaris storage, Linux amd64/cgo, L3, build/test parallelism four, outer check timeout 240 s, inner Go 180 s, stdout/stderr 8 MiB each. Preflight affinity/memory/cgroup; reject insufficient fixed budgets rather than expand resources/change policy. Target gaps zero; unmeasured baseline/unapproved deadline null. Tested configuration cannot issue its own run/exception/policy authorization.
 
-## 4. 原生采集与门禁
+## 4. Native collection and gating
 
-`collect` 只执行获准配置中明确选择的命令, 使用参数数组和显式 cwd/环境, 不执行日志中的命令. 复用已有离线依赖和资源管理能力前先核验其边界; 不把当前支持脚本整体视为可信控制面.
+collect executes only explicitly selected approved commands using argument arrays/cwd/environment, never log-provided commands. Verify existing offline dependency/resource helpers before reuse; the entire support script is not inherently trusted control plane.
 
-每轮冻结包含 dirty/untracked/删除事实的相关源码、测试、配置、规则、运行器和工具链身份. 直接采集起止时间、单调耗时、实际退出/信号/超时、完整输出长度与摘要. 声明、原生事实和解释分开保存; 未运行值不能填零. 日志预算耗尽、失联或采集中断标记证据不完整. 停止后核验所属后代与资源, 未排干不能写成成功清理.
+Freeze relevant source/tests/configuration/rules/runner/toolchain identity including dirty/untracked/deleted facts. Directly capture actual timestamps, monotonic duration, exit/signal/timeout, complete output lengths/digests. Separate declarations, facts, interpretation; unexecuted values are not zero. Output-budget exhaustion, lost contact, and interrupted collection mark incomplete evidence. Verify descendants/resources after stop; undrained work cannot be clean.
 
-`gate` 读取封存证据并独立核对内容, 不接受输入 JSON 中自报的门禁状态. 文件缺失、被替换、截断、来源不符或越界引用进入明确拒绝路径. 某一必需检查失败或未知, 不能由其他同名检查成功覆盖.
+gate independently rereads sealed contents, ignoring self-reported gate status. Missing/replaced/truncated/wrong-source/escaping files reject explicitly. Another successful same-name check cannot cancel required failure/unknown.
 
-- P 仅包含全部必需观察有效且判定通过的义务; 退出码 0、测试数量或报告中的规则名不能单独形成 P.
-- E 只来自获准策略允许的批准渠道, 核对身份/范围、期限、撤销及替代措施. 使用控制面实际时间, 不接受被测程序提供的虚拟时间. 例外不修改原始检查状态.
-- D 按规范计算为 `O - (P union E)`; 身份、授权、完整性、隔离和清理等硬阻断 H 单独计算.
-- H 或 D 非空为 `blocked`; 全部义务实际通过才是 `eligible`; 依赖有效例外时为 `eligible-with-exceptions`. 结论必须带精确范围与缺口原因.
+- P contains only obligations whose required observations/oracles all succeed; exit zero, test count, or rule labels alone are insufficient.
+- E comes only from policy-approved authority channels, checking identity/scope/expiry/revocation/alternatives using real control-plane time, not tested virtual time. Preserve original statuses.
+- D = O - (P union E); identity/authorization/integrity/isolation/cleanup hard blockers H are independent.
+- Nonempty H/D means blocked; actual full passes mean eligible; valid exceptions mean eligible-with-exceptions. Identify exact scope/gaps.
 
-退出码固定为: 0 表示所选动作成功 (`gate` 时仅 `eligible`), 10 为 `eligible-with-exceptions`, 2 为 `blocked` 或采集失败/中断, 3 为格式、授权、环境或证据无效. `collect` 的 0 只表示所选命令正常结束并完成采集, 不表示组件资格; 资格必须另行执行 `gate`.
+Exit codes: 0 for successful selected action (gate: eligible only), 10 eligible-with-exceptions, 2 blocked or failed/interrupted collection, 3 invalid format/authorization/environment/evidence. collect zero means selected commands completed/collected, not component qualification; run gate separately.
 
-采集仅支持 Linux, 使用 subreaper 归属后代并通过 pidfd/start ticks 防止发送信号时 PID 复用. SIGINT/SIGTERM 后停止派生, 排干并清理本轮临时目录; 超预算升级终止仍标为失败/中断, 不抹去首个失败. 不修改宿主服务、cgroup 或旧测试证据. 原生记录单独封存, 汇总仅引用其摘要; 门禁重读记录与两条完整输出, 独立解析 Go JSON 中的必需测试终态及对应契约命中. 没有实际探针、跳过、包未终结和日志截断均不算通过.
+Collection supports Linux only. subreaper tracks descendants; pidfd/start ticks prevent signalling reused PIDs. SIGINT/SIGTERM stops spawning and drains/cleans owned temporaries. Escalated termination remains failed/interrupted and preserves first failure. No host-service/cgroup/old-evidence mutation. Seal native records separately; summaries reference digests. Gate rereads records and both full outputs, independently parsing Go JSON required terminal states/contract hits. Missing probes, skips, unfinished packages, and truncation cannot pass.
 
-实现可先交付有限适配能力, 但未支持的必需义务必须阻断. 仅有缺口计算、例外过期、TEMPLATE/截断/漏平台自检, 只能称为首个工具增量, 不能宣称第 9 节或发布门禁已全部落地.
+Limited initial adapters are acceptable but unsupported obligations block. Gap/expiry/TEMPLATE/truncation/missing-platform self-checks alone are an initial increment, not all Section 9/release gating.
 
-## 5. 三种证据信任边界
+## 5. Three evidence trust boundaries
 
-信任等级由经核验的采集边界决定, 不是报告可任意选择的标签:
+Trust follows verified collection, not arbitrary report labels:
 
-| 等级 | 采集与存储 | 核验及可声明范围 |
+| Tier | Collection/storage | Claims/checks |
 | --- | --- | --- |
-| `local` | 当前工作区账户执行, 原始证据在忽略的 `build/results/verification/` | 核对完整性与重放身份, 承认同账户可回写; 不声称具备隔离采集能力 |
-| `ci` | 待用户指定的隔离任务环境; 运行器、策略和终态记录由待测代码与日常编辑身份不能回写的控制面管理, 产物上传至独立受控存储 | 从可信来源核对任务身份、采集器/策略版本、源码/配置摘要及制品长度/摘要. 被测进程不得取得修改终态记录或获准策略的凭据 |
-| `release` | 在满足发布策略的受控证据基础上, 绑定实际分发产物与独立发布批准 | 核对构建来源、验收范围、实际分发摘要及授权; 不是给 CI 结果换一个标签 |
+| local | Workspace account, ignored build/results/verification/ | Integrity/replay identity; acknowledge same-account rewriting, no isolated-collection claim |
+| ci | User-specified isolated jobs; protected control plane owns runner/policy/terminal records, artifacts in independent controlled storage | Verify job/collector/policy/source/configuration identity and artifact lengths/digests from trusted sources; tested code lacks policy/terminal-record write credentials |
+| release | Release-policy-compliant controlled evidence tied to actual distribution/independent release approval | Verify provenance, acceptance scope, distributed digests, permissions; not relabelled CI |
 
-将日志写到另一个目录、设置只读、同账户签名或运行在另一台同权限机器上, 都不自动形成 `ci`. 可信采集器只能证明实际发生了什么, 被测程序仍可能输出假断言, 因而独立判定和门禁自检继续必需.
+Another directory, readonly attributes, same-account signatures, or another same-permission host do not establish ci. Trusted collectors prove observations, but tested code can still print false assertions; independent oracles/self-checks remain necessary.
 
-CI 的提供方、运行主体、策略保护方式、制品存储位置/保留期、编辑者与被测进程的写权限, 必须在实际接入前明确. 当前未确认这些事实, 不能预先将试点配置标为已满足 `ci`. 可以先完成 `local` 工具链并报告缺口, 不自动降低发布所要求的信任等级.
+Before CI adoption identify provider, principal, protected policy, artifact storage/retention, and editor/tested-process permissions. These facts are currently unconfirmed; do not mark the pilot ci-compliant. Complete local tools/report gaps without lowering release trust automatically.
 
-## 6. 规则切片与加载依赖
+## 6. Rule slices and loading dependencies
 
-使用一个受版本控制的规则注册表, 文档中的小表由它展示或引用. 全局常载至少包含 `DEV-SCOPE`、`DEV-CONFIG`、`DEV-EVIDENCE`、`DEV-GATE`, 以及授权、预算、停止与保护变化的必要正文. 专项由组件的实际架构触发后, 沿注册表中的明确依赖递归加载.
+Use a versioned registry; documentation references/generates its table. Always load at least DEV-SCOPE, DEV-CONFIG, DEV-EVIDENCE, DEV-GATE and required authorization/budget/stop/protection text. Actual architecture triggers specialist rules and explicit recursive dependencies.
 
-加载依赖表示理解某条规则需要同时读取什么, 不表示项目必须引入相关技术. 平台/场景适用性和验证义务另行展开, 不以加载闭包把无持久化的组件变成必须有数据库.
+Loading dependencies define necessary reading, not required technology. Expand applicability/obligations separately; loading closure does not force databases into nonpersistent components.
 
-注册表必须覆盖全部标准 ID, 缺依赖目标、未知 ID 或无法终结的依赖解析明确拒绝. 实现时区分正文引用与可执行义务依赖, 避免互相引用正文形成无意义循环. 固定注册表内容摘要、触发项、展开结果和逐项来源; 验证切片与全量规则对同一配置展开出相同的必需义务.
+Cover all standard IDs; reject missing targets, unknown IDs, and nonterminating resolution. Distinguish textual references from executable-obligation dependencies to avoid meaningless cycles. Freeze registry digest, triggers, expansion, and provenance; verify slices/full policy produce identical required obligations for the same configuration.
 
-## 7. 首个试点与验收
+## 7. Pilot and acceptance
 
-首个真实组件为 `polaris/internal/storage`, 以存储核心的 L3 义务规划, 不为更快变绿改成 L1/L2. `TestVerification` 为以下四个有限样例生成实际判定次数, 原有测试同时运行; 并发快照用例仍保留, 串行样例不冒充关键交错穷举:
+Pilot polaris/internal/storage follows storage-core L3, never downgraded to become green. TestVerification emits actual oracle counts for four finite examples while original tests run. Concurrent snapshot cases remain; serial examples are not exhaustive interleavings.
 
-| 契约重点 | 现有起点 | 必须补足或核实的证据 |
+| Contract | Existing starting points | Required additional/verified evidence |
 | --- | --- | --- |
-| 多键提交与快照不可部分可见 | `TestBatchPersistence`、`TestBatchSnapshot` | 判定命中、关键交错及独立小规模状态模型 |
-| 重试与同版本异内容冲突 | `TestCommit`、`TestUncertain` | 有限历史边界、明确结果/未知结果与反向判定 |
-| SQL 失败不留下部分状态/历史 | `TestBatchRollback`、`TestAtomicity` | 故障点分母、回滚和清理状态, 不只核对错误码 |
-| 历史边界与恢复 | `TestHistoryPrefix`、`TestRestart` | 完整数据和版本; 正常关闭重开不能冒充崩溃或断电耐久验证 |
+| Atomic multi-key commit/snapshot visibility | TestBatchPersistence, TestBatchSnapshot | Hits, key interleavings, independent small-state model |
+| Retry/same-version content conflict | TestCommit, TestUncertain | Finite history boundaries, known/unknown outcomes, negative oracle |
+| SQL failure leaves no partial state/history | TestBatchRollback, TestAtomicity | Fault denominator, rollback/cleanup state, not error code only |
+| History/recovery | TestHistoryPrefix, TestRestart | Complete data/version; clean reopen is not crash/power-loss evidence |
 
-Linux/cgo 环境、实际 Go/编译器/模块缓存身份在获准运行前核验, 关闭隐式依赖下载, 按实际内存设置并行度. 这是组件试点, 不替代三 Star 系统验收. 运行范围、次数、资源与停止方式在看结果前固定.
+Preflight actual Linux/cgo, Go/compiler/module identities before authorized execution; disable implicit downloads and size concurrency by memory. Component pilot does not replace three-Star acceptance. Freeze run scope/counts/resources/stop before results.
 
-基线由首次原生覆盖与义务清单产生. Go 原生覆盖数据不能冒充分支覆盖或 MC/DC; 工具不支持的指标须补适当判定或保留缺口. 定向变异、独立有限模型及关键故障的未完成项同样可见. 不能把几个已有用例通过标为整个组件 L3 达标.
+First native coverage/obligations establish baseline. Go coverage is not branch coverage/MC/DC; add suitable oracles or retain gaps. Mutation, independent finite models, and key faults remain visible when incomplete. A few passing cases do not establish whole-component L3.
 
-收敛记录必须包含同一口径下的基线原始计数/分母及源码身份、目标和用户接受的期限. 目标依据有效规范, 基线待实测, 期限待预算和范围确认, 不先编造“三个数字”. 第一次实际门禁允许得出诚实的 `blocked`, 这证明执行链能够暴露缺口, 但仍不是试点验收通过.
+Convergence records need comparable raw baseline counts/denominators/source identity, targets, and user-accepted deadlines. Standards set targets; measurement sets baseline; budget/scope decisions set deadlines. Do not invent three numbers. A first real blocked decision demonstrates gap detection, not accepted pilot.
 
-门禁自身至少补齐以下成对验收: 合法配置与完整证据可以按范围通过; 未知字段/重复键/缺必填/未知规则被拒绝; TEMPLATE、截断、漏平台、空义务、过期或越界例外、内容替换及自报通过不能通过; 合法静态零问题和预期拒绝用例不被机械误判. 第 9.3 节其他适用类别也须完成或保持未满足, 不因只列了几个首轮用例而消失.
+Pair at least valid scoped acceptance with rejection of unknown/duplicate/missing fields/rules; TEMPLATE, truncation, missing platform, empty obligations, expired/out-of-scope exceptions, replacement, self-reporting; and correct handling of static zero findings/expected rejection. Other applicable Section 9.3 classes remain required, not erased by this initial list.
 
-最终只有配置、原生采集、义务判定、自检和所选组件的全部适用验收形成有效证据后, 才登记相应范围的试点验收日期. 若用精确例外接受风险, 必须保持 `eligible-with-exceptions` 与缺口可见, 不宣称全部检查通过.
+Record scoped pilot acceptance only after valid configuration, native collection, obligation decisions, self-checks, and all selected-component obligations. Approved exceptions remain eligible-with-exceptions with visible gaps, never all passed.
 
-## 8. 资料日期与推进顺序
+## 8. Reference dates and sequence
 
-规范版本、生效日期、资料查阅日期和试点执行日期分别记录. 第 13 节的 `2026-09-29` 只有在可核对实际查阅依据时才保留该含义; 无法确认时删除统一查阅日, 或对实际复核来源逐项记录. 不把修订当天自动写成所有链接的查阅日, 本次只查阅 Schema 资料不构成其他资料重验.
+Separate policy version, effective date, consultation date, and execution date. The former Section 13 date 2026-09-29 must mean an actual verifiable consultation or be removed/replaced with per-source dates. Revision day is not every link's consultation date. Schema research does not reverify other sources.
 
-当前已完成实施准入、现有引擎调查和首个工具增量编写. 后续顺序为: 静态检查并提交具体测试范围 -> 获准运行工具自检和试点 -> 据真实证据补齐基线/缺口 -> 按实际 CI 条件完成隔离接入与验收. 不以文档完成或脚本可启动替代后续验收.
+Implementation admission, engine investigation, and initial tool coding are complete. Next: static review/proposed scope → authorized self-checks/pilot → measured baseline/gaps → actual isolated CI adoption/acceptance. Documentation/computable scripts are not acceptance.
 
-本轮反向分析对应到具体保护与待运行用例:
-
-| 破坏路径 | 代码保护与反向用例 |
+| Failure path | Protection and pending negative case |
 | --- | --- |
-| 汇总报告声称成功, 原始输出被替换或截断 | `verify.reference` 重算字节数/摘要, `go_observations` 核对完整终态; `EvidenceTests.test_integrity_rejected`、`ObservationTests.test_truncated_json` |
-| 已打印命中后跳过/失败, 或同义务另一个必需检查失败 | `go_observations` 核对每个必需测试, `decide` 对全部必需项取合取; `test_non_vacuity_and_failure`、`test_pass_does_not_override_other_required_failure` |
-| 超时父进程先退出, 子进程 setsid 后继续持有输出管道 | `owned_members/drain` 结合 subreaper 与 pidfd 排干; `CollectorTests.test_process_exit_timeout_output_limit_and_orphan` |
+| Summary claims success after raw replacement/truncation | verify.reference recomputes lengths/hashes; go_observations checks terminal completeness; EvidenceTests.test_integrity_rejected, ObservationTests.test_truncated_json |
+| Hits printed before skip/failure, or another required check fails | go_observations validates each required test; decide conjuncts all requirements; test_non_vacuity_and_failure, test_pass_does_not_override_other_required_failure |
+| Timed-out parent exits while setsid child retains pipes | owned_members/drain combines subreaper/pidfd; CollectorTests.test_process_exit_timeout_output_limit_and_orphan |
 
-这些是源码与用例对应关系, 不是已通过证据. 同账户可同时修改日志、摘要和本地批准文件的风险仍无法由本工具消除, 只能在真实隔离 CI 控制面接入后关闭.
+These are source/case mappings, not executed passes. Same-account alteration of logs/hashes/approval cannot be eliminated locally; real isolated CI must close that risk.
 
-## 9. 使用入口与剩余验收
+## 9. Commands and remaining acceptance
 
-以下为命令说明, 不表示已执行. 在 Astra 根目录, 现有 Ubuntu Python 可以执行:
+Command descriptions, not execution claims; use existing Ubuntu Python from Astra root:
 
 ```sh
 python3 -B tools/verify.py validate
@@ -142,8 +140,8 @@ python3 -B tools/verify.py gate \
   build/results/verification/RUN_UUID
 ```
 
-`validate` 输出配置、规则、采集器、设计、规范和 Schema 集合的 pins. 有权批准者核对这些摘要与本次范围后, 在证据目录外建立符合 `authority.schema.json` 的记录: `schema_version: 1`、真实 `approval_ref`、UTC `expires_at`、`revoked: false`、原样 `pins`、`exceptions: []`. 摘要通过单独 CLI 参数传入. AI 可以准备待确认内容, 不能凭自己填写引用取得测试或例外授权. 本地批准文件和哈希仅固定本次批准输入, 不提供隔离或签名信任; CI 必须另有受保护控制面.
+validate emits pins for configuration, registry, collector, design, policy, and schema set. Authorized approvers check digests/scope, then create authority.schema.json records outside evidence: schema_version 1, real approval_ref, UTC expires_at, revoked false, unchanged pins, exceptions []. Pass the digest independently on CLI. AI may prepare content but cannot self-issue authorization by filling references. Local files/hashes fix approved input, not isolation/signature trust; CI needs protected control plane.
 
-本增量不支持配置继承、Windows 采集、通用检查插件、CI/发布隔离或自动判定 MC/DC/模型/变异/全矩阵达标. 这些场景明确拒绝或保留 `unavailable`, 不以未知字段静默降级. `development.json` 中的 29 条规则完整维护义务与六项 L3 专项仍逐条可见, 有限样例只消除自己的四项义务. 首次真实采集后的整体结论预期为 `blocked`, 这是待实测的预期, 不是已产生的结果.
+This increment does not support inheritance, Windows collection, general plugins, CI/release isolation, or automatic MC/DC/model/mutation/full-matrix qualification. Reject or retain unavailable explicitly; unknown fields never silently downgrade. development.json retains all 29 maintenance-rule obligations and six L3 specialist obligations; finite examples discharge only their four items. First actual aggregate collection is expected blocked, a pending expectation rather than an existing result.
 
-下一步待批准范围: 仅工具自检及上述单组件普通 Go/cgo 测试, 不含 Sanitizer、性能、长测或系统部署. 运行并保存真实证据后才能填写基线; 收敛期限由用户确认. 真实 CI 主体、隔离策略与制品保留仍待指定, 不能从现有 SSH 主机推定已具备. 规范生效日期保持待试点验收.
+Pending permission covers tool self-checks and this component's ordinary Go/cgo tests only, excluding sanitizers, performance, soak, and deployment. Fill baseline after real evidence; the user sets convergence deadlines. Actual CI principal/isolation/retention remain unspecified and cannot be inferred from SSH availability. Effective date remains pending accepted pilot.

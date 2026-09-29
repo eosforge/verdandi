@@ -1,128 +1,111 @@
 # Astra Admin
 
-> 目标星图采用 Star 恒星、Planet 中继和业务卫星, 见 [当前架构](../docs/architecture.md).
-> 当前演示仍使用业务行星模型, 该展示迁移尚未实现; 独立真实管理模式已接入 Astrolabe; 当前验证边界见 [统一记录](../docs/validation.md).
+[English](README.md) | [简体中文](README_CN.md)
 
-Astra 的管理前端基础工程, 使用 Vue 3、TypeScript、Vite、Naive UI 和 Three.js; 目标后端为 [Astrolabe](../astrolabe/README.md#管理登录与-admin-接入).
-当前为无侧栏的全视口星图, 包含九颗正常状态恒星、一颗黑洞状态恒星、一个独立脉冲星的拓扑演示. Atlas、Lyra、Vega 分别带有 36、48、60 颗行星;
-Sirius、Capella、Rigel、Procyon、Altair、Deneb 分别带有 12、15、18、21、24、18 颗行星.
-九个普通恒星节点共 252 个 Registry、Subscriber、Publisher 实体, 两两连接形成 36 条无重复连线; Orion 黑洞与 Pulsar 脉冲星均无行星和连线.
-演示星图的连接和实体均为本地示例, 不代表真实集群状态. 顶部可切换到独立的真实管理模式, 后端故障不会静默退回演示.
-当前隐藏全部恒星连线, 保留连接数据; 隐藏时不绘制或更新连线缓冲. 可通过 `sceneConfig.showStarLinks` 调整显示.
+> The target map uses Star stars, Planet relays, and application satellites; see the [architecture](../docs/architecture.md). The demo still represents application entities as planets; that display migration is not implemented. The separate live management mode connects to Astrolabe. See the [validation record](../docs/validation.md) for evidence boundaries.
 
-## Astrolabe 接入
+Astra's management frontend uses Vue 3, TypeScript, Vite, Naive UI, and Three.js, with [Astrolabe](../astrolabe/README.md#management-login-and-admin-integration) as its backend.
+The full-viewport demo has no sidebar. It contains nine normal stars, one black-hole star, and an independent pulsar. Atlas, Lyra, and Vega have 36, 48, and 60 planets; Sirius, Capella, Rigel, Procyon, Altair, and Deneb have 12, 15, 18, 21, 24, and 18. The nine normal stars contain 252 Registry, Subscriber, and Publisher entities and 36 distinct pairwise connections. Orion and Pulsar have neither planets nor connections.
 
-Admin 提供登录与管理界面, Astrolabe 提供管理后端和数据适配来源; 完整边界见 [管理登录与 Admin 接入](../astrolabe/README.md#管理登录与-admin-接入). 首版管理用户仅做登录验证, 不实现用户角色等级、按分组授权或菜单权限表. 真实模式已编写 Cookie 登录、目录/指标观察、Almanac 完整读取、单 Key Set/Delete 和脱敏凭据管理; 自动化检查与浏览器验收分别在 [统一记录](../docs/validation.md) 说明, 不改变下文演示星图的性质.
+These entities and connections are local examples, not live cluster state. The top-level switch opens a separate live management mode; backend failure never silently falls back to the demo. Star links are currently hidden, with their data retained and no drawing or buffer updates while hidden. `sceneConfig.showStarLinks` controls visibility.
 
-管理网络层只向 Go Astrolabe 请求管理数据和提交操作, 登录校验及 [管理账号](../astrolabe/README.md#管理账号) 由后端负责. [会话](../astrolabe/README.md#管理会话) 与 [同源/跨源部署](../astrolabe/README.md#同源与跨源部署) 使用唯一契约, 不在前端另存登录 token 或用 CORS 失败自动降级认证. 浏览器不取得 Pulsar 的服务部署密码、签名凭据或私钥, 不因一次用户登录登记新节点. 网络数据经独立适配层转为 GalaxyData, 渲染器继续只消费展示契约; 不将登录状态或后端协议加入逐帧逻辑.
+## Astrolabe integration
 
-Admin 经 Astrolabe [编辑 Almanac 并提交到 Polaris](../astrolabe/README.md#编辑保存与发布), 分开展示 Polaris 持久提交与各 Star 安装进度, 不把页面修改或某个 Star 已应用当成权威持久成功. 管理底稿只来自 Polaris, 列表过滤、分页、读取失败或落后 Star 的缺项不能变成删除指令. 部分成功、结果不确定、后端不可读和视图陈旧分别报告, 不自动回退演示数据或由前端补发旧请求. 当前编辑器使用完整 Buffer 的 Base64, 显式提交版本; __auth/comet 自动使用专用凭据接口, 不回显已有 SECRET. 部分快照不替换旧视图, 界面分别报告未提交与结果不确定.
+Admin supplies the login and management UI; Astrolabe supplies backend operations and data adapters. The [management contract](../astrolabe/README.md#management-login-and-admin-integration) is authoritative. The first version authenticates management users without role hierarchies, group authorization, or menu permission tables. Live mode implements Cookie login, directory/metrics observation, complete Almanac reads, single-key Set/Delete, and redacted credential management. [Validation](../docs/validation.md) separates automated checks from browser acceptance; these features do not turn the demo map into live topology.
 
-## 本地运行
+The network layer requests management data and operations only from Go Astrolabe. The backend owns [accounts](../astrolabe/README.md#management-account) and authentication. [Sessions](../astrolabe/README.md#management-sessions) and [same-origin/cross-origin deployment](../astrolabe/README.md#same-origin-and-cross-origin-deployment) share one contract: no separately stored frontend login token and no authentication downgrade after a CORS failure. Browsers receive no Pulsar deployment passwords, signing credentials, or private keys; a user login does not register a node. A separate adapter converts network data to `GalaxyData`; renderers consume that presentation contract without login state or backend protocol in frame updates.
 
-使用 Node.js 24 LTS 和 pnpm 12.3.4; `.node-version` 固定当前验证版本 24.21.0.
-在 `admin/` 中运行:
+Admin [edits Almanac through Astrolabe and commits to Polaris](../astrolabe/README.md#saving-and-publishing). The UI distinguishes Polaris durable commit from installation at each Star; neither a page edit nor one Star applying it proves authoritative durability. Editing baselines come only from Polaris. Filtering, pagination, failed reads, and omissions at a lagging Star must not become deletion instructions. Partial success, uncertain outcomes, unreadable backends, and stale views remain distinct; the frontend neither falls back to demo data nor resends an old request automatically. The editor submits a complete Base64 Buffer with an explicit version. `__auth/comet` uses the dedicated credential API and never echoes an existing SECRET. Partial snapshots do not replace the old view; uncommitted and uncertain outcomes are displayed separately.
+
+## Local development
+
+Use Node.js 24 LTS and pnpm 12.3.4. `.node-version` pins the validated Node version, 24.21.0. From `admin/`:
 
 ```powershell
 fnm use
 pnpm dev
 ```
 
-开发服务默认仅监听本机. 需要局域网访问时使用 `pnpm dev --host 0.0.0.0`.
-首次运行前, 由维护者明确批准 `package.json` 中的具体依赖、来源和安装位置后, 才执行
-`pnpm install --frozen-lockfile`. 依赖来自 npm 官方仓库, `node_modules/` 位于此目录.
-pnpm store/cache 沿用用户配置; 当前工作站为 `D:\Program Data\pnpm\store` 和 `D:\Program Data\pnpm\cache`.
-日常验证使用已有依赖, 不包含安装、更新、浏览器下载或发布步骤.
+The development server listens locally by default; use `pnpm dev --host 0.0.0.0` for LAN access. Before first installation, a maintainer must explicitly approve the specific dependencies in `package.json`, their source, and installation location. Only then run `pnpm install --frozen-lockfile`. Dependencies come from the official npm registry into this directory's `node_modules/`. pnpm uses the user's store/cache settings; on the current workstation these are `D:\Program Data\pnpm\store` and `D:\Program Data\pnpm\cache`. Routine validation uses existing dependencies and does not include installation, upgrades, browser downloads, or publication.
 
-## 开发与验证
+## Development and validation
 
-| 命令                    | 用途                                                   |
-| ----------------------- | ------------------------------------------------------ |
-| `pnpm dev`              | Vite 开发服务与热更新                                  |
-| `pnpm format`           | Prettier 格式化                                        |
-| `pnpm format:check`     | 检查格式                                               |
-| `pnpm check:boundaries` | 检查模块分层、运行时循环依赖和延迟加载边界             |
-| `pnpm test`             | Node.js 内置测试, 无浏览器或额外测试框架依赖           |
-| `pnpm type-check`       | 严格 TypeScript 和 Vue 模板检查                        |
-| `pnpm build`            | 类型检查与生产构建, 输出到 `dist/`                     |
-| `pnpm check`            | 格式、架构边界、回归测试、类型检查、生产构建的完整入口 |
-| `pnpm preview`          | 本地查看已构建的产物                                   |
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Vite development server and hot reload |
+| `pnpm format` | Prettier formatting |
+| `pnpm format:check` | Format checks |
+| `pnpm check:boundaries` | Layering, runtime dependency cycles, and lazy-loading boundaries |
+| `pnpm test` | Built-in Node.js tests, without a browser or additional test framework |
+| `pnpm type-check` | Strict TypeScript and Vue template checks |
+| `pnpm build` | Type checks and production output in `dist/` |
+| `pnpm check` | Formatting, boundaries, regression tests, type checks, and production build |
+| `pnpm preview` | Preview existing build output locally |
 
-`pnpm check` 也可用于已准备好依赖的 CI 环境. 当前没有自动安装依赖或发布的仓库工作流.
-单元测试覆盖运动、输入、调度、快照校验、实例化、公转拾取和清理, 不替代真实浏览器的 WebGL 验证.
+`pnpm check` also works in CI with dependencies already prepared. No repository workflow automatically installs dependencies or publishes. Unit tests cover motion, input, scheduling, snapshot validation, instancing, orbital picking, and cleanup; they do not replace WebGL verification in a real browser.
 
-## 目录与扩展
+## Layout and extension
 
 ```text
 src/
-  main.ts                      # 启动入口
-  app/                         # 应用装配、布局、全局样式
+  main.ts                      # Startup
+  app/                         # Composition, layout, global styles
   features/galaxy/
-    index.ts                   # 功能公开入口
-    model/                     # 只读展示契约、布局、快照校验
-    data/                      # 本地演示快照
-    ui/                        # 画布容器、行星详情、实体列表
-    composables/               # Vue 生命周期与异步场景加载
-    runtime/                   # 场景入口、输入、帧调度和资源作用域
-      scene/                   # 画布初始化与唯一选择控制器
-      objects/                 # 星系装配、实例批次、运动、拾取和装饰
-      blackHole/               # 黑洞配置、数值光学、材质和实例
-        shaders/               # 光学体积、盘发射、盘缘厚度和背景透镜
-      pulsar/                  # 脉冲星配置、程序化三维模型和体积光束
-      background/              # 宇宙背景、远景星点与独立着色器
-      rendering/               # 渲染分层约定与共用屏幕几何
-      assets/                  # 恒星、行星和黑洞 GLB 模型
-      materials/               # 恒星表面、日冕和行星纹理
-scripts/                       # 离线检查工具与模型生成器
-tests/                         # Node.js 回归测试
-docs/                          # 架构说明与浏览器验收清单
+    index.ts                   # Public feature entry
+    model/                     # Read-only presentation contracts, layout, validation
+    data/                      # Local demo snapshots
+    ui/                        # Canvas container, planet details, entity list
+    composables/               # Vue lifecycle and asynchronous scene loading
+    runtime/                   # Scene entry, input, frame scheduling, resource scopes
+      scene/                   # Canvas setup and the single selection controller
+      objects/                 # Systems, instance batches, motion, picking, decoration
+      blackHole/               # Configuration, numerical optics, materials, instances
+        shaders/               # Optical volume, disk emission/rim, background lensing
+      pulsar/                  # Configuration, procedural models, volumetric beams
+      background/              # Cosmic background, distant stars, separate shaders
+      rendering/               # Render layers and shared screen geometry
+      assets/                  # Star, planet, and black-hole GLB models
+      materials/               # Stellar surfaces/coronas and planet textures
+scripts/                       # Offline checks and model generators
+tests/                         # Node.js regression tests
+docs/                          # Architecture and browser acceptance
 ```
 
-`src/app/App.vue` 负责将 `demoGalaxy` 注入 `GalaxyView`. 渲染器不导入演示数据, 不请求管理后端 API;
-资产加载器仅按需读取随应用发布的同源 GLB 文件.
-未来接入 API 时, 在数据适配层把网络 DTO 转成 `GalaxyData`, 再替换整个快照.
-当前快照替换会重建场景并回到总览; 高频实时更新需要另行设计增量更新和背压.
+`src/app/App.vue` injects `demoGalaxy` into `GalaxyView`. Renderers neither import demo data nor request management APIs. Asset loaders fetch only the same-origin GLB files shipped with the application, on demand. Network DTOs must pass through a data adapter to `GalaxyData` before replacing a snapshot. Snapshot replacement currently rebuilds the scene and returns to overview; frequent live updates need a separate incremental-update/backpressure design.
 
-参阅 [架构与生命周期](docs/architecture.md)、[贡献与代码规范](CONTRIBUTING.md)、[浏览器验收](docs/verification.md).
-仓库总体规则以 [AGENTS.md](../AGENTS.md)、[开发规范](../docs/development.md) 和 [编码与文件组织规范](../docs/coding.md) 为准; 项目补充见 [维护指南](CONTRIBUTING.md).
+See [architecture and lifecycle](docs/architecture.md), [browser acceptance](docs/verification.md), and [Admin maintenance rules](../docs/project.md#admin). Repository rules live in [AGENTS.md](../AGENTS.md), [development](../docs/development.md), and [coding and file organization](../docs/coding.md).
 
-## 已有交互
+## Current interactions
 
-- 左键拖动旋转, 中键按住拖动平移, 滚轮围绕鼠标指向位置连续缩放.
-- 旋转和平移每帧统一更新, 按时间阻尼平滑收敛; 按下指针立即接管相机, 聚焦前清除旧拖动惯性.
-- 普通恒星点击直径为表面直径的 3 倍, 黑洞为含吸积盘的完整光学范围直径的 3 倍, 与行星轨道范围无关; 本体与可选行星的精确命中优先, 扩大区域重叠时取射线最近入口. 总览仅选择恒星, 约 1.2 秒平滑推进且不打开详情; 进入星系后才能选择所属行星.
-- 同一恒星的行星沿共同轨道面附近、不同半长轴的椭圆公转, 倾角偏差不超过 3°; 恒星位于焦点, 近星段更快, 外圈周期更长.
-- 卫星公转时间倍率为总览 15、恒星视图 6; 恒星（含黑洞状态）统一使用独立的 15 倍, 不因选中恒星而减速. 选中行星时公转全部暂停; 自转和辐射流动不受影响.
-- 每颗行星独占径向轨道带, 相邻轨道计入模型半径和安全间距, 不依赖公转相位避让; 不同星系各有独立轨道面.
-- 恒星间距按完整轨道范围扩大, 星系间保留留白; 总览、缩放上限、连线与聚焦同步使用扩大后的布局.
-- 详情列表可切换实体, “推进至行星”接近公转后的实际位置.
-- 双击空白背景（画布）、在画布聚焦时按 Escape, 或关闭详情, 平滑返回全局视图; 未选节点时也会强制恢复全局构图, 清除平移、旋转和缩放造成的视角偏移.
-- 总览右上角显示实际 FPS 数字, 右下角三角按钮打开星图编辑框; 按钮左侧显示可复制的相机 X/Y/Z 世界坐标, 保留两位小数.
-- Orion 以黑洞状态显示, 不带行星、连线或 X 标记; 点击本体及扩大区域可以聚焦, 不打开行星详情.
-- 正常和黑洞状态的恒星共同围绕 Pulsar 公转. 最多 12 颗优先共享紧凑内层, 利用半径、相位和倾角差打散排列; 超过容量再向外扩展, 不把少数恒星单独推远. 全部恒星的等权中心保持在脉冲星附近.
-- 内层使用统一周期避免追尾, 外层周期更长; 规划检查完整周期并补足采样间的安全余量. 聚焦后相机跟随并将恒星锁定在画面中央, 旋转和缩放围绕它进行; 恒星视图禁用平移, 总览与行星详情保留平移.
-- 首次加载、重建星图和双击返回总览统一使用相机世界坐标 `(-178, 176, 1083)`, 朝向星图中心（有 Pulsar 时为 Pulsar）. 自动构图仅估算距离和裁剪边界, 不覆盖指定位置; 允许星体随后出画或运行至镜头后方.
-- 恒星与黑洞的公转轨道使用低亮度蓝灰细线描出, 与实际椭圆和倾角一致; 作为辅助线不受引力透镜扭曲, 保留深度遮挡. 恒星间连接线继续隐藏.
-- 深空背景包含柔和的低亮度冷暖辐射纹理、微弱视觉噪声及稀疏远景星点; 仅绘制背景, 不修改行星材质、光照和曝光. 星空方向固定, 无平移视差或随机闪烁. 这是艺术化背景, 不是实测微波辐射图.
-- Pulsar 为总览中心, 白热核心带渐散辉光, 双极光束和三层磁场具有流动细丝; 默认 2.4 秒自转一圈, 点击核心可以聚焦.
-- 普通恒星在数量缩放基础上使用 `1.5 × ∛2` 线性倍率（约 1.89）, 黑洞使用 `0.75 × ∛2`（约 0.945）, 两者相比此前体积翻倍; 脉冲星整体放大 8 倍. 拾取与轨道避让范围同步.
-- 编辑框支持最多 48 颗恒星, 每行选择正常或黑洞状态; 正常恒星可配 0..180 颗卫星. 脉冲星单独启用, 最多一颗. 状态切换保留恒星 ID 与名称; 黑洞状态不生成卫星和连线, 恢复正常后重新参与连接.
-- 确认后重新生成并返回总览, 取消保留原星图; 配置仅在当前页面生效. 未启用脉冲星时, 所有恒星保持静态布局; 这些展示轨道不模拟多体引力.
-- 页面隐藏时暂停绘制; 初始化或 WebGL 上下文失败时显示错误与重试入口.
+- Left drag rotates, held middle drag pans, and the wheel zooms continuously around the pointer. Rotation and panning share frame updates with time-based damping. Pointer-down takes control immediately; focus clears old drag inertia.
+- Normal-star picking diameter is three times its surface diameter; black-hole picking is three times the complete optical diameter, including the disk, independent of planetary orbit extent. Exact bodies and eligible planets take precedence; overlapping enlarged regions use the nearest ray entry. Overview selects stars only and approaches smoothly in about 1.2 seconds without opening details. Planets become selectable only inside their own system.
+- Planets follow distinct elliptical semimajor axes near a shared plane, within 3° inclination variation. The star occupies a focus; near-star motion is faster and outer periods longer. Each planet has its own radial band, with model radius and clearance included independently of phase. Systems have independent planes.
+- Satellite orbital time scales are 15 in overview and 6 in star view. Stars, including black holes, use a separate constant 15 scale regardless of selection. Selecting a planet pauses all orbital motion, but not rotation or radiation flow.
+- System spacing accounts for complete orbital extent and leaves gaps. Overview, zoom limits, links, and focus use the expanded layout. Detail lists switch entities; “approach planet” targets its actual orbital position.
+- Double-clicking empty canvas, pressing Escape while the canvas is focused, or closing details returns smoothly to overview and clears details. This also resets panning, rotation, and zoom with no selected node.
+- Actual FPS appears at top right. A bottom-right triangle opens the map editor; its left side shows copyable world camera X/Y/Z coordinates to two decimals.
+- Orion is a black hole without planets, links, or an X marker. Its body and enlarged picking region focus it without planet details.
+- Normal and black-hole stars orbit Pulsar. Up to 12 share a compact inner layer with varied radius, phase, and inclination; additional layers appear only after capacity is exceeded. The equal-weight center stays near Pulsar. Inner orbits share a period to avoid overtaking; outer periods are longer. Planning checks a complete cycle with safety margin between samples.
+- After focus, the camera follows the moving star at screen center; rotation and zoom remain centered on it. Star view disables panning, while overview and planet details retain it.
+- First load, rebuild, and double-click overview reset use camera world position `(-178, 176, 1083)`, looking at the map center (Pulsar when present). Automatic framing estimates distance and clipping without replacing that position. Bodies may subsequently leave the frame or pass behind the camera.
+- Dim blue-gray lines trace the actual tilted elliptical orbits of stars and black holes. These depth-tested guides bypass gravitational lensing. Inter-star links stay hidden.
+- The deep-space background uses soft, dim warm/cool radiation textures, faint grain, and sparse distant stars. It changes no planet materials, lighting, or exposure. Directions remain fixed with no translation parallax or random flicker. This is an artistic background, not a measured microwave map.
+- Pulsar centers overview. Its white-hot core has gradual glow, bipolar beams, and three magnetic-field layers with flowing filaments. Default rotation is one revolution per 2.4 seconds; clicking its core focuses it.
+- Normal stars use `1.5 × ∛2` linear scale (about 1.89) after population scaling; black holes use `0.75 × ∛2` (about 0.945). Both double their previous volume. Pulsar scales by 8. Picking and orbital clearance scale with them.
+- The editor supports up to 48 stars, each normal or black-hole state; normal stars allow 0..180 satellites. Pulsar is enabled separately, at most one. State changes preserve ID and name. Black holes generate no satellites or links; switching back restores connection participation.
+- Confirmation rebuilds and returns to overview; cancellation preserves the original map. Settings affect only the current page. Without Pulsar, stars use a static layout. Display orbits do not simulate many-body gravity.
+- Hidden pages stop drawing. Initialization or WebGL context failure shows an error and retry action.
 
-## 实现与边界
+## Implementation boundaries
 
-- 252 颗行星以 27 个实例批次绘制, 按各自 Kepler 周期更新; 径向带与星系包围范围在初始化时分离, 不逐帧重新规划.
-- 外圈椭圆限制径向摆幅以控制星系大小. 空间比例、轨道间距与运动时间为展示设定, 不代表实际恒星间距或多体引力模拟.
-- 恒星大小按行星数量分段线性缩放: 10→0.5、30→1、60→1.5、120→2、180→3. 普通恒星默认自转一分钟一圈, 控制器提供按节点设置弧度/秒的接口, 同样支持脉冲星.
-- 普通恒星、行星和黑洞来自自有 GLB; 脉冲星由球体、封闭光束体积和磁场管线程序化建模. 资源统一释放, 不下载第三方模型或贴图; 见 [资产说明](src/features/galaxy/runtime/assets/README.md).
-- 黑洞使用预计算光轨道、吸积盘发射、螺旋内流和屏幕空间背景透镜; 暖金亮流、较暗外盘与三倍流动时钟属于展示效果, 不宣称物理流体模拟.
-- 背景透镜使用场景颜色与深度捕获, 不包含屏外或已遮挡的信息, 多黑洞不递归折射. 具体算法、资源所有权和限制见 [架构说明](docs/architecture.md).
-- 目标为 60 FPS, DPR 上限为 1.5; 实际表现取决于 GPU、浏览器、分辨率和刷新率, 尚不构成大规模性能资格保证.
+- The 252 planets use 27 instance batches and individual Kepler periods. Radial bands and system bounds are planned at initialization, not every frame. Outer ellipses limit radial excursion to control system size. Spatial scales, spacing, and time are presentation choices, not physical interstellar distances or many-body simulation.
+- Star size is piecewise linear in planet count: 10→0.5, 30→1, 60→1.5, 120→2, 180→3. Normal stars rotate once per minute by default. A per-node radians/second control also supports Pulsar.
+- Normal stars, planets, and black holes use first-party GLB assets; Pulsar uses procedural spheres, closed beam volumes, and magnetic tubes. Resources have centralized cleanup; no third-party models/textures are downloaded. See [assets](src/features/galaxy/runtime/assets/README.md).
+- Black holes combine precomputed light trajectories, disk emission, inward spiral flow, and screen-space background lensing. Warm gold streams, dimmer outer disks, and a three-times flow clock are display effects, not fluid simulation. Lensing captures scene color/depth, cannot recover off-screen or occluded information, and does not recursively refract multiple black holes. See [architecture](docs/architecture.md) for algorithms and ownership.
+- Target rendering is 60 FPS with DPR capped at 1.5. Actual performance depends on GPU, browser, resolution, and refresh rate; this is not a large-scale qualification claim.
 
-当前仍是演示快照全量重建. 高频增量更新、背压和真实后端状态需要在数据适配层与控制契约中另行设计.
+The demo still rebuilds complete snapshots. High-frequency deltas, backpressure, and live backend topology need explicit adapter/control contracts.
 
-## 许可证与状态
+## License and status
 
-沿用仓库根目录的 [MIT License](../LICENSE). 当前是 Alpha 管理端基础骨架;
-管理登录、Astrolabe 接入与数据编辑已有实现. 完整真实 3D 拓扑仍待实现, 浏览器/GPU 验收、大规模性能和长期稳定性仍缺证据. 本页不以演示画面或历史自动化结果替代当前版本验收.
+Admin uses the repository [MIT License](../LICENSE). It remains an Alpha foundation with implemented management login, Astrolabe integration, and data editing. Complete live 3D topology is pending. Browser/GPU acceptance, large-scale performance, and long-term stability lack evidence; demo appearance and historical automated results do not qualify the current version.

@@ -1,135 +1,129 @@
 # Polaris
 
-Polaris 是 Go 实现的 Almanac 唯一发布权威, 使用 GORM 访问 SQLite, 保存当前完整数据、权威版本和有界增量历史. 首版由部署保证单实例, 不实现选主、自动主备或多写者. 实施状态见 [进度](../docs/progress.md), 实际构建和运行范围见 [验证记录](../docs/validation.md).
+[English](README.md) | [简体中文](README_CN.md)
 
-## 调用边界
+Polaris is the sole Almanac publishing authority, implemented in Go with GORM and SQLite. It stores complete current data, authoritative versions, and bounded incremental history. Deployment guarantees one instance in the first version; there is no election, automatic standby, or multi-writer mode. See [implementation status](../docs/architecture.md#status) and [executed validation](../docs/validation.md).
 
-Astrolabe 是唯一管理写入入口, Polaris 持久提交后向所有 Star 分发. Star 只保存内存副本并向 Comet Reader 提供读取, 不对等复制 Almanac. Catalog/Ephemeris 不存入 Polaris, 其业务发布者和来源 Star 仍按各自规则维护动态状态.
+## Call boundaries
 
-Polaris 经 Pulsar 获得基础设施身份, Star 从 Pulsar 名单发现它并主动建立内部同步流. Polaris 的 Star 登记视图用于识别预期目标与报告缺失连接, 不据此反向拨号. 名单不等于在线状态, Polaris/Astrolabe 也不进入 Star 对等网络或副本数. 内部凭据属于 Almanac, 首次恢复不借助尚未建立的 Comet 会话.
+Astrolabe is the only management write entry. After durable commit, Polaris distributes data to all Stars. Stars keep memory replicas and serve Comet Readers; they do not replicate Almanac peer-to-peer. Catalog/Ephemeris are not stored in Polaris; their publishers/source Stars maintain dynamic state under their own rules.
+
+Polaris obtains infrastructure identity from Pulsar. Stars discover it through Pulsar membership and initiate internal synchronization streams. Polaris uses registered Stars to identify expected targets/report missing connections, not to dial them. Membership does not prove liveness; neither Polaris nor Astrolabe joins the Star peer network or replica count. Internal credentials belong to Almanac, so initial recovery cannot depend on a Comet session that does not yet exist.
 
 <a id="deployment"></a>
 
-## 固定部署与重启
+## Fixed deployment and restart
 
-首版固定 Polaris 的 Pulsar 登录账号名、Galaxy 和规范内部登记端点, 只支持同一权威数据库、同一部署身份下的正常重启. principal 由这些部署信息确定; 重启仍使用新的启动请求并取得新 Member.id/epoch, 不固定进程身份, 不重置 Almanac 权威版本或原提交依据.
+The initial deployment fixes Polaris's Pulsar account name, Galaxy, and canonical internal registration endpoint. Normal restart supports the same authority database and deployment identity only. These fields determine principal. A restart still submits a new startup request and receives new Member.id/epoch; it neither pins process identity nor resets Almanac versions/commit evidence.
 
-首次显式初始化时将上述部署绑定写入既有数据库元信息, 正常启动先核对配置和绑定, 再向 Pulsar 登记. 缺失或不匹配时拒绝启动, 不自动重写绑定或先制造另一条持久成员记录. 登记端点先规范化再比较; 这项本地检查不增加协议字段或第二种身份代次.
+Explicit initialization stores the deployment binding in database metadata. Normal startup verifies configuration against it before registering with Pulsar. Missing/mismatched binding rejects startup, without rewriting it or first creating another durable member. Endpoints are canonicalized before comparison. This local check introduces no wire field or second identity generation.
 
-账号名与密码分开: 保持上述绑定和既有信任要求时, 正常密码轮换或 TLS 证书续期不属于部署迁移. 修改账号名、Galaxy 或登记端点的迁移暂不支持, 首版不增加成员退役、端点转移、别名或自动接管流程.
+Account name and password are distinct: password rotation/TLS renewal preserving binding and trust requirements are not deployment migration. Changing account name, Galaxy, or endpoint is unsupported; no retirement, endpoint transfer, aliases, or automatic takeover are added. A stopped process does not release Pulsar's deployment slot. Multiple Polaris principals created by another database/configuration remain a single-authority deployment conflict, never resolved by reachability, clearing membership, deleting startup evidence, or creating an empty authority database. Deployment remains responsible for singleton execution; local metadata cannot stop another independent deployment starting outside that boundary.
 
-Pulsar 名单不会因原进程停止自动释放部署槽位. 另一个数据库或配置造成多个 Polaris principal 时仍按单点部署冲突处理, 不按可达性选择, 不以清空成员库、删除旧启动依据或新建空权威库来解除冲突. 部署继续保证单实例; 本地元信息校验不声称能阻止另一个独立部署越界启动.
+## Durable commit
 
-## 持久提交
+Each Sector/Spectrum is an authoritative Almanac group with an independent durable version; Star need not represent it with the generic Store class. Management supports single-key Set/Delete and atomic multi-key Set/Delete within one Scope. Set supplies a complete Buffer. One durable transaction checks version conditions and commits data, version, and required delta evidence together. A new valid commit advances authority once, independently of Star cursors or physical time.
 
-Sector/Spectrum 对应一个 Almanac 权威分组, 每组独立维护持久版本; 这里的分组不再要求 Star 使用通用 Store 类. 管理提交支持单 Key Set/Delete 和同 Scope 原子多键 Set/Delete, Set 使用完整 Buffer. 版本条件在持久事务内检查, 合法新提交推进一次权威版本, 不根据 Star 的本地游标或物理时间生成版本; 数据、版本及该提交所需的增量记录共同提交.
+`CommitRequest.change` retains single-key semantics and is mutually exclusive with `changes`. Batches must be nonempty with unique keys, without a batch-wide key-count or byte cap. Individual values remain limited to 1 MiB; configured Scope/global storage budgets and request deadlines still apply. Requests exceeding one frame use client-streaming `Authority.Batch`: every page has the same scope/version; commit occurs only after a `complete=true` last page and normal EOF. Missing completion, cancellation, duplicate keys across pages, position changes, or trailing data after completion never commit a prefix. All Astrolabe multi-key writes use this stream. A batch consumes one strictly +1 authority version; records, global/Scope accounting, and complete retry evidence share one SQLite transaction. Set, empty values, and Delete may mix; any error rolls everything back. Internal `__` scopes retain only the original single-key entry, preserving credential-revocation boundaries.
 
-`CommitRequest.change` 保留单键语义; `changes` 与它互斥, 接受非空、不重复 Key 批次, 不设整批 Key 数量或总字节上限. 单条 value 仍限 1 MiB, 配置的 Scope/全局存储预算和请求截止继续生效. 超出一帧的请求使用客户端流式 `Authority.Batch`: 每页携带相同范围/版本, 末页 `complete=true` 且正常 EOF 后才提交; 缺尾页、取消、跨页重复键、位置变化或尾页后多余数据均不写入前缀. Astrolabe 的所有多键提交统一使用该流式入口. 一个批次只使用一个严格 +1 的权威版本, 所有记录、全局/范围计费和完整重试证据位于同一 SQLite 事务. 允许 Set、空值、Delete 混合, 任一错误回滚整批. 内部 `__` 范围仍只接受原单键入口, 不绕过凭据撤销边界.
+The four-table physical schema is unchanged. A nonempty history key denotes a single-key commit; an empty key denotes an `AB02` binary batch: 8-byte count, then per item a 2-byte key length, 4-byte body length, 1-byte delete flag, and raw bytes, with big-endian integers. Current records always contain real separate keys; applications cannot write an empty key. A whole batch occupies one history version and is retained/evicted atomically. Retry evidence compares the complete ordered request, never inferring past success from present values. Old Polaris binaries cannot decode retained batch history; rollback compatibility needs separate handling. This change does not alter/migrate deployed databases.
 
-四表物理 schema 保持不变. 历史行的非空 key 仍代表单键提交; 空 key 保留给 `AB02` 二进制批次 (8 字节条数, 每项 2 字节键长、4 字节正文长、1 字节删除标志和原字节, 整数大端). 当前记录表始终保存真实的独立键, 不能向业务写入空键. 完整批次占一个历史版本, 整批保留/淘汰. 重试证据按完整有序请求比较, 不从当前最终值推断旧操作成功. 旧 Polaris 二进制不能解读仍保留的批次历史, 回退前须单独处理兼容性; 本次不修改或迁移任何部署库.
+Transactions fitting a synchronization frame use one Patch with `changes`. Larger ones use a frozen complete snapshot covering at least the pending suffix; pages do not advance installation versions, and only complete termination installs once. Transactions exceeding Feed/history retention budgets may still commit durably; downstream recovery rebuilds a complete baseline. Transport page capacity does not cap atomic transaction size. Star prepares all changes in a private COW root and installs content/version once; active Reader suffixes are also accepted atomically. Old receivers reject the new batch shape; do not mix old Stars with batch writes. `Commit`/`Batch` success proves Polaris durability only, not installation on every Star or a cross-domain Catalog transaction.
 
-能装入同步帧的事务使用一个带 `changes` 的 Patch; 超出帧容量时发送至少覆盖待同步后缀的冻结完整快照, 页间不推进安装版本, 仅完整结束页一次安装. 大事务超过 Feed 或历史保留预算时, 仍允许持久提交, 下游按既有恢复流程重建完整基线. 运输页容量不限制原子提交总量. Star 在私有 COW 根上准备全部变更后一次安装版本和内容, 活动 Reader 后缀也一次接纳. 旧接收器会拒绝新增批次形状, 不应混用旧 Star 与新批次写入. `Commit`/`Batch` 成功仍只证明 Polaris 持久提交, 不代表全部 Star 已安装, 更不与 Catalog 建立跨域事务.
+New groups start at version 0. New requests must use current +1, including same-value Set and Delete of an absent key. Empty values differ from Delete; neither single-key nor batch requests bypass checks with version 0. uint64 exhaustion must not wrap. Replica recovery installs authority versions directly rather than applying ordinary +1 semantics record by record to snapshots.
 
-新分组版本为 0, 新请求必须为当前版本 + 1, 包括同值 Set 和删除不存在 Key 也形成一次合法提交. 零字节值与 Delete 分开, 单键和批次都不能以版本 0 跳过校验. uint64 耗尽不得回绕; 恢复副本直接安装权威版本, 不沿用普通提交的 +1 规则逐条重放快照.
+For the same Scope/version, retries confirm the original result only while evidence remains and key, operation, and complete bytes match. They do not recommit, compare Protobuf encoding order, infer from current state, or use another idempotency LRU. Trimmed evidence yields an explicit inability to confirm; different content at the same version is rejected without automatic version increments. Restart from the same authority database retains this evidence despite a new network identity.
 
-同 Scope/版本的管理重试只有仍保留证据且 Key、操作及完整字节相同才确认原结果, 不重复提交. 不比较 Protobuf 编码顺序或仅凭当前最终状态确认, 不另建幂等 LRU. 证据已裁剪时明确报告无法确认原提交, 同版本不同内容拒绝, 不自动提高版本覆盖. 新进程从同一权威库恢复可继续使用这份证据, 不能因网络身份变化把原请求重做成新修改.
-
-成功回执仅表示 Polaris 已完成持久提交. 内存排队、gRPC 发送完成和 Star 安装都不是此确认点. 提交失败不留下半条记录或提前推进版本; 持久提交后响应丢失、Astrolabe 退出或 Star 不可达, 均不回滚已经提交的数据. 依赖超时不能直接证明本次操作未提交, 原请求确认仍需有效证据.
-
-删除最后一个 Key 不重置分组版本. 进程重启从同一持久库恢复内容和版本, 不因 Pulsar 颁发了新进程身份而重新编号. 只读端的版本不能反向改写底稿; 管理冲突也不能通过自动提高请求版本掩盖旧编辑.
+A successful receipt means durable Polaris commit, not memory enqueue, gRPC write completion, or Star installation. Failure leaves no partial record/early version advance. A lost response, Astrolabe exit, or unreachable Star after commit never rolls back committed data. A dependency timeout alone cannot establish noncommit; confirmation needs valid original evidence. Deleting the last key retains group version. Restart restores data/versions without renumbering after Pulsar login. Read-side versions never overwrite the editing baseline, and management conflicts cannot be hidden by automatically increasing the request version.
 
 <a id="gorm"></a>
 
-## GORM 访问与事务
+## GORM access and transactions
 
-已确认采用 GORM 与官方 gorm.io/driver/sqlite 驱动, 底层使用 github.com/mattn/go-sqlite3 和 CGO. 构建需要匹配目标平台的 C 编译器, 不能把任意现有 MSVC 安装等同于 Go CGO 工具链已经可用; 跨平台构建也需对应编译器. 工具选择和 CGO 设置只作用于项目构建进程, 不修改全局环境. 驱动关系和构建要求见 [官方驱动](https://github.com/go-gorm/sqlite) 与 [go-sqlite3](https://github.com/mattn/go-sqlite3).
+The approved stack is GORM with official `gorm.io/driver/sqlite`, backed by `github.com/mattn/go-sqlite3` and CGO. Building requires a target-compatible C compiler; an arbitrary MSVC installation does not establish a working Go CGO toolchain. Cross-compilation likewise needs the matching compiler. Tool/CGO settings affect only the project build process, not global environment. See the [official driver](https://github.com/go-gorm/sqlite) and [go-sqlite3](https://github.com/mattn/go-sqlite3).
 
-不另建通用 Repository/多数据库适配层, 也不把 GORM 类型泄漏到 gRPC 或 Comet 接口. ORM 负责模型映射及受控查询/写入, 版本条件与业务事务仍由 Polaris 明确组织. 首版仍是一个 SQLite 权威库, 不引入数据库解析器、读写路由或后台持久任务表.
+There is no generic Repository/multi-database layer, and GORM types do not escape into gRPC or Comet interfaces. ORM handles mapping and controlled queries/writes; Polaris explicitly owns version conditions and transactions. The first version remains one SQLite authority without database resolver, read/write routing, or durable background task tables.
 
-一次合法管理提交使用一个显式事务, 版本读取/条件检查、Key 修改、分组版本更新和增量依据全部使用同一个 tx. 外层事务确认 COMMIT 成功后才能回复成功并通知同步, 不能在事务闭包返回 nil 前宣告已持久化, 也不能误用根 db 执行其中一步. 单条 SQL 的默认事务不能替代这个整体边界; 不额外嵌套业务事务或依赖模型 Hook 发网络请求. 参见 [GORM 事务接口](https://gorm.io/docs/transactions.html).
+Each valid management commit uses one explicit transaction for version read/check, key mutation, group version, and delta evidence. Success and synchronization notification wait for the outer COMMIT to succeed, not merely a transaction closure returning nil. Every step uses the same tx, never the root db. Per-SQL default transactions cannot replace this boundary. Do not nest business transactions or send network requests from model hooks. See [GORM transactions](https://gorm.io/docs/transactions.html).
 
-写事务串行且等待有界, 包括管理提交和历史裁剪, 仍保留持久条件检查与必要唯一约束, 不把进程内串行当成数据库中版本正确的证明. 读取、快照引用和连接池按总预算管理; 单一写者不等于所有读取也共用一条被写入占满的连接. 连接创建、同步设置与检查点规则见 [SQLite 运行约束](#sqlite), 不由 GORM 默认值替项目决定持久性.
+Write transactions, including history trimming, are serialized with bounded waits. Durable conditions/unique constraints remain necessary; in-process serialization does not prove database version correctness. Reads, snapshot references, and pools share a total budget. One writer does not mean every reader must share its occupied connection. [SQLite constraints](#sqlite) govern connection initialization, durability, and checkpoints instead of ORM defaults.
 
-- 分组版本条件更新须检查 Error 和预期影响行数. 不使用 Save 在条件更新未命中后隐式创建来绕过 CAS; 新分组和新 Key 的创建走明确分支及唯一约束. 同值 Set 与缺失 Delete 仍按已确认规则推进分组版本, 不能以内容行没有变化为由跳过整个合法提交.
-- 更新完整载荷时明确选择字段, 包含零字节值, 不依赖 Updates(struct) 默认非零字段筛选. 数据行的空 BLOB、无行及历史 Delete 是三种不同状态, Go 的 nil slice 不应隐式变成业务 Delete 或数据库 NULL. 上述默认行为见 [GORM 更新规则](https://gorm.io/docs/update.html).
-- 模型只保留明确需要的元信息、分组版本、当前 Key/Value 和有界历史字段. 不嵌入 gorm.Model 来附带无用途的自增 ID、自动时间戳或软删除; Almanac Delete 删除当前数据行, 结束依据由既有历史记录提供.
-- Sector/Spectrum/Key 按独立列和明确的复合键查询, 字节精确匹配; 不拼接成带通配语义的路径, 不因缺少 Where 扩大到其他范围. SQL 参数绑定, 查询只取得所需列, 不做逐记录关联预加载或 N+1 取数.
-- uint64 权威版本使用固定 8 字节大端 BLOB 持久化及索引比较, Go 内检查递增与耗尽, 不映射到有符号 INTEGER、自增主键或 REAL. 读写均校验类型及长度, 必要的 Scanner/Valuer 收敛在存储内部. SQLite INTEGER 的取值边界与 BLOB 比较见 [官方类型说明](https://www.sqlite.org/datatype3.html).
+- Conditional group updates check both Error and expected affected-row count. Never let Save implicitly insert after a failed conditional update and bypass CAS. New groups/keys have explicit branches and unique constraints. Same-value Set/missing Delete still advance the version even if content rows do not change.
+- Complete payload updates explicitly select fields, including zero-byte values, rather than relying on Updates(struct)'s nonzero-field default. Empty BLOB, absent row, and historical Delete are distinct; a nil Go slice must not silently become Delete or SQL NULL. See [GORM updates](https://gorm.io/docs/update.html).
+- Models contain only needed metadata, group versions, current Key/Value, and bounded history. Do not embed gorm.Model for unused auto IDs/timestamps/soft deletion. Almanac Delete removes the current row; history retains termination evidence.
+- Sector/Spectrum/Key use separate columns and explicit composite keys with byte-exact matching, not wildcard paths. Missing Where must not widen scope. Bind SQL parameters, select needed columns, and avoid per-record association preload/N+1 queries.
+- uint64 authority versions use fixed 8-byte big-endian BLOBs for storage/index comparison, never signed INTEGER, autoincrement IDs, or REAL. Go checks increment/exhaustion; reads/writes validate type/length. Scanner/Valuer support stays internal. See [SQLite types](https://www.sqlite.org/datatype3.html).
 
-Schema 及格式版本由项目显式管理. 初始创建使用已知结构, 正常启动先核对元信息、表和索引, 不用 AutoMigrate 自动修复未知/损坏数据库或执行未审阅的生产结构变更. 首版实现时仅支持明确的格式, 后续版本迁移另行给出边界, 不增加通用迁移框架. GORM 提供的自动迁移能力不等于项目已经授权每次启动修改结构, 参见 [GORM 迁移接口](https://gorm.io/docs/migration.html).
+The project explicitly owns schema/format versions. Initialization creates a known schema; normal startup verifies metadata/tables/indexes. AutoMigrate must not repair unknown/corrupt databases or apply unreviewed production changes. The first implementation supports explicit formats; later migrations need separate boundaries, not a generic framework. [GORM migration facilities](https://gorm.io/docs/migration.html) do not authorize automatic startup changes.
 
-ORM 返回错误仍按真实提交阶段分类. 约束冲突、忙等待、容量不足与无法确认的 COMMIT 不混成一个“未提交”; 无法确认持久状态时暂停新写入并恢复核对, 不自动加版本重做. 已持久成功后通知失败只影响同步, 不能重做原修改. SQL 日志不得输出完整载荷、Credential SECRET 或其他绑定敏感参数; 必要诊断保留错误类别及有界上下文.
+Errors retain their real commit phase. Constraint conflicts, busy waits, exhaustion, and uncertain COMMIT are not all “uncommitted.” Uncertain durability pauses new writes for recovery/reconciliation, without increment-and-retry. Notification failure after durability affects synchronization only. SQL logs must not expose payloads, Credential SECRET, or other sensitive bound parameters; diagnostics retain error classes and bounded context.
 
 <a id="sqlite"></a>
 
-## SQLite 运行约束
+## SQLite operating constraints
 
-已确认采用 journal_mode=WAL 与 synchronous=FULL, 仅使用受支持的本机文件系统, 不把数据库放在网络共享文件系统上. WAL 允许读事务与单个写者并发, 不增加多个写者或主备能力. 这些设置只用于 Polaris; Pulsar 的 DELETE + EXTRA 保持独立. 参见 [SQLite WAL](https://www.sqlite.org/wal.html).
+Polaris uses `journal_mode=WAL` and `synchronous=FULL` on supported local filesystems, never network shares. WAL allows readers alongside one writer, not multiple authorities or standby. Pulsar's independent DELETE + EXTRA configuration is unchanged. See [SQLite WAL](https://www.sqlite.org/wal.html).
 
-启动时设置并读取确认主库的实际日志模式, 不忽略 PRAGMA 返回值或接受静默回退. journal_mode 持久保存在库中, synchronous 和忙等待等连接设置仍需通过受控 DSN/连接初始化落实到每条新建及重建的连接, 不能仅在连接池偶然取出的一个连接执行. 可配置参数受项目约束, 不允许额外 DSN 覆盖持久同步级别. 无法落实配置时不开放写入.
+Startup sets and reads back the main database's actual journal mode, rejecting silent fallback/ignored PRAGMA results. Journal mode persists, but synchronous/busy settings must reach every new/recreated connection through controlled DSN/initialization, not just one opportunistically acquired pool connection. Extra DSN parameters cannot override durability. Writes remain closed if configuration cannot be enforced.
 
-FULL 下成功 COMMIT 是持久确认点, 不需要等待后续检查点才回复, 也不将 NORMAL 的进程崩溃恢复能力当成断电耐久性. 检查点未完成不自动否认之前成功的提交; I/O 故障仍按真实阶段报告并停止不安全的新写入. 底层文件系统和设备必须正确执行同步, 普通进程终止测试不等于断电验证. 参见 [SQLite synchronous](https://www.sqlite.org/pragma.html#pragma_synchronous).
+With FULL, successful COMMIT is the durability acknowledgment; no later checkpoint is required for the receipt. NORMAL process-crash recovery is not power-loss durability. An incomplete checkpoint does not revoke prior commits. I/O errors retain phase-specific reporting and stop unsafe new writes. Filesystem/device sync behavior must be correct; ordinary process termination is not a power-loss test. See [synchronous](https://www.sqlite.org/pragma.html#pragma_synchronous).
 
-首版优先使用 SQLite 自带的有界页数阈值自动 PASSIVE 检查点, 不先增加独立检查点线程或多级任务框架. 阈值在连接初始化时统一, 工程初值可采用 1000 页, 它不是 WAL 文件字节上限. 自动检查点可能增加触发它的提交延迟, 后续仅在实测需要时将检查点移出写入路径. 不在每次提交后强制 TRUNCATE, 不把检查点未完成当成可立即忙等重试的理由.
+Initially use SQLite's bounded-page-threshold automatic PASSIVE checkpoint, without an independent thread/task hierarchy. Initialize the threshold consistently per connection; 1000 pages is an engineering starting value, not a WAL byte cap. Checkpoints may add latency to the triggering commit; move them off the write path only if measurements justify it. Do not force TRUNCATE after every commit or busy-spin on incomplete checkpoints.
 
-快照准备使用有界读事务取得一致数据和版本, 关闭游标并结束事务后再发送已准备的不可变载荷. 可复用同一基线的只读载荷, 不为每个 Star 复制整个权威库; 准备中、已准备及发送中的字节共同计费. 不将 SQL Rows、读事务或写事务跨越 gRPC 发送、ACK 等待和慢客户端背压, 也不通过多次独立 SELECT 拼成虚假的一致快照. 当前数据容量与可准备/安装范围预算必须相容.
+Snapshot preparation obtains consistent data/version in a bounded read transaction, then closes cursors/transaction before sending immutable payloads. Reuse a shared baseline payload rather than cloning the authority per Star. Preparing, prepared, and in-flight bytes all count. SQL Rows and transactions must not span gRPC writes, ACK waits, or slow-client backpressure. Separate SELECTs cannot impersonate one consistent snapshot; data capacity must fit preparation/installation budgets.
 
-长读事务会阻止检查点完成和 WAL 复用, 单独设置 journal_size_limit 不能形成硬磁盘上限. 读事务时长、准备并发和占用预算均有界; 超限或取消时实际关闭游标/回滚后才释放额度. 达到配置的 WAL/磁盘压力阈值时停止接纳新的写事务及快照准备, 等现有有界读事务结束并尝试检查点, 不边报告繁忙边无限追加. 区分未检查点内容与可复用文件的保留大小, 压力解除后恢复受理, 不因停止写入也停止维护而永久暂停. 必要的强制检查点只能在受控维护窗口有界执行, 不删除 WAL, 不撤销已成功提交的结果.
+Long reads prevent checkpoint completion/WAL reuse; journal_size_limit alone is no hard disk bound. Bound read duration, preparation concurrency, and occupancy. Cancellation/exhaustion releases quota only after actual cursor close/rollback. At configured WAL/disk pressure, stop admitting new writes/snapshot preparation, let bounded reads finish, and attempt checkpoints instead of indefinitely appending while reporting busy. Distinguish uncheckpointed data from retained reusable file size. Resume after pressure clears; maintenance must continue while writes stop. Forced checkpoints, if needed, run boundedly in controlled maintenance windows. Never delete WAL or revoke successful commits.
 
-当前锁定 GORM v1.31.2、gorm.io/driver/sqlite v1.6.0、go-sqlite3 v1.14.52, 已缓存驱动的 sqlite3-binding.h 确认内嵌引擎 3.53.4. 模块见 [go.mod](../go.mod), 缓存/授权见 [进度](../docs/progress.md#已批准并缓存的-polaris-依赖). 不静默回退系统 libsqlite3, 缓存与源文件版本确认不等于运行验证.
+Pinned dependencies are GORM v1.31.2, gorm.io/driver/sqlite v1.6.0, and go-sqlite3 v1.14.52. The cached `sqlite3-binding.h` identifies embedded SQLite 3.53.4. See [go.mod](../go.mod) and [approved/cache status](../docs/architecture.md#approved-cached-polaris-dependencies). No silent system-libsqlite3 fallback. Cached source/version inspection is not runtime validation.
 
-## 有界历史
+## Bounded history
 
-已确认只保留当前完整数据和有界增量历史, 不永久保存全部历史内容. 历史用于 Star 短期追赶及仍有证据的原提交确认, 不是审计库, 首版不提供任意历史版本查询或回滚接口.
+Only complete current data and bounded incremental history are retained, not all historical content forever. History supports short Star catch-up and original-commit confirmation while evidence remains; it is not an audit database and exposes no arbitrary historical query/rollback API.
 
-这份已与底稿共同提交的历史就是增量恢复依据, 不再增加 Outbox 表、持久任务队列或按 Star 复制的日志. 提交后通知只合并受影响 Scope 的最新目标版本, 同步器仍从连续持久历史取得中间 +1 提交, 不将通知合并变成丢弃中间操作. 通知遗漏由已提交范围状态重查及安装版本核对发现, 不重做管理事务.
+History committed with the baseline is the recovery source: no extra Outbox, durable task queue, or per-Star replicated log. Notifications coalesce each affected Scope's latest target version; synchronizers still read intermediate +1 commits from continuous durable history. Coalescing notifications must not drop commits. Rechecking committed Scope state/installed versions detects missed notifications without repeating management transactions.
 
-历史使用明确的条数和字节预算, 保留时间可以进一步限制窗口; 具体初值在实现配置中统一定义, 不作为协议保证. 裁剪只移除不再保留的旧增量, 不删除当前底稿、空分组的版本或当前值. 单条合法提交及事务准备也必须有资源边界, 不能先接受无限大内容再依赖历史回收解决容量.
+History has count/byte budgets and optionally a retention-time limit; initial values belong in implementation configuration, not protocol guarantees. Trimming removes old deltas only, preserving current data and empty-group versions. Valid commits and transaction preparation also need resource bounds; accepting unbounded content before relying on eviction is insufficient.
 
-Star 请求的位置已超出连续历史窗口时, Polaris 发送对应范围的完整快照及权威版本. 不用残缺增量推进安装确认, 不把已删除的历史拼成另一份版本序列. 某个 Star 长期离线不能阻止历史裁剪, 不能为每个 Star 无限保留独立发送队列.
+When a Star position falls outside continuous history, send a complete Scope snapshot and authority version. Never advance installation on incomplete deltas or invent a replacement version sequence. Offline Stars cannot prevent trimming or acquire unlimited private queues. Acquired send data has a stable lifetime during trimming; retrieval/trimming share continuity checks. If the full required interval is unavailable, restart with a snapshot. Concurrent post-snapshot commits need an explicit continuation position; staging exhaustion ends that recovery with backoff rather than extending history without bound.
 
-增量裁剪期间, 已取得的发送数据必须具有稳定生命周期. 取数和裁剪按同一边界判断连续性; 若不能取得完整所需区间则重新走快照. 快照后的并发提交也必须有明确衔接位置, 暂存超过预算时终止本次恢复并退避重试, 不隐式延长历史为无界队列.
+## Synchronization to Star
 
-## 向 Star 同步
+Each Star connects to the unique Polaris discovered through Pulsar and uses one internal bidirectional stream for all Almanac groups and installed positions. Polaris pushes continuously, without reverse dialing or per-group connections. [Protocol](../proto/README.md#polaris-stream) alone defines discovery conflicts, identity, reconnect, and stream budgets; Stars need no second configured Polaris address.
 
-已确认由 Star 主动连接通过 Pulsar 名单发现的唯一 Polaris, 使用一条内部双向流接收所有 Almanac 分组并报告实际安装位置. Polaris 持续推送, 不反向拨号或按分组建立连接. 发现冲突、身份、重连与流资源边界只在 [协议](../proto/README.md#polaris-stream) 定义; 不再要求 Star 配置第二份 Polaris 地址.
+New internal Patch messages preserve strict per-Scope version +1, including same-value Set/missing Delete. Consecutive patches may share a transport batch, but key coalescing cannot omit intermediate authority commits. Downstream Star Watch may still coalesce final state over covered ranges. Gaps recover continuous history, then full Scope snapshots if unavailable; replay at/below installed positions is not recommit.
 
-向 Star 的内部新 Patch 保留每个 Scope 的严格 version + 1 顺序, 同值 Set/缺失 Delete 也必须安装其权威版本. 多条连续补丁可以打包传输, 但不按 Key 合并后省略中间权威提交; Star 的下游 Watch 仍可以合并已覆盖区间的最终状态. 跳号恢复连续历史, 历史不足再取该 Scope 全量, 已安装位置以内的重放不重新提交.
+Initial snapshots fix declared scope, complete data, and authority version, including legitimate empty scopes and internal credentials. Pagination is transport only; reading a changing current table page by page is not a snapshot. ACK requires complete installation. Failed partial snapshots retain the old complete state or remain unready, without claiming catch-up. [Credential snapshot semantics](../proto/README.md#credential-snapshot) own session effects, without new per-account identity markers in Polaris.
 
-初始快照固定其声明范围、完整数据与相应权威版本, 包括合法空范围和内部凭据. 分片只是传输方式, 逐页读取不断变化的当前表不能冒充同一个快照. Star 只有完整安装后才能确认该版本; 半份快照失败保留原完整状态或未就绪状态, 不确认已追平. 内部凭据快照的会话影响只在 [凭据快照](../proto/README.md#credential-snapshot) 定义, 不为 Polaris 增加逐账号身份标记.
+Bootstrap fixes an initial Scope inventory and minimum versions in one bounded consistent read. Each Scope then independently prepares a complete baseline at or above that minimum, with content/version from one transaction; payloads need not share one global database instant. Release the inventory transaction immediately, rather than retaining a global read across networking or cloning the whole database. Scopes independently complete and continue +1 updates. Bootstrap completes only when all initial entries satisfy requirements and the final marker arrives, including an explicitly terminated empty inventory.
 
-首次引导在一个有界一致读取边界固定初始 Scope 清单及各自最低权威版本. 每个 Scope 随后独立准备完整基线, 版本不得低于清单要求; 其内容和版本仍来自同一读事务, 不要求所有 Scope 的载荷来自同一个全库时刻. 清单元数据读取后即释放事务, 不为等待全部网络同步保持全库读事务或复制整个库. 各 Scope 可以独立完成并接续 +1 更新, 首轮只有初始清单全部满足且完整结束标志收到后才完成; 合法空清单也须明确结束.
+New Scopes/later commits enter bounded subsequent synchronization without endlessly expanding the initial inventory. Inventory/discovery handoff must not lose new Scopes; committed-state rechecks/version reconciliation close the gap. Bootstrap promises no cross-Scope transaction or global simultaneous view. See [startup ordering](../docs/architecture.md#startup-and-operation) for public-service readiness.
 
-新增 Scope 和后续提交进入同一流的有界后续同步, 不反复扩张首轮清单使初始化永远无法完成. 清单建立与后续发现的交接不能漏掉夹在二者之间的新 Scope, 以已提交范围状态重查及既定版本核对兜底. 首轮不承诺跨 Scope 管理事务或全库同时刻视图; Star 的公共业务开放顺序见 [架构](../docs/architecture.md#启动与运行).
+Startup validates/recovers the authority database before serving baselines. A listening endpoint or Pulsar registration does not prove recovery; until ready, return unavailable, never a temporary empty database. Polaris serves connected targets without waiting for all Stars; Star bootstrap does not wait for Astrolabe.
 
-进程启动先校验并恢复权威库, 再允许同步流取得底稿. 内部监听已经可连接或 Pulsar 已登记均不代表数据库恢复完成; 未完成时明确暂不可用, 不能返回一份临时空库基线. Polaris 不等待所有 Star 就绪才服务已经接入的目标, Star 首次恢复也不等待 Astrolabe 在线.
+Scheduling uses [batched sending/cumulative ACK](../proto/README.md#stream-batching); durable commits do not await page round trips. Concurrent recoveries may share an already prepared immutable Scope/version snapshot, without retaining another whole-database memory cache or prefreezing every Scope. Actual references govern reclamation; slow targets cannot prevent others progressing.
 
-发送调度复用 [批量发送与累计确认](../proto/README.md#stream-batching), 持久提交不等待逐页网络往返. 同一 Scope/版本的已准备不可变快照可由同期恢复共享; 共享仅用于已有准备结果, 不为缓存命中长期另存第二份全库内存底稿或预先冻结所有 Scope. 旧快照退出后按实际引用回收, 慢目标不会阻止其他目标推进到更新版本.
+Restart retains neither old memory send queues nor installed-position tables. Reconnecting Stars report actually retained complete versions; the recovered authority determines continuation, independent of new login identity. Lost streams/ACKs do not roll back installed data. Missing/lower authority versions relative to a Star are errors, not empty-state replacement. Registered but disconnected Stars remain unknown/stale, never falsely synchronized.
 
-Polaris 重启不保有上一进程的内存发送队列或安装确认表. Star 重连时报告实际保有的完整版本, Polaris 根据恢复后的同一权威库决定后续发送, 不把重新登录的进程身份当成新的数据版本空间. 同步流或确认丢失不回滚已安装数据; 权威版本缺失/低于 Star 的范围明确异常, 不按空范围静默覆盖. 未连接的已登记 Star 标记为未知/陈旧, 不伪造全网同步完成.
-
-网络调用不占用写事务或业务状态锁. 快照存续、发送缓存、历史引用与数据库读快照的资源占用均须有界, 不能通过长期保持数据库快照规避内存预算而制造无限磁盘增长. 具体分页和数据库访问实现在既定一致性边界内选择, 不为每个 Star 克隆全部历史.
+Network calls hold no write transaction/business-state lock. Snapshot lifetime, send caches, history references, and database read snapshots all remain bounded; long database snapshots cannot bypass memory budgets while causing unlimited disk growth. Pagination/storage implementation must preserve these boundaries without cloning all history per Star.
 
 <a id="assessment"></a>
 
-## 安装版本核对
+## Installed-version reconciliation
 
-持续推送之外, 默认约每 30 秒、带抖动地核对各已连接 Star 实际安装的 Scope 版本, 周期可配置, 不作为协议要求. 核对复用现有同步流和每目标恢复状态, 只交换有界的范围/版本元数据, 不新增每 Scope 定时器、独立核对 RPC 或全量内容轮询. 同一差异只驱动已有恢复任务, 不叠加多个重建.
+Alongside pushes, reconcile connected Stars' installed Scope versions approximately every 30 seconds with jitter by default. The configurable period is not a protocol requirement. Reuse the stream/per-target recovery state and bounded Scope/version metadata: no per-Scope timer, separate reconciliation RPC, or full-content polling. One discrepancy drives the existing recovery task, never duplicate rebuilds.
 
-比较 Polaris 已持久提交的权威版本与 Star 完整安装的版本. 发送完成、部分分页和入队均不算安装, 空分组仍保留版本. 落后时只修复差异范围, Star 报告超前则停止错误覆盖并诊断. 通知偶尔遗漏可由核对发现, 一个慢 Star 不阻塞其他目标或管理事务, 同数字也不能单独证明内容相同.
+Compare durable authority versions with complete installed versions, not sends, partial pages, or enqueues. Empty groups retain versions. Repair only lagging Scopes; an ahead-of-authority Star stops erroneous overwrite and triggers diagnosis. Reconciliation catches occasional missed notifications. Slow Stars block neither peers nor management commits; matching numbers alone do not prove matching content.
 
-## 文件与恢复边界
+## Files and recovery boundaries
 
-数据库路径显式配置, 与 Pulsar 的成员库分开. 不回退到临时库或内存库, 不因文件损坏、目录冲突或不支持的格式删除重建. 首次空库初始化与已有库恢复分开, 一致备份和版本迁移必须保留当前数据、空范围及其版本.
+Configure the database path explicitly, separately from Pulsar membership storage. Never fall back to temporary/in-memory storage or delete/recreate corrupt, conflicting, or unsupported databases. Initial creation differs from recovery. Consistent backup/migration preserves current data and empty Scope versions.
 
-服务级独占保证一个权威进程使用该库, 不能把 SQLite 多连接/多进程文件锁当成 Polaris 单例保证. 正常恢复保留崩溃遗留的 WAL, 在完整恢复和校验后再开放服务; 不先清理 -wal/-shm 或把尚未回写主文件的提交当成丢失. 运行中备份采用 SQLite 一致备份机制; 直接复制主文件, 或分别复制仍在变化的主文件和 WAL, 都不能作为有效备份. 首版不因此增加在线备份管理 RPC, 具体运维步骤随交付定义.
+Service-level exclusivity guarantees one authority process; SQLite file locks/multiple connections do not establish the Polaris singleton. Preserve crash-left WAL and complete recovery/validation before opening service; do not remove `-wal`/`-shm` or treat not-yet-checkpointed commits as lost. Online backup uses SQLite's consistent backup mechanism. Copying only the main file, or independently copying changing main/WAL files, is invalid. This does not add a backup-management RPC; delivery defines operational steps.
 
-从旧备份恢复不是普通进程重启, 不能拿降低后的权威版本覆盖仍保有较新版本的 Star 或宣称全群已经追平. 首版不自动执行这种回退, 发现不一致时报告并停止受影响范围的错误覆盖; 尚未设计跨全群回滚协议.
+Restoring an old backup is not a normal restart. Lower versions cannot overwrite newer Stars or prove cluster catch-up. No automatic rollback is supported; inconsistencies stop affected overwrites and are reported. No cluster-wide rollback protocol exists. Version comparison detects lag/ahead positions but not equal-version divergence after unauthorized database rollback/new writes. The first version relies on one authority and no silent rollback; it does not claim database-fork detection or backup-lineage verification.
 
-安装版本核对可以发现落后或超前, 不能单靠相同数字证明两份内容相同. 擅自回滚库后再写入可能形成同版本异内容, 不在正常重启保证内; 首版依赖唯一权威及禁止静默回滚的运维约束, 不声称已经具备数据库分叉探测或跨备份谱系验证.
+Polaris stores neither Astrolabe management accounts/sessions nor Catalog/Ephemeris. The official GORM CGO driver and WAL + FULL are implemented. [go.mod](../go.mod) pins dependencies; [schema.go](internal/storage/schema.go) validates format. New downloads require specific approval. GORM does not spread into database-free Astrolabe or SQLite-C-API Pulsar.
 
-本服务不保存 Astrolabe 管理账号或登录会话, 也不替 Star 保存 Catalog/Ephemeris. GORM 官方 CGO 驱动与 WAL + FULL 已实现; 依赖版本由 [go.mod](../go.mod) 固定, 库格式由 [schema.go](internal/storage/schema.go) 校验. 新增下载仍需取得具体授权, GORM 不扩散到无数据库的 Astrolabe 或使用 SQLite C API 的 Pulsar.
+## Implementation and validation
 
-## 实施与验证
-
-持久提交、历史裁剪、快照/增量、安装确认和进程重启已有存储、流及真实进程用例. 用例映射与仍需扩展的故障/规模场景统一纳入 [验收计划](../docs/comet.md), 最新实际证据只维护 [validation.md](../docs/validation.md); 普通回归不代表真实断电、大规模或所有交错已经验证.
+Storage, stream, and real-process cases cover commits, history trimming, snapshots/deltas, installation ACK, and restart. Case mappings and additional fault/scale scenarios belong in the [acceptance plan](../docs/comet.md); actual evidence belongs only in [validation.md](../docs/validation.md). Ordinary regression does not establish power-loss durability, large-scale behavior, or every interleaving.

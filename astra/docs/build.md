@@ -1,109 +1,123 @@
-# Astra C++26 服务
+# Astra C++26 Services
 
-当前 C++ 目标为 Linux x64 / GCC 16.2.0. 已接入 Pulsar SQLite 成员库、Go Polaris、Star 三域存储/登录/Watch、多 Star 单流恢复、Comet C++ 读写保活、必要 Go Astrolabe、指标与 Admin 管理适配. Planet 继续冻结. 当前实现边界见 [推进进度](progress.md), 构建与运行结果统一见 [验证记录](validation.md).
+Current C++ servers target Linux x64/GCC 16.2.0. Implemented paths include Pulsar SQLite membership, Go Polaris, Star's three domains/login/Watch, single-stream multinode recovery, Comet C++ writes/reads/keepalive, essential Go Astrolabe, metrics, and Admin adapters. Planet remains frozen. See [status](architecture.md#status) and [validation](validation.md).
 
-范围见 [架构](architecture.md), 源码职责见 [维护指南](../CONTRIBUTING.md), 存储见 [三域存储](../common/README.md), 时间服务见 [Pulsar](../pulsar/README.md). [Polaris](../polaris/README.md) 负责持久 Almanac, [Astrolabe](../astrolabe/README.md) 提供无自身数据库的 Go 管理入口与实时观测. 首版 SDK 是 [Comet C++](../comet/cpp/README.md), [Comet Go](../comet/go/README.md) 后续推进, 不作为 C++ 业务闭环的前置条件.
+[Architecture](architecture.md) owns scope, [maintenance](project.md) source duties, [storage](../common/README.md) native domains, and [Pulsar](../pulsar/README.md) time. [Polaris](../polaris/README.md) persists Almanac; [Astrolabe](../astrolabe/README.md) is database-free management/observation. [Comet C++](../comet/cpp/README.md) is the first SDK; [Go](../comet/go/README.md) is future work, not its prerequisite.
 
-## 运行模式与接线
+## Deployment and wiring
 
-取消架构级 standalone 分支. 单机与 All-in-One 仅是部署方式, 同样完成 Pulsar 准入及首次校准、Polaris 初始 Almanac、首轮对等连接与动态数据同步. 不因部署同机、材料缺失或依赖离线绕过初始化. 具体启动预算与已运行节点的降级规则只在 [架构](architecture.md#启动与运行) 定义.
+There is no standalone architectural fallback. Single-machine/All-in-One deployments still complete Pulsar admission/first calibration, initial Polaris Almanac, and initial peer/dynamic synchronization. Colocation, missing material, and offline dependencies cannot bypass initialization. [Architecture](architecture.md#startup-and-operation) owns startup budgets/running-node degradation.
 
-Star 业务认证与 TLS 独立配置, 目标默认均开启, 允许分别显式关闭, 配置失败不自动降级. APIKEY/APISECRET 只验证 Comet 登录, 不建立范围权限或注册所有者; 外部接口始终隔离 `__` Sector. 凭据只从 Polaris 的内部 Almanac 安装, 不再提供 standalone 凭据文件或另一份启动权威.
+Star business authentication/TLS are independent, both enabled by default and individually explicitly disableable; configuration errors never downgrade automatically. APIKEY/APISECRET authenticate login, not scope permissions/registration ownership. External entries always isolate __ Sectors. Credentials arrive only from Polaris internal Almanac, never a standalone credential file/second bootstrap authority.
 
-内部必需材料缺失或非法时明确失败, 暂时不可达时按初始化及退避规则处理. 业务 TLS 开启时必须具有有效的服务端证书和私钥, 关闭 Comet TLS 不取消基础设施链路的保护. 初始 Almanac 的合法空凭据表可以完成同步, 但认证开启时没有合法 Comet 账号就拒绝登录, 不改成匿名.
+Missing/invalid internal material fails; temporary unreachability follows initialization/backoff. Business TLS requires valid server certificate/key, and disabling it does not unprotect infrastructure. A valid empty credential table completes initial sync but, with auth enabled, rejects all Comet logins rather than allow anonymity.
 
-### 监听与配置入口
+### Listeners and configuration entries
 
-业务与内部服务使用两个独立的 gRPC Server/Builder. 不能在注册了内部服务的同一个 Server 上增加业务明文端口, 否则业务 TLS 开关会一并暴露内部 RPC.
+Business/internal services use separate gRPC Server/Builders. Adding plaintext business ports to a Server containing internal RPCs would expose those RPCs and is prohibited.
 
-| 入口 | 调用者与服务 | 控制规则 |
+| Entry | Caller/services | Controls |
 | --- | --- | --- |
-| 外部业务入口 | Comet Session, Almanac 读取, Catalog/Ephemeris 业务 | 独立认证/TLS 配置, 始终隔离 `__` Sector |
-| 内部系统入口 | 获准节点的对等流和必要内部控制 | 内部 TLS 与 Pulsar 身份, 按角色限制系统职责 |
-| 指标 HTTP 入口 | Astrolabe 读取 /metrics | 独立可选只读监听与资源预算, 不依赖外部监控系统 |
+| Public business | Comet Session, Almanac reads, Catalog/Ephemeris | Independent auth/TLS; always isolate __ |
+| Internal system | Authorized peer streams/required control | Internal TLS/Pulsar identity; role-limited duties |
+| Metrics HTTP | Astrolabe /metrics reads | Optional independent readonly listener/budget; no external monitoring prerequisite |
 
-Star 对等节点不能替 Polaris 发布 Almanac, Astrolabe 也不能绕过 Polaris 直接改写该权威数据. APIKEY 只用于普通 Comet 准入, 不等于内部服务角色. 内部监听先于公共业务开放, 以便冷启动恢复, 不等待浏览器登录或尚不可用的 Comet 会话.
+Peers cannot publish Almanac for Polaris; Astrolabe cannot bypass it. APIKEY is not an internal role. Internal listeners precede public readiness for cold recovery, independent of browser login/unavailable Comet sessions.
 
-Almanac 同步由 Star 主动连接 Pulsar 名单中的唯一 Polaris, 接收其推送并返回安装确认, 不再为 Polaris 入站灌注另开 Star RPC. 该出站同步与上述两套 Server 共用受控存储, 内部身份和 TLS 仍独立于 Comet 开关; 具体规则见 [Polaris 同步流](../proto/README.md#polaris-stream).
+Star initiates synchronization to its directory's sole Polaris, receiving pushes/reporting installation without another inbound injection RPC. The outgoing stream shares controlled storage with the two servers; internal identity/TLS remain independent of Comet switches. See [Polaris stream](../proto/README.md#polaris-stream).
 
-两套 Server 共享受控业务存储, 分别限制流数、消息、资源及退出工作. 独立 Server 不等于独占 CPU, 仍需限制快照、解析和发送工作. 鉴权前 Hello 的 4 KiB 预算不等于已鉴权消息上限; 当前内部消息默认上限为 8 MiB, 由双方声明取较小值, 也不因此取消业务预算. 长流继续采用 Callback/异步路径, 不用同步阻塞 Read 占住服务线程.
+Each server bounds streams/messages/resources/shutdown work. Separate servers do not mean dedicated CPUs; bound snapshots/parsing/sending. The preauthentication Hello limit of 4 KiB is not the authenticated-message limit. Internal messages default to 8 MiB, negotiating the smaller peer limit without removing business budgets. Long streams use callbacks/async paths rather than blocking service threads in synchronous Read.
 
-### 业务监听与材料参数
+### Business listener and material options
 
-下列业务配置已接入实现, 具体构建配置和已验证源码身份见 [验证记录](validation.md):
+These options are implemented; [validation](validation.md) identifies actual tested sources/configurations.
 
-| 参数 | 目标含义 |
+| Option | Meaning |
 | --- | --- |
-| `--listen` / `--advertise` | 保留内部节点监听和可达登记地址, 不改作 Comet 地址 |
-| `--comet=IP:PORT` | 显式启用独立业务监听, 不自动占用内部端口 |
-| `--auth=true|false` | 只控制 Comet 登录验证, 目标默认 true |
-| `--tls=true|false` | 只控制 Star–Comet TLS, 目标默认 true |
-| `--comet-identity=目录` | 外部 TLS 的 cert.pem / key.pem, 不从节点 identity 隐式借用 |
-| `--metrics=IP:PORT` | 独立只读 HTTP 指标监听, 缺省不监听, 与 Comet TLS 开关分开 |
-| `COMET_CA_FILE` CMake 缓存项 | SDK 可选嵌入的 CA 证书文件, 不是服务端私钥 |
+| --listen / --advertise | Internal listener/reachable registration address, not Comet address |
+| --comet=IP:PORT | Explicit separate business listener, never implicit internal-port reuse |
+| --auth=true\|false | Comet login only; default true |
+| --tls=true\|false | Star–Comet TLS only; default true |
+| --comet-identity=directory | External cert.pem/key.pem; never implicitly borrow node identity |
+| --metrics=IP:PORT | Separate readonly HTTP metrics; disabled by default, independent of Comet TLS |
+| COMET_CA_FILE CMake cache | Optional SDK-embedded CA, not a server private key |
 
-各入口地址冲突直接失败, 外部 TLS 关闭时显式提供 comet-identity 视为冲突配置. 不提供 --standalone、本地 credentials 引导分支或单独指定 Polaris 地址的参数. 目录查找、Almanac 接收及动态域首轮同步均已接入业务开放门, 动态来源超时按已确认的有界降级规则处理.
+Conflicting addresses fail. Explicit comet-identity with business TLS off is invalid. No --standalone, local-credentials bootstrap, or separately configured Polaris address exists. Directory discovery, Almanac intake, and initial dynamic sync gate public opening; dynamic-source timeout follows bounded degradation.
 
-SDK 信任材料的外部加载、编译嵌入与证书来源见 [Comet TLS](../comet/cpp/README.md#tls). 关闭业务 TLS 时凭据和载荷不再获得该链路的机密性, 登录本身不提供加密. 指标的实时抓取边界见 [Astrolabe](../astrolabe/README.md#实时观测), 未接入外部监控不影响业务初始化.
+[Comet TLS](../comet/cpp/README.md#tls) describes external/embedded trust and certificate provenance. Without business TLS, credentials/payloads lose confidentiality on that link; login is not encryption. See [Astrolabe observation](../astrolabe/README.md#live-observation); absence of external monitoring does not block initialization.
 
-## 构建
+## Build
 
-从仓库根目录使用现有项目工具和缓存, 不隐式下载:
+From root with existing tools/caches, without implicit downloads:
 
 ```bash
 bash build.sh build --profile debug
 bash build.sh build --profile release
 ```
 
-目标产物位于 `build/cmake/<profile>/`: C++ `star`, `planet`, `pulsar`, Go `polaris`, `astrolabe`, 以及 Comet 静态库. 已移除 C++ Astrolabe 占位程序的构建目标; Planet 继续冻结. 各构建配置的实际结果见 [验证记录](validation.md).
-Windows 可编辑和格式化源码, `build.ps1` 会明确拒绝当前不支持的平台, 不自动远程执行或切换编译器.
+Output under build/cmake/<profile>/ contains C++ star/planet/pulsar, Go polaris/astrolabe, and Comet static libraries. The C++ Astrolabe placeholder target is removed; Planet remains frozen. [Validation](validation.md) owns profile results. Windows can browse the solution/build standalone Comet; ordinary server build/test rejects Windows without automatic remote execution/compiler switching.
 
-普通构建不运行 protoc. [dependencies.lock.json](../dependencies.lock.json) 是依赖版本、来源及校验值的唯一清单; 工具在 `build/tools`, 依赖在 `build/deps/astra`.
-生成源码保存在 `common/src/generated`, 由 [协议入口](../proto/README.md#generation) 的显式命令更新; 禁止手改生成文件.
-gRPC 使用配套 BoringSSL, 不另找系统 OpenSSL. Ephemeris 恢复能力使用同一 Crypto 库, core-only 原生状态构建也需要已准备的 gRPC/Protobuf 导出前缀, 但不链接或运行 gRPC 服务. 第三方许可见 [licenses](../licenses/README.md).
+### Visual Studio and Windows adaptation
 
-`tools/build.py` 的非 core-only 构建同时要求项目内 Go 1.27.1 及已批准模块缓存. Go 子进程只使用 build/deps/go 和 build/cache/go, 设置 GOPROXY=off、GOTOOLCHAIN=local 与只读模块模式, 缺依赖明确失败. Pulsar 的 SQLite C 后端仅消费已缓存并校验的 amalgamation, 不影响 Star 的纯内存业务设计.
+Generate from Astra root with existing Python, CMake, and Visual Studio:
 
-构建和测试并行度分别通过 `--jobs` / `--test-jobs` 限制, 默认根据本次实际 CPU、可用内存及 cgroup v2 预算选择. 显式上限不会突破估算的资源预算, Go 测试与 CTest 顺序运行. 这些命令仍需本轮明确授权后才能执行.
+```powershell
+.\build.ps1 solution --prefix D:\path\to\approved\comet-msvc\install
+```
 
-`tools/prepare_dependencies.py fetch/build` 是单独的依赖准备动作, 须先获得具体下载/构建授权. 正常检查缺少工具时失败, 不代为安装.
-TSan 消费独立的 `linux-gcc16-tsan` 已插桩前缀, 不覆盖普通依赖. 正常依赖构建的虚拟内存限制不能机械套用到 TSan shadow 地址空间.
+Open build/Astra.sln. Comet, Star, Pulsar, Common, and Planet projects live in build/<Project>/; coordinator metadata in build/Astra/, without overwriting the root build/CMakeCache.txt Ninja configuration. CMake generates .vcxproj; the tool publishes .sln from actual GUIDs/configurations/paths and supports CMake versions defaulting to .slnx. Regenerate after source additions/removals.
 
-默认从当前 Astra 仓库读取源码和 `build/` 缓存. 复用旧工作区缓存必须显式设置 `ASTRA_CACHE_ROOT`, 不移动已有安装前缀和构建树.
-并行度由上述统一入口按实际资源选择, 不因虚拟机配置为 16 核便同时启动 16 个高内存编译任务.
+Ordinary solution uses LANGUAGES NONE: no compiler probe, compilation, tests, or downloads. Default --prefix is deps/comet-msvc/install under ASTRA_CACHE_ROOT (default build/). Outputs always stay in Astra/build regardless of dependency cache. Use solution --browse-only for browsing only.
 
-## 启动
+Only Release/x64 with prepared /MD dependencies is configured. Explicit Build Solution/Comet configures/builds the standalone SDK in build/Comet/native/, without tests/install. Star/Pulsar/Common/Planet are marked browse only and fail explicit builds; empty-target success is not compilation. No Debug configuration masquerades with Release dependencies.
 
-身份目录包含 `ca.pem`, `cert.pem`, `key.pem`, `admission.pub`, `login.json`. 密码保存在受保护的 login.json, 不放到命令行或日志. 仓库公开身份仅用于测试.
+solution --runtime performs experimental C++26 compilation probes for actual reflection, annotations, expansion, and contracts. Missing capabilities fail. Even supported syntax cannot unlock full services until Windows time-quality, stdout-backpressure, and database-initialization durability are implemented. No automatic browsing fallback/contract reduction. This command needs current build authorization.
+
+Nonreflection native adaptation has an independent verification project, executable with build/test authorization:
+
+```powershell
+cmake -S cmake/platform -B build/Astra/platform -G "Visual Studio 18 2026" -A x64 -DBUILD_TESTING=ON
+cmake --build build/Astra/platform --config Release --parallel 4
+ctest --test-dir build/Astra/platform -C Release --output-on-failure --no-tests=error
+```
+
+It reuses actual Clock/Filter, native timing/random/stop, Metrics HTTP state machine, and cases. Common/Star objects/artifacts live in build/Common/platform/ and build/Star/platform/. It requires no gRPC, reflection, or new tools and does not prove complete services/mixed clusters. See [Windows design](features/windows.md) and [actual results](validation.md).
+
+Ordinary builds do not run protoc. [dependencies.lock.json](../dependencies.lock.json) alone owns versions/sources/checksums; tools live in build/tools, dependencies in build/deps/astra. Committed common/src/generated is updated only through [explicit generation](../proto/README.md#generation), never hand-edited. gRPC uses bundled BoringSSL, not system OpenSSL. Ephemeris recovery capabilities use that Crypto library; core-only native state builds still require prepared gRPC/Protobuf exports but neither link nor run gRPC services. See [licenses](../licenses/README.md).
+
+Non-core-only tools/build.py also requires project Go 1.27.1/approved modules. Go children use build/deps/go and build/cache/go with GOPROXY=off, GOTOOLCHAIN=local, readonly modules; missing dependencies fail. Pulsar's C SQLite consumes only cached/checksummed amalgamation; Star business state remains memory-only.
+
+--jobs/--test-jobs separately cap concurrency selected from actual CPUs, available memory, and cgroup v2 budgets. Explicit caps cannot exceed estimated resource budgets; Go tests/CTest run sequentially. Commands still need current permission.
+
+tools/prepare_dependencies.py fetch/build is separate dependency preparation requiring specific download/build authorization. Missing tools fail without installation. TSan uses a separate instrumented linux-gcc16-tsan prefix, preserving ordinary dependencies; ordinary virtual-memory limits cannot be imposed mechanically on shadow address space.
+
+Default source/cache roots are current Astra/build. Reusing previous caches requires explicit ASTRA_CACHE_ROOT without moving installed prefixes/build trees. Sixteen configured VM cores do not justify sixteen simultaneous high-memory compilers.
+
+## Startup
+
+Identity directories contain ca.pem, cert.pem, key.pem, admission.pub, and login.json. Store passwords in protected login.json, never command lines/logs. Repository identities are tests only.
 
 ```bash
 build/cmake/debug/star --listen=192.168.0.119:7442 --super=192.168.0.119:7440 --galaxy=alpha --group=east --identity=build/deployment/star-a
 build/cmake/debug/planet --listen=192.168.0.119:7443 --super=192.168.0.119:7440 --galaxy=alpha --group=east --identity=build/deployment/planet-a
 ```
 
-C++ 当前使用 `--galaxy`; 不把旧文档的参数套到所有程序.
-`--super` 指向 Pulsar 的 Orbit 登记端口. 响应携带 Pulse 地址, Star 启动采样; 空地址时仅有连接准入, 不获得新有限租约的时间资格.
+C++ uses --galaxy; do not apply legacy arguments to every program. --super targets Pulsar Orbit admission; responses carry Pulse addresses for sampling. An empty address provides connectivity admission only, not qualification for new finite leases.
 
-TLS 1.3/h2, 跨 Go/C++ 测试证书采用 ECDSA P-256/SHA-256, 准入签名采用 Ed25519. TLS 服务端证书与签名 bearer 的职责不同.
-通配监听需提供可达 `--advertise`; 实际选项、范围和默认值见配置与 `--help`. 角色由可执行文件决定, `--worker-threads` 不支持.
+TLS 1.3/h2; cross-language test certificates use ECDSA P-256/SHA-256 and admission signatures Ed25519. TLS server certificates and signed bearers have separate duties. Wildcard listeners require reachable --advertise; actual options/ranges/defaults are in configuration/--help. Executables determine roles; --worker-threads is unsupported.
 
-服务不随 stdin 关闭退出. Linux 接收 SIGINT/SIGTERM, 停止接纳、取消并排空自有 RPC 后退出. 参数错误为 2, 运行错误为 1, 正常退出为 0.
-Planet 当前不提供业务下游服务; `initialized` 和 `upstream` 不能作为业务同步就绪标志.
+stdin closure does not stop services. Linux SIGINT/SIGTERM stops admission and cancels/drains owned RPCs before exit. Argument errors return 2, runtime errors 1, normal exit 0. Planet currently has no business downstream service; initialized/upstream are not business-sync readiness.
 
-## 验证与交付
+## Verification and delivery
 
-测试及前置构建须先获当轮授权, 命令和配置见 [测试方法](../tests/README.md). 最新结果只在 [验证记录](validation.md) 维护.
-安装目标保留根许可证和第三方授权文本, 不继承开发机 GCC RPATH. 发布需携带匹配运行库并在目标发行版验证; 当前骨架不承诺跨发行版二进制兼容或生产业务就绪.
+Tests/prerequisite builds need current authorization; see [methods](../tests/README.md) and [results](validation.md). Installation preserves root/third-party terms, excludes development GCC RPATH, and needs matching runtimes/target-distribution acceptance. Current scaffolding promises neither cross-distribution binary compatibility nor production readiness.
 
-## 独立仓库与已有缓存
+## Independent repository and existing caches
 
-所有命令从 Astra 根目录执行, 工具代码位于 `tools/`, 跨进程测试位于 `tests/`.
-默认缓存与工具路径为本仓库 `build/`; 如需复用迁移前已经批准的环境, 可以仅为本次命令设置:
+Run from Astra root; tools/ owns tooling and tests/ cross-process scenarios. Caches/tools default to build/. Explicitly reuse an approved premigration environment for one command:
 
 ```bash
 ASTRA_CACHE_ROOT=/home/ubuntu/verdandi/build bash build.sh build --profile release
 ```
 
-`ASTRA_CACHE_ROOT` 只选择已有工具和依赖, 新 CMake 目录仍为 `build/cmake/<profile>`, Go 缓存和临时产物位于本仓库 `build/`.
-旧 CMakeCache、虚拟环境和已安装前缀可能含绝对路径, 不直接改名后声称可复用, 不为迁移自动下载或重建第三方依赖.
-旧证据保留原路径及原源码身份. Astra 正式源码包不包含父目录的 SDK、缓存、凭据、日志或备份.
+ASTRA_CACHE_ROOT selects existing tools/dependencies only; new CMake output remains build/cmake/<profile> and Go caches/temporaries stay in Astra/build. Old CMakeCache, virtual environments, and installed prefixes may contain absolute paths: renaming does not prove reuse. Migration authorizes no third-party downloads/rebuilds. Old evidence retains original paths/source identity. Formal Astra source packages exclude parent SDKs, caches, credentials, logs, and backups.

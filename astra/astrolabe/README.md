@@ -1,146 +1,146 @@
 # Astrolabe
 
-Astrolabe 是 [admin/](../admin/README.md) 的 Go 管理与实时观测后端. 首版提供必要的登录、Almanac 管理和节点状态入口; 完整 Orrery 界面暂缓. [Go 入口](main.go) 连接 HTTP 管理、Polaris 代理与指标抓取, 旧 C++ 占位入口已退出构建. 实施状态见 [进度](../docs/progress.md), 实际运行和浏览器验收范围见 [验证记录](../docs/validation.md).
+[English](README.md) | [简体中文](README_CN.md)
 
-## 开发语言与数据职责
+Astrolabe is the Go management/live-observation backend for [admin/](../admin/README.md). Its first version supplies login, Almanac administration, and node status; the complete Orrery interface is deferred. The [Go entry](main.go) connects HTTP management, the Polaris proxy, and metrics collection. The old C++ placeholder is no longer built. See [implementation status](../docs/architecture.md#status) and [runtime/browser validation](../docs/validation.md).
 
-| 对象 | 归属与边界 |
+## Language and data responsibilities
+
+| Object | Ownership/boundary |
 | --- | --- |
-| 管理账号和部署参数 | 部署配置提供一个管理账号及后端接入材料, 不建立 Astrolabe 数据库 |
-| Almanac 当前数据和有界历史 | 由 [Polaris](../polaris/README.md) 的 SQLite 唯一持久保存, Astrolabe 通过管理 RPC 读取和提交 |
-| APIKEY/APISECRET | 属于内部 Almanac, 经同一 Polaris 提交与分发路径管理, 不另存一份凭据表 |
-| 管理登录会话 | 仅存在 Astrolabe 进程内存, 固定期限见 [管理会话](#管理会话) |
-| 节点与指标观察 | Pulsar 名单与各服务实际观测分别取样, 内存保存有界的最新状态, 不保存长期时序 |
+| Management account/deployment parameters | Deployment supplies one account and backend access materials; no Astrolabe database |
+| Current Almanac/bounded history | Sole durable authority is [Polaris](../polaris/README.md) SQLite; Astrolabe reads/commits through management RPC |
+| APIKEY/APISECRET | Internal Almanac, using the same Polaris commit/distribution path; no second credential table |
+| Management sessions | Astrolabe process memory only; fixed lifetime under [sessions](#management-sessions) |
+| Nodes/metrics | Pulsar directory and actual service observations are sampled separately; bounded latest state in memory, no long-term time series |
 
-Astrolabe 不引入 SQLite/PostgreSQL、GORM、文件内容源或 KV 适配层, 不再承担“先保存独立来源, 再直接发布到 Star”的双写流程. Almanac 唯一底稿属于 Polaris; 新 Catalog 的业务持久化仍由业务发布者负责. Astrolabe 不将观测视图回写为权威内容.
+Astrolabe introduces no SQLite/PostgreSQL, GORM, file-content source, or KV adapter. It does not save an independent source and then write directly to Star. Polaris alone owns the Almanac baseline; application publishers own dynamic Catalog durability. Observed views never become authoritative writes.
 
-首版 Comet C++ 不依赖 Comet Go 完成. 后续 Go SDK 可用于管理界面所需的普通业务视图, 但必要管理写入、内部凭据和 Star 启动恢复直接走内部协议, 不以 Go SDK 或前端完成为前置条件.
+The initial Comet C++ SDK does not depend on completion of Comet Go. A future Go SDK may provide ordinary business views for management, but essential writes, internal credentials, and Star bootstrap use internal protocols directly, without waiting for Go SDK/frontend completion.
 
-## 管理准入
+## Management admission
 
-基础设施沿用 Pulsar 准入与内部 TLS, 为 Polaris 和 Astrolabe 增加各自角色. Polaris 接受 Astrolabe 的管理写入; Star 的 Almanac 安装只接受 Polaris. Astrolabe 的观测身份不能绕过 Polaris 直接修改 Star 的 Almanac, 也不自动成为 Comet 会话.
+Infrastructure retains Pulsar admission/internal TLS with separate Polaris/Astrolabe roles. Polaris accepts Astrolabe management writes; Star accepts Almanac installation only from Polaris. Observation identity cannot bypass Polaris or automatically become a Comet session.
 
-不保留架构级 standalone 或同机免节点认证分支. All-in-One 只是部署 Profile, 使用同一条初始化与准入链路. Comet 的认证/TLS 开关不改变内部管理身份、传输或 `__` Sector 边界.
+There is no architectural standalone/same-host authentication bypass. All-in-One is a deployment profile using the same startup/admission chain. Comet authentication/TLS switches do not change internal management identity, transport, or `__` Sector boundaries.
 
-Astrolabe 登记实际可达的后端端点, 不使用浏览器地址、Vite 端口或静态站点地址冒充服务身份. Polaris/Astrolabe 不进入 Star 全互联、Planet 候选或业务副本数, 浏览器登录也不登记节点. Orbit 定义 Polaris/Astrolabe 明确角色及各消费者的转换, 未知角色不能退化为 Star.
+Astrolabe registers its reachable backend endpoint, not a browser address, Vite port, or static-site URL. Polaris/Astrolabe join neither Star full mesh, Planet candidates, nor business replica counts. Browser login registers no node. Orbit defines explicit roles/consumer conversions; unknown roles never degrade to Star.
 
-## 管理登录与 Admin 接入
+## Management login and Admin integration
 
-首版管理用户仅验证登录, 不引入账号分级、读写权限、Sector/Spectrum ACL 或逐按钮权限表. 已登录用户具有相同的已开放管理能力; 登录不绕过数据版本、输入校验或资源限制. 浏览器登录与后端基础设施身份分开, 不将 Pulsar 的账号、节点凭证或私钥交给前端.
+The first version authenticates management users without account tiers, read/write roles, Sector/Spectrum ACLs, or per-button permission tables. All authenticated users share the exposed capabilities, still subject to versions, validation, and resource limits. Browser authentication is separate from infrastructure identity; Pulsar accounts, node credentials, and private keys never reach the frontend.
 
-### 管理账号
+### Management account
 
-已确认使用部署配置提供的一个管理账号, 不建立账号表、在线账号 CRUD、开放注册或 Polaris 管理账号 Almanac. 配置在启动时完整加载和校验; 缺失或非法时不能退化为免登录. 首版修改该账号通过更新部署配置并重启 Astrolabe 生效, 原内存会话随进程结束失效, 不增加热重载撤销协议.
+Deployment provides one account, without account tables, online CRUD, public signup, or Polaris-hosted management-account Almanac. Startup fully loads/validates configuration; missing/invalid settings cannot enable anonymous access. Account changes require deployment update and Astrolabe restart, invalidating memory sessions without adding hot-reload revocation.
 
-账号包含 username、salt、hash. 密码摘要参数复用 [Pulsar 既定规则](../pulsar/README.md#启动与已有材料), 配置保存摘要而非明文密码, 不自动导入节点 login.json、Pulsar accounts.json 或 Comet APISECRET. Go 使用相同摘要与比较语义, 不通过 C ABI 链接 C++ 身份实现.
+The account contains username/salt/hash. Password hashing follows [Pulsar parameters](../pulsar/README.md#startup-and-existing-materials); configuration stores a digest, never plaintext. Do not import node login.json, Pulsar accounts.json, or Comet APISECRET automatically. Go uses identical hashing/comparison semantics without a C ABI link to C++ identity code.
 
-登录输入和并发数有界, 密码派生不持有会话表锁, 正常请求只检查内存会话. 浏览器不取得密码摘要或服务接入材料. 登录本身不依赖 Pulsar/Polaris 在线; 某个管理操作是否可用仍取决于该后端的准入和目标状态, 登录成功不能伪装依赖已经就绪.
+Bound login input/concurrency; password derivation holds no session-table lock. Ordinary requests check memory sessions only. Browsers receive neither hashes nor service access materials. Login itself requires neither Pulsar nor Polaris online; individual management operations still depend on admission/target readiness. Login success is not dependency readiness.
 
-### 管理会话
+### Management sessions
 
-已确认仅在当前 Astrolabe 进程内存保存不透明会话, 自登录成功签发起固定有效 8 小时. 活动、状态查询和页面刷新不滑动续期, 不增加 refresh token、JWT 或会话数据库. 到期需重新登录, 显式注销及进程重启使相应会话失效; 浏览器仍持有 Cookie 不能恢复已消失的服务端会话.
+Opaque sessions exist only in the current process and expire exactly eight hours after successful issuance. Activity, status requests, and refresh do not extend them. No refresh token, JWT, or session database. Expiry requires login; logout/process restart invalidates corresponding sessions, regardless of a retained browser Cookie.
 
-凭据由可靠随机源生成并检查活动表冲突, 不采用用户名、时间戳或递增编号. 使用 HttpOnly Cookie 携带, 不向前端返回可存入 localStorage 的会话 token. HTTPS 使用 Secure, Cookie 绑定后端主机且不配置共享 Domain; Path、SameSite 和删除属性使用一致配置. 浏览器 Cookie 寿命不超过服务端剩余会话期限, 服务端仍在每次请求接纳时检查真实截止.
+Generate credentials from reliable randomness and check active-table collisions; never derive from username, timestamps, or counters. Use HttpOnly Cookies, not frontend tokens for localStorage. HTTPS uses Secure. Cookies bind to the backend host without shared Domain; Path, SameSite, and deletion attributes are consistent. Cookie lifetime cannot exceed remaining server lifetime, and every admitted request checks actual server deadline.
 
-登录、会话总数及清理工作有界. 注销先使内存会话失效, 再清 Cookie, 重复注销保持幂等; 已受理的 Polaris 写入不会因注销、过期或页面关闭而自动回滚. 页面关闭不主动注销其他标签页. 首版不跨 Astrolabe 实例共享会话, 相同账号配置不能让另一实例接受该 token; 部署需固定后端或明确重新登录.
+Login, total sessions, and cleanup are bounded. Logout invalidates memory state before deleting Cookie and is idempotent. Already-admitted Polaris writes do not roll back on logout, expiry, or page close. Closing one page does not log out other tabs. Sessions are not shared across Astrolabe instances; equal account configuration does not make another instance accept a token. Deployment must pin a backend or require explicit relogin.
 
-### 同源与跨源部署
+### Same-origin and cross-origin deployment
 
-首版同时支持浏览器同源和显式配置的跨源部署. Admin 的后端地址与允许的前端 Origin 分开配置; Origin 按规范化后的 scheme/host/port 精确匹配, 不用字符串后缀、任意反射或 * 放行带凭据请求, null Origin 不受信任. 同源代理和跨源直连共用一套登录与业务 API.
+Both same-origin and explicitly configured cross-origin browsers are supported. Configure Admin's backend URL separately from allowed frontend Origins. Match normalized scheme/host/port exactly, never suffixes, arbitrary reflection, or `*` for credentialed requests. `null` Origin is untrusted. Same-origin proxies and cross-origin connections share login/business APIs.
 
-跨源请求显式使用 credentials: include. 服务端仅对匹配的 Origin 返回对应 Access-Control-Allow-Origin、Access-Control-Allow-Credentials: true 和 Vary: Origin, 方法与请求头也使用明确名单; 允许来源的错误响应同样携带 CORS 信息. OPTIONS 预检不要求登录 Cookie, 只校验来源、方法和头部, 不执行管理副作用或视为登录成功. 协议约束见 [Fetch 标准](https://fetch.spec.whatwg.org/#cors-protocol-and-credentials).
+Cross-origin clients use `credentials: include`. For allowed Origins only, return matching Access-Control-Allow-Origin, Access-Control-Allow-Credentials: true, and Vary: Origin, with explicit method/header allowlists. Allowed-origin error responses also carry CORS headers. OPTIONS needs no login Cookie, checks only origin/method/headers, causes no management side effect, and proves no login. See the [Fetch standard](https://fetch.spec.whatwg.org/#cors-protocol-and-credentials).
 
-Cookie 的跨源与跨站不是同一个概念. 同站部署可以使用 SameSite=Lax; 需要跨站 Cookie 时必须显式使用 SameSite=None; Secure, 经 HTTPS 接入. 浏览器仍可能阻止第三方 Cookie, 不能承诺通过 CORS 配置绕过; 应明确报告会话未建立, 部署可改用同站域名或同源代理, 不静默改为 URL token、localStorage 或免登录. 参见 [Cookie 属性](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie) 与 [浏览器 Cookie 策略](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS#third-party_cookies).
+Cross-origin differs from cross-site. Same-site deployments may use SameSite=Lax; cross-site Cookies explicitly require SameSite=None; Secure over HTTPS. Browsers may still block third-party Cookies; CORS cannot bypass that policy. Report session establishment failure and use same-site domains/proxies if appropriate, never silently switch to URL tokens, localStorage, or anonymous access. See [Cookie attributes](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie) and [browser policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS#third-party_cookies).
 
-修改操作、登录和注销由服务端在产生副作用前校验 Origin, 并要求非简单请求头; 不只依赖浏览器是否允许读取响应. 缺失或不允许的 Origin 拒绝这些浏览器写入请求, GET/HEAD 不修改数据. 来源校验不能替代 Cookie 登录; 代理只能信任显式配置的转发来源, 不从任意 Host/Forwarded 推导可信站点. 具体头名和 HTTP 字段随接口定义固定.
+Writes, login, and logout validate Origin and require a nonsimple header before side effects, independently of whether browsers can read responses. Missing/disallowed Origin rejects these browser writes. GET/HEAD do not mutate. Origin checking does not replace Cookie authentication. Trust proxy forwarding only when explicitly configured, not arbitrary Host/Forwarded values. Interface definitions fix concrete headers/fields.
 
-## Almanac 编辑与同步发布
+## Almanac editing and distribution
 
-### 内容来源
+### Content source
 
-Polaris 保存唯一权威底稿, Astrolabe 读取其明确版本的内容供管理编辑. Star 的业务视图用于观察实际安装情况, 不能作为 Polaris 的新权威底稿. 不因 Star 缺失、落后或不可达推导管理 Delete, 不用界面搜索、分页或失败的读取结果清空整个 Scope.
+Polaris owns the authoritative baseline; Astrolabe reads an explicit version for editing. Star views observe installation, never supply a new Polaris authority baseline. Missing/lagging/unreachable Stars cannot imply Delete; UI search, pagination, or failed reads cannot clear a Scope.
 
-管理入口保留单 Key Set/Delete, 并支持 POST 请求的 `changes` 数组原子提交同 Scope 的多个唯一键. 数组条目为 `{key, value}` (base64) 或 `{key, erase:true}`, 外层共用 sector、spectrum、version, 与旧单键字段互斥. Almanac 批次不设 Key 数量或总字节上限, HTTP 正文也不另设批次上限; 单条 value 仍遵循原有 1 MiB 约束, 配置的存储容量和请求截止继续生效. Astrolabe 使用 `Authority.Batch` 分页提交, 完整标记与正常 EOF 后才提交一次事务. 空 Buffer 与 Delete 分开; 内部凭据范围不开放此批次入口. 当前 Admin 界面仍按单键编辑, 新批次由 HTTP API 提供. 首版不增加文件、数据库和 KV 导入适配器, 也不通过此入口替业务持久化动态 Catalog.
+Management retains single-key Set/Delete and accepts an atomic POST `changes` array for unique keys in one Scope. Entries are `{key, value}` with Base64 or `{key, erase:true}`; outer sector/spectrum/version are shared and mutually exclusive with old single-key fields. Almanac imposes no batch key-count/total-byte cap and no separate HTTP batch-body cap. Individual values retain 1 MiB limits; configured storage capacity/request deadlines still apply. Astrolabe pages through `Authority.Batch`, committing once after completion plus normal EOF. Empty Buffer differs from Delete; internal credentials do not expose batching. Admin UI still edits one key; batching is available through HTTP API. No file/database/KV import adapters or dynamic Catalog business persistence are added.
 
-### 编辑保存与发布
+### Saving and publishing
 
-管理请求从 Astrolabe 同步调用 Polaris, 只有确认持久提交才能返回“已提交”. Polaris 入队、Star 内存安装或 Watch 观察都不替代这一确认. 管理接口分别呈现持久提交位置与各 Star 的安装进度, 不等待全部 Star 同步完毕才确认一次合法写入.
+Management calls Polaris synchronously and returns “committed” only after durable confirmation. Polaris enqueue, Star memory installation, and Watch observation do not replace it. Report durable position separately from each Star's installation; a valid commit does not wait for every Star.
 
-并发编辑仍受 Almanac 分组的版本条件约束, 不能因为只有一个 Polaris 进程就把所有旧编辑当成合法覆盖. 冲突时明确返回并由调用方重新读取和决定, 不自动换成最新版本强行重发. 具体管理请求字段与回执由内部协议统一定义.
+Concurrent edits obey group-version conditions even with one Polaris process. Report conflicts for caller reread/decision; do not substitute latest version and resend stale edits. Internal protocol defines requests/receipts.
 
-超时、断链或 Astrolabe 重启可能发生在 Polaris 提交之后, 因此结果不确定不等于未提交. 不回滚已确认内容, 不由 Astrolabe 保存第二份持久任务队列, 不通过 Watch 回调反复发布. 原结果只能依据原操作的有效证据确认, 当前内容或版本相同不自动证明历史请求曾经提交.
+Timeout, disconnect, or Astrolabe restart may follow Polaris commit, so uncertain is not uncommitted. Do not roll back confirmed data, maintain another durable task queue, or republish through Watch callbacks. Only valid evidence for the original operation confirms its outcome; equal current content/version alone is insufficient.
 
-原子批次遇到任一确定失败全部回滚, 结果不确定仍须用完整请求确认. 多次独立单 Key 提交遇到冲突、失败或结果不确定时停止该轮后续操作, 保留已确认部分. 原不确定结果不会因后续新编辑成功而改写. Polaris 的有界历史不保证永久保留任意旧操作的重试证据, 首版没有任意版本回滚接口.
+Any definite atomic-batch failure rolls back everything; uncertain outcomes require the complete request for confirmation. For independent single-key sequences, conflict/failure/uncertainty stops later operations in that round while preserving confirmed prefixes. Later successful edits do not rewrite an earlier uncertain outcome. Bounded Polaris history does not permanently retain every retry proof, and no arbitrary-version rollback API exists.
 
-### Star 启动恢复
+### Star bootstrap recovery
 
-Star 从 Polaris 接收保留权威版本的完整 Almanac 基线, 包括合法空集合和内部凭据. 恢复不等待浏览器登录、Astrolabe 页面打开或 Comet Go 订阅; 初始化顺序和降级边界只在 [架构](../docs/architecture.md#启动与运行) 定义.
+Star receives a complete version-preserving Almanac baseline from Polaris, including valid empty sets/internal credentials. Bootstrap waits for neither browser login, an open Astrolabe page, nor Comet Go subscription. [Architecture](../docs/architecture.md#startup-and-operation) owns startup/degradation ordering.
 
-Polaris 为空时也必须明确完成空基线, 不能把读取失败当成空库. 认证开启但没有 Comet 凭据时拒绝业务登录; Astrolabe 仍可凭独立内部身份向 Polaris 写入首批凭据. Star 无需开放公共 `__` 访问来解除引导依赖.
+An empty Polaris still explicitly completes its baseline; failed reads are not empty databases. With authentication enabled and no Comet credentials, business login fails. Astrolabe can install initial credentials through independent internal identity. Star need not expose public `__` access to break a bootstrap cycle.
 
-## Comet 凭据管理
+## Comet credential management
 
-APIKEY/APISECRET 记录属于 `Almanac["__auth"]["comet"]`, 每个 APIKEY 对应一个完整凭据记录, 经 Polaris 持久提交再分发. 不包含 Grant、逐范围权限或注册所有者; 普通 Comet 登录后可访问全部普通业务数据, `__` Sector 仍由 Star 的外部入口拒绝.
+APIKEY/APISECRET belong to `Almanac["__auth"]["comet"]`, one complete credential per APIKEY, committed durably by Polaris then distributed. There are no Grants, per-Scope permissions, or registration owners. Authenticated Comet can access all ordinary business data; Star's external entry still rejects `__` Sectors.
 
-管理面使用内部结构校验凭据, 普通 Buffer 可为空不代表凭据必需字段可为空. Star 安装凭据时, 记录、已安装版本、登录查找索引与必要会话失效共同生效, 不提前确认安装. 只需要 APIKEY 查找, 不构建各域/Sector/Spectrum 权限位图; 凭据字段与容量归 [内部协议](../proto/README.md#credentials).
+Management validates internal credential structure; ordinary empty Buffer legality does not make required credential fields optional. Star atomically installs records, version, login index, and required session invalidation before ACK. Only APIKEY lookup is needed, not domain/Sector/Spectrum permission bitmaps. [Protocol](../proto/README.md#credentials) owns fields/capacity.
 
-### 凭据生命周期
+### Credential lifecycle
 
-部署的 APIKEY/APISECRET 长期有效, 由管理面显式轮换或撤销, 不设自动过期或周期重登录. 每个 APIKEY 只有一个有效 SECRET, 不设新旧重叠窗口. 连续安装新 SECRET 或删除 APIKEY 后使对应旧 Session 失效并结束关联订阅; 连续同值更新和相同安装版本的重放不误关连接.
+Deployed APIKEY/APISECRET remain valid until explicit rotation/revocation, without automatic expiry/periodic login. Each APIKEY has one active SECRET, no overlap window. Contiguous installation of a new SECRET or deletion invalidates old Sessions and associated subscriptions. Same-value contiguous updates and replay at the same installed version do not incorrectly close connections.
 
-Polaris 持久提交与各 Star 安装不是同一瞬间, 未收到更新的 Star 不承诺同时撤销, 已发送数据不可收回. 暂时失联时 Star 使用已安装凭据, 不改为匿名, 不为每个 Comet 请求回查 Polaris. 凭据轮换和会话检查的并发边界由协议闭合, 不以取消逐范围权限为由接受失效会话.
+Polaris durability and Star installation are not simultaneous. Unupdated Stars cannot promise simultaneous revocation, and sent data cannot be recalled. During disconnection, Stars use installed credentials without anonymous fallback or per-request Polaris lookup. Protocol closes rotation/session-check races; removing per-Scope permissions does not permit stale Sessions.
 
-删除后重建同名 APIKEY 只允许新的登录, 不复活旧 Session, 不重置业务版本/操作顺序或重新获得 TTL. APIKEY 不是 Ephemeris 所有权或 Catalog 发布权威. SDK 自己的活跃对象仍按其原身份、期限和目标恢复, 不因同名凭据出现就自动接管任意 UUID.
+Deleting/recreating an APIKEY allows new login only, not old-session resurrection, version/order reset, or renewed full TTL. APIKEY is neither Ephemeris ownership nor Catalog authority. SDK objects recover under original identity/deadlines/targets; a reused credential name does not authorize arbitrary UUID takeover.
 
-若 Star 跳过中间历史安装较新完整凭据快照, 已确认让该 Star 全部旧 Comet Session 重新认证, 包括最终 SECRET 未变的账号. 接受这一恢复时的影响以保持 Credential 只有 secret, 不新增逐账号身份标记; 安装原子性、重复快照及 SDK 恢复只在 [凭据快照](../proto/README.md#credential-snapshot) 定义.
+When a Star skips intermediate history and installs a newer complete credential snapshot, all its old Comet Sessions must reauthenticate, even if final SECRET is unchanged. This accepted recovery cost keeps Credential secret-only without per-account identity markers. [Credential snapshots](../proto/README.md#credential-snapshot) alone define installation atomicity, duplicate snapshots, and SDK recovery.
 
-APISECRET 如何交给业务属于部署流程. Comet 不取得凭据表, 不从 Astrolabe/Pulsar 查询 SECRET; SDK 的本地 SECRET 更新不回写 Polaris. 服务密码、摘要、私钥、APISECRET 和会话 token 不进入日志、URL、命令行、错误、指标或前端普通拓扑响应.
+Deployment distributes APISECRET to applications. Comet gets no credential table and queries neither Astrolabe nor Pulsar for SECRET. Local SDK SECRET replacement does not update Polaris. Service passwords, hashes, private keys, APISECRET, and session tokens belong in neither logs, URLs, CLI, errors, metrics, nor ordinary frontend topology responses.
 
-## 实时观测
+## Live observation
 
-Astrolabe 从 Pulsar 的 [只读成员查询](../proto/README.md#directory) 取得名单, 复用进程内有界缓存, 再观察各服务的实际连接、就绪和同步状态. 浏览器刷新不直接触发一次新的 Pulsar 查询. 登记存在不等于在线, 抓取失败不等于已经确认节点退出; 观察携带采样时间与成功/未知/陈旧状态. 不依据一次失败自动删除成员、改写 Almanac 或切换发布权威.
+Astrolabe caches a bounded [read-only Pulsar directory](../proto/README.md#directory), then independently observes real connection/readiness/synchronization state. Browser refresh does not initiate a new Pulsar query. Registration is not online status; failed scrape is not confirmed exit. Observations include sampling time and success/unknown/stale state. One failure never automatically deletes membership, rewrites Almanac, or switches authority.
 
-Star 已编写独立只读 HTTP GET /metrics, 使用 Prometheus 文本格式, Astrolabe 直接抓取用于实时展示. 首版不部署或依赖 Prometheus/Grafana, 不保存长期指标时序, 不另建私有指标 gRPC. 标准格式为未来外部接入保留可能, 不扩大当前实施范围.
+Star implements independent read-only HTTP GET `/metrics` in Prometheus text format, directly scraped by Astrolabe. The first version deploys/requires neither Prometheus nor Grafana, stores no long-term series, and adds no private metrics gRPC. Standard formatting permits future integrations without expanding current scope.
 
-指标入口默认关闭, 显式配置监听后启用; 本机绑定回环地址, 跨机使用明确受保护的网络或代理. 它与业务/内部 gRPC 的服务注册和资源预算分开, 不因 Comet 关闭认证/TLS 而扩大暴露范围, 也不承载管理写入或敏感转储.
+Metrics are disabled by default and require explicit listening configuration. Use loopback locally and protected networks/proxies across hosts. Service registration/resource budgets are separate from business/internal gRPC. Disabling Comet authentication/TLS cannot widen metrics exposure. This endpoint carries neither management writes nor sensitive dumps.
 
-首版实际暴露八个固定状态 gauge, 不声称已有请求计数或固定桶直方图; 标签只使用有限方法、状态和角色集合, 不使用 APIKEY、UUID、Key 或任意 Sector/Spectrum. 指标随事件维护, 不为每次抓取遍历全部分组或保留逐请求样本. 抓取并发、缓冲和单次等待有界, 覆盖范围是可信目录中的全部 Star; 单个结果完成即发布, 整轮耗时仍随节点数量和延迟变化. 不将业务估算字节冒充 RSS.
+Eight fixed state gauges are currently exposed, not request counters/fixed-bucket histograms. Labels use bounded method/state/role sets, never APIKEY, UUID, Key, or arbitrary Sector/Spectrum. Event-maintained metrics do not scan every group per scrape or retain per-request samples. Scrape concurrency/buffers/waits are bounded. Every trusted-directory Star is covered; individual results publish as they complete, but round duration varies with count/latency. Business-accounted bytes are not RSS.
 
-Admin 经适配层消费这些结果, Three.js 渲染器不持有基础设施凭据或参与恢复. 真实后端与演示模式显式分开, 后端不可达或数据陈旧时不静默回退为演示成功. 必要管理 API 与完整星图界面分别交付.
+Admin consumes results through an adapter. Three.js owns no infrastructure credentials/recovery. Live backend and demo modes are explicit; unavailable/stale data never silently becomes demo success. Essential management APIs and complete map UI are separate deliveries.
 
-## 实施与验收边界
+## Implementation and acceptance boundaries
 
-单管理账号、8 小时内存会话、同源/跨源规则、经 Polaris 持久提交和直接实时观测已经确认. 管理与目录接口见下节, 首版不扩展为账号系统、通用内容导入平台或外部监控集成.
+One management account, eight-hour memory sessions, origin rules, Polaris durability, and direct observation are confirmed. Interfaces follow below; scope is not expanded into an account platform, universal importer, or external monitoring integration. [Acceptance](../docs/comet.md) follows current domains/contracts. Old Astrolabe database, direct-Star writes, Grant, and standalone cases are not new-feature acceptance. HTTP, real-process, and browser validation have baselines; current evidence/unverified changes live only in [validation](../docs/validation.md).
 
-[验收规约](../docs/comet.md) 按三域和本页边界维护, 旧 Astrolabe 数据库、直接写 Star、Grant 和 standalone 用例不作为新功能通过标准. 管理 HTTP、真实进程与浏览器已有验证基线, 执行证据和后续未验证改动只维护 [最新验证](../docs/validation.md).
+## HTTP API and current parameters
 
-## HTTP 接口与当前参数
+Parameters include `--listen=IP:PORT`, optional `--advertise`, `--super=IP:PORT`, `--galaxy`, `--group`, `--identity=directory`, `--account=digest-file`, and `--public=https://management-api-origin`. Management defaults to TLS 1.3 with deployed certificates. `--http` permits loopback only for a separately configured reverse proxy. `--public` determines Cookie Secure without trusting arbitrary Forwarded headers. `--origins` adds comma-separated browser origins; explicit `--crosssite` requires an HTTPS public origin. Memory sessions default to at most 4096, reducible with `--sessions`.
 
-源码中的基础参数为 `--listen=IP:PORT`, 可选 `--advertise`, `--super=IP:PORT`, `--galaxy`, `--group`, `--identity=目录`, `--account=摘要文件`, `--public=https://管理API来源`. 默认管理端 TLS 1.3, 使用明确部署的证书目录; `--http` 只允许回环监听, 供单独配置的反向代理使用. `--public` 决定 Cookie 的 Secure 属性, 不读取任意 Forwarded 头. `--origins` 可列出额外的逗号分隔浏览器来源; 显式跨站配置为 `--crosssite`, 只允许 HTTPS 公共来源. 默认最多 4096 个内存会话, 可用 `--sessions` 降低.
+All mutations require allowed `Origin` and `X-Astra-Request: 1`. JSON uses `application/json`, rejecting duplicate/unknown fields. Authenticated reads use the same `astra-session` Cookie. Management versions are decimal strings, never JavaScript Number conversions. Writes are not automatically retried; `effect` is `committed`, `unapplied`, or `unknown`.
 
-所有修改请求必须使用允许的 `Origin` 与 `X-Astra-Request: 1`; JSON 正文采用 `application/json`, 不接受重复/未知字段. 已登录的管理读取也使用同一 `astra-session` Cookie. 管理版本使用十进制字符串, 不经 JavaScript Number 转换. API 不自动重试写入, `effect` 分为 `committed`, `unapplied`, `unknown`.
-
-| 方法与地址 | 请求与结果 |
+| Method/path | Request/result |
 | --- | --- |
-| `POST /api/session` | `username`, `password`; 成功只设置 HttpOnly Cookie 并返回 username/expires, 不返回 token 正文 |
-| `GET /api/session` | 返回当前用户名与固定期限, 不续期 |
-| `DELETE /api/session` | 幂等注销并清除相同作用域 Cookie |
-| `GET /api/metrics` | 返回最近抓取的 samples, 含实例 id、采样/尝试时间、stale 与固定数值字符串; 不由请求触发网络抓取 |
-| `GET /api/nodes` | 缓存目录的脱敏成员与 observed/stale, 不包含在线断言、principal、密码或签名材料 |
-| `GET /api/almanac` | Polaris 的完整分组清单, 每项 sector/spectrum/version |
-| `GET /api/almanac?sector=...&spectrum=...` | 单分组 NDJSON 快照; 普通行 key/value, value 为 Base64; 最终行 complete/position |
-| `POST /api/almanac` | sector/spectrum/key/version, 以及二选一的 Base64 value 或 erase=true; 成功 position 只来自 Polaris 的持久确认 |
+| `POST /api/session` | username/password; success sets HttpOnly Cookie and returns username/expires, never a token body |
+| `GET /api/session` | Current username/fixed expiry, without renewal |
+| `DELETE /api/session` | Idempotent logout/deletion of the same-scope Cookie |
+| `GET /api/metrics` | Latest samples: instance ID, sample/attempt time, stale flag, fixed numeric strings; no request-triggered scraping |
+| `GET /api/nodes` | Redacted cached members and observed/stale, without online claims, principal, passwords, or signing materials |
+| `GET /api/almanac` | Complete Polaris group inventory: sector/spectrum/version |
+| `GET /api/almanac?sector=...&spectrum=...` | One-group NDJSON snapshot: key/value rows with Base64 values, then complete/position |
+| `POST /api/almanac` | sector/spectrum/version plus single key and Base64 value or erase=true; alternatively the mutually exclusive `changes` batch described above. Success position comes only from Polaris durability |
 
-合法空 value 为 `""`, 不等于删除. 每次管理提交仍受 Polaris 的严格版本规则约束. 快照读取不在 Astrolabe 保存第二份完整底稿: 逐页接收、逐行输出, 最终 `complete: true` 只在源 gRPC 正常结束后发送. HTTP 中途关闭、错误行、缺少最终行都表示本次快照不完整, 接入方必须丢弃暂存而不是清空旧视图. 对内部凭据的 Buffer 编码使用 [Credential](../proto/README.md#credentials), 不把普通配置转为默认凭据.
+Valid empty value is `""`, not deletion. Strict Polaris version rules apply to every commit. Astrolabe retains no second complete baseline: receive pages, emit rows, and emit final `complete: true` only after normal source gRPC termination. HTTP closure, error rows, or missing completion mean incomplete snapshot; consumers discard staging instead of clearing old views. Internal credential Buffers encode [Credential](../proto/README.md#credentials), never reinterpret ordinary settings as default credentials.
 
-实现初值为最多 4 次并发 KDF、16 个普通管理请求和 2 个完整快照流. 密码计算不占会话表锁; 单个修改 RPC 5 秒、快照总接收 30 秒, 慢 HTTP 写入受独立服务器期限约束. 这些限制是工程初值, 尚未测量吞吐、尾延迟或 RSS.
+Initial limits are four concurrent KDFs, sixteen ordinary management requests, and two full snapshot streams. Password work holds no session lock. Mutation RPC deadline is five seconds; total snapshot reception is thirty seconds; slow HTTP writes have separate server deadlines. These are engineering defaults without measured throughput/tails/RSS qualification.
 
-凭据管理使用 POST `/api/credentials`, JSON 为 `key`, 正十进制字符串 `version`, 以及 Base64 `secret` 或 `erase: true` 二选一. 编码内部 Credential 由 Astrolabe 负责, 不要求浏览器维护 Protobuf. GET `/api/credentials` 返回分行的 APIKEY 与 `redacted: true`, 最后仍需完整标记和范围版本; 通用 Almanac 对 `__auth/comet` 的读取同样脱敏, 不通过另一 URL 返回已存储的 SECRET. 普通配置范围仍返回 Base64 value.
+`POST /api/credentials` accepts key, positive decimal-string version, and either Base64 secret or erase:true. Astrolabe encodes internal Credential; browsers need no Protobuf handling. `GET /api/credentials` streams APIKEY/redacted:true rows plus final completion/version. Generic Almanac reads of `__auth/comet` also redact, never exposing stored SECRET through another URL. Ordinary scopes return Base64 values.
 
-指标目标通过可选 `--metrics=metrics.json` 明确部署, 文件为 `{ "Star内部IP:端口": "http://指标IP:端口/metrics" }`. 不设置独立的 64 节点采集上限; 配置文件整体以 8 MiB 限制异常输入, 已配置且位于可信目录的 Star 全部参与采样. 管理响应覆盖目录中的全部 Star, 未配置、尚未成功采集或刚替换的实例返回空数值并显示“未采集”; 不因缺少采样而隐去节点. 前端沿用完整目录的响应容量, 不另截断为 64 项.
+Optional `--metrics=metrics.json` explicitly maps `{ "Star-internal-IP:port": "http://metrics-IP:port/metrics" }`. There is no separate 64-node collection cap. The file has an 8 MiB malformed-input bound; all configured trusted Stars participate. Responses cover every directory Star, retaining unconfigured/uncollected/replaced instances with empty values and “not collected,” rather than hiding them. Frontend capacity follows the full directory, without truncating at 64.
 
-允许 HTTPS 受保护代理, 使用部署 CA; 不跟随重定向、不读取环境代理、不向指标端发送节点 bearer. 四个工作者、单请求两秒、单端正文 64 KiB; 空闲连接池按部署目标数量保留, 不将池容量与同时发起的请求数混淆. 每轮完成后按五秒定时器继续, 不承诺任意规模都在五秒内完成一轮. 结果安装时通过与目录同边界发布的端点/实例索引拒绝迟到旧实例. 失败保留同一实例的旧值并标陈旧, 超过 15 秒未成功抓取也标陈旧.
+HTTPS protected proxies may use the deployment CA. Scraping follows no redirects/environment proxies and sends no node bearer. Four workers, two-second requests, and 64 KiB per-endpoint bodies bound work. Idle pool capacity follows target count, not concurrent request count. A five-second timer follows each completed round; arbitrary-size rounds are not promised within five seconds. Installation checks an endpoint/instance index published at the same directory boundary to reject late old-instance results. Failure retains same-instance old values marked stale; no successful scrape for fifteen seconds also marks stale.
 
-当前 Orbit Member 仅公布内部 gRPC 端点, 没有指标地址字段. 指标自动发现尚未接入, 仍需上述部署映射; 不按相邻端口猜测, 不扫描未知地址. Pulsar/Polaris 等角色当前只有目录观察, 不伪造其尚未提供的 Star 指标.
+Orbit Member currently advertises only internal gRPC endpoints, not metrics addresses. Automatic metrics discovery is unimplemented: use explicit mapping, never adjacent-port guesses or unknown-address scans. Pulsar/Polaris currently have directory observation only; do not invent Star metrics for them.
 
-Star 每秒至多生成一次固定快照, 抓取不访问业务锁; 控制循环超过十秒未更新时拒绝提供旧成功响应. 当前指标为 astra_ready、astra_almanac_ready、astra_clock_ready、astra_clock_synchronized、astra_clock_uncertainty_nanoseconds、astra_members、astra_sessions、astra_recovery_bytes. 最后一项是复制恢复的逻辑计费, 不是 RSS; 全局 Almanac ready 也不是每 Scope 已安装版本.
+Star generates at most one fixed snapshot per second without business-lock access during scraping. If its control loop has not updated for ten seconds, it refuses stale success. Gauges are astra_ready, astra_almanac_ready, astra_clock_ready, astra_clock_synchronized, astra_clock_uncertainty_nanoseconds, astra_members, astra_sessions, and astra_recovery_bytes. Recovery bytes are logical accounting, not RSS; global Almanac ready is not per-Scope installed version.

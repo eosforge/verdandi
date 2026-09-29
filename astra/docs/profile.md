@@ -1,147 +1,185 @@
-# C++ 功能探针与时钟诊断
+# C++ Probes and Clock Diagnostics
 
-实现位于 [profile.hpp](../common/include/astra/profile.hpp), 离线分析入口为 [profile.py](../tools/profile.py). 探针用于定位成本, 性能排名仍使用关闭探针的生产构建. 运行任何构建、测试、微基准或真实负载前取得本轮授权, 结果只写入 [validation.md](validation.md).
+Implementation: [profile.hpp](../common/include/astra/profile.hpp); offline analysis: [profile.py](../tools/profile.py). Probes locate costs; performance rankings use production builds with probes compiled out. Builds/tests/microbenchmarks/real workloads require current authorization; results belong in [validation.md](validation.md).
 
-## 构建与采集
+## Build and collection
 
-`ASTRA_PROFILE` 默认 `OFF`. 关闭时宏直接消除参数、计时、TLS、记录状态和诊断成员, 不依赖优化器删掉运行期分支. 不改变公共 SDK API、业务协议、锁的生存期或调度额度. 开启只影响手写 C++, 不对生成代码和第三方插桩. Comet 单独 CMake 构建也使用相同开关; 诊断版静态 SDK 内仍有探针, 发布使用关闭构建.
+ASTRA_PROFILE defaults OFF. Disabled macros eliminate arguments, timing, TLS, recording state, and diagnostic members directly, without relying on optimizer removal of runtime branches. Public SDK APIs, protocols, lock lifetimes, and scheduling budgets stay unchanged. Instrument handwritten C++ only, not generated/third-party code. Standalone Comet uses the same switch; diagnostic static SDKs retain probes, releases use OFF.
 
-获得授权后可使用以下独立构建目录, 不覆盖普通基线或触发工具下载:
+With authorization, build separately without overwriting baselines/downloading tools:
 
 ```bash
 bash build.sh build --profile release --probes
 ```
 
-环境仅作用于被测子进程, 不修改系统或用户配置. 调用方在项目 `build/` 下创建每轮独立绝对目录, 在启动 Star/Comet/Pulsar 前设置:
+Set environment only for tested children, never user/system-wide. Create a distinct absolute directory beneath project build/ for each run before starting Star/Comet/Pulsar:
 
-| 环境项 | 默认值 | 边界 |
+| Variable | Default | Boundary |
 | --- | --- | --- |
-| `ASTRA_PROFILE_DIR` | 未设置, 不记录 | 已存在的绝对目录, 每进程独立 `<pid>.profile`, 同名文件存在即拒绝覆盖 |
-| `ASTRA_PROFILE_GROUPS` | `all` | 逗号分隔的功能名, 见下表; 空值、空项、未知名、重复名、空白及 `all` 与其他名称混用均拒绝 |
-| `ASTRA_PROFILE_SAMPLE` | 64 | 每线程最外层已选中入口以约 1/N 概率采样, N 为 1..65536; 子入口继承采样决定 |
-| `ASTRA_PROFILE_MIB` | 64 | 每进程 1..512 MiB 固定文件容量; 不动态扩容 |
-| `ASTRA_PROFILE_CPU` | 0 | 1 时额外测线程 CPU 时间, 不能与仅墙钟结果混为同组 |
-| `ASTRA_PROFILE_SECONDS` | 0 | 从该进程首次探针初始化起计时, 0 表示仅受容量限制, 1..86400 表示最长采集秒数 |
+| ASTRA_PROFILE_DIR | Unset: no recording | Existing absolute directory, per-process <pid>.profile; reject existing names |
+| ASTRA_PROFILE_GROUPS | all | Comma-separated groups below; reject empty values/items, unknowns, duplicates, whitespace, or all mixed with names |
+| ASTRA_PROFILE_SAMPLE | 64 | Approximate 1/N per-thread outer selected-entry sampling, N=1..65536; descendants inherit decision |
+| ASTRA_PROFILE_MIB | 64 | Fixed 1..512 MiB/process file, no growth |
+| ASTRA_PROFILE_CPU | 0 | 1 adds thread CPU timing; compare separately from wall-only |
+| ASTRA_PROFILE_SECONDS | 0 | From first process probe initialization: 0 capacity-only, 1..86400 maximum collection seconds |
 
-| 功能名 | 覆盖范围 |
+| Group | Scope |
 | --- | --- |
-| `clock` | Pulsar 内核参考采样、Ping/Pong、Star 四时间戳滤波及连续时钟模型发布; 不包含高频 `Clock::now` |
-| `storage` | Star 原生状态、来源历史、投影、页及未另行分类的 Star 内部路径 |
-| `rpc` | Catalog/Ephemeris 业务服务与 Gateway 入口 |
-| `replication` | Exchange/Dispatch/Landing/Receiver/Intake/Restore、双域 Replica 与公共对等会话 |
-| `watch` | Downstream/Readout/Broadcast/Edition/Pagination 的准备、分页及扇出 |
-| `sdk` | Comet 写入、订阅、回调和调度 |
-| `core` | Runtime、公共设施及未另行分类的站点, 包含高频 `Clock::now` |
-| `test` | 探针自身夹具的 `profile.test.*` 站点 |
+| clock | Pulsar kernel reference, Ping/Pong, Star four-timestamp filter/continuous-model publication; excludes hot Clock::now |
+| storage | Native state/history/projection/pages and otherwise unclassified Star internals |
+| rpc | Catalog/Ephemeris services and Gateway |
+| replication | Exchange/Dispatch/Landing/Receiver/Intake/Restore, domain replicas, peer sessions |
+| watch | Downstream/Readout/Broadcast/Edition/Pagination preparation/paging/fanout |
+| sdk | Comet writers/subscriptions/callbacks/scheduling |
+| core | Runtime/common/unclassified sites, including hot Clock::now |
+| test | Probe fixture profile.test.* sites |
 
-每个站点仅归属一个功能, 分类在编译期完成. 例如 `ASTRA_PROFILE_GROUPS=clock,replication` 只选择两组. 未选中父跨度不进入线程栈, 已选中子跨度归到最近的已选中父跨度; 若没有则成为新的采样入口. 组间调用仍实际执行, 只是没有对应记录, 不能用局部结果冒充全调用树.
+Each site has one compile-time group. clock,replication selects only those. Unselected parents do not enter TLS stacks; selected children attach to the nearest selected parent or form new sampled roots. Calls still execute across groups; partial recording is not a complete call tree.
 
-未设置目录时, 开启二进制仍有入口检查成本, 不能称为编译关闭. 配置错误或映射失败输出固定诊断并停止采集, 业务继续; 夹具必须检查预期进程文件、退出码和报告完整性. 不将错误文本、地址、Key、UUID、正文或凭据写入探针. 不支持进程在初始化后 `fork` 继承映射继续采集, 不在运行期间更改诊断环境, 不在异步信号处理器使用探针.
+Enabled binaries without a directory still pay entry-check cost, unlike compile-time OFF. Invalid configuration/mapping emits fixed diagnostics and stops recording while business continues; fixtures must verify expected files, exits, and completeness. Record no error text, addresses, Keys, UUIDs, payloads, or credentials. No postinitialization fork-inherited collection, runtime environment changes, or probes inside async signal handlers.
 
-灰度方式是只对选定实例启动诊断构建, 按功能、采样率、容量和时限收敛观测. 当前不提供运行中热切换、在线读取或远程控制 API. 到期停止新记录, 已预留跨度仍正常收尾; 映射保留到进程退出, 不异步撤销其他线程持有的地址. 因而时限不是强制结束在途调用的截止, 也不自动重启业务或采集下一轮. 本轮新增功能仍待验证, 尚不能据此承诺生产灰度开销达标.
+Deploy diagnostics only to selected instances with constrained groups/sample/capacity/time. No hot switching, online reading, or remote-control API exists. Expiry stops new records while reserved spans finish; mappings live until exit rather than unmapping addresses used by threads. Collection duration neither terminates in-flight calls nor restarts business/another round. Newly added capabilities require applicable evidence before claiming production overhead targets.
 
-## 控制自身开销
+## Probe overhead
 
-- 名称在编译期散列. 热路径只写定长 80 字节记录, 不做日志格式化、排序、Protobuf 转换或堆分配.
-- 未选中功能不进入 TLS 栈或读取诊断时钟. 选中但未采样子调用维护线程栈, 不记录计时; 若设置采集时限, 入口仍需一次单调读钟判断截止. 同步子调用继承最近已选中父入口的采样决定.
-- 顶层采用线程内 xorshift32 选择, 仅三组移位/异或, 不取随机设备、不共享原子状态. 避免固定每 N 次抽样与等待/工作循环相位重合而永久漏掉路径; N=1 全采. 这不是密码学随机源.
-- 每线程一次预留 64 槽, 正常记录不逐条争抢全局原子计数; 分块起点按 64 字节对齐. 每线程最后一块可有最多 63 个空槽, 属于固定容量预算.
-- 首次初始化预留磁盘并映射固定文件. 无后台收集线程、全局热锁或同步刷盘. `mmap` 仍有初触页、RSS、页缓存和内核回写成本, 不是免费 I/O; 磁盘和内存都计入测量资源.
-- 每个同步跨度两次单调读钟; CPU 模式还增加两次 `CLOCK_THREAD_CPUTIME_ID`, 因而独立开启. 线程号每线程最多查一次.
-- 计数只读取调用点已有数值, 不为统计再调用 `ByteSizeLong`、扫描目录或遍历树; 参数应是无业务副作用的 O(1) 取值. 编译关闭连参数也消除, 运行期功能筛选不消除计数参数求值. COW 计费只报告页对象大小, 不冒充包含控制块和分配器元数据的完整 malloc 流量.
-- 满额不扩容, 记录直接拒绝数 `missed` 并停止全进程的新采集, 避免之后的热路径反复竞争拒绝计数. 因此 `missed` 不是全部丢失事件数量. 容量不足或时钟/嵌套异常的报告不得用于正常归因.
-- 时限检查在选中功能入口、数值记录和异步消费执行, 会增加单调读钟; 任一线程观察到到期后只检查停止标志. 时限/容量截止可能截断一棵同步树中的后续站点, 已记录跨度仍可完成并维持合法父链; 不把这个窗口边界解释为被调用功能消失.
+- Hash names at compile time. Hot paths write fixed 80-byte records, without formatting, sorting, Protobuf conversion, or heap allocation.
+- Unselected groups avoid TLS stacks/diagnostic clocks. Selected unsampled children maintain stacks without timing; configured duration still requires an entry monotonic read. Synchronous children inherit the nearest selected root decision.
+- Per-thread xorshift32 uses three shift/XOR sets without devices/shared atomics. It avoids fixed-every-N phase lock against work/wait loops; N=1 records all. It is not cryptographic randomness.
+- Reserve 64 slots/thread at a time, 64-byte-aligned blocks, avoiding an atomic per record. Up to 63 unused final slots/thread count against capacity.
+- Initialize by preallocating/mapping a fixed disk file. No collector thread, global hot lock, or synchronous flush. mmap still costs first faults, RSS, page cache, and kernel writeback; budget disk/memory.
+- Synchronous spans read monotonic time twice; CPU mode adds two CLOCK_THREAD_CPUTIME_ID calls and is separately enabled. Query thread ID at most once/thread.
+- Counters read existing O(1), side-effect-free values, never extra ByteSizeLong/directory/tree scans. Compile-time OFF removes argument evaluation; runtime group filtering does not. COW charges page objects, not full malloc/control-block/allocator traffic.
+- Capacity never expands. Record directly rejected count missed and stop new collection process-wide, avoiding repeated rejection atomics. missed is not all lost events. Exhaustion/clock/nesting-error reports cannot support normal attribution.
+- Duration checks occur at selected entries, values, and async consumption, adding monotonic reads; after any thread sees expiry, others check the stop flag. Capacity/time may truncate later sites in a tree while existing spans finish with valid ancestry; absence at the window edge is not absent execution.
 
-诊断不能保证零扰动. 即便采样关闭了一棵树, 栈维护、代码布局和分支仍可能影响缓存. 先用成对测量决定合适采样率, 不预先宣称固定纳秒开销或 QPS 提升.
+Zero perturbation is not promised. Stack work, layout, and branches can affect caches even for unsampled trees. Choose sample rates by paired measurement rather than asserting fixed nanosecond cost or QPS gains.
 
-## 已覆盖的边界
+## Instrumented boundaries
 
-| 路径 | 观察内容 |
+| Path | Observations |
 | --- | --- |
-| Comet 写入 | Publishing/Beaming 调用、完成处理、poll、续租和 Core 调度 |
-| Comet 订阅 | 页面回调、就绪到消费、投影 accept、Table 克隆/修改/完成、应用通知所在 poll |
-| Star RPC | Catalog Publish/Renew, Ephemeris Create/Update/Renew/Remove, Watch 接入 |
-| 原生状态 | 候选准备、Scene/Origin 提交/回放、读取与到期推进, 本机导出及远端来源准备/安装 |
-| 并发边界 | 首次锁获取、共享读取退回到期维护、来源等待、域锁外准备与重新取锁 |
-| 对等复制 | Runtime 各阶段、Session 收包/消费、Data::prepare 独立准备跨度、begin_write 同步提交、Exchange 接收/ACK/修复、Dispatch 分页 |
-| 下行扇出 | Downstream/Readout 变化通知、冻结、advance/pump、submit 同步 StartWrite, Broadcast 缓存命中/编码和页字节数 |
-| 其他 C++ | Almanac/Library/Receiver 同步、Pulsar Ping/Pong 与登记入口、Star 对时采样和 Clock 发布 |
+| Comet writing | Publishing/Beaming, completion, poll, renewals, Core scheduling |
+| Comet reads | Page callbacks, ready-to-consume, projection accept, Table clone/edit/finish, notification poll |
+| Star RPC | Catalog Publish/Renew, Ephemeris Create/Update/Renew/Remove, Watch admission |
+| Native state | Candidates, Scene/Origin commits/replay, reads/expiry, local export, remote preparation/install |
+| Concurrency | Initial lock, shared-read fallback to maintenance, source waits, outside-domain preparation/reacquisition |
+| Replication | Runtime stages, Session receive/consume, Data::prepare, synchronous begin_write, Exchange receive/ACK/repair, Dispatch pages |
+| Downstream | Notifications, freeze, advance/pump, synchronous StartWrite submit, Broadcast cache/encoding/page bytes |
+| Other C++ | Almanac/Library/Receiver, Pulsar Ping/Pong/admission, Star calibration/Clock publication |
 
-同一模板的不同域由父调用上下文区分, 不给每个 Key 增加动态标签. 部分重载共用语义名称, 聚合时保留父站点. 源码站点目录可静态生成, 不启动测试:
+Parent context distinguishes template domains; no dynamic per-Key labels. Some overloads share names, so retain parents when aggregating. Generate site inventory statically without tests:
 
 ```bash
 python3 -B tools/profile.py --inventory build/results/profile-sites.json
 ```
 
-没有给每行、每次散列或每个递归树节点都计时. 这类细化会制造与业务工作相当的探针成本. gRPC/TLS 内部、内核调度、Go Polaris/Astrolabe、冻结组件没有被这些 C++ 探针直接覆盖; 某站点无样本表示未观察到, 不是零成本. 若剩余成本集中在这些边界, 再选择对应的采样剖析工具, 工具缺失仍须单独授权下载.
+Do not time every line/hash/recursive node: probe cost could rival useful work. These C++ probes do not directly cover gRPC/TLS internals, kernel scheduling, Go services, or frozen components. No sample means unobserved, not free. Select appropriate profilers for remaining costs; missing-tool downloads need separate permission.
 
-## 分析与解释
+## Analysis and interpretation
 
-只能在所属进程正常退出后解析文件. 文件头水位是预留量, 不是已完成量, 不能在线读取. 空槽也可能来自异常终止中尚未结束的跨度, 因而分析器的 `complete` 只表示格式、容量和已完成记录通过校验; 测试夹具还必须独立保存退出状态、清理结果、源码与二进制 SHA-256. 不把当前工作副本的站点目录当成被测二进制的来源证明.
+Parse only after owning processes exit normally. Header watermarks count reservations, not completions; no online reads. Empty slots may be unfinished spans from abnormal termination. Analyzer complete means format/capacity/completed-record validity only; fixtures independently preserve exit/cleanup/source/binary SHA-256. Current-workspace site inventories do not prove binary provenance.
 
 ```bash
 python3 -B tools/profile.py build/results/profile-run --output build/results/profile-report.json
-# 可选导出时间线, JSON 可能明显大于二进制; 导出只在测量结束后执行.
+# Optional timeline export can exceed binary size; export after measurement.
 python3 -B tools/profile.py build/results/profile-run --output build/results/profile-report.json --trace build/results/profile-trace.json
 ```
 
-固定 Linux 小端 64 位格式: 128 字节头与 80 字节记录. 当前写 v2, 在头部记录功能位和时限, 数值记录可表达有符号偏移; 分析器同时接受旧 v1, 不重写旧证据. 分析器校验版本、容量、事件类型、父子编号、线程与时间包含关系, 对截断、未知站点、缺失父项明确失败. `missed/errors` 非零时报告不完整并返回非零. 头部失败/缺文件也不得忽略. 进程分开汇总, 同步站点按父站点分组, 输出观测次数、均值、P50/P95/P99/P99.9、最小/最大值和总和. 样本少于 10000 时标记尾部分位证据不足.
+Fixed Linux little-endian 64-bit format: 128-byte header/80-byte records. Writer v2 adds groups/duration and signed values; analyzer also accepts v1 without rewriting evidence. Validate version/capacity/event types/ancestry/threads/time containment; reject truncation, unknown sites, missing parents. Nonzero missed/errors means incomplete/nonzero exit; missing/bad files cannot be ignored. Summarize per process and parent site: observations, mean, P50/P95/P99/P99.9, min/max/sum. Below 10,000 samples mark tails insufficient.
 
-- `wall_ns` 包含同步子调用; `own_ns` 扣除已插桩的直接子区间, 仍包含未插桩工作、抢占和部分探针成本. 二者都不等于 CPU 时间, 父子累计不能相加当总请求耗时.
-- CPU 模式只统计所在工作线程的 CPU; 跨异步回调不沿用栈. 间隔事件单独报告就绪到消费、对等流及下行 StartWrite 到 OnWriteDone 的墙钟等待, 不从某个函数的 CPU 中相减. 写间隔包含 gRPC 调度与回调排队, 包括以失败结束的写, 不等于纯网线传输时长或对端业务可见时间.
-- 计数是被采样树内的观测值. 伪随机抽样在所选功能与采集窗口内沿用同一决定, 树内样本相关; 不简单乘采样率宣称精确总量, 也不拿站点数当功能覆盖率.
-- 同宿主 `steady_clock` 可对齐进程时间线; 跨主机不能直接比较. 此实现未增加跨节点请求关联 ID, 不能凭不同进程相近的时间戳声称某次请求已完成端到端分解. 端到端延迟继续由业务基准测量.
+- wall_ns includes synchronous children; own_ns subtracts instrumented direct-child intervals but retains uninstrumented work, preemption, and some overhead. Neither equals CPU; parent/child totals cannot be added as request duration.
+- CPU covers the current worker only; stacks do not cross async callbacks. Report ready-to-consume and peer/downstream StartWrite-to-OnWriteDone separately, not subtracted from a function's CPU. Write intervals include gRPC scheduling/callback queues and failures, not pure wire time/peer visibility.
+- Counters are observations within sampled trees. Shared decisions correlate tree samples; multiplying by sample rate is not exact total reconstruction, and site count is not functional coverage.
+- Same-host steady_clock aligns process timelines, not hosts. No cross-node request correlation IDs were added; nearby timestamps do not prove end-to-end decomposition. Business benchmarks still measure end-to-end latency.
 
-## 时钟偏移定位
+## Clock-offset diagnosis
 
-优先只开 `clock`, 对 Pulsar 和三台 Star 各自采集. 获准运行后, 可在子进程环境设置 `ASTRA_PROFILE_GROUPS=clock`, `ASTRA_PROFILE_SAMPLE=1`, `ASTRA_PROFILE_CPU=0`, `ASTRA_PROFILE_MIB=32`, `ASTRA_PROFILE_SECONDS=1800`, 配合已创建的项目内绝对 `ASTRA_PROFILE_DIR`. 这是观察配置示例, 不代表已经运行; 容量是否覆盖窗口需以实际文件判断. 不更改 NTP、阈值或业务时钟来获得漂亮结果.
+Prefer clock-only collection on Pulsar/three Stars. Authorized child environments may use GROUPS=clock, SAMPLE=1, CPU=0, MIB=32, SECONDS=1800 with an existing absolute project ASTRA_PROFILE_DIR. This is an example, not execution evidence; inspect actual capacity coverage. Do not change NTP, thresholds, or business clocks for attractive results.
 
-| 数值前缀 | 作用与单位 |
+| Prefix | Meaning/units |
 | --- | --- |
-| `clock.kernel.*` | `status` 为 adjtimex 返回状态, `flags` 为 timex 状态位; `maxerror_us/esterror_us` 固定微秒; 有符号 `offset` 乘 `offset_unit_ns` 得纳秒; `elapsed_ns` 为 BOOTTIME, `unix_ns` 为墙钟 Unix 纳秒, `window_ns` 为夹取查询与取时的窗口 |
-| `clock.source.*` | 每轮 `available` 表示原始样本存在, `accepted` 表示连续时钟接纳; `exception` 单独标出取时/精度标定/Provider 异常 |
-| `clock.server.*` | Pulse 拒绝原因, 无可信观测时的本地 `ready` 与 `uncertainty_ns`, 成功应答的误差预算 |
-| `clock.filter.*` | 同一观测的四时间戳、远端与本地精度、往返/处理时长、网络 RTT 估计和合并误差, 均为纳秒; `t0/t3` 是 Star 的 BOOTTIME, `t1/t2` 是 Pulsar 的 Unix 时间 |
-| `clock.model.*` | 首次初始化状态、输入误差、观测到消费的年龄、目标及模型 Unix 时间、有符号 `debt_ns` 与校正速率 `slew_ppm`; 正债务表示模型需要加速追上目标, 负债务表示需要减速 |
-| `clock.client.*` | 一批八次探测的收包数、最终 gRPC 状态码、内容校验结果、是否形成滤波估计及模型是否接纳; RPC 成功与对时接纳分开记录 |
+| clock.kernel.* | status=adjtimex result, flags=timex flags; maxerror_us/esterror_us microseconds; signed offset × offset_unit_ns gives ns; elapsed_ns BOOTTIME, unix_ns wall Unix ns, window_ns brackets query/time |
+| clock.source.* | available=raw sample, accepted=continuous clock accepted; exception separately marks time/calibration/Provider failure |
+| clock.server.* | Pulse rejection, local ready/uncertainty_ns without trusted observation, successful response error budget |
+| clock.filter.* | Four timestamps, precision, roundtrip/processing, estimated network RTT/combined error in ns; t0/t3 Star BOOTTIME, t1/t2 Pulsar Unix |
+| clock.model.* | Initialization, input error, observation-consumption age, target/model Unix, signed debt_ns, slew_ppm; positive debt needs acceleration, negative deceleration |
+| clock.client.* | Received count in eight probes, final gRPC code, content validation, filter/model acceptance; RPC success separate from synchronization acceptance |
 
-拒绝码为固定整数, 不格式化错误文本. 同一前缀的 `rejected=0` 表示该层接纳, 不表示整个对时链成功; 后续层仍可能拒绝. 各层定义如下:
+Rejections are fixed integers, not formatted errors. rejected=0 means only that layer accepted; later layers may reject.
 
-| 前缀 | 非零 `rejected` |
+| Prefix | Nonzero rejected |
 | --- | --- |
-| `clock.kernel` | 1 查询失败/内核未同步/误差字段非法; 2 采样窗口或 Unix 坐标非法; 3 原始误差或残余偏移超限; 4 合计误差超限 |
-| `clock.server` | 1 无可信接收时钟; 2 处理窗口内质量变化/反序/精度不可用; 3 响应准备异常; 4 请求坐标非法 |
-| `clock.filter` | 1 输入坐标/精度/质量非法; 2 往返或处理时长超过 200 ms; 3 处理时长超出本地往返及量化容差; 4 时间坐标映射越界 |
-| `clock.model` | 1 无效/重复/反序观测或模型已失败; 2 观测老化/外推越界; 3 首次锚点误差超过 500 ms; 4 本地推进失败 |
+| clock.kernel | 1 query/unsynchronized/invalid error; 2 invalid sample window/Unix coordinate; 3 raw error/residual offset over limit; 4 combined error over limit |
+| clock.server | 1 no trusted receive clock; 2 changing quality/reversed window/unavailable precision; 3 response preparation exception; 4 invalid request coordinate |
+| clock.filter | 1 invalid coordinates/precision/quality; 2 roundtrip/processing over 200 ms; 3 processing exceeds roundtrip plus quantization tolerance; 4 coordinate mapping overflow |
+| clock.model | 1 invalid/duplicate/reversed observation or failed model; 2 aged observation/extrapolation overflow; 3 first-anchor error over 500 ms; 4 local advancement failure |
 
-内核探针在夹取窗口完成后写入记录; Star 的 T0/T3 仍紧邻实际发送/接收取时. Pulse 的发送前记录仍会影响观测 RTT, 时钟模型记录也会延长发布临界区, 因此不能宣称探针对时零扰动. `clock` 组排除每次业务读钟, 不把高频租约路径淹没在诊断日志中.
+Kernel records follow the bracketing window; Star T0/T3 remain adjacent to actual send/receive. Presend Pulse records affect RTT and model records extend publication locks; no zero-perturbation claim. clock excludes frequent business reads, avoiding lease-path diagnostic floods.
 
-进程退出且证据收集完成后, 离线导出原始时钟数值:
+After process exit/evidence collection export raw clock values:
 
 ```bash
 python3 -B tools/profile.py build/results/profile-clock --output build/results/profile-clock-report.json --clock build/results/profile-clock.jsonl
 ```
 
-JSONL 保留进程号、线程号、诊断单调时间 `observed_ns`、父跨度 `span/scope`、字段名与值. 按 `(process, span)` 关联同次观测; 槽位顺序受线程分块影响, 文件行序不是全局时间序, 时间线须按 `observed_ns` 排序. 同宿主进程可对齐诊断单调轴, 跨宿主需独立对齐证据, 不直接排序就声称因果关系.
+JSONL preserves PID/TID, diagnostic monotonic observed_ns, parent span/scope, field/value. Correlate by (process, span). Thread blocks make file order nonglobal; sort timelines by observed_ns. Same-host monotonic axes align; cross-host causality needs independent alignment, not sorting alone.
 
-排查顺序:
+Investigate in order:
 
-1. 内核 `maxerror_us` 持续线性增长, `offset`/`esterror_us` 相对稳定, 最后 `kernel.rejected=3/4`: 优先检查 Chrony 有效更新时间与保守误差增长. `maxerror` 是上界, 不能当成实测墙钟偏移; 也不能以更小的 `esterror` 替换门槛输入.
-2. 同一进程相邻样本的 `Δunix_ns - Δelapsed_ns` 显著变化: 指向墙钟相对 BOOTTIME 的变化, 结合采样窗口、宿主挂起及 Chrony 状态检查. 这仍不是对独立真实时间的绝对误差证明; 两种本机时钟共同漂移无法仅靠这些探针排除.
-3. 内核质量稳定, Star 的 `elapsed_ns/rtt_ns` 或模型 `age_ns` 尖峰: 检查调度/网络/消费延迟. `processing_ns` 区分服务端处理部分, 不能把全 RTT 归为网络传输.
-4. `model.initialized=0` 且拒绝码 3, 与已初始化节点的 `debt_ns`、同步质量分别判断. 已校准后的平滑追赶与新 Star 缺首个可信锚点不是同一种失败. `t1-t0` 包含 Unix 与 BOOTTIME 的原点差, 绝不是物理偏移.
+1. Linearly growing maxerror_us with stable offset/esterror_us and kernel rejection 3/4: inspect Chrony effective updates/conservative error growth. maxerror is a bound, not measured wall skew; smaller esterror cannot replace it.
+2. Significant neighboring Δunix_ns − Δelapsed_ns changes: inspect wall-versus-BOOTTIME movement, sample windows, suspension, Chrony. This is not absolute error against independent time and cannot exclude joint drift.
+3. Stable kernel quality with elapsed_ns/rtt_ns/model age_ns spikes: inspect scheduling/network/consumption. processing_ns separates server work; full RTT is not network-only.
+4. model.initialized=0/rejection 3 differs from initialized-node debt/quality. Smooth catch-up after calibration is not missing first anchor. t1−t0 includes Unix/BOOTTIME epoch difference, never physical skew.
 
-## 验证方法
+## Verification method
 
-`cpp_profile` 同时检查开启/关闭二进制, 包含子树嵌套、提前结束幂等、异常展开、四线程并发、跨线程时间戳、关闭参数不求值、关闭二进制无探针字符串、缺目录、错误配置、CPU 模式、采样、交替入口相位覆盖及容量耗尽. Python 格式用例覆盖损坏头、记录、父链、空槽及统计口径.
+cpp_profile checks enabled/disabled binaries: nested trees, idempotent early finish, exception unwinding, four threads, cross-thread timestamps, disabled argument elision/no probe strings, missing directories, invalid configuration, CPU, sampling, alternating-phase coverage, capacity. Python cases cover bad headers/records/parents/empty slots/statistics.
 
-本轮补充的待运行用例包括单功能/多功能筛选、未选中父跨度、配置拒绝、采集时限、有符号值及 int64 边界、v1/v2 兼容和时钟 JSONL 导出. 2026-09-27 按用户要求只完成实现、用例与静态审阅, 尚未构建、运行这些用例或开展新的时钟采样; Chrony 配置也未改变. 以下验证须等待用户再次通知启动.
+Added cases cover single/multiple groups, unselected parents, invalid settings, duration, signed/int64 bounds, v1/v2, and clock JSONL. As recorded on 2026-09-27, implementation/cases/static review were complete but these additions had not been built/run or newly sampled, and Chrony was unchanged. Later execution status belongs in [validation](validation.md); this historical boundary is not current authorization.
 
-获得本轮授权后, 先构建普通 Release 与独立 probes 目录并执行普通回归. 再运行 `star_profile_on_test bench` 与 `star_profile_off_test bench`, 检查同工作量校验和、样本数和循环墙钟成本. 微基准不能替代下列标准 3 Star 配对:
+With current permission, build ordinary/probe Release separately and regress, then star_profile_on_test bench / star_profile_off_test bench, checking equal-work checksums, sample counts, and loop wall cost. Microbenchmarks do not replace paired three-Star runs:
 
-1. 关闭编译 / 开启但不记录 / 墙钟采样 1:64 / 墙钟采样 1:256. CPU 计时另外对照, 不混入普通版排名.
-2. 同资源、每 Star 同时本地写入并向其他 Star 复制, 多订阅; Catalog 2048 B 和 Ephemeris 独立测量. 同一源码、编译优化、契约与其他参数, 配对顺序交错, 至少四组.
-3. 报告吞吐、回执和可见延迟 P99/P99.9、CPU、峰值 RSS、写盘量/容量、样本数与丢样; 包括初始化预热和正式窗口边界. 普通版端到端结果是性能基线.
-4. 暂以吞吐影响不超过约 5%、P99 影响不超过约 10% 作为轻量诊断的筛选目标, 同时考察配对波动. 超出则降低采样率或缩小观测层级, 并如实报告. 不将小于环境噪声的变化当确定收益.
+1. Compile OFF / enabled-not-recording / wall 1:64 / wall 1:256; compare CPU mode separately from rankings.
+2. Equal resources, all Stars writing/replicating, multiple subscribers; Catalog 2048 B and Ephemeris separately. Same source/optimization/contracts/settings, interleaved paired order, at least four pairs.
+3. Throughput, receipt/visibility P99/P99.9, CPU, peak RSS, disk/capacity, samples/loss, warmup/formal windows. Ordinary end-to-end results are baseline.
+4. Provisional lightweight targets: about ≤5% throughput and ≤10% P99 impact, considering paired variability. Otherwise lower sampling/narrow groups and report honestly. Noise-sized changes are not certain benefits.
 
-旧全功能探针的测量不能代替后来功能筛选、时限与时钟诊断改动的验收. 当前轻量目标尚未在所有负载得到证明, 有效结果、波动和后续方向只维护在 [validation.md](validation.md). 后续重测仍需当轮授权.
+Old all-group measurements do not validate later filters/duration/clock changes. Targets remain unproven for all loads. Keep results/variation/direction in validation; reruns require permission.
+
+## Weak page caching and deadline indexing
+
+[Broadcast](../star/src/broadcast.hpp) retains weak_ptr per page. Nonoverlapping consumers can rebuild: a lifetime tradeoff, not an unprotected cache race. Shared Protobuf objects do not guarantee shared final gRPC wire encoding.
+
+Downstream returns encoded charges after write completion; Edition held accounts frozen sources only. Replacing weak with strong references would retain bytes after accounting release, including rejected candidates. Strong caching needs its own budgets/eviction/rejection/cancellation semantics; Limits is not an RSS cap.
+
+rebuilds() and star.broadcast.rebuild/rebuilt_bytes distinguish first construction from successful reconstruction after release. Weak control blocks distinguish empty/expired slots; failed construction is not success. rebuilt_bytes is wire length, not heap size/CPU savings. See validation for executed-case scope.
+
+SDK deadline indexing remains a measurement candidate. [Core](../comet/cpp/src/core.cpp) uses steady_clock; [Agenda](../star/src/agenda.hpp) uses Unix/10 ms ticks. Transplanting it must handle infinity, rounding, long pauses, cross-thread unlink/destruction, and lifetime. Agenda::next is next tick; advance still cascades/processes expiry, not O(1) overall. First measure directory_items/ready_items/polled_items to establish scan cost.
+
+<a id="performance"></a>
+
+## Evidence boundaries for optimization
+
+Attribute candidates under real workloads, changing one core mechanism at a time:
+
+| Scope | Measure first | Preserve |
+| --- | --- | --- |
+| SDK | Directory/ready scans, callback queues, version queries, encoding/workspace | Prompt cancellation, stale completion isolation, no failure replay, budgets/lifetimes |
+| Downstream | Exact/full-Scope fanout, pending collection/progress/pages/index locks | Continuous cursors, atomic installs, per-stream backpressure/bounded slow readers |
+| Dynamic domains | Source preparation/final locks, large TTL steps/recovery peaks | Continuous ACK, watermarks/ownership, stable old views/full rollback |
+| RPC/replication | prepare/StartWrite sync cost, packets, in-flight waits, coverage scans | ACK complete prefixes; transport batching is not transactions |
+| Polaris | WAL/checkpoints/read pools/snapshot cache/interleaved Scopes/history trims | Durable-before-ACK, Scope +1, FULL durability |
+| Astrolabe | Large/slow directory freshness, worker reuse/backoff | Bounded concurrency, stale-instance rejection, explicit stale/unknown |
+| Build/capacity | Deferred Planet defaults, static dependencies, allocation/cache working sets | Link declarations are not actual artifact contents; no implicit upgrades |
+
+Astrolabe removed a separate 64-node cap, but four workers/two-second deadlines mean a fully slow sweep can take ceil(N/4) × 2s; a five-second ticker does not promise directory-wide freshness. Mesh n(n−1)/2 streams/fanout remain despite shared pages.
+
+Bidi writes, Arena/PMR, strong caches, RCU/Actor, container replacement, LTO/PGO need independent evidence. Unary already has failure/cancellation contracts; streaming adds correlation/backpressure/recovery. atomic shared_ptr need not be lock-free, Arena need not eliminate every allocation, ByteBuffer is not end-to-end zero-copy.
+
+Fix source, three-Star local writes, total resources/application load; report throughput/tails/CPU/RSS/FD/threads/replication/control costs. Short same-VM results do not imply physical-machine scale; old APIs do not prove new gains. Validation indexes data/raw evidence.
+
+## Further acceptance
+
+Existing cases cover native state, faults, RPC, persistence, three-Star propagation, and SDK lifecycles; see [acceptance](comet.md). Systematic cross-machine partitions/reconnects, large sources, real sleep/clock steps, power/disk-full combinations, browser/GPU, and long resource evidence remain.
+
+Prioritize affected regression, then select random models, malformed-page/sequence properties, and allocation profiling by problem. Fixed interleavings do not prove all concurrency; no coverage percentages without collection. Follow [C++ coding](coding.md#cpp)/[authorization](../AGENTS.md); document cleanup starts no tests/builds.

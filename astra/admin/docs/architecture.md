@@ -1,26 +1,25 @@
-# 管理端架构
+# Admin architecture
 
-> 目标角色已按 [星图结构修订](../../docs/architecture.md) 更新: Star 为恒星, Planet 为全量授权缓存行星,
-> 业务实体为可直属恒星或绑定行星的卫星. 下文记录当前已实现的旧展示模型, 不是新模型已完成的声明.
+> Target roles follow the [map architecture](../../docs/architecture.md): Star is a star, Planet is a fully authorized cache relay, and application satellites attach directly to a Star or to a Planet. The following describes the implemented older display model, not completion of that migration.
 
-## 真实管理与演示边界
+## Live management and demo boundaries
 
-App 显式装配演示星图或 app/management/Management.vue. 后者经 api.ts 验证 HTTP/NDJSON 输入, 使用 Cookie 和可取消有界请求, 不将网络 DTO 或真实身份注入 Three.js 逐帧逻辑. 目前真实管理使用表格, 不用可信成员名单猜测实际连接图; 完整 Orrery 暂缓. 切换模式/卸载取消本页网络与计时器, 不注销其他页面或停止服务.
+App explicitly selects the demo map or `app/management/Management.vue`. Live management validates HTTP/NDJSON through `api.ts`, uses Cookies and cancellable bounded requests, and keeps network DTOs and real identities out of Three.js frame logic. It currently uses tables, not a connection graph inferred from trusted membership; complete Orrery visualization is deferred. Mode switches/unmount cancel this page's networking and timers, without signing out other pages or stopping services.
 
-## 依赖方向
+## Dependency direction
 
 ```text
 main → app/App + AppShell + styles
-          ↓ 选择数据源并注入 GalaxyData
+          ↓ choose source and inject GalaxyData
        galaxy/index → ui/GalaxyView → ui/PlanetDetails
                             ↓
                   composables/useGalaxyScene
-                            ↓ 动态 import
+                            ↓ dynamic import
                   runtime/createGalaxyScene
-                   ├─ scene/createSceneView → 画布、相机、controls、尺寸同步
-                   ├─ scene/createSelectionController → 唯一选择状态、权限与聚焦
-                   ├─ createGalaxyObjects → objects/ 建模、运动、索引、装饰
-                   ├─ lensingRenderer → 场景颜色/深度捕获、背景折射与装饰合成
+                   ├─ scene/createSceneView → canvas, camera, controls, sizing
+                   ├─ scene/createSelectionController → selection, permission, focus
+                   ├─ createGalaxyObjects → objects/ models, motion, index, decoration
+                   ├─ lensingRenderer → color/depth capture, refraction, composition
                    ├─ celestialAssets → assets/*.glb + blackHole/prepareModel
                    ├─ CameraMotion
                    ├─ FrameOrbitControls
@@ -31,259 +30,146 @@ main → app/App + AppShell + styles
 model/types + presentation + layout + orbitalPlane + orbit + orbitPlanner + systemLayout + validate ← data/demo, ui, composables, runtime
 ```
 
-`GalaxyData` 是展示快照, 不是 Astrolabe 的网络协议. Star、行星和连线使用稳定 ID;
-行星坐标是相对于 Star 的初始布局参考, 防碰撞规划可调整实际起点与轨道, 不改写输入数据.
-Star 坐标同样作为布局参考; 运行时按完整星系范围扩展间距, 使用独立的 `StarSystem.center` 保存展示中心.
-连线显式提供, 渲染器不会把所有 Star 自动连成完全图. 初始化前检查唯一性、所属关系、有限坐标和边端点.
-此检查面向已类型化的内部快照; 未来网络响应仍需独立的结构、大小与登录状态处理, 不通过展示层实现管理权限分级.
+`GalaxyData` is a presentation snapshot, not Astrolabe's wire protocol. Stars, planets, and links have stable IDs. Planet coordinates are initial layout hints relative to a Star; collision planning may change actual starts/orbits without mutating input. Star coordinates are also hints; runtime expands spacing for complete system extents and stores display centers separately in `StarSystem.center`. Links are explicit; rendering never invents a complete graph. Initialization validates uniqueness, ownership, finite coordinates, and edge endpoints. This checks typed internal snapshots; network input separately needs structure/size/authentication checks. Presentation validation does not implement management permission tiers.
 
-## 责任与所有权
+## Responsibilities and ownership
 
-| 模块                                           | 负责                                                   | 不负责                |
-| ---------------------------------------------- | ------------------------------------------------------ | --------------------- |
-| App                                            | 主题、布局、选择数据源                                 | 场景内部状态          |
-| GalaxyView / PlanetDetails / PlanetList        | 容器、FPS、错误、详情、列表分类与 ID 选择              | 逐帧计算、GPU 资源    |
-| useGalaxyScene                                 | 异步加载、Vue 响应式投影、快照替换和重试               | 拾取算法、相机矩阵    |
-| createGalaxyScene                              | 异步初始化、输入与帧循环接线、失败和释放               | 选择规则、GPU 算法    |
-| scene/createSceneView                          | 画布、相机、controls 与尺寸同步                        | 选择、业务数据源、RAF |
-| scene/createSelectionController                | 唯一选择状态、ID 权限、平滑聚焦命令                    | DOM、渲染、资源创建   |
-| celestialAssets                                | 同源模型加载、结构校验、GPU 资源登记                   | 业务选择、动画时钟    |
-| createGalaxyObjects                            | 对象子模块装配与选择装饰同步                           | DOM 事件、RAF 调度    |
-| objects/createStarSystems + createPlanetShells | 全局轨道规划、星体模型和实例批次                       | 拾取、选择、帧循环    |
-| objects/createObjectMotion                     | 自转、黑洞动画和独立公转周期                           | 新资源、渲染          |
-| objects/createObjectIndex                      | 只读 ID 索引、分层拾取与实时世界坐标                   | 建模、独立选择状态    |
-| objects/createSceneDecorations                 | 共享灯光、可用节点连线和选择环                         | 业务状态、动画        |
-| blackHole/                                     | 光学配置、轨道数学、查找纹理、材质、GLB 准备和实例动画 | 场景装配、数据源、Vue |
-| CameraMotion                                   | 连续推进与围绕鼠标锚点缩放                             | RAF、渲染器           |
-| canvasInput                                    | 点击/拖动区分、滚轮归一化、双击和 Escape               | 详情展示、业务数据源  |
-| FrameLoop                                      | 唯一 RAF、60 FPS 目标、实际 FPS 采样、暂停与停止       | Vue 和 DOM 可见性判断 |
-| ResourceScope                                  | 逆序、幂等、尽力完成全部清理                           | 业务状态恢复          |
+| Module | Owns | Does not own |
+| --- | --- | --- |
+| App | Theme, layout, data-source choice | Internal scene state |
+| GalaxyView / PlanetDetails / PlanetList | Container, FPS, errors, details, list categories, ID selection | Frame computation, GPU resources |
+| useGalaxyScene | Async loading, Vue projections, snapshot replacement, retry | Picking, camera matrices |
+| createGalaxyScene | Async initialization, input/frame wiring, failure/disposal | Selection rules, GPU algorithms |
+| scene/createSceneView | Canvas, camera, controls, sizing | Selection, business data, RAF |
+| scene/createSelectionController | Sole selection state, ID permission, smooth focus commands | DOM, rendering, resource creation |
+| celestialAssets | Same-origin loading, structure validation, GPU registration | Business selection, animation clocks |
+| createGalaxyObjects | Object composition, selection decoration | DOM events, RAF |
+| objects/createStarSystems + createPlanetShells | Global orbit planning, models, instance batches | Picking, selection, frame loop |
+| objects/createObjectMotion | Spin, black-hole animation, independent orbital periods | New resources, rendering |
+| objects/createObjectIndex | Read-only ID index, layered picking, live world coordinates | Modeling, separate selection state |
+| objects/createSceneDecorations | Shared lights, available-node links, selection rings | Business state, animation |
+| blackHole/ | Optical settings/math/tables/materials, GLB preparation, instance animation | Scene composition, data source, Vue |
+| CameraMotion | Continuous approach, pointer-anchored zoom | RAF, renderer |
+| canvasInput | Click/drag distinction, wheel normalization, double-click, Escape | Detail UI, business data |
+| FrameLoop | Sole RAF, 60 FPS target, measured FPS, pause/stop | Vue, DOM visibility decisions |
+| ResourceScope | Reverse, idempotent, best-effort complete cleanup | Business-state recovery |
 
-`createSelectionController` 独占选择状态, 场景装配通过只读 getter 为每帧运动和拾取取得当前选择.
-选择控制器只借用所需对象与相机能力; 场景失败或释放后, 存活检查统一拒绝命令.
-对象索引不向调用者暴露可修改的 Map 接口; 拾取只缓存当前星系的目标数组, 星系切换时复用,
-不会为每个星系重复存储全体恒星列表. `PlanetList` 使用片段模板, 提取后保持详情面板原有 DOM 布局.
+`createSelectionController` alone owns selection; composition exposes read-only getters to motion and picking. It borrows object/camera capabilities and rejects commands after failure/disposal through one liveness check. The object index exposes no mutable Map; it reuses the current system's pick-target array instead of duplicating all stars for each system. `PlanetList` uses fragment templates to preserve the detail panel's DOM layout.
 
-`scripts/architecture-rules.mjs` 维护分层与循环依赖规则, `check-boundaries.mjs` 只负责解析、遍历与报告.
-模型层不能依赖 Vue、Three.js 或演示数据; 对象构造层只允许以纯类型引用资产加载契约.
-黑洞数值与 shader 层不能取得 Three.js 或场景装配依赖. 运行时循环依赖被拒绝, 纯类型边不计入初始化环.
+`scripts/architecture-rules.mjs` defines layering/cycle rules; `check-boundaries.mjs` parses, traverses, and reports. Model code cannot depend on Vue, Three.js, or demo data. Object constructors may import asset contracts only as types. Black-hole numeric/shader layers cannot depend on Three.js or scene composition. Runtime cycles fail checks; type-only edges are excluded from initialization cycles.
 
-场景控制器的选择命令接受 ID, 错误 ID 和已释放实例返回 `false`, 不改变当前选择.
-`setStarRotationSpeed(starId, radiansPerSecond)` 设置可用恒星的本地 Y 轴自转速度, 单位为弧度/秒.
-普通恒星默认使用 `sceneConfig.starRotationRadiansPerSecond` 的 `2π/60`, 即一分钟一圈; 脉冲星默认 `2π/2.4`, 均允许负数反转和 0 原地停止.
-拒绝非有限值、缺失或黑洞状态节点以及已失败/释放的场景, 不改变原自转速度; 黑洞仍参与公转.
-该接口独立于行星数量和选择状态, 暂不推导业务速度规则; 重建快照时调用方需重新设置速度.
-`overview()` 无论是否已选节点都会清空拖动惯性并重新启动返回全局构图的平滑运动; 被手势中断后可再次返回.
-存在选择时统一发布空选择, 已为空时不重复发布; UI 不另行猜测或维护运行时选择状态.
-画布对中键 `pointerdown`、`mousedown` 和 `auxclick` 取消浏览器默认动作以阻止自动滚屏, 保留事件传播供 OrbitControls 捕获并处理平移手势.
-行星详情中的邻接数只统计两端均可用的边, 数据来源和说明来自快照元数据.
+Selection commands take IDs; invalid IDs or disposed instances return `false` without changing selection. `setStarRotationSpeed(starId, radiansPerSecond)` changes an available star's local-Y spin: normal default `sceneConfig.starRotationRadiansPerSecond = 2π/60`, pulsar default `2π/2.4`. Negative values reverse and zero stops. Nonfinite values, missing/black-hole nodes, and failed/disposed scenes are rejected without changing speed. Black holes still orbit. Speed is independent of population/selection; callers reapply overrides after rebuilding a snapshot.
 
-## 生命周期
+`overview()` always clears drag inertia and starts a smooth global reset, even without selection or after an interrupted reset. It publishes an empty selection only when clearing an existing one; UI maintains no competing selection state. Middle-button `pointerdown`, `mousedown`, and `auxclick` prevent browser defaults/autoscroll but keep propagation for OrbitControls panning. Detail adjacency counts only edges with both endpoints available; source/explanation come from snapshot metadata.
 
-1. Vue 观察画布引用、数据快照引用和重试次数.
-2. 替换快照、重试或卸载时取消旧加载资格、中断模型请求并释放旧场景. 晚到的实例仍立即释放.
-3. 校验快照后按需加载同源 GLB, 全部模型加载完成且未取消才创建画布; 每取得一项资源即登记到 `ResourceScope`.
-4. 初始化中途抛错时逆序清理已取得资源, 保留并上抛原始错误.
-5. 文档隐藏时停止 RAF, 丢弃滚轮惯性, 保留推进进度. 恢复第一帧的时间增量为零.
-6. 绘制失败或 WebGL 上下文丢失时停止循环、禁用 controls 并显示重试入口.
-7. 释放时取消监听与观察器、停止循环, 再清理实例资源、材质、纹理、几何、controls、画布和 WebGL 上下文.
+## Lifecycle
 
-每个场景独占一份 GPU 资源. 共享仅发生在该场景的多个实例之间, 没有全局可变 Three.js 单例.
-连续全量快照更新会重建所有对象并复位选择, 因此不适合直接承接高频事件流.
+1. Vue watches the canvas reference, snapshot reference, and retry count.
+2. Replacement, retry, or unmount invalidates old loading, aborts model requests, and disposes the old scene. Late instances are disposed immediately.
+3. Validate, then load required same-origin GLBs. Create the canvas only after all models arrive without cancellation. Register every acquired resource immediately in `ResourceScope`.
+4. Partial initialization failure cleans acquired resources in reverse order and rethrows the original error.
+5. Hidden documents stop RAF, discard wheel inertia, and retain approach progress. The first resumed frame has zero delta.
+6. Drawing failure or WebGL context loss stops the loop, disables controls, and exposes retry.
+7. Disposal removes listeners/observers and stops the loop, then releases instance resources, materials, textures, geometry, controls, canvas, and WebGL context.
 
-## 行星轨道与实例化
+Each scene owns its GPU resources. Sharing is confined to instances in that scene; there are no globally mutable Three.js singletons. Complete snapshot replacement rebuilds all objects and resets selection, so it cannot directly handle high-frequency streams.
 
-27 个实例批次共享行星 GLB 几何与材质. `model/orbitalPlane.ts` 从 Star ID 生成共同轨道面, 与恒星坐标和输入顺序无关.
-不同星系的共同面相对世界 XZ 面倾斜 12..32 度, 各行星相对所属共同面的倾角限制为 0..3 度, 法线保持同向.
-这些角度是展示参数, 不代表所有真实恒星系统的观测分布. [NASA 的行星系统介绍](https://science.nasa.gov/universe/stars/planetary-system/)
-说明太阳系行星大致共面且同向公转, 与形成它们的原行星盘有关; [黄道面](https://www.nasa.gov/image-article/plane-of-ecliptic/) 特指地球公转平面,
-因此本项目对其它星系使用“共同轨道面”, 不称它们共享同一个黄道面.
-`model/layout.ts` 生成面内均匀方位, 不再生成球面布局. `model/orbit.ts` 从稳定 ID 和布局参考构造小倾角椭圆候选,
-`model/orbitPlanner.ts` 按布局半径和稳定 ID 排序, 为每颗行星分配不同半长轴的独占径向轨道带, 恒星位于椭圆焦点.
-各行星的平均角速度直接取 `0.028 * (20/a)^1.5`, 满足统一展示引力参数下的 `n²a³` 常量, 不再量化为重复周期档位.
-布局提示的模长作为半长轴下限, 方向投影到所属小倾角轨道面; 提示不保证等于最终起点.
-径向摆幅 `a*e` 上限由稳定 ID 分配为 0.15..0.35 世界单位, 同时不超过候选椭圆的摆幅.
-外圈随半长轴增大而降低离心率, 避免大量轨道按固定离心率指数膨胀; 这是可读性取舍, 不是实际行星系统的统计规律.
-相邻轨道要求 `q_outer - Q_inner >= 2R + 0.12`, 其中 q/Q 为近星点/远星点半径, R 为真实行星网格的包围半径.
-首条轨道另外避开缩放后的恒星实体, GLB 原点偏移也计入模型包围半径.
-由两位置距离不小于距星半径之差可知, 这些间隔覆盖任意相位与倾角, 不依赖同步时钟、离散采样或时序避让.
-每个请求显式提供 `starId`, 保持输入顺序无关和快照不变; 初始化排序为 O(N log N), 分配为 O(N), 不进行候选搜索.
-`model/systemLayout.ts` 使用最大远星点加行星半径作为星系范围, 并覆盖恒星日冕、脉冲星完整光束或黑洞光学体积.
-任意两中心距离至少为 `1.02 * (extentA + extentB) + 1`, 围绕原布局平均中心统一扩大, 不缩小输入参考坐标的间距.
-这些额外留白是展示参数. 非重合中心保留相对方位; 出现重合中心时按稳定 ID 在圆周上展开, 再应用同一间距约束.
-星系间的包围范围彼此分离, 因此其行星和恒星实体也保持分离; 星系布局初始化使用 O(S²) 配对计算.
-模型组、连线、拾取和聚焦统一使用展示中心, 选择回调仍返回原始 Star 快照.
-运行时以五步 Newton 迭代求位置, 不做逐帧碰撞检测、速度让行或离轨修正.
-公式参考 [NASA 的 Kepler 定律介绍](https://science.nasa.gov/solar-system/orbits-and-keplers-laws/).
-轨道元素、共同引力参数、空间和时间比例均为展示设定, 不使用真实星历或多体引力模拟.
-场景唯一选择状态决定轨道时间倍率: 总览 15、恒星视图 6、行星详情 0. 各行星按自己的周期包裹累计时间, 限制长期浮点相位漂移.
-选中行星暂停全部公转, 黑洞流纹与恒星自转仍使用独立时钟.
-每帧复用矩阵和位置缓冲, 每批仅上传一次 `DynamicDrawUsage` 实例矩阵; 252 个实例约为 15.75 KiB/帧, 暂停时无上传.
-静态包围球覆盖远日点与模型半径, 公转后仍支持剔除和拾取. 选中环和推进读取当前实例矩阵, 不使用初始坐标.
+## Planet orbits and instancing
 
-## 拾取与星体缩放
+The 27 instance batches share planet GLB geometry/materials. `model/orbitalPlane.ts` derives a common plane from Star ID independently of coordinates/input order. System planes tilt 12..32 degrees from world XZ; individual planets deviate 0..3 degrees with aligned normals. These are display parameters, not a universal astronomical distribution. [NASA's planetary-system introduction](https://science.nasa.gov/universe/stars/planetary-system/) relates the Solar System's approximately coplanar, same-direction orbits to its protoplanetary disk. The [ecliptic](https://www.nasa.gov/image-article/plane-of-ecliptic/) specifically denotes Earth's orbital plane; other systems here have their own common planes.
 
-`createObjectIndex` 维护实体索引和精确拾取, `createStarPicker` 只负责扩大区域的射线回退, 不创建可见几何.
-总览优先拾取恒星本体, 进入星系后加入所属行星的精确拾取; 其它星系的行星不会挡住恒星点击.
-未精确命中时, 普通恒星按 Surface 几何包围球的世界直径扩大 3 倍检测点击; 黑洞按含吸积盘的完整光学范围 `bodyRadius` 扩大 3 倍,
-使用实时中心, 不重复乘模型缩放. 两者均与行星轨道范围无关.
-此容差跟随模型世界矩阵, 不改变显示或布局; 脉冲星仍只拾取实际核心. 重叠时取射线裁剪区间的最近入口, 等距按 ID 稳定排序,
-支持相机位于范围内部, 不创建额外渲染对象. 精确行星命中优先于扩大区域, 保持近景行星选择.
-控制器的 `selectPlanet` 和 `focusPlanet` 同样要求已经进入对应星系, 不再隐式跨视图选择. ID 查找不依赖对象引用.
-恒星使用 GLB 中的起伏球面和球形日冕壳, 按 Star 着色; 行星使用 GLB 岩质网格并按实体类型着色.
-`model/presentation.ts` 以全部所属行星数计算恒星线性缩放: 10→0.5、30→1、60→1.5、120→2、180→3,
-区间内线性插值, 两端钳制. 只缩放恒星 GLB 根节点, 表面、日冕和拾取同步; 行星不继承该缩放, 轨道规划计入缩放后的核心半径.
-数量缩放之外, `sceneConfig.starScale = 1.5 * Math.cbrt(2)` 将普通恒星原来的体积翻倍, 半径与直径增加约 26%; `pulsarScale = 8` 将脉冲星整体放大八倍.
-最终模型缩放与轨道避碰包围范围使用同一个倍率; 黑洞状态使用 `0.75 * Math.cbrt(2)` 同步体积翻倍, 不叠加普通恒星的数量倍率.
+`model/layout.ts` produces uniform in-plane azimuths rather than spherical layouts. `model/orbit.ts` derives slightly inclined elliptical candidates from stable IDs/hints. `model/orbitPlanner.ts` sorts by hinted radius and stable ID, assigning unique semimajor axes and exclusive radial bands, with the star at a focus. Mean angular velocity is `0.028 * (20/a)^1.5`, giving constant `n²a³` for the shared display gravitational parameter rather than quantized periods. Hint magnitude bounds the semimajor axis from below; its direction projects onto the planet's plane, without guaranteeing the final start.
 
-## 相机与背景
+Stable IDs assign radial excursion `a*e` limits of 0.15..0.35 world units, also capped by the candidate ellipse. Outer eccentricity decreases with semimajor axis to avoid exponential system expansion from fixed eccentricity; this is a readability choice. Adjacent bands satisfy `q_outer - Q_inner >= 2R + 0.12`, where q/Q are periapsis/apoapsis and R is the actual mesh bounding radius. The first band also clears the scaled star; bounds include GLB origin offsets. Distance between positions is at least the difference of their radial distances, so this separation covers every phase/inclination without synchronized clocks, sampling, or timed avoidance. Requests explicitly include `starId`, preserve input snapshots, and remain order-independent. Initialization sorts in O(N log N), assigns in O(N), and performs no candidate search.
 
-`scene/sceneFraming.ts` 统一维护固定全局坐标、星图观察中心与距离边界. 完整包围球和窗口视场角只用于远裁剪与缩放上限,
-不再计算随后被覆盖的自动构图位置或逐个星体投影. 公转时不抢占手动镜头, 允许恒星出画或到镜头后方.
-恒星聚焦距离至少为 90, 根据该星系轨道范围适当后退; 聚焦和滚轮共用实时距离上限.
-窗口尺寸变化更新总览目标与裁剪范围, 不抢占用户相机姿态.
-`createSceneFraming` 和 `fitSceneFraming` 共用 `camera.initialPosition = [-178, 176, 1083]`,
-首次加载、快照重建与所有返回总览入口共用该位置; 观察中心仍来自星图中心. 缩放上限和远裁剪同时容纳指定坐标, 避免控制器夹回.
-背景透镜每帧同步相机近远裁剪值, 避免扩大场景后仍按旧深度范围解码.
-`background/createCosmicBackground.ts` 在普通场景层用单个全屏三角形绘制远裁剪面天空, 不写入深度、不参与拾取.
-世界观察方向驱动两层低频程序噪声, 使用五次插值和较弱细节层使纹理柔和; 冷暖颜色仅为辐射的艺术化表达. 细粒噪声固定在像素上, 不随时间闪烁.
-天空先于星体绘制, 不设置环境贴图或灯光, 不修改曝光; 黑洞背景捕获会包含天空, 光学及辅助层不重复绘制它.
-`sceneConfig.cosmicBackground` 提供开关、辐射强度与噪声强度; 资源由场景作用域释放, 不依赖下载或新纹理资产.
-`createDistantStars.ts` 用固定种子均匀采样天球, 2200 个软边星点合并为一个 Points 批次, 大部分亮度较低; GLSL 独立于资源构造.
-仅观察旋转参与投影, 深度位于远裁剪面; 不参与照明和拾取, 不写入深度, 由前景实体遮挡. 星点在普通场景层进入黑洞背景捕获.
-每个可用恒星保存独立自转速度, 使用原有帧循环更新模型根节点姿态, 不增加材质、纹理或行星矩阵上传.
-无效时间增量被忽略, 零速不更新姿态; 先按旋转周期折叠增量再乘速度, 避免极大有限输入溢出.
-星体与日冕均为实体网格, 不使用 Sprite 或随相机转向的贴片; 行星选中环仍是独立的 UI 装饰.
+`model/systemLayout.ts` bounds each system by maximum apoapsis plus planet radius and includes stellar corona, complete pulsar beams, or black-hole optical volume. Pairwise center distance is at least `1.02 * (extentA + extentB) + 1`. Uniform expansion around the original mean center never reduces hinted spacing; noncoincident centers retain relative directions. Coincident centers spread around a stable-ID circle before applying the same constraint. Disjoint bounds imply disjoint bodies. Initialization takes O(S²) pair comparisons. Models, links, picking, and focus share display centers; callbacks still return original Star snapshots.
 
-## 恒星公转与编辑器
+Runtime solves positions with five Newton iterations, with no per-frame collision detection, yielding, or off-orbit correction. See [NASA's Kepler laws](https://science.nasa.gov/solar-system/orbits-and-keplers-laws/). Elements, gravity, space, and time are display choices, not ephemerides or many-body simulation. Selection sets satellite time scales to overview 15, star view 6, details 0. Each planet wraps accumulated time by its own period to limit long-term floating-point phase drift. Planet selection pauses all orbits; black-hole flow and star spin use independent clocks. Matrices/position buffers are reused; each batch uploads one `DynamicDrawUsage` instance matrix set per frame, about 15.75 KiB for 252 instances, with no upload while paused. Static bounding spheres cover apoapsis plus model radius for culling/picking. Selection rings and approach read live instance matrices, not initial coordinates.
 
-`Star.appearance` 为可选展示类型, 缺省或 `star` 使用普通恒星, `pulsar` 使用程序化脉冲星; `black-hole` 状态优先使用黑洞.
-默认 Pulsar 作为九颗正常恒星和一颗黑洞状态恒星的共同公转中心, 无行星和连线; 正常恒星保持 36 条两两连接, 外观类型不代表后端角色.
-尚无真实质量数据, 包含黑洞状态的全部恒星输入坐标按等权平均确定脉冲星锚点, 不用状态或行星数量推定恒星质量.
-`GalaxyData.centerStarId` 显式指定总览观察中心, 当前取 Pulsar; 构图围绕其最终展示位置重新包围全部星系, 返回总览和旋转使用同一中心.
-`model/clusterLayout.ts` 对所有非中心恒星使用统一布局, 不按正常/黑洞状态筛除轨道成员. `stellarOrbits.ts` 每层最多容纳 12 颗,
-小规模仅使用内层, 超过容量才均衡增层. 各层按星系大小交错安排角向位置, 避免多个大星系相邻而撑大整个层.
-`stellarPacking.ts` 用平衡的二阶扰动改变半长轴（基准的 0.92..1.08）、相位和轨道面, 不把节点排成等半径正多边形;
-偏心率为 0.02..0.04. 以 12 度为倾角基准, 尝试 ±3、±9、±15 度变化, 只选择完整周期安全半径最小的方案.
-同层共享平均角速度, 相对构型闭合重复, 避免独立周期追尾; 用 512 个周期采样点, 再扣除两条轨道最大速度之和乘半个采样间隔,
-得到覆盖采样间隙的距离下界, 按实际星系包围半径和留白求最小整体尺度. 每对轨道只计算一次, 对称位置复用同一下界; 这不是只检查初始相位是否重叠.
-不同层仍使用互斥的完整径向带并采用不同周期. 最内层基础周期 600 虚拟秒, 外层周期随层尺度的 1.5 次方增加; 使用既有 Kepler 位置求解.
-近似相位平衡使全部恒星（含黑洞状态）的等权中心接近脉冲星, 不保证精确重合; 只有一颗恒星时, 其自身质心随轨道移动.
-这是稳定的展示轨道, 不声称满足多体引力或真实质量加权的质心动力学. 无脉冲星时所有恒星保持静态布局.
-黑洞状态仅控制模型、卫星和连线可见性, 不改变公转成员或质心权重; 其光学体积半径同样计入避碰范围, 不再使用外围静止布局.
-`createStellarMotion.ts` 仅平移星系父节点, 各自的卫星轨道仍在局部坐标中计算; 恒星公转统一使用独立倍率 15, 总览与恒星视图速度不变, 行星详情停止.
-`createStellarOrbitLines.ts` 使用同一规划的半长轴、偏心率和轨道基向量, 每条椭圆采样 256 段闭合细线; 包含黑洞状态的恒星.
-轨道合并为一个静态 LineSegments, 使用低透明度蓝灰色与深度测试, 不写入深度、不参与拾取, 不增加每帧上传; 资源归场景作用域释放.
-卫星使用 15/6/停止倍率. 每个公转周期包裹累计时间, 自转、脉冲星辐射和黑洞流动继续使用真实帧增量. 全景裁剪范围计入远星点, 但不保证运动始终在画面内.
-运行时中心数组由模型、拾取和连线共享, 连线可见时每帧更新一次缓冲. 聚焦时相机、观察中心、未完成推进和缩放锚点一起平移.
-初始平滑推进完成后, `CameraMotion.keepCentered` 将观察中心锁到所选恒星的实时中心, 同步补偿相机和缩放锚点以维持观察角度与距离.
-恒星视图禁用平移, 旋转和缩放仍可用, 非中心鼠标缩放不会让星体偏离画面中央; 总览和行星详情恢复平移. 返回总览停止跟随,
-行星推进不受恒星锁中心影响. 不把逐帧中心写回输入快照或 Vue 响应式状态.
+## Picking and body scaling
 
-右下角 `GalaxyEditor.vue` 的三角形按钮打开独立草稿. 支持 0..48 颗恒星, 各行选择正常或黑洞状态; 正常状态可配 0..180 颗卫星, 另有可选的一颗脉冲星;
-至少保留一个星体, 名称去除首尾空白后为 1..64 个字符. 卫星数量沿用当前业务 `Planet` 模型, 三类实体轮流分配, 无需为三的倍数.
-`model/galaxyEditor.ts` 在确认时校验并生成完整快照, 只在正常状态恒星之间生成两两连接; 黑洞仍保留原恒星 ID 与名称, 不再有独立黑洞草稿列表.
-删除或改状态不会重编号其它恒星. 同次编辑中切回正常状态保留草稿卫星数, 确认为黑洞则输出零卫星; 取消或关闭不会修改当前数据.
-`App.vue` 用 shallowRef 保存快照, 经 GalaxyView 的 regenerate 事件替换; 既有 composable 取消旧加载、释放资源并从总览重建.
-配置只在本页内存中生效, 不持久化或发送到管理后端. 校验失败保留草稿; 资源加载失败继续使用现有场景错误与重试入口.
-三角按钮左侧显示相机世界坐标 X/Y/Z, 两位小数且可选择复制. 场景通过可选 cameraPosition 回调最多每秒十次上报变化,
-沿用现有 RAF, 静止时不更新 Vue, 快照重建清空旧读数, 已取消场景的晚到回调被忽略.
+`createObjectIndex` owns entity indexing/exact picking; `createStarPicker` only provides enlarged-region ray fallback with no visible geometry. Overview first picks star bodies; inside a system, its planets join exact picking. Other systems' planets cannot intercept star clicks. Without an exact hit, normal stars use 3× the world diameter of the Surface bounding sphere; black holes use 3× complete optical `bodyRadius`, including the disk. Live centers avoid duplicate scale multiplication; neither uses planetary orbit extent.
 
-## 脉冲星
+Tolerance follows world matrices without altering display/layout. Pulsars still use only the actual core. Overlaps select the nearest entry in the clipped ray interval, breaking equal-distance ties by stable ID, including cameras inside a region. Exact eligible planets outrank enlarged regions. `selectPlanet` and `focusPlanet` likewise require entry into the owning system and never implicitly cross views. IDs, not object identity, drive lookup.
 
-`runtime/pulsar/` 分开维护配置、GLSL 和模型构造; 不加载额外 GLB、贴图或依赖. 模型核心半径为 3.6, 数量倍率 0.5 再乘整体倍率 8 后, 该示例实际半径为 14.4.
-核心是球面实体, 采用白热磁极、弱磁纬细纹与蓝色临边层次. 周围以有限光路高斯发射积分表现暖白内辉光和蓝色散射, 不以固定亮球壳描边.
-自转轴相对世界 Y 倾斜 30 度, 磁轴相对自转轴倾斜 30 度.
-两个相反方向的封闭圆柱作为体积代理, 沿视线固定 64 次采样发射密度与透射率; 每束包含细亮芯、五条向外流动的细丝和较稀疏的蓝色外层, 在端部和代理边界前归零.
-每个光束和辉光体积独占局部相机 uniform, 仅绘制前转换坐标, 不修改相机或另开帧循环.
-`magneticField.ts` 以三层不同半径、错开的方位和轻微扭转构造 24 条偶极磁场细丝, 基础关系为 `r = r_equator * sin(theta)^2`.
-细亮芯与柔和外层合并为两个网格批次, 临时建模几何立即释放; 材质沿弧线传输亮结, 远景随投影尺寸淡出.
-核心和光晕的脉冲由视线与世界磁轴夹角决定, 视线在磁极方向约 20..7 度内逐渐增强; 改变视角会改变脉冲, 并非全局正弦闪烁.
-自转继续使用原有速度接口和统一帧循环, 行星暂停不影响它. 细丝流动使用每实例共享的四秒闭合相位, 停转不停止辐射流动; 不同实例互不共享可变时钟.
-拾取仅使用球形核心; 布局和总览包围球计入整段光束的旋转范围. 两个光束共享本实例的几何, 所有最终几何与材质登记到场景作用域.
-灯塔式扫射参考 [NASA 的脉冲星介绍](https://imagine.gsfc.nasa.gov/observatories/satellite/xmm/pulsar.html).
-可见光束、磁场线、半径和 2.4 秒展示周期均为示意, 不是实际辐射光谱或磁层模拟. 光束沿用场景深度测试, 不计算与其它透明体积的逐点遮挡.
-自动化执行结果见 [统一验证记录](../../docs/validation.md#sdk-完整回归结果); GPU 画面仍需独立验收, 不能以数值和资源用例代替视觉确认.
+Stars use GLB uneven surfaces and spherical coronas with per-Star color; rocky planets are colored by entity type. `model/presentation.ts` scales stars by total owned planet count: 10→0.5, 30→1, 60→1.5, 120→2, 180→3, interpolated and clamped. Only the GLB root scales: surface/corona/picking follow, planets do not; orbit planning includes the scaled core. Additionally, `sceneConfig.starScale = 1.5 * Math.cbrt(2)` doubles previous star volume, increasing radius/diameter about 26%; `pulsarScale = 8` scales the entire pulsar eightfold. Collision bounds use the same multiplier. Black-hole scale is `0.75 * Math.cbrt(2)`, doubling volume without normal-star population scaling.
 
-## 黑洞与光学合成
+## Camera and background
 
-`Star.status` 显式声明展示状态 `available | black-hole`; 黑洞是恒星状态. Orion 为黑洞状态示例.
-黑洞状态只创建黑洞模型, 即使快照保留旧实体和边, 也不创建其行星、行星拾取入口或任何关联连线; 恒星核心仍可拾取和聚焦.
-星图装配时将黑洞模型整体缩放到 `0.75 * Math.cbrt(2)`, 盘面、阴影同步; 扩大点击范围以完整光学体积为基准. 以下光学参数均为未缩放的模型局部单位.
-黑洞 GLB 包含 Core、Horizon 和 Accretion 下的 Disc、Glow. 运行时只绘制封闭的 Horizon 光学体积;
-Core 隐藏表面但保留节点射线拾取, Disc 与 Glow 保留离线建模结构, 避免普通球面遮挡与光线成像重复叠加.
-模型克隆共享几何、材质与纹理, 姿态保持不变. `createBlackHole` 为实例维护独立时钟和三个有限生命周期的亮结,
-在 `onBeforeRender` 绑定该实例的 uniform, 并设置 `uniformsNeedUpdate`, 避免连续绘制共享材质时复用上一个节点的时间.
-局部相机位置也在绘制前由节点世界矩阵反求, 以 uniform 传入; 不再逐顶点求逆或插值这个常量.
-`blackHole/flow.ts` 统一 CPU 亮结与 GPU 主流速度: `1.02 * (discInner / r)^1.5` 弧度/真实秒, 保留三倍虚拟时钟, 移除共同匀速分量.
-固定半径处的角速度对应盘内缘一圈约 6.2 秒, 外缘约 61 秒; 主流同时以 `0.36 * sqrt(discInner / r)` 模型长度/真实秒向内汇聚.
-GPU 沿该螺旋流场反向追溯纹理来源, CPU 沿同一流场积分亮结半径和角位移, 表现收缩过程中逐渐加快的绕转.
-稀薄层的角速度为主流的 0.68 倍, 向内速度为主流的 0.65 倍. 这些是展示速度, 不是物理时间标定.
-两个错开半周期的 24 虚拟秒流场在零权重处复位, 真实周期 8 秒, 限制快速内盘累计剪切导致的细丝模糊; 行星仍独立遵循 15/6/停止策略.
-亮结在独立生命周期内生成、螺旋向内移动、角向拉长并消散, 接近盘内缘时提前淡出, 不瞬移回外缘; 每帧复用向量, 不克隆材质或纹理, 离屏实例不计算亮结.
-`blackHole/optics.ts` 以 RK4 积分非旋转黑洞的光轨道方程 `u'' + u = 1.5 rs u²`; `lookupTextures.ts` 在初始化时将结果打包为 513×768 的 R16F 查找表.
-冲量范围 0.02..28, 在临界值 4.5 两侧加密, 同时覆盖捕获和逃逸光线; 捕获后半径停留在事件视界, 不重新插值回无穷远.
-另有 513×128 的 RG16F 表反求有限距离观察相位和逃逸角, 替代先前近景的无穷远相位近似.
-每像素计算光线平面与盘面的前两个交点, 按光路先后累积发射颜色与透射率, 再合成捕获阴影. 不再以预设圆弧描边或旋转模型朝向相机.
-两次交点使用相同的发射和频移模型, 可见度由沿光路的遮挡确定, 不再按倾角人为切换上下盘像能量.
-盘内缘取非旋转黑洞的稳定圆轨道内边界 `3 rs`, 即约 5.196; 外盘延伸到 24, 从 19.5 起逐渐衰减,
-避免过早截断前景盘面后露出独立的宽次像. 亮结位置始终位于该发射盘内.
-频移使用光线守恒角动量在盘轴上的投影和圆轨道角频率, 同时包含引力与运动影响, 不用光源到相机的直线方向代替弯曲光路.
-RGB 温差与亮度采用受限频移及三次方强度近似; 这是显示模型, 不是完整黑体光谱积分.
-高温主亮环采用暖金色, 发射能量最多提高 45%; 外层使用较暗琥珀色, 保留密度间隙和左右明暗差.
-精确侧视附近将小于 1e-6 的倾角正弦视为零, 防止顶点插值误差让相邻像素选择不同交点而产生碎斑.
-次像始终查询真实盘面交点, 保留径向发热分布和盘缘. 只有该处像宽接近或小于两倍像素足迹时, 才连续混入覆盖面积近似;
-不能按整个节点的距离把宽光弧换成固定发热半径的实心带. 近似与真实像按覆盖率混合颜色, 避免透明边缘混入白色硬边.
-范围表为 768×1 的 RGBA32F, 保存内外边界、发射加权半径和能量修正; 初始化时对每行进行 32 点径向发射积分,
-避免把整段窄像按峰值发射描成亮线. 显式插值两个最近采样, 不依赖浮点线性过滤扩展.
-256×1024 流纹贴图在初始化时烘焙角向周期的二维密度场; RGBA 分别保存长细丝、密度团、中尺度断续流带和稀薄丝雾.
-径向扰动控制在细丝宽度附近, 避免形成粗大卷曲纹理; mipmap 与各向异性过滤控制亚像素闪烁, 周期角度接缝使用修正后的导数.
-近景以细丝为主, 远景保留中尺度流带. 主层和稀薄层分别进行双相平流, 常规交点四次纹理采样; 粗 mip 的散射采样只保留主层平均能量.
-密度同时控制发光与透射, 外盘逐渐变薄; 薄盘交点按近似倾角延长光程, 使掠射比俯视更致密, 次像的亚像素覆盖也保留透射率.
-细丝的径向坐标采用非线性展开, 内侧密集、外侧间距增大并有更明显的松散丝雾. 主发光带集中在 `1.36 * discInner` 附近,
-外层随密度场变化提前消散, 不保留等亮、整齐的圆盘边缘; 最外侧仍在既有光学体积内平滑归零.
-径向散射宽度由内向外增大, 内部保持凝聚的暖金亮流, 外部保留较暗的琥珀细丝和稀薄透射, 不整体放大模型.
-上述纹理归场景作用域所有, 在黑洞实例之间共享, 不在帧循环中重建或上传. 光学体积内外均只绘制一次.
-存在黑洞时, `lensingRenderer.ts` 把普通场景绘入一份共享颜色/深度目标, 复制到画布后绘制黑洞, 最后统一绘制可见的辅助标记（选中环和恒星轨道线）.
-`rendering/layers.ts` 统一通道编号, `rendering/fullscreenTriangle.ts` 为背景和颜色/深度复制提供共用几何构造. 辅助层与光学层不会反向引用场景装配.
-轨道线不进入透镜背景捕获, 因此不被折射; 保留其材质的深度测试, 使用已合成的深度进行遮挡. 无黑洞时辅助标记仍在普通层, 保持单次绘制.
-目标按绘图缓冲尺寸复用和调整, 使用最多四样本 MSAA; 没有黑洞时仍使用原单次绘制路径. 资源登记到场景作用域, 异常时恢复渲染目标和相机层.
-`blackHole/shaders/lensing.ts` 根据光轨道表的逃逸角投影背景采样方向, 依据深度衰减有限距离的偏移, 并拒绝前景采样.
-折射只作用于黑洞局部光学体积, 外缘平滑衰减; 屏外方向回退到原背景, 不把边缘像素无限拉长.
-这是屏幕空间近似: 不包含屏外或被遮挡的物体信息, 透明光晕与连线没有独立深度, 多个黑洞共享未折射背景且不递归成像.
-高光使用亮度压缩, 仅最高能量略微趋白, 保留暖金内盘、琥珀外盘及流带暗隙.
-内层连续发光承载主亮度, 细丝只做较弱的运动调制; 纹理峰更窄、角向连续段更短, 避免发白的粗同心线.
-外盘降低发射和光学厚度, 更早渐隐; 主亮环周围使用较宽而克制的散射过渡. 此配色调整尚未完成画面验收.
-盘像两侧以固定四次粗 mip 采样补充小范围径向散射, 仅柔化实际发光盘缘, 不生成固定形状的光环. 这是艺术化散射近似, 不是完整二维 bloom.
-阴影投影半径在 14..65 绘图缓冲像素之间平滑提高纹理细节级别; 远景扩大亮结并增强细纹过滤, 不改变盘像几何.
-亮结运动在阴影半径降至 2..8 像素时淡出, 防止极小节点闪烁; 每个可见实例仍最多计算三个亮结.
-流团通过角向分段打散, 密度峰值在烘焙时筛选; 不抬高低密度尾部来形成连续宽亮带.
-远景额外导数过滤为 1.15 倍, 保留 mipmap、各向异性和周期接缝过滤. 稀薄层只是发射和透射近似, 不代表已经实现三维流体模拟.
-`blackHole/shaders/volume.ts` 仅在接近侧视时补充前景盘缘: 射线先与外圆柱和高度区间求交, 截断到节点前方后做四步发射积分.
-椭圆截面最大半厚度 0.28 与 GLB 一致, 屏幕足迹控制盘缘过滤, 光程采样间距决定显式 mip 级别, 避免稀疏采样产生条码闪烁.
-加载器从 GLB 的 Accretion 姿态取得盘法线和坐标变换. 光学体积写入节点附近的虚拟深度, 避免把包围球前表面当作实体遮挡其它星体;
-虚拟深度不是沿弯曲光线与场景物体求交; 其它星体的形变由上述屏幕空间背景采样近似, 不属于完整场景光线追踪.
-发射分布、流动时间尺度和 RGB 显示范围经过艺术调整; 盘面成像采用薄盘近似, 仅保留前两次交点.
-正侧视的前景盘缘保留有限厚度, 但仅用局部直线射线补充; 弯曲盘像仍是薄盘近似, 并未实现完整的体积相对论辐射转移.
-这不是完整 Kerr 渲染或物理稳态吸积流体.
-按维护者明确选择, 捕获阴影内部增加微弱的风格化弧面层次: 模型局部球面法线决定暗部、暖色盘缘光和冷色弱轮廓.
-只在可见阴影像素计算, 在盘像之后按剩余透射率合成; 不绘制独立核心表面, 不改变阴影轮廓或深度, 不新增纹理和绘制调用.
-这些暗部层次用于提示体积, 不是物理事件视界的发光或反射, 也不属于光轨道方程的模拟结果.
-展示状态只属于演示, 不用于推断真实故障原因.
+`scene/sceneFraming.ts` owns fixed global position, map target, and distance bounds. Complete bounds/FOV determine far clipping and zoom limits, without computing an unused automatic camera position or projecting every body. Orbits do not seize the manual camera; bodies may leave the frame or pass behind it. Star focus distance is at least 90 and grows with system extent. Focus/wheel share live distance limits. Resizing updates overview target/clipping without changing the user's pose.
 
-帧调度器按累计截止时间限帧, FPS 统计已完成的绘制. 单帧时间增量上限 0.1 秒,
-避免卡顿恢复后一次性追赶过量动画. 相机推进和缩放都使用时间增量, 与刷新率解耦.
-滚轮只修改目标距离, 同步缩放相机位置和观察中心以保持鼠标锚点稳定.
+`createSceneFraming` and `fitSceneFraming` share `camera.initialPosition = [-178, 176, 1083]` for load, rebuild, and every overview return. The target remains the map center; zoom/far clipping include the fixed position to prevent clamping. Lensing synchronizes near/far camera planes every frame to avoid decoding expanded scenes with stale depth ranges.
 
-`FrameOrbitControls` 把 OrbitControls 在鼠标/触摸事件中的即时 `update()` 延后到每帧的 `updateFrame()`.
-事件只累积旋转和平移, 每帧按 90 ms 时间常数消费一次, 避免鼠标事件密度改变阻尼和速度.
-聚焦开始前通过公开 API 清空旧惯性并保留当前相机姿态; 按下指针立即中断推进和缩放,
-5 像素阈值仅用于区分点击和拖动. 隐藏页面也清空拖动惯性, 恢复后不补跑.
+`background/createCosmicBackground.ts` draws one fullscreen triangle at the far plane in the ordinary scene layer, without depth writes or picking. World viewing direction drives two low-frequency procedural-noise layers with quintic interpolation and weak detail. Warm/cool colors artistically suggest radiation. Grain is pixel-fixed, not time-flickering. Sky draws before bodies, sets no environment map/lights/exposure, enters black-hole background capture, and is not redrawn in optical/helper layers. `sceneConfig.cosmicBackground` controls enablement, radiation, and grain strength. Scene scope owns resources; no downloads/new texture assets.
 
-## 后续扩展边界
+`createDistantStars.ts` uniformly samples the celestial sphere with a fixed seed: 2200 soft-edged points in one Points batch, mostly dim, with GLSL separate from construction. Only view rotation affects projection; far-plane stars neither illuminate nor pick nor write depth, and foreground objects occlude them. They enter ordinary-layer lensing capture.
 
-真实接入以 [Go Astrolabe](../../astrolabe/README.md#管理登录与-admin-接入) 为后端, 先定义管理登录、拓扑 DTO 和错误契约, 再增加独立数据适配层. 首版使用部署管理账号并仅做登录验证, 不增加管理用户的角色等级或 Sector/Spectrum 权限表. 固定内存会话和同源/跨源请求遵循后端契约; 浏览器登录与基础设施准入分开, 不让场景渲染器持有服务凭据或自行连接 Star/Pulsar. Almanac 编辑由 Astrolabe 提交给 Polaris, 持久提交结果与各 Star 安装进度分别展示, 不在前端重新维护发布补偿队列或将观测视图回写为权威底稿.
-新增行星类型需要一起更新展示类型、颜色、构造策略与相关测试.
-高频拓扑更新需要显式增量协议、批量合并、选择保持和过期数据语义;
-大规模模型需要在实际 GPU 上测量后决定 LOD、实例分组、剔除和标签策略.
-当前没有实现路由、全局状态库、认证或网络层, 基础骨架不声称这些能力已具备.
+Each available star keeps independent spin speed, updating its root in the existing frame loop without new materials/textures or planet uploads. Invalid deltas are ignored; zero speed leaves orientation untouched. Delta folds by rotation period before multiplication to avoid overflow for huge finite input. Stars/coronas are meshes, not Sprites or camera-facing cards; planet selection rings remain separate UI decoration.
+
+## Stellar orbits and editor
+
+Optional `Star.appearance` defaults to normal `star`; `pulsar` selects the procedural model, while `black-hole` status takes precedence. Default Pulsar is the shared center for nine normal stars and one black-hole star, without planets/links. Normal stars retain 36 pairwise links. Appearance does not encode backend role. Without actual masses, the equal-weight mean of all star coordinates, including black holes, anchors Pulsar; neither status nor population implies mass. `GalaxyData.centerStarId` explicitly chooses overview center, currently Pulsar; final framing encloses every system around its display position, also used by reset/rotation.
+
+`model/clusterLayout.ts` lays out every noncentral star regardless of status. `stellarOrbits.ts` permits at most 12 per layer, using only the inner layer for small populations and balancing added layers after capacity. Alternating systems by size avoids grouping large neighbors. `stellarPacking.ts` uses balanced second-order perturbations of semimajor axes (0.92..1.08 of base), phases, and planes rather than a regular polygon; eccentricity is 0.02..0.04. Around a 12-degree inclination baseline, it tries ±3, ±9, and ±15 degrees, choosing the smallest safe complete-cycle radius.
+
+Same-layer mean angular velocity is shared so relative geometry repeats without overtaking. From 512 cycle samples, subtract the sum of pairwise maximum speeds times half a sample interval to bound unsampled distance; actual system bounds and clearance determine minimum overall scale. Each pair is evaluated once and symmetric positions reuse the bound. This is not merely an initial-overlap check. Different layers use disjoint full radial bands and different periods. The innermost base period is 600 virtual seconds, with outer periods scaling as layer size^1.5, using the existing Kepler solver. Approximate phase balance keeps the equal-weight center near Pulsar, not exactly coincident; a single star's own center moves with its orbit. These stable display orbits claim neither many-body dynamics nor a mass-weighted physical barycenter. Without Pulsar, layout is static.
+
+Black-hole status changes model/satellite/link visibility, not orbital membership or center weight; its optical volume participates in clearance. `createStellarMotion.ts` translates system parents only; satellite motion remains local. Stellar time scale is independently 15 in overview/star view and stopped in details. `createStellarOrbitLines.ts` samples each planned ellipse's semimajor axis, eccentricity, and basis into 256 closed segments, including black holes. All guides form one static LineSegments batch: dim translucent blue-gray, depth-tested, no depth write/picking/frame upload, scene-owned. Satellites use 15/6/stopped. Each orbit wraps time; spin, pulsar radiation, and black-hole flow use real frame delta. Overview clipping covers apoapsis but does not promise every moving body stays visible.
+
+Models/picking/links share live center arrays; visible links update one buffer per frame. Following translates camera, target, unfinished approach, and zoom anchor together. After initial approach, `CameraMotion.keepCentered` locks target to the selected star's live center and compensates camera/zoom anchor to preserve view angle/distance. Star view disables panning; rotation and off-center pointer zoom preserve centering. Overview/details restore panning; reset stops following, and planet approach ignores star centering. No frame-by-frame centers are written into input snapshots or Vue state.
+
+The triangle in `GalaxyEditor.vue` opens an independent draft: 0..48 stars, each normal/black-hole, 0..180 satellites for normal stars, plus optional single Pulsar. At least one body is required; trimmed names have 1..64 characters. Satellites use the existing application `Planet` model with three entity types assigned cyclically, without a multiple-of-three requirement. `model/galaxyEditor.ts` validates on confirm and creates a complete snapshot with pairwise links only between normal stars. Black holes retain star IDs/names; no separate black-hole list. Deletion/state changes do not renumber other stars. Switching back within one draft preserves satellite count; confirming a black hole emits zero satellites. Cancellation/close never changes current data.
+
+`App.vue` keeps the snapshot in a shallowRef and replaces it on GalaxyView's regenerate event. Existing composable cancellation/disposal rebuilds overview. Settings are page-memory-only, never persisted or sent to management. Validation failure retains the draft; load failure uses the existing scene error/retry path. Camera X/Y/Z beside the triangle are selectable, two-decimal text. Optional `cameraPosition` callbacks report changes at most ten times/second using existing RAF, with no Vue update while stationary. Rebuild clears readings; cancelled-scene late callbacks are ignored.
+
+## Pulsar
+
+`runtime/pulsar/` separates settings, GLSL, and construction without extra GLBs/textures/dependencies. Core model radius is 3.6; population factor 0.5 and overall factor 8 give example radius 14.4. The solid sphere has white-hot poles, faint magnetic-latitude texture, and blue limb detail. Finite-path Gaussian emission integration produces warm inner glow/blue scattering rather than a bright shell. Spin axis tilts 30 degrees from world Y; magnetic axis tilts 30 degrees from spin.
+
+Two opposite closed cylinders proxy beam volumes, each using 64 fixed line-of-sight emission/transmittance samples. Each beam has a bright thin core, five outward-flowing filaments, and sparse blue outer emission, falling to zero before endpoints/proxy boundaries. Each beam/glow owns a local-camera uniform, transformed immediately before drawing without modifying the camera or creating another loop.
+
+`magneticField.ts` constructs 24 dipole filaments in three radii with staggered azimuth and slight twist, using `r = r_equator * sin(theta)^2`. Bright cores and soft outer layers merge into two mesh batches; temporary geometry is released immediately. Materials move knots along arcs and fade with projected size at distance. Core/glow pulses depend on view/world-magnetic-axis angle, strengthening within roughly 20..7 degrees of a pole, not a global sine flicker. Existing speed controls/frame loop drive spin independently of planet pause. Filaments share a per-instance four-second closed phase; stopping spin does not stop radiation, and instances share no mutable clock.
+
+Only the spherical core picks; layout/overview bounds cover rotating full beams. Both beams share instance geometry; all final geometry/materials are scene-registered. The lighthouse concept follows [NASA's pulsar introduction](https://imagine.gsfc.nasa.gov/observatories/satellite/xmm/pulsar.html). Visible beams/field lines, sizes, and the 2.4-second period are illustrative, not spectra or magnetosphere simulation. Beams use scene depth tests but no per-sample occlusion against other transparent volumes. [Automated evidence](../../docs/validation.md#full-sdk-regression-results) does not replace independent GPU visual acceptance.
+
+## Black holes and optical composition
+
+`Star.status` explicitly declares `available | black-hole`; Orion exemplifies the latter. Even if input retains old entities/edges, black-hole assembly creates no planets, planet pick entries, or incident links. The stellar core still picks/focuses. Map assembly scales the entire model by `0.75 * Math.cbrt(2)`, including disk/shadow; enlarged picking uses full optical volume. Optical values below are unscaled local units.
+
+GLB contains Core, Horizon, and Accretion/Disc/Glow. Runtime draws only the closed Horizon optical volume. Core hides its surface but keeps ray picking; Disc/Glow retain offline structure, avoiding double composition of ordinary spherical occlusion and ray imagery. Clones share geometry/materials/textures without changing pose. `createBlackHole` gives each instance a clock and three finite-lived knots. `onBeforeRender` binds instance uniforms and sets `uniformsNeedUpdate`, preventing shared-material reuse of another node's time. Local camera position is also inverse-transformed from the world matrix before drawing and passed as a uniform, not inverted per vertex or interpolated as a constant.
+
+`blackHole/flow.ts` aligns CPU knots and GPU main-flow velocity: `1.02 * (discInner / r)^1.5` radians/real second, retaining the three-times virtual clock but removing a common uniform-speed term. At fixed radius, inner/outer rotations take about 6.2/61 seconds. Inward speed is `0.36 * sqrt(discInner / r)` model units/real second. GPU backtraces texture origins through that spiral field; CPU integrates knot radius/angular displacement through the same field, accelerating as knots contract. The thin layer uses 0.68× angular and 0.65× inward velocity. These are display speeds, not physical calibration.
+
+Two half-cycle-offset fields reset at zero weight every 24 virtual seconds (8 real seconds), limiting inner-disk shear blur. Planets independently follow 15/6/stopped. Knots spawn, spiral inward, stretch azimuthally, and fade over independent lifetimes, disappearing before the inner edge without teleporting outward. Frames reuse vectors and create no materials/textures; off-screen instances skip knot computation.
+
+`blackHole/optics.ts` integrates nonrotating light trajectories with RK4: `u'' + u = 1.5 rs u²`. `lookupTextures.ts` packs a 513×768 R16F lookup at initialization, with impact range 0.02..28 densified around critical 4.5. It covers capture/escape; captured radius stays at the horizon instead of interpolating back to infinity. A separate 513×128 RG16F table solves finite-distance viewing phase/escape angle, replacing the near-view infinity approximation.
+
+Per pixel, the first two ray-plane/disk intersections accumulate emission/transmittance in path order, followed by capture-shadow composition. There are no preset arc outlines or camera-facing model rotation. Both intersections share emission/frequency-shift models; path occlusion determines visibility without manually switching disk-image energy by inclination. The inner disk is the nonrotating innermost stable circular orbit, `3 rs`, about 5.196; the outer edge is 24, fading from 19.5 to avoid truncating the foreground disk and exposing a detached broad secondary image. Knots stay inside this emitting disk.
+
+Frequency shift uses conserved light angular momentum projected onto the disk axis and circular orbital angular frequency, including gravity/motion rather than straight source-camera direction. Bounded shifts and cubic intensity approximate RGB temperature/brightness, not full blackbody integration. The hot main ring is warm gold with emission increased at most 45%; the darker amber exterior retains density gaps and left/right asymmetry. Near exact side view, inclination sine below 1e-6 becomes zero to prevent neighboring pixels choosing different intersections from interpolation error.
+
+Secondary images always query real disk intersections and retain radial heating/edges. Only when local image width approaches or falls below twice the pixel footprint does a continuous area-coverage approximation blend in. Distance alone must not replace a broad arc with a solid band at fixed emission radius. Coverage blends color without white hard edges from transparent boundaries. A 768×1 RGBA32F range table stores inner/outer bounds, emission-weighted radius, and energy correction; initialization integrates 32 radial emission samples per row instead of drawing the entire narrow image at peak brightness. Explicit nearest-two interpolation needs no float-linear-filter extension.
+
+A 256×1024 flow texture bakes an azimuth-periodic 2D density field. RGBA hold long filaments, density clumps, intermittent medium-scale bands, and thin mist. Radial perturbation stays near filament width to avoid thick curls. Mipmaps/anisotropy filter subpixel flicker; corrected derivatives handle angular seams. Near views emphasize filaments, far views retain medium bands. Main/thin layers each use dual-phase advection: four texture samples per ordinary intersection. Coarse-mip scattering retains only main-layer average energy.
+
+Density drives emission and transmission; outer disks thin gradually. Approximate inclination extends thin-disk path length so grazing views are denser; secondary-image subpixel coverage also preserves transmittance. Nonlinear radial coordinates pack inner filaments more tightly and spread outer mist. Main emission centers near `1.36 * discInner`; outer density fades early rather than keeping a uniformly bright circular edge, reaching zero within the existing optical volume. Radial scattering widens outward, retaining compact inner gold and dim amber/translucent outer threads without enlarging the model. Scene-owned textures are shared across black holes and never rebuilt/uploaded in frame loops. Optical volumes draw once from either inside or outside.
+
+With black holes, `lensingRenderer.ts` renders ordinary scene color/depth into one shared target, copies it to canvas, draws black holes, then visible helper markers (selection rings/stellar orbit lines). `rendering/layers.ts` centralizes layer IDs; `rendering/fullscreenTriangle.ts` supplies shared construction for background/color-depth copying. Helper/optical layers do not depend back on composition. Orbit guides bypass background capture/refraction but depth-test against composited depth. Without black holes, helpers stay in the ordinary layer for one draw.
+
+Targets resize/reuse at drawing-buffer dimensions with at most four MSAA samples. No black holes retains the original single-pass path. Scene scope owns resources; exceptions restore render target/camera layers. `blackHole/shaders/lensing.ts` projects background directions from lookup escape angles, attenuates finite-distance offsets by depth, and rejects foreground samples. Refraction is local to the optical volume and fades at its edge. Off-screen directions fall back to original background instead of stretching edge pixels indefinitely.
+
+This screen-space approximation lacks off-screen/occluded information. Transparent halos/links have no independent depth. Multiple black holes share the unrefracted background without recursive imagery. Luminance compression whitens only the highest energy, retaining warm inner gold, outer amber, and dark gaps. Continuous inner emission carries brightness; weaker moving filaments have narrower peaks/shorter angular segments to avoid white concentric bands. Outer emission/optical thickness fades earlier; restrained broader scattering surrounds the main ring. This color adjustment still lacks visual acceptance.
+
+Four fixed coarse-mip samples on either side add local radial scattering only around the actual emitting edge, not a fixed halo. This is artistic scattering, not full 2D bloom. Projected shadow radius 14..65 drawing-buffer pixels smoothly raises texture detail. Distant knots enlarge and fine texture receives stronger filtering without changing disk geometry. Knot motion fades at 2..8 pixels to avoid tiny-node flicker; at most three knots are computed per visible instance. Angular segmentation separates clumps and baking selects density peaks without lifting low-density tails into broad bright bands. Additional far-view derivative filtering is 1.15×, alongside mipmaps, anisotropy, and seam filtering. The thin layer is emission/transmission approximation, not 3D fluid simulation.
+
+`blackHole/shaders/volume.ts` adds foreground rim only near side view. Rays intersect the outer cylinder/height interval, clip to the node foreground, then take four emission-integration steps. Elliptical maximum half-thickness 0.28 matches GLB. Screen footprint filters the rim; path sample spacing selects explicit mip levels to prevent sparse-sample barcode flicker. The loader derives disk normal/transforms from GLB Accretion orientation. The optical volume writes virtual depth near the node instead of using the front bounding sphere as a solid occluder. This is not curved-ray/scene intersection; other-body distortion comes from screen-space sampling, not complete scene ray tracing.
+
+Emission, flow time, and RGB range are artistically adjusted. Disk imagery retains two thin-disk intersections; exact side-view rim has finite thickness through local straight-ray integration only. There is no full volumetric relativistic transfer, Kerr rendering, or physical steady accretion fluid. By explicit maintainer choice, captured-shadow interiors include faint stylized curvature from local spherical normals: dark shading, warm rim light, and a cool weak outline. Only visible shadow pixels compute it, composed after disk imagery using remaining transmittance. It adds no core surface, texture, draw call, shadow-outline change, or depth change. It suggests volume, not emitting/reflecting horizons or a result of the trajectory equation. Display status cannot diagnose real failures.
+
+The frame scheduler caps rate by accumulated deadlines and measures completed draws. Delta is capped at 0.1 seconds to avoid excessive catch-up. Approach/zoom use delta, independent of refresh rate. Wheel events change target distance only, scaling camera and target together to preserve the pointer anchor. `FrameOrbitControls` defers OrbitControls' event-time `update()` to frame-time `updateFrame()`. Events accumulate rotation/panning; each frame consumes it with a 90 ms time constant, making damping independent of event density. Focus clears old inertia through public APIs while preserving pose. Pointer-down immediately interrupts approach/zoom; the 5-pixel threshold distinguishes clicks from drags only. Hiding clears drag inertia with no catch-up on resume.
+
+## Extension boundaries
+
+Live management uses [Go Astrolabe](../../astrolabe/README.md#management-login-and-admin-integration). Management login, topology DTOs, and errors belong in explicit contracts and independent adapters. Initial deployment management accounts authenticate only, without role levels or Sector/Spectrum permission tables. Fixed in-memory sessions and same/cross-origin requests follow backend contracts. Browser login is separate from infrastructure admission: renderers hold no service credentials and never connect directly to Star/Pulsar. Astrolabe submits Almanac edits to Polaris; durable commit and individual Star installation remain distinct. The frontend maintains no compensation queue and never writes observed views back as authoritative baselines.
+
+New planet types require coordinated changes to presentation types, colors, construction, and tests. Frequent topology updates need explicit deltas, batching, selection preservation, and stale-data semantics. Large-scale LOD, instancing, culling, and label decisions require actual GPU measurements. Management authentication/networking are implemented separately; the demo renderer does not thereby acquire live topology, application routing, or a global state store.

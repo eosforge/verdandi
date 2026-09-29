@@ -1,72 +1,64 @@
-# 验证说明
+# Verification
 
-## 自动检查
+## Automated checks
 
-获得当轮测试授权后运行 `pnpm check`, 顺序执行格式、依赖边界、Node 回归测试、严格类型检查和 Vite 生产构建.
-这些检查使用已存在的依赖, 不会安装测试框架、浏览器或其它工具.
+After obtaining authorization for the current test run, execute `pnpm check`: formatting, dependency boundaries, Node regressions, strict type checks, then a Vite production build. It uses existing dependencies and installs no test framework, browser, or other tool.
 
-| 范围 | 自动覆盖                                                                               |
-| ---- | -------------------------------------------------------------------------------------- |
-| 数据 | 演示规模、确定的盘面布局、重复 ID、错误归属、非法坐标、悬空和重复边                    |
-| 相机 | 推进与重定向、取消、滚轮连续性、帧率独立性、锚点保持、大范围构图、动态距离上下限       |
-| 调度 | 30/32/60/120/144 Hz 时钟、真实 FPS、重复启动、后台恢复、长帧、绘制异常                 |
-| 输入 | 单击资格、中键不拾取、拖动回到起点不误选、多指/取消、双击、Escape、滚轮单位、监听释放  |
-| 对象 | 27 批 252 实例、矩阵上传、15/6/停止、分层拾取、恒星大小节点、缩放拾取、自转独立与停转  |
-| 轨道 | 共同面与小倾角、焦点椭圆、Kepler 周期、径向带解析间隔、独立相位、星系间距、确定性      |
-| 资产 | 本地 GLB 解码、共享资源释放、无外部引用、加载错误、加载前及加载中取消                  |
-| 选择 | 总览与跨星系拒绝行星命令、平滑聚焦、实际行星坐标、无选择时全景复位、停止服务后拒绝操作 |
-| 架构 | 动态入口、数值层与 shader 依赖限制、纯类型资产引用、运行时依赖环                       |
-| 清理 | 逆序、幂等、单项失败后继续清理、晚到资源立即释放                                       |
+| Area | Automated coverage |
+| --- | --- |
+| Data | Demo size, deterministic disk layout, duplicate IDs, incorrect ownership, invalid coordinates, dangling/duplicate edges |
+| Camera | Approach/redirect/cancel, wheel continuity, frame-rate independence, anchor preservation, large framing, dynamic distance bounds |
+| Scheduling | 30/32/60/120/144 Hz clocks, actual FPS, duplicate start, background recovery, long frames, drawing exceptions |
+| Input | Click eligibility, no middle-button picking, no selection after dragging back to origin, multitouch/cancel, double-click, Escape, wheel units, listener disposal |
+| Objects | 27 batches/252 instances, matrix upload, 15/6/stopped motion, layered picking, population-scaled stars, scaled picking, independent rotation/stop |
+| Orbits | Shared plane/small inclination, focus ellipses, Kepler periods, analytic radial clearance, independent phases, system spacing, determinism |
+| Assets | Local GLB decoding, shared-resource disposal, no external references, load errors, cancellation before/during load |
+| Selection | Reject planet commands in overview/across systems, smooth focus, actual coordinates, reset without selection, reject commands after service stop |
+| Architecture | Dynamic entry, numeric/shader dependency restrictions, type-only asset imports, runtime cycles |
+| Cleanup | Reverse order, idempotence, continue after individual failures, immediate disposal of late resources |
 
-对象测试只替代岩质纹理生成所需的二维像素容器, GLB 解码、数学和射线拾取使用真实 Three.js.
-现有用例包含选择控制器、架构规则、轨道分层、编辑草稿隔离、校验、相机跟随和公转暂停. 本页只列覆盖意图, 具体执行日期、输入和结果见统一验证记录.
-这些用例不验证 GPU shader、真实驱动、浏览器默认手势或 Vue 模板运行时.
+Object tests replace only the 2D pixel container needed for rocky textures; GLB decoding, math, and ray picking use real Three.js. Tests also cover the selection controller, architectural rules, orbital layers, isolated editor drafts, validation, camera following, and orbital pause. This page states coverage intent; execution dates, inputs, and outcomes belong in the unified validation record. These tests do not validate GPU shaders, real drivers, default browser gestures, or Vue template runtime behavior.
 
-## 浏览器验收清单
+## Browser acceptance checklist
 
-修改界面或运行时并获得测试授权后, 在已有浏览器中访问开发服务; 发布前还应使用 `pnpm preview` 检查构建产物.
+After UI/runtime changes and test authorization, open the development service in an existing browser. Before release, also inspect production output with `pnpm preview`.
 
-1. 首屏无左侧功能栏, 显示九颗正常状态恒星及行星、黑洞状态的 Orion、独立 Pulsar 脉冲星和右上角 FPS; 新增六颗正常恒星各带 12..24 颗行星. 正常恒星的 36 条连接边数据保留但隐藏, 黑洞状态和脉冲星均无行星及连线, 控制台无运行错误.
-2. 星图占满可用宽度, 左侧无空白占位; 调整窗口后比例正常, 右下角编辑按钮与相机坐标仍可使用. 移除侧栏后的画面检查尚未执行.
-3. 点击恒星连续推进, 不自动出现详情; 左键旋转和中键平移可中断推进. 在近景和扩大后的总览中按住中键拖动, 相机与观察中心同步平移, 不缩放或旋转, 不触发浏览器自动滚屏; 松开后正常释放手势.
-4. 滚轮向内/向外缩放连续, 在距离上下限附近无跳变或 NaN.
-5. 普通恒星点击直径为表面的 3 倍, 黑洞点击直径为含吸积盘的完整光学范围的 3 倍, 不扩大至全部行星轨道; 检查公转、数量缩放后范围随动. 普通恒星与黑洞体积均翻倍, 半径增加约 26%. 本体和可选行星优先于扩大区域, 重叠区域取射线最近入口. 脉冲星整体倍率为 8, 点击仍按实际核心. 总览不直接选择行星; 进入星系后仅精确选择所属行星, 详情显示正确的 ID、类型、Star 和演示来源; 暂停所有行星公转.
-6. 切换实体类型、选择列表行, 仅目标行高亮; “推进至行星”仍指向选中的实际位置.
-7. 双击空白背景、画布聚焦时按 Escape、详情关闭按钮都平滑返回全景并清空详情. 未选节点时先平移、旋转、缩放, 再双击背景应强制恢复全局构图; 中断返回后再次双击仍可复位.
-8. 隐藏页面后停止绘制, 恢复后无动画追赶; 热更新或卸载后画布、监听和 RAF 不重复.
-9. 在允许的开发测试环境模拟无 WebGL 或上下文丢失, 显示错误; 重试只创建一个新画布.
-10. 替换数据快照后旧场景释放, 新快照从总览展示; 空快照不崩溃, 非法快照显示错误.
-11. 总览和恒星视图中, 各星系行星形成薄盘而非球壳; 旋转至侧视仍有小幅厚度, 不同星系盘面方向不同.
-12. 确认 252 行星分配到不同半长轴的轨道, 恒星位于焦点; 星系范围分离, 外圈公转周期更长, 分层拾取与 15/6/停止保持一致.
-13. 扩大后的星图在首屏与返回总览时完整入镜; 横竖窗口切换后滚轮无距离跳变, 连线和聚焦均指向新中心, 黑洞背景透镜无裁剪深度异常.
-14. 点击 Pulsar 核心平滑聚焦, 不打开行星详情; 白热核心周围辉光连续衰减, 不呈硬壳描边. 双极光束随倾斜磁轴扫射, 内部细丝向外流动, 三层磁场弧线有流动亮结并在远景淡出, 不露出圆柱代理壳或矩形背景.
-15. Pulsar 默认约 2.4 秒自转一圈, 可通过 `setStarRotationSpeed("star-pulsar", 0)` 停转并以正负速度恢复; 选中其它行星不暂停其自转. 检查光束正视、侧视、穿入体积和与其它星体重叠时的成像.
-16. Pulsar 为所有恒星（包含黑洞状态）的共同公转中心; 首屏和返回总览均以它为观察中心, 所有星系完整入镜, 旋转围绕该中心. 停止自转后细丝仍流动, 跨越多个四秒周期无复位跳变.
-17. 少量恒星共用紧凑内层, 半径、相位和倾角错开, 不呈规则九边形; 超过 12 颗才增加外层, 连线两端始终贴合正常恒星. 黑洞状态也持续公转并参与等权质心布局.
-18. 聚焦公转中的恒星, 初始推进平滑, 完成后恒星持续位于画面中央; 旋转与非中心鼠标缩放均不使其偏离. 恒星视图不允许平移, 总览和行星详情恢复平移. 切换恒星、行星暂停和返回总览均连续, 隐藏页面恢复后不追赶位移.
-19. 右下角三角按钮可用鼠标和键盘打开编辑框. 每个恒星行可选择正常/黑洞状态, ID 与名称保持不变; 黑洞状态禁用卫星数量输入, 确认后移除其全部连线和卫星但继续公转. 恢复正常后重新参与连接; 至多一颗脉冲星.
-20. 取消、Esc、关闭和点击遮罩后原图不变; 再次打开重置为当前配置. 空名称、非法数量和删除所有星体时提示错误并保留草稿.
-21. 分别生成仅脉冲星、仅黑洞、单恒星、无脉冲星及多黑洞场景. 连续重建和快速重复确认后仅保留一个画布/RAF, 过期加载不得覆盖新图; 重新生成回到总览.
-22. 窄窗口中名称与卫星数量输入仍可用, 内容可滚动且确认按钮可达; 模态框打开时焦点不进入背后的画布.
-23. 三角按钮左侧显示两位小数的相机 X/Y/Z 世界坐标; 旋转、平移、缩放和跟随黑洞状态恒星时持续更新. 数字可复制, 不干扰画布手势; 重建时不保留上一个场景的读数.
-24. 首次加载、重建和双击返回总览完成后, 相机坐标均为 `(-178, 176, 1083)`, 脉冲星居中; 首帧和窗口变化不得将其夹回旧距离上限. 手动平移、旋转、缩放及选择恒星后再双击, 均平滑回到同一坐标. 持续运行允许星体出画或到镜头后方; 固定全局坐标的画面检查尚未执行.
-25. 恒星公转总览与恒星视图都为 15 倍, 切换选择不改变速度或重置相位; 卫星为 15/6, 行星详情暂停公转. 检查不同倾角方案在完整周期内的星系间距, 以及 12/13 颗边界的分层行为; 浏览器画面与自动化用例分别验收.
-26. 恒星（含黑洞）沿蓝灰细线公转, 线条随各自轨道倾角闭合, 不显示恒星间连线或行星轨道. 轨道辅助线不受引力透镜扭曲, 仍保留深度遮挡; 未选行星时也正常显示, 无黑洞时保持可见. 检查旋转、聚焦和重建后的轨迹对齐与点击穿透; 无脉冲星时不生成公转轨道线. 画面检查与辅助层回归分别验收.
-27. 开关宇宙背景时, 行星表面材质、光照与曝光保持一致; 背景为柔和暗淡的冷暖起伏、微弱细粒和稀疏远景星点, 无逐帧随机闪烁. 旋转时天空方向连续, 推近时不出现近处云层或星点视差; 前景星体遮挡远景星点, 黑洞捕获背景、轨道辅助线保持独立. 检查重建清理和帧率变化; 新背景的 GPU 画面与性能尚未验证.
+1. Initial view has no left feature sidebar and shows nine normal stars with planets, black-hole Orion, independent Pulsar, and top-right FPS. The six additional normal stars each have 12..24 planets. The 36 normal-star edges are retained but hidden; black holes and Pulsar have no planets or links. No console runtime errors.
+2. The map fills available width without a left placeholder. Resizing preserves proportions; the lower-right editor and camera coordinates remain usable. Visual verification after sidebar removal is still pending.
+3. Clicking a star approaches continuously without opening details. Left rotation and middle panning interrupt approach. In close and expanded overview, held middle drag moves camera and target together without zoom, rotation, or browser autoscroll; release ends the gesture.
+4. Wheel zoom in/out remains continuous near both distance limits, with no jumps or NaN.
+5. Normal-star picking diameter is 3× the surface; black-hole picking is 3× the complete optical extent including the disk, not the planet-orbit extent. Picking follows orbital motion and population scaling. Both bodies double volume (radius about +26%). Exact bodies/eligible planets take priority; overlapping enlarged regions use the nearest ray entry. Pulsar scales by 8 but uses its actual core for picking. Overview cannot select planets; star view selects only its own planets, with correct ID/type/Star/demo source in details, and pauses all planet orbits.
+6. Entity-type/list selection highlights only the target row; “approach planet” points to the selected entity's actual position.
+7. Empty-background double-click, Escape with canvas focus, and detail close return smoothly to overview and clear details. With no selection, first pan/rotate/zoom, then double-click to force global framing; interrupting and repeating reset still works.
+8. Hiding the page stops rendering; resumption does not catch up animation. Hot reload/unmount leaves no duplicate canvas, listeners, or RAF.
+9. In an authorized development environment, simulate unavailable WebGL or context loss: show an error, and retry creates exactly one new canvas.
+10. Snapshot replacement disposes the old scene and opens the new one in overview. Empty snapshots do not crash; invalid snapshots show errors.
+11. Planet systems form thin disks, not spherical shells, in overview and star view. Side views retain slight thickness; system planes differ.
+12. All 252 planets have distinct semimajor axes with stars at foci. System extents remain separated, outer periods longer, and layered picking consistent with 15/6/stopped motion.
+13. The expanded map fits at first load and overview return. Portrait/landscape changes cause no wheel distance jump. Links/focus use new centers; black-hole background lensing has no clipping-depth anomaly.
+14. Pulsar-core selection focuses smoothly without planet details. Glow fades continuously without a hard shell. Bipolar beams sweep with the tilted magnetic axis; filaments flow outward. Three magnetic layers have moving bright knots and fade at distance, without visible cylindrical proxies or rectangular backgrounds.
+15. Pulsar rotates in about 2.4 seconds by default. `setStarRotationSpeed("star-pulsar", 0)` stops rotation; positive/negative speeds resume it. Other planet selection does not stop its spin. Inspect beams head-on, side-on, from inside, and overlapping other bodies.
+16. Pulsar is the shared orbital center of all stars, including black holes. Initial/overview views target it, frame every system, and rotate around it. Filaments still flow when spin stops, without reset jumps across multiple four-second periods.
+17. A small star population shares a compact inner layer with varied radius/phase/inclination, not a regular nonagon. Outer layers start above 12. Link endpoints follow normal stars. Black holes keep orbiting and participate in equal-weight center layout.
+18. Focusing an orbiting star approaches smoothly, then holds it at screen center. Rotation and off-center pointer zoom preserve centering. Star view disallows panning; overview/planet details restore it. Star switches, planet pause, and overview return remain continuous; page resumption does not catch up displacement.
+19. Mouse and keyboard open the lower-right triangle editor. Each star can switch normal/black-hole state without changing ID/name. Black-hole state disables satellite count, removes links/satellites on confirmation, and keeps orbiting; returning to normal restores connection participation. At most one pulsar.
+20. Cancel, Escape, close, and backdrop clicks preserve the original map. Reopening resets to current settings. Empty names, invalid counts, and deleting all bodies produce errors while retaining the draft.
+21. Generate pulsar-only, black-hole-only, single-star, no-pulsar, and multiple-black-hole scenes. Repeated rebuilds/rapid confirmations leave one canvas/RAF; stale loads cannot replace a newer map. Rebuild returns to overview.
+22. Narrow windows retain usable name/count inputs, scrollable content, and an accessible confirm button. Modal focus never enters the canvas behind it.
+23. World camera X/Y/Z at the triangle's left show two decimals and update during rotation, panning, zoom, and black-hole following. Text is copyable without disturbing canvas gestures; rebuild clears old readings.
+24. First load, rebuild, and completed overview reset all use `(-178, 176, 1083)` with Pulsar centered. First frame/resizing must not clamp to an old distance limit. Reset after manual movement/selection smoothly returns to the same position. Later motion may leave the frame or pass behind the camera. Visual verification of fixed global coordinates is pending.
+25. Star orbits, including black holes, use 15× in both overview and star view without phase reset or selection-dependent speed. Satellites use 15/6; planet details pause orbital motion. Check system clearance across complete cycles under different inclinations and the 12/13 layer boundary. Browser and automated acceptance are separate.
+26. Dim blue-gray closed lines follow each star's tilted orbit; no inter-star links or planet orbits are shown. Guides bypass gravitational lensing but retain depth occlusion, remain visible without planet selection/black holes, align after rotation/focus/rebuild, and do not intercept clicks. No pulsar means no orbital guides. Visual and helper-layer regression acceptance are separate.
+27. Toggling cosmic background preserves planet materials, lighting, and exposure. Soft dim warm/cool variation, faint grain, and sparse stars have no per-frame random flicker. Rotation preserves sky direction; approach creates no nearby cloud/star parallax. Foreground bodies occlude distant stars, black holes capture the background, and orbital guides remain separate. Check rebuild cleanup and FPS changes. The new background's GPU appearance/performance are unverified.
 
-第 8-10 项涉及浏览器生命周期, 未执行的项目必须明确记录, 不能用纯函数测试代替.
+Items 8–10 concern browser lifecycle. Unexecuted items must be recorded explicitly, never replaced by pure-function results.
 
-## 黑洞固定视角对照
+## Fixed black-hole views
 
-开发服务中的 `/tests/visual/black-hole.html` 直接使用生产 GLB、材质和实例工厂, 固定 DPR 为 1,
-提供 0、-2、+2、12、45、90 度和距离 18、48、96、192 的按钮. 默认暂停流纹, 可单独播放,
-便于对照盘缘连接、宽次像和缩放过滤. 播放时检查螺旋内流与亮结消散, 连续观察至少两个流纹周期, 确认无复位跳变. 页面不作为生产构建入口, 不额外安装工具.
-这里展示原始模型局部单位; 完整星图会把整个黑洞缩放为 `0.75 × ∛2`.
+The development page `/tests/visual/black-hole.html` uses production GLB, materials, and instance factories with DPR fixed at 1. Buttons select 0, -2, +2, 12, 45, and 90 degrees and distances 18, 48, 96, and 192. Flow is paused by default and can be played separately to compare disk-rim joins, broad secondary images, and scale filtering. During playback, inspect inward spirals and knot dissipation for at least two flow cycles without reset jumps. This is not a production build entry and installs no tools. It uses raw local model units; the full map scales the entire black hole by `0.75 × ∛2`.
 
-`/tests/visual/galaxy-controls.html` 提供生产控制器的按钮和结果, 便于复核总览、跨星系和有效行星选择.
-也可显式设置 Atlas 自转为 0.3 rad/s 或停转; 该速度仅为验收输入, 不作为生产场景默认值.
-它不读写场景内部状态, 也不绕过选择权限; 页面关闭时释放场景, 不作为生产构建入口.
+`/tests/visual/galaxy-controls.html` exposes production controller buttons/results to check overview, cross-system rejection, and valid planet selection. Atlas can rotate at an explicit 0.3 rad/s or stop; that is an acceptance input, not a production default. The page neither accesses private scene state nor bypasses selection permissions. It disposes its scene on close and is not a production build entry.
 
-## 最新执行记录
+## Latest execution record
 
-实际结果统一记录在 [最新验证](../../docs/validation.md#sdk-完整回归结果), 本文仅维护验证方法和验收边界. 更早的逐次调整与截图记录从 Git 历史查询.
+Actual outcomes live in [validation](../../docs/validation.md#full-sdk-regression-results). This page maintains methods and acceptance boundaries only. Earlier individual adjustments and screenshots are available through Git history.

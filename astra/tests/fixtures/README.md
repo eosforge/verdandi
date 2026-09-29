@@ -1,23 +1,25 @@
-# 公开测试身份
+# Public Test Identities
 
-本目录的证书、私钥、账号和签名材料是刻意公开的隔离测试夹具, 不得用于部署. 只有显式加载夹具 CA 的测试信任它们, 不安装到系统信任库.
+[English](README.md) | [简体中文](README_CN.md)
 
-## 用途
+Certificates, private keys, accounts, and signing material here are deliberately public isolated fixtures, never for deployment. Only tests explicitly loading the fixture CA trust them; do not install them in system trust stores.
 
-- pulsar: 测试准入签名密钥和公开账号配置.
-- star-a 至 star-d: alpha 的不同部署身份.
-- planet-a、planet-b: 保留 Planet 测试身份, 不表示该组件已完成.
-- wrong-cluster: 错误集群/未知账号场景.
-- expired、rogue: 过期证书及签名无效场景.
-- untrusted: 独立的不可信证书, 用于验证拒绝非夹具 CA.
-- admission-v1.json、admission-v5.json: 共享编码与身份测试向量.
+## Uses
 
-主夹具 TLS 证书使用同一公开测试 CA 的 ECDSA P-256/SHA-256 配置, 与固定版本的 Go 和 C++ gRPC/BoringSSL 配合. 证书有匹配的 SKI/AKI; 不通过关闭严格校验适配不完整证书. untrusted 是独立拒绝样本, 不属于主 CA.
+- pulsar: admission-signing keys and public test accounts.
+- star-a through star-d: distinct alpha deployment identities.
+- planet-a, planet-b: reserved Planet identities, not claims of implementation.
+- wrong-cluster: wrong-cluster/unknown-account cases.
+- expired, rogue: expired certificates and invalid signatures.
+- untrusted: independent certificates verifying rejection of nonfixture CAs.
+- admission-v1.json, admission-v5.json: shared encoding/identity vectors.
 
-准入签名使用 Ed25519, 与 TLS 证书算法分开. 历史 Verdandi URI SAN 不再授予角色; v5 由公开 login.json 和 Pulsar accounts.json 测试账号授权. Astra 准入签名域为 proto.orbit.v1.admission 后接 NUL, 本目录不保存真实部署的已签名准入凭证.
+Primary TLS fixtures use a public ECDSA P-256/SHA-256 CA with pinned Go and C++ gRPC/BoringSSL. Certificates have matching SKI/AKI; do not disable strict verification to accommodate incomplete certificates. The independent untrusted rejection fixture is outside this CA.
 
-## 维护
+Admission uses Ed25519 separately from TLS algorithms. Historical Verdandi URI SANs no longer grant roles; v5 authorization uses public login.json and Pulsar accounts.json test accounts. Astra's signing domain is proto.orbit.v1.admission followed by NUL. No real signed deployment credentials are stored here.
 
-生成入口为 [tools/generate_fixtures.py](../../tools/generate_fixtures.py), 仅在明确需要更新夹具时使用已有项目 Python/cryptography 环境执行. 生成工具与测试运行分开, 不自动下载依赖或刷新证书. 主 CA 私钥在生成后丢弃, 叶证书私钥作为测试输入保留.
+## Maintenance
 
-目录迁移保持原有身份字节不变. 临时数据库、复制的密钥、进程记录和日志写入忽略的 build/, 不回写公开夹具. 实际验证结果见 [验证记录](../../docs/validation.md).
+Use [tools/generate_fixtures.py](../../tools/generate_fixtures.py) only when fixture updates are explicitly needed, in the existing project Python/cryptography environment. Generation and tests are separate; do not download dependencies or refresh certificates automatically. Discard the primary CA private key after generation; retain leaf private keys as test input.
+
+Directory moves preserve identity bytes. Temporary databases, copied keys, process records, and logs belong in ignored build/, not public fixtures. Actual results are in [validation](../../docs/validation.md).

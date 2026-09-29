@@ -1,39 +1,41 @@
 # Comet Go
 
-新原生 Go SDK 预留目录为 comet/go, 与 [Comet C++](../cpp/README.md) 共用 [proto.comet.v1 业务契约](../../proto/README.md#comet). 当前只有设计入口, 没有可调用 SDK、go.mod 或测试通过记录; 不复用冻结的 Redis SDK 作为新协议实现.
+[English](README.md) | [简体中文](README_CN.md)
 
-## 实施范围
+The reserved native Go SDK directory, comet/go, shares [proto.comet.v1 contracts](../../proto/README.md#comet) with [Comet C++](../cpp/README.md). It currently contains design only: no callable SDK, go.mod, or passing test record. The frozen Redis SDK is not a new-protocol implementation.
 
-Go SDK 后续接入 Almanac、Ephemeris 与 Catalog, 业务接口已与 [C++ SDK 契约](../cpp/README.md#c-公共接口) 一同确认, Go 命名、具体类型和包组织仍待实施. [Astrolabe](../../astrolabe/README.md) 的必要管理写入直接调用 Polaris, 不再要求先实现 Go SDK、独立内容源或直接发布到 Star. 未来若通过 Go SDK 展示普通业务数据, 仍遵循完整视图、恢复、认证和所有权规则, 不放开内部 __ 范围.
+## Scope
 
-协议字段、版本、错误和服务端受理只在 proto/README.md 定义. Go 使用原生 Context、错误、所有权与并发机制, 不暴露 gRPC 生成类型 或通过 C ABI 包装 C++ SDK, 也不单独规定一套同步版本.
+Future Go support covers Almanac, Ephemeris, and Catalog. Business interfaces were confirmed with the [C++ contract](../cpp/README.md#c-public-api); Go names, types, and package organization remain to implement. [Astrolabe](../../astrolabe/README.md) writes required management data directly to Polaris, without a prerequisite Go SDK, separate content source, or direct Star publication. Future ordinary-data displays through Go must preserve complete views, recovery, authentication, and ownership, without opening internal __ scopes.
 
-## 公共接口映射
+Only proto/README.md defines fields, versions, errors, and server acceptance. Use native Context, errors, ownership, and concurrency, exposing neither generated gRPC types nor C ABI wrappers around C++, and defining no separate synchronization version scheme.
 
-| 角色 | 已确认的业务语义 |
+## Public interface mapping
+
+| Role | Confirmed semantics |
 | --- | --- |
-| Client | 多角色共享活动 Star、会话与资源, 单角色停止不关闭 Client |
-| Beacon | 同步工厂返回句柄/error, update 同步; 固定 Attr/TTL/beat, 可选 tick 回调只返回 Data, state/changed, destroy 立即关闭 |
-| Observer | Ephemeris 本地池的 one(selector)/stop, 不提供 watch/change |
-| Publisher | Scope 级 update(batch, ttl), 同步原子多键提交, 内部版本, 无自动续租/内容补发 |
-| Subscriber | Scope watch 完整 Map; 精确 Key watch 明确存在性; state/changed/stop |
-| Reader | 同 Subscriber, 但保留 Almanac 已见权威版本下限 |
+| Client | Roles share active Star, session, resources; stopping one does not close Client |
+| Beacon | Synchronous factory returns handle/error; synchronous update; fixed Attr/TTL/beat; optional tick returns Data only; state/changed; destroy closes immediately |
+| Observer | Local Ephemeris pool one(selector)/stop, without watch/change |
+| Publisher | Scope-level update(batch, ttl), synchronous atomic multi-key commit, internal versions, no automatic renewal/content replay |
+| Subscriber | Scope watch returns complete Map; exact-Key watch has explicit presence; state/changed/stop |
+| Reader | Subscriber semantics plus observed Almanac authoritative-version floor |
 
-Context 约束单次 RPC 总截止, 包括版本查询及允许的一次冲突修复; 同步失败后不保存请求供自动重发. 只有 Beacon 保存最近成功确认的 Data, 成功对象切换 Star 后恢复同一逻辑 id; 初次工厂失败由外部决定重试. Go 的返回值/error 可直接承载这些语义, 不需要 C++ 绑定或另一个异步公共提交模型.
+Context bounds the entire RPC, including version query and one permitted conflict repair. Do not retain failed synchronous requests for automatic replay. Only Beacon retains most recently confirmed Data and restores the same logical id after a successful object's Star switch; initial factory failure leaves retry to the caller. Native values/errors express this without C++ bindings or another async public commit model.
 
-精确 Key 的回调须明确存在性, 不能仅凭 nil/空 byte slice 将删除和合法空 Data 混淆. 全 Scope Map 回调是完整状态, 网络仍增量同步; 应用要缓存时必须获得可安全保留的数据. Observer 的可变 Data 用于短期业务估计, 不上传, 新权威 Data 优先; 用拥有值/受控修改和数据代次保护实现, 不让裸共享 map 写入绕过覆盖规则.
+Exact-Key callbacks distinguish absence from valid empty Data rather than using nil/empty byte slices ambiguously. Scope Map callbacks deliver complete state while networking remains incremental; cached application data must be safely retainable. Observer mutable Data is a local short-lived estimate, never uploaded; fresh authoritative Data wins. Use owned values/controlled edits and data generations, not raw shared map writes bypassing replacement.
 
-## 同步与资源边界
+## Synchronization and resources
 
-- 首次同步取得快照, 后续通过 Watch 推送增量; 初次未完成与就绪空集合必须区分, 不为“同步拉取”新增全量轮询 RPC.
-- 同一完整视图携带 instance/Scope/target/version 和就绪状态. 分页未 complete 不替换可见基线; 断线保留旧视图并标记陈旧, 实例切换遵循协议 reset, 不把旧版本当作新 Star 的恢复位置.
-- Go 的 map 和 []byte 不因返回给调用方就成为只读. 公共读取接口须保证调用方不能修改已安装状态或 SDK 在途载荷, 使用受控查询/迭代、拥有副本或明确的借用契约, 不暴露共享可变 map 或用约定伪装不可变.
-- Client 共享连接与认证, 各订阅独立取消和恢复. 已确认 Session 失效时合并重认证, 包括服务端 [凭据快照恢复](../../proto/README.md#credential-snapshot), 不误当成首次登录被拒绝或重置业务身份/TTL. 在途流、视图、缓冲和重连工作有界; stop/destroy 立即逻辑关闭并取消 Context, 内部继续持有必要状态直到 goroutine 及真实在途引用退出, 不在自身回调同步等待, 不把发出取消当作已回收.
-- Almanac Reader 保留已观察到的分组权威版本下限, Catalog Subscriber 切换后接受新 Star 的完整视图及暂时较低的 Key 版本; 两类策略不混用, 也不让 SDK 参与对等来源对账. 业务持久化和 Polaris 管理提交不下沉为 Go SDK 的内容适配器或数据库事务.
-- 普通 Comet 业务连接继续遵循目标的业务 TLS/认证配置, Astrolabe 的管理凭据不自动成为 Comet 会话. __ Sector 始终拒绝, 内部 Almanac 的管理读取不通过放宽 Go SDK 获得.
+- Initial synchronization obtains a snapshot, then Watch delivers deltas. Distinguish incomplete initialization from a ready empty collection; do not add full-poll RPCs for synchronous retrieval.
+- A complete view carries instance/Scope/target/version/readiness. Incomplete pages cannot replace visible baselines. Disconnection retains stale-marked views; instance changes follow reset rather than reuse old versions as a new Star's cursor.
+- Returned Go maps/[]byte are not inherently readonly. Protect installed state/in-flight payloads through controlled query/iteration, owned copies, or explicit borrowing. Do not expose shared mutable maps or pretend conventions enforce immutability.
+- Client shares transport/authentication; subscriptions cancel/recover independently. Coalesce reauthentication for confirmed Session invalidation, including [credential snapshot recovery](../../proto/README.md#credential-snapshot), without treating it as initial login rejection or resetting identity/TTL. Bound streams, views, buffers, and reconnect work. stop/destroy logically closes and cancels Context immediately, retaining state until goroutines/actual references drain. Never synchronously wait inside one's own callback or equate cancellation with reclamation.
+- Reader preserves the observed per-group authoritative floor; Subscriber accepts a new Star's complete view and temporarily lower Key versions. Do not mix these policies or make SDKs perform peer source reconciliation. Business persistence/Polaris management commits are not Go SDK content adapters/database transactions.
+- Ordinary Comet connections obey business TLS/authentication settings. Astrolabe management credentials do not automatically become Comet sessions. Always reject __ Sector; internal Almanac management reads must not relax Go SDK rules.
 
-## 生成与验证
+## Generation and verification
 
-Comet 的 Go 生成源码须处于独立协议包, 不与 Orbit 通用消息名混在同一包. 公共 Go API、模块路径、生成目标和依赖版本在实现前固定; 不为文档先运行生成器、下载依赖或恢复旧 SDK 开发.
+Keep generated Comet Go in an independent protocol package, avoiding Orbit message-name collisions. Fix public API/module path/generation targets/dependencies before implementation. Documentation alone does not authorize generators, downloads, or resumed legacy SDK development.
 
-跨语言行为与 Go 专属取消/视图所有权的验收见 [Comet 验收](../../docs/comet.md). 文档场景不是已经实现的用例, 构建及测试仍需本轮授权.
+See [Comet acceptance](../../docs/comet.md) for cross-language behavior and Go-specific cancellation/view ownership. Documented scenarios are not implemented cases; builds/tests need current-task authorization.

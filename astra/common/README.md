@@ -1,193 +1,229 @@
-# 三域存储、快照与 TTL
+# Three-domain storage, snapshots, and TTL
 
-Star 的新业务存储分别由 Almanac、Catalog、Ephemeris 管理, 不再用统一 Store 承载三种业务语义. Almanac 已接入管理同步和公共 Reader 路径, Catalog/Ephemeris 原生提交、来源恢复和公开投影也已接线. 现有 [Store](src/store.hpp) 已从 Runtime 的空业务占位移除, 它的 KV、时间轮和索引验证不能代替新业务验证; 实现见 [当前实现](#current), 实际执行结果见 [验证记录](../docs/validation.md).
+[English](README.md) | [简体中文](README_CN.md)
 
-Star 不引入 SQLite 或业务落盘. Polaris 持久维护 Almanac, Astrolabe 仅作为管理入口, Catalog 的持久底稿由业务负责, Ephemeris 为临时注册. 权威、准入及组件边界见 [架构](../docs/architecture.md), 消息语义见 [协议](../proto/README.md).
+Star's business storage is independently managed by Almanac, Catalog, and Ephemeris, rather than one generic Store. Almanac connects management synchronization to public Readers; native Catalog/Ephemeris commits, source recovery, and public projections are wired. The existing [Store](src/store.hpp) is no longer Runtime's empty business placeholder. Its KV, wheel, and index tests cannot qualify the new domains. See [implementation](#current) and [executed validation](../docs/validation.md).
 
-动态域的相同机制可以共用实现, 不等于统一业务模型. 当前 Pagination 共享公开分页, Reading 共享读取同步边界; 原生版本合并、UUID 归属及到期提交仍由各域决定. 共用层与保留差异的完整边界见 [复用审核](../docs/review.md#动态域复用边界), 执行状态以验证记录为准.
+Star has neither SQLite nor business persistence. Polaris durably owns Almanac; Astrolabe is the management entry; applications own Catalog persistence; Ephemeris is temporary registration. [Architecture](../docs/architecture.md) defines authority/admission/components; [protocol](../proto/README.md) defines messages. Shared mechanisms do not imply one business model: Pagination shares public paging, Reading shares read synchronization, while each domain owns native merge, UUID ownership, and expiry commits. See [reuse boundaries](#reuse); execution status remains in validation.
 
-## 新版 SDK 对存储的配套要求
+## Storage support for the new SDK
 
-Catalog.Query 已接入 State::versions, 在一个共享读锁中返回相关 Key 的合并水位, 包含过期正文; 不创建范围或扫描全表. Ephemeris 的下列要求同样已接入源码; 执行配置与源码身份统一见 [验证记录](../docs/validation.md), 旧冻结快照不覆盖后续改动. 完整语义见 [协议差异](../proto/README.md#已确认目标与实现差异).
+Catalog.Query uses State::versions to return merged watermarks for relevant keys, including expired bodies, under one shared read lock without creating scopes or scanning the table. Ephemeris support below is also implemented. [Validation](../docs/validation.md) binds results to configuration/source; older frozen snapshots do not cover later changes. See [protocol implementation boundaries](../proto/README.md#confirmed-targets-and-implementation-gaps).
 
-- Catalog 的内容版本改由 SDK 内部产生, Star 提供相关 Key 的已知版本查询. 按 Key 比较, 同批一个版本, 不把 Scope 最大值作为全体 Key 的冲突条件; 同号的不同发布者批次须可区分. 查询不是全网最新值证明.
-- 每次 Catalog update 附带新 TTL, 不再要求 SDK 自动续租或持有完整期望. 当前 Renew 存储路径如保留仍校验其语义, 不据此继续设计新版 Publisher 自动任务.
-- Ephemeris 新 Update 必须将 Data/order、固定 TTL 的新截止、来源事实和调度一次提交. 重复 order 不再次延期; 存储不得只改 Data 就回报新版成功.
-- 成功 Beacon 的逻辑 id 跨 Star 恢复, 允许多个来源暂存同 id, 单份投影去重. 已知较高 Data 版本优先, 注册代次与数据版本独立; 老代次的更新/注销不影响新代次. 同 ID 多来源按 Data order/generation/截止选择有效候选, 固定属性和同号正文仍检查冲突; 老式 generation=0 记录保持唯一来源限制.
-- 完整快照和增量的原子安装继续保留. Observer 本地业务估计属于 SDK 选择层, 不修改 Star 的 Attr/Data 权威记录, 不把本地可变视图传入底层 Index 的写路径.
+- SDK generates Catalog content versions internally; Star queries known versions for relevant keys. Compare per key, with one version per batch, never the Scope maximum as every key's conflict condition. Equal-number batches from distinct publishers remain distinguishable. Query does not prove globally latest state.
+- Every Catalog update carries a new TTL; Publisher needs neither automatic renewal nor a complete desired-state cache. Any retained Renew storage path still validates its own semantics, without defining new automatic Publisher tasks.
+- Ephemeris Update atomically commits Data/order, a new deadline from fixed TTL, source facts, and scheduling. Duplicate order does not extend again. Changing only Data cannot acknowledge the new Update contract.
+- A successful Beacon's logical ID survives cross-Star recovery. Multiple sources may temporarily hold it, but each projection deduplicates. Higher known Data version wins independently of registration generation. Old-generation updates/deletes cannot affect new generations. Candidates are selected by Data order/generation/deadline; fixed attributes/equal-order bodies are checked for conflicts. Legacy generation=0 retains unique-source restrictions.
+- Full snapshots/deltas still install atomically. Observer's local business estimates belong to SDK selection, never mutate authoritative Attr/Data or feed mutable local views into Index writes.
 
 <a id="data"></a>
 
-## 三种原生结构
+## Three native structures
 
-下表表达逻辑所有权, 不预先规定所有层级必须使用 std::map 或 unordered_map. Sector/Spectrum 仍组成 Scope, 但不再意味着一个通用 Store 实例.
+This table defines ownership, not mandatory std::map/unordered_map at every level. Sector/Spectrum still form Scope without implying a generic Store instance.
 
-| 业务域 | 分组及记录 | 版本和期限 |
+| Domain | Grouping/record | Version/deadline |
 | --- | --- | --- |
-| Almanac | Sector -> Spectrum -> 权威分组; Key -> 不可变 Value | 每 Scope 一个 Polaris 权威版本; 无业务 TTL |
-| Catalog | 来源 Star -> 来源组 -> Sector -> Spectrum -> Key -> Record | 每来源组一个复制版本; Record 保存正内容版本及可选的活动载荷/有限截止 |
-| Ephemeris | 来源 Star -> 来源组 -> Sector -> Spectrum -> UUID -> Record | 每来源组一个复制版本; Record 包含 Attr、Data、一个有限截止、固定 TTL 和必要的两个操作顺序 |
+| Almanac | Sector → Spectrum → authority group; Key → immutable Value | One Polaris authority version per Scope; no business TTL |
+| Catalog | Source Star → source group → Sector → Spectrum → Key → Record | One replication version per source group; positive content version with optional live body/finite deadline |
+| Ephemeris | Source Star → source group → Sector → Spectrum → UUID → Record | One replication version per source group; Attr, Data, one finite deadline, fixed TTL, two required operation orders |
 
-来源 Star 指经准入确认的进程 Member.id. Catalog 和 Ephemeris 分别拥有来源组, 每组版本覆盖该来源在本域的全部 Scope, 不再每 Scope 分配来源序号. 本节点也是来源组之一, 只有该组的源端提交生成对等广播; 远端组由直接连接的来源更新, 不转播第三方数据.
+Source Star means admitted process Member.id. Catalog/Ephemeris have separate source groups, each versioning all Scopes of that source/domain rather than a sequence per Scope. The local node is one source group; only its own commits broadcast. Remote groups update directly from their source, without third-party forwarding.
 
-Almanac 独立保存权威分组和不可变读取根, 只接收 Polaris 的完整安装或按权威版本连续的 Patch. 管理持久提交仍在 Polaris, Star 无 Comet 写入口、不自行生成权威版本、不接受其他 Star 转发. 无操作的合法权威提交也保留其版本, 空分组不归零; 全量安装直接采用权威版本而非逐 Key 自增.
+Almanac keeps independent authority groups/immutable read roots. Only complete Polaris installations or consecutive authority Patch messages are accepted. Star neither accepts Comet writes nor creates authority versions nor accepts peer Almanac forwarding. Legitimate no-op commits retain versions; empty groups never reset. Full install adopts authority version directly, not per-key increments.
 
-Catalog 的原生 Record 将内容版本、内容和期限放在一起. 当前保留的 Catalog 纯续租路径只修改本机来源组的有效完整记录, 不能借用远端副本或其较晚截止制造自有来源; 受理还须检查合并水位没有更高版本, 完整规则见 [Catalog](../proto/README.md#catalog). 到期可以释放载荷及调度节点, 保留该来源直接受理的最高版本; 无载荷水位与合法零字节内容分开. 来源内的最高版本与本 Star 跨来源学到的最高版本用途不同, 后者归本地合并索引, 不能把别人的新版本写回自有组充当本机受理. 详细规则见 [来源水位](../proto/README.md#catalog-watermark).
+Catalog Record combines content version, body, and deadline. Retained pure Renew changes only a valid complete local-source record, never borrowing a remote body/later deadline to invent local ownership. Admission also verifies no higher merged watermark; see [Catalog](../proto/README.md#catalog). Expiry may free body/scheduling while retaining that source's highest directly accepted version. Bodyless watermarks differ from valid empty values. Per-source accepted maxima differ from this Star's cross-source known maximum, which belongs to the merge index; another source's version cannot be written into the local group as a local acceptance. See [source watermarks](../proto/README.md#catalog-watermark).
 
-Ephemeris 的 UUID 对应一条原生 Record, 不再拆成 uuid:attr / uuid:data. Attr 和 Data 分别持有不可变字节引用, Update 原子替换 Data/顺序并延长同一截止, 纯续租只修改截止及续租顺序; 同 order 重复确认不再次延期. 创建、到期和注销操作整条记录, 不需要后缀拼接、双 Key 准备、双时间轮节点或全量快照配对. 两个载荷都为空时记录仍存在; 注册固定 TTL、期限及 order 的业务含义见 [Ephemeris](../proto/README.md#ephemeris).
+Ephemeris stores one native Record per UUID, not uuid:attr/uuid:data keys. Attr/Data hold immutable byte references. Update atomically replaces Data/order and extends the same deadline; pure Renew changes deadline/renew order only. Duplicate order confirms without another extension. Create, expiry, and unregister operate on the entire record, avoiding suffix paths, paired preparation/wheel nodes/snapshot matching. A record with both bodies empty still exists. See [Ephemeris](../proto/README.md#ephemeris).
 
-UUID/Key 由索引键给出, 来源和 Scope 由所属组给出, 不在每条记录重复保存已由作用域表达的字符串. 查询可以借用 string_view, 存储与异步在途拥有所需生命周期. 本地创建和恢复验证能力, 同 Scope/UUID 保存有界来源候选; 按数据版本、注册代次和有效截止选取一份公开记录, 属性/TTL 或同版本正文不符拒绝. 来源过期可以回退到另一有效候选; 不拼接 Attr 或用到达次序覆盖新值.
+Index keys supply UUID/Key; owning groups supply source/Scope, without repeated strings per record. Queries may borrow string_view; stored/async data owns required lifetimes. Creation/recovery validates capabilities and keeps bounded source candidates per Scope/UUID. Data version, registration generation, and valid deadline select one public record; incompatible Attr/TTL or same-version body rejects. Source expiry may fall back to another valid candidate, never splice Attr or overwrite newer values by arrival order.
 
-内部凭据仍为 Almanac["__auth"]["comet"][APIKEY], 编码由 [Credential](../proto/README.md#credentials) 定义. 记录、权威安装版本、登录索引及必要会话失效在同一安装边界生效, 跨历史完整安装遵循 [凭据快照](../proto/README.md#credential-snapshot), 不增加逐记录身份标记. 外部入口统一隔离 __ Sector, 不恢复 Grant、APIKEY 归属或 standalone 凭据文件.
+Internal credentials remain `Almanac["__auth"]["comet"][APIKEY]`, encoded as [Credential](../proto/README.md#credentials). Record/version/login-index/session invalidation share one installation boundary. History-skipping full installation follows [credential snapshots](../proto/README.md#credential-snapshot), without per-record identity markers. External entries isolate `__` Sectors uniformly; no Grant, APIKEY ownership, or standalone credential files return.
 
 <a id="indexing"></a>
 
-## 直接索引与热路径
+## Direct indexing and hot paths
 
-来源组是事实所有者, Scope 投影服务读取; 两者共享载荷和稳定记录/键句柄, 不各自保存一份完整 Buffer 或再次拼接来源/Scope/Key 路径. 查找使用 find/透明查找, 不用 operator[] 为失败请求、只读访问或不存在的 Key 偷建容器. 首版复用标准容器和已有页索引能力, 不为逻辑 map 图机械增加每层共享指针、虚函数或全局字符串驻留表.
+Source groups own facts; Scope projections serve readers. They share bodies and stable record/key handles rather than duplicate complete Buffers or concatenated source/Scope/key paths. Use find/transparent lookup, not operator[] creating containers for failed requests, reads, or absent keys. Reuse standard containers/page indexes without mechanically adding per-layer shared_ptrs, virtual calls, or global string interning.
 
-已知来源的写入、续租及精确回补先定位来源组和 Scope, 再直接定位 Key/UUID; 对外精确读取由 Scope 投影直接定位, 不扫描全体来源. Catalog 合并索引保留一个当前最高版本/可见候选及其必要来源引用, 较高版本到来时不遍历其他来源逐条删低版本; 原来源事实仍按各自期限和水位规则维护, 读取只经合并投影.
+Known-source writes, renewals, and exact repairs locate source/Scope then Key/UUID directly. Public exact reads use Scope projection rather than scanning sources. Catalog's merge index retains current maximum/visible candidate and necessary source references. Higher versions do not require scanning/deleting every lower source record; source facts retain their own deadline/watermark rules and reads use merged projection.
 
-当前观察目录同时索引 Scope 和精确 Key/UUID, 正文变化只访问全范围及命中目标的订阅; 无关精确订阅通过 Scope 的 Progress 推进连续覆盖位置, 必要时发送空增量帧. 有界轮转不等于取消全部进度工作, 相关成本与边界见 [审核](../docs/review.md#performance). 纯续租或仅 order 变化不经过内容观察列表. 捕获基线与挂入观察使用同一提交边界, 空目标等待项有预算, 最后观察者退出后释放观察目录.
+Observation directories index Scope and exact Key/UUID. Body changes visit full-Scope and matching exact subscriptions only. Unrelated exact subscriptions advance continuous coverage through Scope Progress, sending empty deltas if needed. Bounded rotation does not eliminate progress work; see [performance boundaries](../docs/profile.md#performance). Pure renewal/order-only changes bypass content observers. Baseline capture and observer attachment share a commit boundary; empty-target waits are budgeted and the directory is released after the last observer.
 
-读取未知 Scope 返回版本 0 的完整空视图或精确缺项, 不分配永久业务目录, 超过写入 Scope 数量的只读访问也不能占满写入名额. 第一次真实写入才创建业务投影; 已发生提交的 Scope 即使后来为空也保留其游标, 不因目录回收把旧位置伪装成新基线.
+Unknown Scope reads return complete empty version-0 views or exact absence without permanent business-directory allocation. Read-only scope counts cannot consume write slots. First real write creates the projection. A previously committed Scope retains its cursor even when empty; directory reclamation cannot disguise an old position as a new baseline.
 
-Ephemeris 的续租热路径只访问身份、顺序、截止及调度信息, Data 更新复用固定 Attr, 不解码普通载荷或将 Proto 对象常驻为业务记录. 发布记录仍采用清晰的原生结构, 根据实际访问次序安排冷热字段, 不为压低 sizeof 引入 pack、指针标记或额外多态. 只在真实出现共享冻结页时复制必要路径, 读完同步与锁边界不能由 use_count 替代.
+Ephemeris Renew touches identity/order/deadline/scheduling only; Data updates reuse fixed Attr. Ordinary bodies are not decoded and Proto objects are not permanent records. Native records organize hot/cold fields by access, without pack, pointer tagging, or extra polymorphism merely to reduce sizeof. Copy paths only when pages are actually shared/frozen. use_count cannot replace read-completion/lock synchronization.
 
 <a id="origin"></a>
 
-## 来源组与版本
+## Source groups and versions
 
-| 位置 | 推进者 | 证明范围 |
+| Position | Advanced by | Meaning |
 | --- | --- | --- |
-| Almanac 权威版本 | Polaris 的持久提交 | 一个 Scope 的权威状态 |
-| Catalog 内容版本 | SDK 内部为发布者分配, Star 逐 Key 校验 | 同 Scope/Key 的内容先后 |
-| 动态来源组版本 | 该来源 Star 在相应域的提交 | 该来源、本域全部 Scope 的连续事实 |
-| 动态视图游标 | 接入 Star 的可见投影提交 | 本实例、业务域、Scope 的下游读取状态 |
+| Almanac authority version | Polaris durable commit | One Scope's authority state |
+| Catalog content version | SDK publisher allocation, per-key Star validation | Content order for Scope/Key |
+| Dynamic source-group version | Source Star's commit in that domain | Continuous facts across all Scopes of that source/domain |
+| Dynamic view cursor | Attached Star's visible projection commit | Downstream state for this instance/domain/Scope |
 
-版本各自独立, 不建立内容版本到来源版本或视图游标的映射表. 来源组初始为 0, 有新的来源事实才推进; 同一来源的两个域彼此独立. Scope 变空或被回收、历史裁剪均不重置组版本. 重启得到新的 Member.id 后才形成新的来源空间, 本地 Generation 仍只用于旧 RPC 回调隔离.
+Versions are independent, with no content→source/cursor mapping tables. Groups start at zero and advance only for new facts; a source's two domains remain independent. Empty/reclaimed Scopes and history trimming do not reset group versions. Restart creates a new source space through new Member.id; local Generation only fences old RPC callbacks.
 
-本机新 Publish/Renew、Ephemeris Create/新 order Update/新 order Renew/权威结束, 连同来源记录和有界来源历史一起提交. 幂等确认旧 order 不制造新事实. 其他 Star 安装来源事件只推进该组已处理位置, 不生成自己的来源事件. Ephemeris 本机到期是来源结束, 副本本地到期只改变本地可见性; Catalog 到期在所有节点都不向对等网络广播删除.
+New local Publish/Renew, Ephemeris Create/new-order Update/new-order Renew/authoritative termination commit source records and bounded history together. Idempotent old-order confirmation creates no fact. Remote installation advances processed position without generating local-source events. Local Ephemeris expiry is source termination; replica expiry only changes local visibility. Catalog expiry never broadcasts peer deletion on any node.
 
-来源组版本不能用预先 fetch_add 后再分别落入数据/日志的方式发布, 否则失败和并发会留下缺号或编号顺序与提交顺序不一致. 同域源端提交在短边界内定序, 准备成功后才发布下一位置, 状态、历史及版本一起可见. 两个域、Polaris Almanac 与网络发送不共用一把整个 Star 的业务写锁. 这项序列化有实际并发成本, 不把组版本变少写成无锁或已测得吞吐提升.
+Never publish group versions by fetch_add before independent data/log updates: failures/concurrency would create gaps or reorder commits. A short domain boundary sequences source commits; preparation succeeds before publishing the next position, with state/history/version visible together. The two domains, Polaris Almanac, and network sends do not share one Star-wide write lock. Serialization has real cost; fewer version spaces do not imply lock-free operation or measured throughput gain.
 
-自有组保留当前来源状态和一份有界发送历史, 历史裁剪不丢当前状态. 远端组保存已安装状态、连续已处理位置及有界恢复准备, 不为转发再复制一份发送历史. 对端发送器只维护位置和有限在途引用, 按 [批量发送](../proto/README.md#stream-batching) 从共享历史取数, 不为每个对端复制事件 FIFO; 相同不可变内容在当前记录、历史和发送引用间共享.
+Local groups retain current state and one bounded send history; trimming preserves current state. Remote groups retain installed state, continuous processed position, and bounded recovery staging, not another forwarding history. Peer senders keep positions/finite in-flight references and obtain entries from shared history through [batching](../proto/README.md#stream-batching), not per-peer event FIFOs. Records/history/sends share immutable bodies.
 
-来源组编号不能在活动身份内回收重用, 不等于每个历史进程的空容器必须永久保留. 已可信替换来源的活动 TTL、在途引用结束后, 按 [来源退役规则](../proto/README.md#repair) 回收组和轮, 本地 Catalog 防回退水位及已知较新身份继续保留. 不为回收额外建立后台全表扫描.
+Group numbering cannot be reused within an active identity, but empty historical-process containers need not live forever. After trusted replacement, active TTLs/in-flight references drain and [retirement](../proto/README.md#repair) reclaims groups/wheels. Local Catalog anti-regression watermarks/newer known identity remain. Reclamation adds no background full-table scan.
 
 <a id="projection"></a>
 
-## 下游视图与本地期限
+## Downstream views and local deadlines
 
-Comet 的 Watch 仍以域、Scope 和可选精确 Key/UUID 订阅. Star 维护面向读取的有界投影索引与必要历史, 不让 SDK 收集来源组版本、按来源合并或参与对等恢复. 原生来源记录是业务事实, 投影只共享可见载荷与必要元数据, 不是另一份可独立写入的权威 KV.
+Comet Watch subscribes by domain/Scope/optional exact Key or UUID. Star maintains bounded read projections/history; SDK does not collect source versions, merge origins, or perform peer recovery. Native records are facts; projections share visible content/metadata, not independently writable authority KV copies.
 
-Catalog 的本地合并索引按 Scope/Key 保存最高已知内容版本及当前可见结果. 它只接纳该版本的有效完整记录, 同版本的截止按协议取较大值; 更高版本一旦受理, 原来源失效也不能回退到较低版本. 无载荷的高版本仍能排除旧可见值. 同版本仅水位或快照缺项不能删除本地仍有效的已接收记录, 包括相同来源的记录, 否则来源端的 TTL 清理会被偷换成对等删除. 来源断开、替换、全量快照缺项和历史裁剪不清除本进程已经取得的版本下限. 不需要为每次 Watch 扫描所有来源或逐 Key 复制 Buffer.
+Catalog merge state holds the highest known content version and visible result for Scope/Key. Only valid complete records at that version participate; equal-version deadlines take the protocol maximum. Once a higher version is accepted, losing its source cannot expose a lower version. A bodyless high watermark excludes old visible values. Same-version watermark-only records or snapshot omissions cannot delete a still-valid received body, even from the same source, or source TTL cleanup would become peer deletion. Disconnect, replacement, omissions, and history trimming do not remove this process's version floor. Watch need not scan every source/copy each Buffer.
 
-Ephemeris 的投影以原生完整注册为单位, 固定 Attr 与当前 Data 一起捕获, Data 增量无需重发 Attr. 副本本地过期后可移除可见记录并释放内容, 以后新来源期限必须补齐完整记录才能恢复. 不以收到 Renew 就创建缺 Attr 的记录, 不把本地删除改成来源终止.
+Ephemeris projects whole registrations, capturing fixed Attr/current Data together while Data deltas omit unchanged Attr. Local replica expiry may remove visible records/free bodies; later source deadlines require a full record to restore. Renew cannot create an Attr-less registration, and local deletion is not source termination.
 
-动态视图游标只在该 Scope 的可见记录内容或存在性改变时推进. Catalog 的内容版本属于可见内容, 即使字节相同而内容版本提高也须推进; Ephemeris 的固定 TTL、绝对截止及两个 order 不对 Observer 暴露. 纯期限刷新、同字节的新 Data order、无可见变化的水位/来源进度更新不产生视图提交, 不唤醒内容订阅. 到期/恢复/内容变化仍产生真实的新游标和历史, 不在同游标下悄悄改图. Almanac 使用权威版本, 不套用这一动态游标优化.
+Dynamic view cursors advance only for visible content/existence changes in that Scope. Catalog content version is visible, so higher version advances even with identical bytes. Ephemeris fixed TTL/deadline/two orders are hidden from Observer. Pure deadline refresh, same-byte new Data order, or invisible watermark/source progress creates no view commit/content wakeup. Expiry/recovery/content changes create real cursors/history, never hidden mutation under an unchanged cursor. Almanac retains authority versions instead of this optimization.
 
-来源版本负责对等续传, 视图游标负责下游续传. 续租可以增加来源版本而不增加视图游标, 副本到期可以增加视图游标而不增加来源版本. 两者无需保持 1:1; 不为减少一种版本而把远端 TTL 清理写进来源历史. 已用视图范围变空后仍保留游标, 不能销毁重建后重用位置.
+Source versions resume peer replication; view cursors resume downstream streams. Renewal may advance only source version; replica expiry may advance only view cursor. No 1:1 requirement or remote TTL cleanup in source history. Used empty Scopes retain cursors and cannot recreate/reuse positions.
 
 <a id="commit"></a>
 
-## 原子提交与锁边界
+## Atomic commit and locking
 
-内部原子提交针对原生状态、期限调度、必要版本/历史和可见投影, 不再要求改造通用 Store::put/remove/renew 来间接实现业务. 参数、身份、Session、内容版本、order 和到期条件均在最终受理边界重查; 分配或预算失败不能只提交记录而漏掉复制依据.
+Atomicity covers native state, deadline scheduling, required versions/history, and visible projection, not indirect generic Store put/remove/renew adaptation. Final admission rechecks parameters, identity, Session, content version, order, and expiry. Allocation/budget failure cannot install a record without replication evidence.
 
-- 索引查找只取得稳定句柄, 释放索引保护后再处理业务. 允许删除 Scope 的目录必须同时交接对象所有权, 例如由句柄持有 shared_ptr; 仅依赖 map 节点地址稳定不能抵抗 erase. 句柄失效与对象销毁分开, 正在使用的组、视图和调度节点必须存活. 读写锁可以缩短并发查找的等待, 但不预设 shared_mutex 比普通互斥量更快, 不为每层目录机械增加一把锁.
-- 首版每个动态域使用独立的短提交保护统一发布来源组状态和本地投影, 避免多个来源同时修改同一 Catalog Key 时出现水位/可见值撕裂. Almanac 按权威分组保护, 不共用跨三域大锁; 锁进一步拆分须有热点依据.
-- 涉及 Comet 的最终受理先取得对应 Session 有效性保护, 再取得业务提交保护. 凭据安装/撤销遵循一致顺序, 不反向等待正在提交的请求. 不增加逐范围权限保护.
-- 大块载荷准备、完整快照遍历、编码、网络发送、取消及用户回调在业务锁外进行. 有依赖的索引路径/节点准备在受控边界内完成, 不在锁内复制整个来源组或整张投影 Map.
-- 完整来源在锁外接收并构建私有 Draft, 完成后按 Scope 逐步安装. 每个远端 Replica 使用独立准备锁和稳定共享所有权; 等待同来源时先释放域锁, 取得后重新验证目录身份. 原生候选、旧项枚举、正文校验/复用和新期限节点在域锁外准备, 不阻塞其他来源的准备或本机写入. 随后重取域锁, 根据当前水位/投影重新合并, 最终重查身份/位置/期限并原子发布. 不跨 Scope 持有准备事务, 不提前 ACK. 公共投影、预算、通知和原生根最终发布仍使用动态域 gate; 尚未实现每 Scope 独立提交锁, 单条远端增量也仍在域锁内受理.
-- 成功提交后的发送失败只影响恢复或订阅, 不回滚数据、重复加号或把原成功报成未提交. 提交时移交旧根的所有权, 在锁外释放可能触发大量析构的最后引用; 不因根交换看似 O(1) 就在临界区同步销毁整棵旧树.
+- Index lookup obtains stable handles, then releases index protection before business processing. Erasable Scope directories must transfer ownership, such as shared_ptr handles; map-node address stability does not survive erase. Invalidation differs from destruction; active groups/views/schedulers stay alive. Reader/writer locks may reduce lookup contention but are not assumed faster or added mechanically at every layer.
+- Each dynamic domain has its own short commit guard publishing origin state and local projection together, preventing torn watermark/value merges from concurrent sources. Almanac guards authority groups separately, without a three-domain lock. Further partitioning requires hotspot evidence.
+- Comet final admission takes Session validity protection before business commit protection. Credential install/revoke follows the same order and never waits in reverse on active commits. No per-Scope permission lock is added.
+- Large payload preparation, full snapshot traversal, encoding, network sends, cancellation, and user callbacks occur outside business locks. Dependent index-node/path preparation remains controlled, without copying whole source/projection maps under lock.
+- Complete sources are received/built as private Drafts outside locks, then installed Scope by Scope. Each remote Replica has a separate preparation lock and stable shared ownership. Waiters release the domain lock before waiting, then revalidate directory identity. Native candidates, old-item enumeration, body validation/reuse, and deadline nodes prepare outside the domain lock, without blocking other sources/local writes. Reacquire it to merge against current watermarks/projections, recheck identity/position/deadline, and publish atomically. Preparation transactions do not span Scopes or ACK early. Final projection/budget/notification/native-root publication still uses domain gate; there are no per-Scope commit locks yet, and individual remote deltas are admitted under the domain lock.
+- Send failure after successful commit affects recovery/subscription only, without rollback, another increment, or misreporting uncommitted. Transfer old-root ownership at commit and release potentially large final-reference destruction outside locks. An O(1) root swap does not make whole-tree destruction cheap inside a critical section.
 
-Catalog 的一次写入可覆盖同 Scope 原子 Key 批次, Ephemeris 每次仍限定一个注册. 同 Scope 快照和下行按完整提交边界观察, 不因逐项准备而暴露半批. 组版本统一定序不新增跨 Scope 管理写事务; 一次完整来源组恢复覆盖多个 Scope, 各个 Scope 的订阅按各自完整投影交付, SDK 不取得跨多个订阅的原子观察承诺.
+Catalog writes may atomically batch keys in one Scope; Ephemeris remains one registration per operation. Same-Scope snapshots/downstream see complete commits, never preparation prefixes. Source sequencing adds no cross-Scope management transaction. Whole-source recovery covers multiple Scopes, each delivered as a complete projection; SDK receives no atomic observation across separate subscriptions.
 
-## 时间与调度
+## Time and scheduling
 
-沿用 Clock 的连续 Unix 纳秒时间轴和 Wheel 的完整追赶语义. 新原生记录只保存一个绝对截止, 不恢复每条数据的纪元编号或第二套截止. TTL 请求的单位、取值和溢出由业务入口校验, 已校准后 Pulsar 失联不自动取消新租约资格, 见 [时间模型](../pulsar/README.md#clock).
+Use Clock's continuous Unix-nanosecond axis and Wheel's complete catch-up semantics. Native records keep one absolute deadline, not per-record era/second deadline. Business entries validate TTL units/ranges/overflow. After calibration, Pulsar loss alone does not revoke new-lease eligibility; see [time](../pulsar/README.md#clock).
 
-Almanac 没有时间轮. 动态组在首次有限期限前按需准备调度器, 不为每个 Sector/Spectrum 分配 Wheel<4, 10>、线程或独立定时器. 首版按来源组管理调度节点并由共享运行循环推进; 一条原生 Ephemeris 只有一个节点, Catalog 的无载荷水位不占活动租约节点. 节点与轮地址在实际移除前保持稳定, 分配/关闭仍计入总预算.
+Almanac has no wheel. Dynamic groups prepare schedulers lazily before finite deadlines, not Wheel<4, 10>, threads, or timers per Sector/Spectrum. Source-group nodes advance through the shared loop. One native Ephemeris record has one node; bodyless Catalog watermarks have none. Node/wheel addresses remain stable until removal; allocation/close count toward total budgets.
 
-来源复制快照需要原截止, 因而续租同时更新可被捕获的原生状态及调度位置; 已冻结的来源快照不被原地修改. 下游视图只包含公开内容, 不因隐藏期限更新重建内容索引或保留重复内容历史. 源端复制历史仍会承受续租流量, 容量与恢复窗口不得按下游内容更新频率估算.
+Source snapshots require original deadlines. Renewal updates capturable native state and schedule together without mutating frozen snapshots. Downstream views contain public content only, so hidden deadline changes neither rebuild content indexes nor retain duplicate content history. Source history still carries renewal traffic; recovery windows cannot be estimated from visible-content frequency.
 
-自有来源的发送捕获/后缀/精确回补使用独立 export 共享锁, 不取业务时间或清理其他来源. 本机写入按域 gate -> export 顺序取得独占锁, 不存在反向获取. 公开投影的 const 读取使用 gate 共享锁; 只有越过任一来源轮的下一整拍边界时才重新独占取时推进. 注入时钟及倒退检查有独立短锁. View 读区退出使用对应共享锁与写者同步, 不改变根及页面的寿命契约.
+Local-source capture/suffix/exact repair use a separate shared export lock without reading business time or cleaning other sources. Local writes take exclusive domain gate → export, never reverse. Const projection reads use shared gate; only crossing a source wheel's next full tick retries exclusively to read time/advance. Injected-clock/reversal checks have their own short lock. View completion synchronizes through the corresponding shared lock without changing root/page lifetime contracts.
 
-域锁内的 TTL 维护只尝试取得远端准备锁, 不反向阻塞. 忙碌来源保留原到期边界, 退役空来源也保留回收责任; 本机写入可在完成自身期限检查后提交. 公开捕获/点查/后缀及后台 tick 若遇到该来源有待完成维护, 在域锁外等其准备结束, 再重新取时并完整推进, 不用等待前读数对外承诺新鲜视图. 私有候选准备始终保留原根, 迫使修改路径 COW; 发布和原 View 的完成屏障仍在同一个 gate 同步域.
+TTL maintenance under domain lock only tries remote preparation locks and never blocks in reverse. Busy sources retain expiry boundaries; retiring empty sources retain reclamation responsibility. Local writes may commit after their own deadline checks. Public capture/find/suffix and background tick encountering pending maintenance wait outside the domain lock, then reread time/fully advance before promising fresh views. Private preparation retains the original root to force COW; publication and old-View completion share gate synchronization.
 
-后台推进及 Watch 捕获前的推进共用受控调度边界, 不逐 Key 重新取时或为一次 Scope 查询扫描全部来源记录. 提交前重新取业务时间, 已过期的本机 UUID 不能因等待锁或准备时使用旧时间而被续活. 副本的过期处理只修改本地投影及调度状态, 不伪造来源 ACK/版本.
+Background and pre-Watch advancement share controlled scheduling, without per-key clock reads or scanning all source records for one Scope query. Reread business time before commit; an expired local UUID cannot revive using pre-wait/preparation time. Replica expiry changes local projection/scheduling only, not source ACK/version. Catch up every elapsed tick with fractional remainder, round finite deadlines upward, never delete early, and do not cap max_ticks leaving internal time behind. Preparation failure publishes neither partial expiry nor false catch-up; affected subscriptions report stale/recovery failure per protocol. Large catch-up/bulk expiry still need performance evidence, not constant-time claims.
 
-推进完整追赶经过的拍数, 保留亚拍余量, 有限截止向上取整且不提前删除, 不引入 max_ticks 使内部时间长期落后. 资源准备失败不发布半次过期或假装视图已追平; 已有受影响订阅按协议报告陈旧/恢复失败. 实际大跨度追赶和批量到期仍需性能验证, 不承诺恒定耗时.
+## Snapshots and history
 
-## 快照与历史
+Downstream batches with equal domain/Scope/target/start/end cursor share immutable record sources. Each stream has its own page position/final Write acknowledgment. A recent batch may supply a complete prefix of a known continuous suffix while newer changes remain pending per stream. The control thread reuses still-in-flight same-page Protobuf messages. Scope holds a weak reference to its latest batch; batches hold separate weak page references, so fast/slow interleaving does not overwrite other in-flight pages. No consumer releases bodies; later requests may rebuild. Page slots/weak control blocks grow with this frozen batch's pages and die with it, never accumulate across batches. Page indices extend contiguously, rejecting huge sparse indices. Per-stream budgets remain conservatively separate; cancelling one does not release another's borrowed message. Active suffix-vector consolidation runs outside downstream queue locks; commit collection still maintains per-subscription pending maps, not O(1) broadcast or zero-copy gRPC serialization.
 
-同域/Scope/目标/起止游标的下行批次共享不可变记录来源, 每条流拥有独立分页位置及最后 Write 确认. 最近批次还可提供已知连续后缀的完整前缀, 较新变化留在各流待发区. 控制线程复用仍在途的同页 Protobuf 消息; Scope 只保存最近批次弱引用, 批次按页号保存独立弱引用, 快慢流交错不覆盖其他在途页. 无消费者时释放正文, 之后请求可重建; 页槽及弱控制块随本次冻结批次页数增长并随批次释放, 不跨批次积累. 页号只允许连续扩展, 不接受稀疏巨量下标. 各流预算仍保守独立计算, 取消一个流不释放其他流借用的消息. 活动后缀向量的整理在下行队列锁外进行; 提交收集仍按订阅维护待发合并表, 不是 O(1) 广播或 gRPC 序列化零复制.
+Source snapshots freeze a whole source group's native state/version; downstream snapshots freeze a Scope's merged projection/cursor; Almanac freezes its authority-group version. Capture root/position at the short commit boundary, then page outside locks from resumable positions without rescanning prefixes, pre-copying complete maps, or pairing Ephemeris fragments.
 
-区分两种冻结视图: 来源快照固定一个来源组的完整原生状态和组版本, 下游快照固定一个 Scope 的合并投影和视图游标; Almanac 则捕获权威分组版本. 在对应短提交边界取得根及位置, 锁外按可继续的位置分页, 不逐页重扫前缀、预复制全部 Map 或临时配对 Ephemeris 记录.
+A source snapshot covers every Scope in that source/domain, including an explicitly complete empty group. Scope-organized pages are not separate recovery positions. New Scopes/concurrent updates continue from group-baseline history. Incomplete reception changes nothing. Once complete, Scopes may install atomically in sequence, but one completed Scope is not a completed group. Missing single records use [exact repair](../proto/README.md#repair); history gaps require whole-group recovery.
 
-完整来源组快照覆盖该来源、本域的全部 Scope, 空组也有完整边界. 分页可按 Scope 组织, 但不构成多个独立恢复位置; 新 Scope 和并发更新从组基线之后的连续历史衔接. 接收未完成的快照不改变状态; 完整接收后允许各 Scope 先后原子安装, 不以一个 Scope 完成当作组完成. 单条缺失按 [精确回补](../proto/README.md#repair) 处理, 历史断档才恢复整个来源组.
+The full-source Draft spans all Scopes; each control round installs at most one. Source ACK is indivisible. Record count, metadata, bodies, frozen pages, projection preparation, and in-flight references are budgeted under [recovery capacity](#capacity); paging does not imply constant total staging memory. Interruption/later-Scope failure preserves installed Scopes and leaves others old. Internal Scope coverage records complete target B, preventing old events at/below B after reconnect from overwriting installed scopes, including omitted keys and locally expired UUIDs. Only all-Scope completion advances source ACK/clears coverage. A Scope capacity failure may be deferred once to let others free capacity, not retried indefinitely.
 
-完整来源 Draft 仍覆盖全部 Scope, 每个控制轮至多安装一个 Scope; 逐 Scope 提交不代表来源级确认可以分割. 组记录数、元数据、载荷、冻结页、投影准备及在途引用均有预算; 容量与失败分类遵循下方 [恢复预算](#capacity), 不靠分页声称总准备内存恒定. 安装中断或后续范围失败时保留先前已安装的 Scope, 未处理范围保持旧状态. 内部范围覆盖证据记录完整目标 B, 阻止重连时 B 以内的旧事件覆盖已安装范围, 包括快照中缺失的 Key 和本地到期清理后的 UUID. 全部 Scope 完成才推进来源 ACK 并清理覆盖证据. 单范围容量失败最多延后重试一次, 让其他范围先归还容量, 不无限重试.
+Downstream baseline capture simultaneously attaches observation. During snapshots, bounded changes coalesce by target without pinning history indefinitely or assuming it survives. Extraction preserves complete coverage, never labels a newer live value with an older target version. Ephemeris history preserves create/change/end and sends data-only only when the subscription baseline is proven to contain Attr; see [projection deltas](../proto/README.md#ephemeris-delta).
 
-下游捕获基线时同时挂入后续观察. 快照期间按目标合并有界变更, 不无限固定历史或赌旧历史仍在; 差异提取保持完整覆盖, 不把实时表的较新值标成旧目标版本. Ephemeris 原生历史保留创建/修改/结束语义, 仍须证明订阅基线已经具有 Attr 才发送 data-only, 见 [下行投影](../proto/README.md#ephemeris-delta).
+Source-send and local-projection histories independently have count/byte/time budgets. Eviction does not imply payload release while snapshots/in-flight references remain; retained costs still count. Exact Key/UUID queries get only the target/boundary, not a whole-group snapshot. Full streams share immutable bases rather than per-subscriber registries.
 
-来源发送历史和本地投影历史各有条数/字节/时间预算, 不互相替代. 仅移出历史不代表载荷已释放, 快照和在途仍持有的引用继续计费. 精确 Key/UUID 查询直接取得目标记录及观察边界, 不为其构建整组快照; 全范围流共享不可变基础, 不按订阅者复制整份注册表.
+Origin/Scene retention is lazy write-time history age trimming, not read expiry. Same-instance/scope continuous suffixes remain replayable until actually trimmed. Reads neither refresh timestamps nor extend retention at the next write. Actual gaps require full baselines; send count/byte limits remain. Zero retention evicts new history at commit. Business TTL advances independently; replay retains original absolute deadlines, never a fresh lease.
 
-Origin/Scene 的 retention 是写入时惰性裁剪历史的年龄阈值, 不是读取有效期. 同实例、同范围且版本连续的后缀只要尚未被裁剪, replay/deliver 就可继续提供; 读取不刷新存储时间, 不延长下一次写入时的保留窗口. 只有实际断档才回退完整基线, 发送条数/字节预算继续生效. retention 为零仍在提交时淘汰新历史项. 业务 TTL 独立推进, 旧事件携带原绝对截止, 不因重放重新获得租约.
+Immutable views avoid long-held business write locks during traversal; reference publication/counting/reclamation are not inherently lock-free. [atomic shared_ptr](https://eel.is/c++draft/util.smartptr.atomic.shared) implementation determines lock freedom. No special RCU/hazard-pointer framework is added. Publish one new root per complete change batch, sharing unchanged pages instead of snapshotting for every internal record.
 
-不可变视图只保证业务遍历不长期占写锁, 不等于引用发布、增减计数或回收天然无锁. std::atomic<std::shared_ptr<T>> 是否始终无锁由实现决定, 见 [C++ 标准草案](https://eel.is/c++draft/util.smartptr.atomic.shared); 首版不因此引入专用 RCU/危险指针回收框架. 一次完整变更批次统一发布新根, 无变化的内容页继续共享, 不为了每个内部记录重复生成完整快照.
+Clock, intrusive Wheel, immutable bytes, and path-copy indexes are reusable. [Pages](src/pages.hpp) stores different native Records; Index = Pages<Cell> preserves existing KV use. Do not encode native Ephemeris/bodyless Catalog in Cell or recreate a unified Store, business inheritance hierarchy, or generic Actor. Preserve read-completion/reclamation boundaries: use_count() is no concurrency barrier.
 
-Clock、侵入式 Wheel、不可变字节所有权和按路径复制的索引机制可以复用. 页算法已抽为 [Pages](src/pages.hpp), 直接保存不同原生 Record, 同时以 Index = Pages<Cell> 保留既有 KV 使用方式. 不把原生 Ephemeris 或仅水位 Catalog 编码进 Cell, 不重新生造统一 Store、业务继承层或通用 Actor. 保留原来的读完成同步和回收边界, use_count() 不是并发屏障.
+Almanac's outside-lock preparation, atomic install, consecutive commits, and bounded history are patterns for dynamic groups, not a per-Scope independently numbered StarSlice. [Source-group version scope](#origin) and domain merge/deadline rules remain. Full snapshots cannot replace [exact-repair coverage](../proto/README.md#repair); repair ahead of group position must still allow older events for other targets.
 
-Almanac 的锁外准备、原子安装、连续提交与有界历史可作为动态来源组的实现模式, 不能把单 Scope 类直接作为每 Scope 独立编号的 StarSlice. 来源版本仍遵循 [来源组范围](#origin), 本地合并及期限仍遵循各域语义. 完整快照不能替代 [精确回补](../proto/README.md#repair) 的局部覆盖依据; 目标回补领先组位置时, 后续仍需处理其他目标的旧事件.
-
-现有 Index::View 是受 Store 读区约束的内部句柄, 读完后还须经过所属状态锁, 不能原样充当可以越过 Client 寿命的 SDK 公共 View. 复用页索引必须同时闭合读完成与最后引用回收, 不只复用 capture() 的 O(1) 形式. SDK 的只读存储拥有独立安全寿命, 最后释放不访问已析构的网络核心/互斥量, 持有旧视图也不让关闭的连接继续运行; 具体对外约束见 [SDK 读取视图](../comet/cpp/README.md#subscription).
+Index::View is internal to Store read regions and must synchronize through its state lock after reading. It cannot directly serve as an SDK public View outliving Client. Reuse must close read-completion/final-reference reclamation, not just O(1) capture. SDK read storage has independent safe lifetime; final release touches no destroyed network core/mutex, and old views keep no closed connection running. See [SDK views](../comet/cpp/README.md#subscription).
 
 <a id="capacity"></a>
 
-## 容量与恢复预留
+## Capacity and recovery reserves
 
-业务总预算不是全部可用于活动数据的容量. 配置和接纳须满足“常驻状态 + 获准并发恢复的准备峰值 + 维护保留量 <= 受控总预算”; 常驻包括水位/空范围游标和历史, 恢复包括新旧根并存、投影路径、解码/编码页及实际在途, 维护包括到期、续租和关闭所需工作. 共享的实际存储只拥有一份内部记账, 各引用退出后才释放其持有成本; 预算是保守工程计量, 不是分配器或 RSS 的精确等式.
+Business budget is not all available for active data. Admission/configuration must satisfy resident state + admitted concurrent recovery peak + maintenance reserve ≤ controlled total budget. Resident includes watermarks/empty-scope cursors/history; recovery includes coexisting roots, projection paths, encoded/decoded pages, and actual in-flight data; maintenance includes expiry/renewal/close. Shared physical storage has one internal accounting owner and remains charged until references release it. Accounting is conservative engineering, not an exact allocator/RSS equation.
 
-接受新 Key、扩大载荷或提高部署容量时, 要同时检查该来源整组及 Almanac Scope 的合法最大状态能否在上述预留内恢复. 不只验证正常 put 的增量字节, 也不能仅用当前较小组的恢复成本支持无限增长. 多来源/多目标同时恢复受同一预算接纳, 排队只保留任务位置, 不提前为每个连接复制完整候选状态. 首版使用组件内有限计数及 RAII 归还, 不增加全局内存管理框架或每字节跨模块回调.
+New keys, larger bodies, or higher deployment limits must also ensure the maximum legal whole source group/Almanac Scope can recover within reserves. Normal put's incremental cost or today's smaller groups cannot justify unlimited growth. Multi-source/target recovery shares one admission budget; queues retain positions, not precloned candidates per connection. Initial implementation uses bounded component counters/RAII returns, not a global memory manager or per-byte callbacks across modules.
 
-单条编码硬上限、永久水位容量与暂时的在途压力分别判定. 暂时压力可以有界退避; 已知完整状态超过硬上限则报告容量不相容并停止重复下载该基线, 等待配置或数据状态满足条件后再恢复. 保留旧完整状态及失败原因, 不靠无限重连解决确定装不下的数据. Polaris 持久范围与部署 Star 的容量属于静态部署契约, 不因此增加逐请求远程 Limits 协商或等待全 Star ACK 才接受管理提交.
+Separate encoded-item hard limits, permanent watermark capacity, and transient in-flight pressure. Transient pressure may back off boundedly. A known oversized complete state reports incompatible capacity and stops redownloading that baseline until configuration/data permits recovery. Retain the old complete state/reason; endless reconnect cannot fit impossible data. Polaris durable Scope/Star capacity is a deployment contract, not per-request remote Limits negotiation or an all-Star-ACK requirement before management commit.
 
-不为释放空间驱逐 Catalog 最高版本、仍有效业务记录或尚在途载荷. 维护预留不能被普通新写入占满, 但不承诺任意分配失败仍可无条件到期成功; 实际无法推进时按既定协议结束受影响 Watch 的追平承诺. 单条最大载荷、最大合法恢复、旧根仍被引用、多目标重建和准备失败必须分别验收, 参数初值见 [协议预算](../proto/README.md#服务端与编码预算).
+Never evict highest Catalog versions, valid records, or in-flight bodies to free space. Ordinary writes cannot consume maintenance reserves, but arbitrary allocation failure still may prevent expiry. If advancement is impossible, end affected Watch catch-up promises under protocol. Separately verify maximum item, maximum legal recovery, retained old roots, multi-target rebuild, and preparation failure; see [initial budgets](../proto/README.md#server-and-encoding-budgets).
 
 <a id="current"></a>
 
-## 现有底层工具与验证边界
+## Existing primitives and validation scope
 
-新增 [Almanac](../star/src/almanac.hpp) 管理单 Scope 的原生内容、权威版本、私有全量候选与有界连续历史, 不调用 Store. Draft 在锁外构建, reset 仅交换完整状态, apply 按权威 +1 安装; 点查表与页索引共享 Key/Value. View 捕获不复制 Map, 遍历结束通过独立持有的互斥量同步, 包括异常路径; 对象销毁后旧 View 仍有自己的页面和同步域. 复用现有 Index 的 KV 页面时 deadline 始终为空, 不为 Almanac 创建时间轮或第二套版本.
+[Almanac](../star/src/almanac.hpp) owns one Scope's native content, authority version, private full candidate, and bounded continuous history without Store. Draft builds outside lock, reset swaps complete state, and apply installs authority +1. Point lookup/page index share Key/Value. Capturing View copies no Map. Traversal completion, including exceptions, synchronizes through an independently owned mutex; old Views retain pages/synchronization after owner destruction. Reused Index KV pages always have empty deadline, without a wheel/second version.
 
-View::each 的用户回调不持有提交锁, 可以重入仍存活 Almanac 的公开操作; 退出时的读完成同步仍可能等待写者, 不承诺无等待或固定等待上限. 调用者持有上层锁时须保持与提交路径一致的锁顺序, 不采用一律禁止回调重入来掩盖锁顺序问题. 超出历史预算的合法提交仍生效, 其历史项与全部旧历史一起淘汰; 后续可重新积累连续历史, 不能跨被淘汰的提交返回不完整增量.
+View::each callbacks hold no commit lock and may reenter public operations on a live Almanac. Completion synchronization can still wait for writers, without fixed/no-wait guarantees. Callers holding outer locks must preserve commit-path lock order rather than prohibit all callback reentrancy to hide ordering problems. Legal commits exceeding history budget still take effect, evicting their own and all old history. New continuous history can accumulate afterward, but cannot bridge the evicted commit with an incomplete delta.
 
-这只是局部状态核心: 当前容量限制计量活动内容与历史, 尚不构成跨 Scope、恢复准备、旧视图及网络在途的全进程预算. Sector/Spectrum Library、完整接收安装、公共 Gateway/Readout 和 C++ Client/Reader 已接线并纳入回归. 原生入口假定调用方先完成 UTF-8/身份验证, 自身检查 Key 长度/NUL、正文上限与状态版本. [普通用例](../star/tests/almanac_test.cpp) 和 [分配故障用例](../star/tests/almanac_fault_test.cpp) 属于 CTest; 执行配置与结果见 [验证记录](../docs/validation.md).
+This is a local core: current capacity measures active content/history, not a process-wide budget across Scopes, staging, old Views, and networking. Sector/Spectrum Library, full receive/install, public Gateway/Readout, and C++ Client/Reader are integrated/regressed. Native entries assume callers already validated UTF-8/identity; they check key length/NUL, body limits, and state version. [Ordinary](../star/tests/almanac_test.cpp) and [allocation-fault](../star/tests/almanac_fault_test.cpp) cases belong to CTest; actual execution is in [validation](../docs/validation.md).
 
-[Catalog](../star/src/catalog.hpp) 与 [Ephemeris](../star/src/ephemeris.hpp) 已写入独立原生记录和无分配候选规则: Catalog 区分来源事实/合并水位/可见变化, Ephemeris 区分新事实与同 order 确认. [Origin](../star/src/origin.hpp) 只复用两个动态域的来源分组、原生页、连续位置及发送历史机制, 不实现 TTL/order/内容冲突判断, 不承载 Almanac. 单项 Edit 在全部准备成功前不发布; 私有 Draft 完整后才交给 Restore 按 Scope 原子安装, 全来源完成后确认连续位置. 回收对象须移至外部提交锁之外释放. View 仍保留读完成同步, 不以 shared_ptr 引用计数冒充内存屏障.
+[Catalog](../star/src/catalog.hpp)/[Ephemeris](../star/src/ephemeris.hpp) have separate native records/allocation-free candidate rules. Catalog distinguishes source facts, merged watermarks, and visible changes; Ephemeris distinguishes new facts from same-order confirmation. [Origin](../star/src/origin.hpp) shares source grouping/native pages/continuous positions/send history only, not TTL/order/conflict decisions or Almanac. Edit publishes only after all preparation succeeds. Completed private Drafts enter Restore for atomic per-Scope installation, acknowledging continuity after the entire source. Move retired objects outside outer commit locks for destruction. Views retain completion synchronization, not reference-count-as-barrier assumptions.
 
-[Agenda](../star/src/agenda.hpp) 按需为来源分配 Wheel<4, 8>, 使用固定 10 ms 拍, 不按 Scope 建轮或保存每条记录的第二期限. 回调重排使用当前拍, 失败重排保留后续到期机会, 大幅推进不使用 max_ticks. 来源历史以完整原生引用保守计费, 形态标签供发送器选择 data/renew/full, 尚未验证广播成本或共享计费效果.
+[Agenda](../star/src/agenda.hpp) lazily allocates Wheel<4, 8> per source with fixed 10 ms ticks, not per Scope/second deadline per record. Callback rescheduling uses the current tick; failure preserves a later expiry opportunity. Large advance has no max_ticks cap. Source history conservatively charges full native references; shape tags select data/renew/full transport. Broadcast/shared-accounting effects still require measurement.
 
-[Scene](../star/src/scene.hpp) 保存公开内容及独立游标, 与 Origin 共用名称和不可变载荷, 不因续租复制下游页面. [Ephemeris::State](../star/src/ephemeris_state.hpp) 已组合本机来源、两级投影、总历史额度和单个来源轮, 准备后重读时间再发布. Ephemeris unary/Watch 已注册到 Runtime, C++ Observer 已接线; Catalog 组合层、Comet Beacon/Publisher 与多 Star 恢复也已接线. 组件故障、公共 RPC 及真实进程用例分别验证这些边界, 不能只由组件测试推断端到端结果.
+[Scene](../star/src/scene.hpp) stores public content/independent cursors and shares names/immutable bodies with Origin; renewal does not copy downstream pages. [Ephemeris::State](../star/src/ephemeris_state.hpp) combines local origin, two-level projection, total history quota, and source wheel, rereading time after preparation before publication. Runtime registers Ephemeris unary/Watch and C++ Observer is wired; Catalog composition, Comet Beacon/Publisher, and multi-Star recovery are also integrated. Component faults, public RPC, and real-process cases qualify different boundaries; component tests alone do not prove end-to-end results.
 
-当前 Store 仍是内部 KV 工具, 不提供上述业务结构、鉴权、对等复制或持久恢复. Buffer 为 std::vector<std::uint8_t> 的别名, Value 为 std::shared_ptr<const Buffer>; 数据、索引和历史由同一状态锁保护, 独立构建锁串行化快照 Map 构建, 写者不等待这把构建锁. snapshot() 短锁捕获根和本地版本后在锁外复制 Map/Key, Value 共享; 完整 Map 仍有 O(N) 工作和内存.
+Store remains an internal KV primitive without these business structures, authentication, peer replication, or durable recovery. Buffer aliases std::vector<std::uint8_t>; Value is std::shared_ptr<const Buffer>. One state lock protects data/index/history. A separate build lock serializes snapshot Map construction without blocking writers on it. snapshot() briefly captures root/local version, then copies Map/Key outside lock while sharing Values: complete Map still costs O(N) time/memory.
 
-Store 的 version 只表示本实例提交, 不存在 Key 的 remove 不推进, 到期批次共用一次版本. extract(since) 按完整历史批次提取, 历史不足或游标超前要求快照. 默认复制预算 32 MiB 只计算 Delta 数组和 Key 字节, 不是历史载荷、RSS 或网络编码上限; 超限和分配失败可抛异常.
+Store version represents this instance's commits only. Removing an absent key does not advance; an expiry batch shares one version. extract(since) extracts complete history batches; gaps/ahead cursors require snapshots. Default 32 MiB copy budget covers Delta arrays/key bytes, not retained bodies, RSS, or wire encoding. Limit/allocation failure may throw.
 
-| 当前工具参数 | 实际含义 |
+| Primitive parameter | Meaning |
 | --- | --- |
-| Clock::Time | 固定 Unix 起点、非负 int64 纳秒 |
-| optional<Clock::Time> deadline | 空为永久, 最大整数仍是有限值 |
-| interval | 默认 10 ms, 必须为正 |
-| retention | 默认 10 分钟, 非负, 使用本地 Steady 经过时间; 零表示不保留增量历史, 不是关闭年龄限制后仅按容量淘汰 |
-| capacity | 默认 1000 个历史批次, 零表示不保留历史, 不等于业务 Key 或内存容量 |
-| initial | 默认无初始时间; 首次 tick 建立边界, 不从 1970 年补拍 |
-| Timer | 当前内嵌 Wheel<4, 10>, 四层各 1024 槽 |
+| Clock::Time | Nonnegative int64 Unix nanoseconds |
+| optional<Clock::Time> deadline | Empty means permanent; maximum integer is still finite |
+| interval | Default 10 ms, strictly positive |
+| retention | Default ten minutes, nonnegative local Steady elapsed time; zero retains no delta history, not age-filter disablement |
+| capacity | Default 1000 history batches; zero retains none, not a business-key/memory limit |
+| initial | No time by default; first tick establishes the boundary, without catch-up from 1970 |
+| Timer | Embedded Wheel<4, 10>, four layers of 1024 slots |
 
-capacity 或 retention 为零时, 已落后的游标要求重新取得快照, 已追平的 extract(version()) 仍返回 stale=false 的空增量. 现有 `store_test::test_retention_and_idle_maintenance` 明确覆盖此契约; 当前说明不代表重新执行该用例.
+With zero capacity/retention, lagging cursors need a snapshot; caught-up extract(version()) still returns an empty stale=false delta. Existing `store_test::test_retention_and_idle_maintenance` covers this contract; this statement does not claim it was rerun.
 
-当前每 Store 仅 4096 个槽头在目标 x64 即约 32 KiB, 未含数据和历史. 这项源码布局推算说明新业务不应继续按每 Scope 建 Store/轮, 不是新结构已经测得的内存结果. 现有 put 不隐式推进时间, Runtime 已改用 Ephemeris 原生状态推进, Catalog/远端来源也已使用自身状态和调度, 不能只增加三层 wrapper 后继续保留全部旧容器.
+On target x64, each Store's 4096 slot heads alone imply about 32 KiB, before records/history. This source-layout estimate motivates avoiding a Store/wheel per Scope; it is not measured new-model memory. Existing put does not implicitly advance time. Runtime uses native Ephemeris and Catalog/remote-source state/scheduling, not three wrapper layers over all old containers.
 
-已有 Store/Wheel/Clock 测试继续只证明其原覆盖边界. 原生模型及新的来源版本/投影关系另有 [验收计划](../docs/comet.md) 和实际业务用例; 运行路径已接入不等于所有规模场景均已验证. 测试仍需本轮授权, 最新实际记录统一维护在 [validation.md](../docs/validation.md).
+Existing Store/Wheel/Clock tests retain only their original coverage. Native models/source-version/projection relationships have separate [acceptance plans](../docs/comet.md)/business cases. Integrated execution paths do not qualify all scales. Tests require current authorization; [validation.md](../docs/validation.md) is the sole current record.
+
+<a id="reuse"></a>
+
+## Dynamic-domain reuse boundaries
+
+Catalog content versions, post-expiry watermarks, and multisource merge differ from Ephemeris UUID ownership, fixed Attr, and separate Data/Renew orders. Differences affect commit, rollback, deletion, and recovery; two Boolean Traits cannot safely turn both States into aliases.
+
+| Shared mechanism | Implementation and retained distinction |
+| --- | --- |
+| Native pages, candidate commits, source logs | Pages/Origin/Scene shared; domains choose records/semantics |
+| Source recovery/transport | Restore, Borrowing, Dispatch, Landing, Exchange::Pipe share recovery/budgets |
+| Public pagination | [Pagination](../star/src/pagination.hpp) shares frozen references, sorting/compaction, page budgets; Encoding/merge remain domain-specific |
+| Public reads | [Reading](../star/src/reading.hpp) shares shared fast path, exclusive advance, outside-lock source waits/reclamation |
+| Clock, scope directory, accounting | Private [Context](../star/src/context.hpp) shares reading/locate/obtain/allowance/single-item publish; State still owns locks, fields, Pending, business methods |
+| SDK Watch | Watching shares network recovery/cancellation/callbacks/accounting; installation retains domain candidate/version rules |
+| SDK writes | Publishing/Beaming remain separate: synchronous Catalog commits differ from Beacon registration/renewal/recovery |
+
+Context introduces no new owning object, inheritance layer, runtime domain selector, or moved state locks. Clock order remains gate_ → timing_; invalid readings leave observed_ unchanged. Generic helpers do not take over Catalog batches or Ephemeris owners_. Template reuse is not evidence of faster builds, smaller binaries, or better performance.
+
+## Algorithm and resource boundaries
+
+| Suggestion/question | Current conclusion |
+| --- | --- |
+| Zero Store retention | [Constructor](src/store.hpp) explicitly means no delta history, consistent with trim. Do not reinterpret it as capacity-only eviction; zero capacity likewise retains none. Later workspace corrections need their own validation |
+| Default Scene::Batch move | Not equivalent: owner_ carries rollback responsibility and must be exchanged to nullptr; default pointer move could let the old destructor undo a valid edit |
+| Direct Pagination sort | Retain index sort/permutation cycles. Earlier direct Event moves hit GCC Release maybe-uninitialized with warnings-as-errors; no fabricated measured move-cost benefit |
+| Pagination tail capacity | resize/move into shared_ptr do not release actual vector capacity; keep charging it. Real shrinking requires allocation/peak analysis, not deleting accounting |
+| In-place Dispatch encoding | Retain temporary Entry validation then Swap. RemoveLast retains reusable submessages; soft-budget-rejected capacity must not hide in prepared packets |
+| Partial Scene batch replay | upper_bound need not return the first batch item; first->version != first->first rejects history-trimmed batches, including since == first->first - 1 |
+| Projection dedup buckets | discard swaps an empty container to release buckets, also cleared on success; records * 2 is a staging bound, not every reset's inevitable peak |
+| Exchange dispatch | Explicit body_case switch retains domain validation/rejection/budgets, without reflection |
+| Exchange workspace | Acquire new quota, clear old bytes_ + workspace_, then register the new workspace. Guard cleans failure/exception; successful pagination retains it without double return |
+| coverage lookup | Combine exact location, maximum Scope coverage, and capacity count in one pass, still O(N), without another rollback-maintained index |
+| Directory sorting | principal map order differs from business ID order; container ordering does not justify deleting sort |
+| Wheel ceiling division | Quotient plus nonzero remainder avoids unsigned overflow in remaining + width - 1 |
+| Bitmap/big-endian encoding | countr_zero locates and bits &= bits - 1 consumes; they complement each other. Portable fixed-eight-byte encoding is not unconditionally replaced by byteswap |
+
+Runtime shutdown's server_ null check is defensive hardening, not a reproduced crash. Resource guards make immediate return/exception boundaries explicit; quota previously returned during disconnected-stream destruction is not a proven permanent leak.

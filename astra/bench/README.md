@@ -1,10 +1,12 @@
-# 当前实现的性能测量
+# Performance measurement of the current implementation
 
-本目录新增的 `native.cpp`、`almanac.cpp`、`comet.cpp` 测量当前三域及原生 Comet C++. `store.cpp`、`push.cpp` 是旧 Store/独立传输探针, 不能代替当前系统结果. 实际数据及结论只维护在 [最新验证](../docs/validation.md#performance); 本文定义复现方法, 不复制结果.
+[English](README.md) | [简体中文](README_CN.md)
 
-## 构建与执行
+`native.cpp`, `almanac.cpp`, and `comet.cpp` measure the current three domains and native Comet C++. `store.cpp` and `push.cpp` are older Store/isolated transport probes, not substitutes for current system results. Actual data/conclusions live only in [validation](../docs/validation.md#performance); this page specifies reproduction.
 
-需要本轮明确测试授权. 仅消费项目已有工具和依赖, 缺失时失败, 不下载或安装. 使用 Release, 不将 Sanitizer 结果当作生产性能. 性能场景顺序运行, 不与编译、其他测试或另一份压测并行.
+## Build and execution
+
+Explicit authorization for the current tests is required. Use existing project tools/dependencies only; missing inputs fail without download/install. Use Release; Sanitizer results are not production performance. Run scenarios sequentially, without overlapping compilation, other tests, or another load run.
 
 ```bash
 bash build.sh configure --profile release --benchmarks
@@ -16,36 +18,35 @@ python3 -B bench/run.py --binaries build/cmake/release --cases bench/auth.json -
 python3 -B bench/run.py --binaries build/cmake/release --cases bench/concurrency.json --output build/results/performance/concurrency
 ```
 
-`star_restore_bench <每远端记录数> <Scope数量> <0或1>` 单独诊断六个本机写者与两个远端全量恢复的竞争, `0` 为无恢复对照, `1` 为并发恢复. 例如 `4096 1 1` 与 `4096 64 1` 保持总记录量相同, 仅改变恢复的 Scope 分布. 使用真实 Catalog/Origin/Scene, 业务时间固定, 不含网络、Pulsar 或 SDK, 不将此成绩冒充三 Star 系统吞吐. 普通 CTest 不自动运行性能探针.
+`star_restore_bench <records-per-remote> <scope-count> <0-or-1>` diagnoses six local writers competing with two remote full recoveries; 0 is the no-recovery control, 1 enables concurrent recovery. `4096 1 1` versus `4096 64 1` keeps total records fixed and changes Scope distribution only. It uses real Catalog/Origin/Scene with fixed business time, without networking, Pulsar, or SDK. Its result is not three-Star system throughput. Ordinary CTest does not run performance probes.
 
-构建并发应按当次实际资源调整, 示例的一任务不覆盖项目的自适应并行规则. 网络场景还需要先通过统一构建入口生成当前的 `star`、`pulsar`、`polaris`、`astrolabe`; 运行器不会替用户构建. 输出目录必须不存在, 不覆盖已有证据. `--repeat=1..5` 控制有限轮次, 默认三轮, 不启动长期后台任务.
+Choose build parallelism from actual resources; the single-job example does not override adaptive project policy. Network cases also require current `star`, `pulsar`, `polaris`, and `astrolabe` artifacts built through the unified entry beforehand; runners do not build. Output directories must not exist. `--repeat=1..5`, default three, selects finite rounds without resident background jobs.
 
-Polaris 使用真实 SQLite 文件、生产 WAL/FULL 配置和已填满的历史, 建库/预填不计入提交耗时. 在本项目的离线 Go 环境中运行:
+Polaris uses real SQLite files, production WAL/FULL, and prefilled history. Creation/prefill are outside commit timing. From the Astra root, using the project's offline Linux Go environment:
 
 ```bash
 python3 -B - <<'PY'
-import subprocess, sys
-sys.path.insert(0, 'astra')
-import build
+import subprocess
+from tools import build
 env = build.environment(jobs=build.resources()[0])
-subprocess.run([str(build.ROOT / 'build/tools/go-1.27.1/bin/go'), '-C', 'astra', 'test', './polaris/internal/storage', '-run', '^$', '-bench', '^BenchmarkCommit$', '-benchtime=2s', '-count=3', '-benchmem'], env=env, check=True)
+subprocess.run([str(build.CACHE / 'tools/go-1.27.1/bin/go'), '-C', str(build.ROOT), 'test', './polaris/internal/storage', '-run', '^$', '-bench', '^BenchmarkCommit$', '-benchtime=2s', '-count=3', '-benchmem'], env=env, check=True)
 PY
 ```
 
-## 统计口径
+## Measurement semantics
 
-- 原生微基准: 每个普通操作 20,000 次, 逐次计时, 输出吞吐及最近秩 p50/p95/p99/p99.9. 记录准备在窗口外. Catalog/Ephemeris 使用预先分配的不可变正文; Almanac 拥有式接口的正文/Key 复制计入窗口. 不能据此直接横比三域的纯算法效率. 全量恢复只有五次/轮, Create 次数等于记录数, 单次长暂停只有一次/轮; 这几项主要看持续时间, 不宣称尾部分布已稳定.
-- 时钟/采样本身有成本, 不作估算扣减. 亚微秒数值用于本机量级判断, 不承诺同等精度. 原生域使用固定可用业务时间排除 TTL 到期; Agenda 单独测 1 小时、1 天和 1 周完整空拍追赶, 不是实际将操作系统挂起.
-- `comet.commit`: 从调用开始到实际写入确认. `comet.visible`: 同一次调用到所有本次 Subscriber/Observer 的推流回调都确认正确版本/正文. 回调只从传入的 View 点查本次热点, 不反向轮询共享 Subscriber/Observer. 每个写者由独立条件变量唤醒, 后者包含 Star 复制、推流、SDK 投影安装及应用通知/线程唤醒, 不只是 gRPC 传输延迟.
-- `rate=0`: 固定 1/8/16/32 个写者的闭环负载, 每写者最多一个在途请求, 等所有观察者可见才写下一条. 完成率是该负载下的端到端吞吐, **不是 Star 独立服务的最大 QPS**. Watchers 是逻辑流数量, 不等于 TCP 连接数. 每个目标 Star 共用一个订阅 Client, 生产者也共享一个 Client.
-- `rate>0`: 从公共起点按固定速率产生计划时间, 延迟从原计划计算, 包含未能及时发起的客户端排队. 仍保持每写者单在途, 不将客户端积压称为服务器拒绝或已收到的请求; 不是无界并发的开环网络发包器. 超过总时间预算失败, 不删掉积压样本来美化尾延迟.
-- 网络样本先创建全部记录, 等真实订阅完整安装, 再等待 200 ms 排空握手工作, 正式窗口默认五秒. 初始化及正常退出不计入网络吞吐, CPU/RSS 资源轨迹覆盖整个探针进程, 包含初始化. 所有写入和可见性检查必须成功, 失败使样本无效而非跳过. 已有基线存储/认证/副本逻辑没有测试替身.
-- TLS 只切换公共业务接口; 内部始终使用真实准入和 TLS. 认证场景由 Astrolabe -> Polaris 正式安装随机测试凭据, 再由 Comet 登录; 不向 Star 内存直接塞入 Session. 临时密码/SECRET 文件仅存本次私有临时目录, 结束后删除.
+- Native microbenchmarks time 20,000 ordinary operations individually and report throughput/nearest-rank p50/p95/p99/p99.9. Record preparation is outside the window. Catalog/Ephemeris use preallocated immutable bodies; Almanac's owning API includes body/key copies. These are not directly comparable pure-algorithm costs across domains. Full recovery has five samples/round, Create count equals records, and a long pause occurs once/round; emphasize duration, not stable tail distributions.
+- Clocks/sampling cost time, without estimated subtraction. Submicrosecond values show local magnitude, not equivalent precision guarantees. Native domains use fixed valid business time to exclude TTL expiry. Agenda separately measures empty catch-up after one hour/day/week, without actually suspending the OS.
+- `comet.commit` runs from call start to actual write receipt. `comet.visible` runs from the same start until every participating Subscriber/Observer callback confirms correct version/body. Callbacks point-query the supplied View, not a shared reader through reverse polling. Each writer has its own condition variable. Visible latency includes Star replication/push, SDK projection install, application notification, and thread wakeup, not just gRPC transport.
+- `rate=0` is closed-loop with 1/8/16/32 writers, at most one request in flight per writer, waiting for all observers before the next write. Completion rate is end-to-end throughput for this workload, **not maximum standalone Star QPS**. Watchers count logical streams, not TCP connections. Each target Star shares one subscribing Client; producers also share one Client.
+- `rate>0` assigns planned send times from a common origin; latency includes client delay before initiation. Each writer still has one in-flight request. Backlog is neither server rejection nor requests already received, and this is not an unbounded open-loop packet generator. Exceeding total time budget fails; do not discard backlog to improve tails.
+- Network samples create all records, await complete real subscriptions, then allow 200 ms for handshake drain before the default five-second window. Initialization/normal exit are excluded from network throughput; process CPU/RSS traces include initialization. Every write/visibility check must succeed; failure invalidates the sample rather than being skipped. Storage/authentication/replication use real implementations.
+- TLS toggles only public business endpoints; internal admission/TLS remain real. Authentication cases install random test credentials through Astrolabe → Polaris, then log in with Comet, never injecting Session into Star memory. Password/SECRET files stay in this run's private temporary directory and are removed afterward.
 
-## 资源与证据
+## Resources and evidence
 
-运行器保存产物 SHA-256、CPU/亲和性、内核、实际内存、换页计数、原始分位数及各进程 RSS/线程/CPU 轨迹. 每份网络样本独立启动 Pulsar、Polaris、必要的 Astrolabe 及 1/2/4 个 Star, 结束或异常时仅停止本次进程组并删除临时数据库. 日志和结果留在指定 `build/` 目录. 不设置系统参数、关闭动态内存或修改全局环境.
+The runner records artifact SHA-256, CPU/affinity, kernel, actual memory, paging counters, raw quantiles, and per-process RSS/thread/CPU traces. Each network sample starts its own Pulsar, Polaris, required Astrolabe, and 1/2/4 Stars. Completion/failure stops only owned process groups and removes temporary databases; logs/results remain under the chosen `build/` directory. No system settings, dynamic-memory configuration, or global environment are changed.
 
-`stable_memory=false` 表示本次范围内内存总量变化或系统换页计数增加, 原始结果保留, 不混入稳定样本中位数. 该标志不是“系统完全无干扰”的证明: 同宿主调度、其他工作负载、频率和冷缓存仍会造成波动. RSS 采样约 20 ms/200 ms, 不是逐次分配审计; 多进程 RSS 求和会重复计入共享页, 不等于物理常驻内存. 现有 swap 占用与本次新换页分开报告.
+`stable_memory=false` means total memory changed or system paging counters increased during the sample. Keep raw results but exclude them from stable-sample medians. This flag does not prove freedom from host scheduling, other workloads, frequency changes, or cold-cache effects. RSS sampling is approximately 20 ms/200 ms, not allocation-level auditing. Summed process RSS double-counts shared pages and is not physical resident memory. Report existing swap separately from new paging.
 
-在同一 VM 中运行客户端及多台 Star, 可以验证实际协议路径和相对扩展成本, 不能推导跨物理机网络、真实生产容量、长期内存稳定性或 p99.99 SLA. 未覆盖的验收矩阵分支继续见 [B01–B14](../docs/comet.md#性能与规模矩阵), 不因本套有限基准通过而一并关闭.
+Clients and Stars on one VM establish real protocol behavior/relative scaling cost, not cross-machine networking, production capacity, long-term memory stability, or p99.99 SLA. Uncovered [B01–B14 acceptance branches](../docs/comet.md#performance-and-scale-matrix) remain open after finite benchmarks pass.

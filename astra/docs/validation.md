@@ -1,246 +1,272 @@
-# 最新验证记录
+# Latest validation
 
-## 开发门禁与 Polaris 存储试点: 待运行
+## Visual Studio and platform split: ordinary regression passed, complete Windows services not ready
 
-2026-09-29, 分支 `sdk`, HEAD `61694d8a3ffd146f71fdf258461da05a1acece4d` 加当前未提交工作区. 本轮获准实现正式 Schema、门禁与试点接入; 根据项目测试约定, 行为测试及前置构建等待本轮明确范围授权. 未安装依赖、启动 Go 测试、运行门禁自检、提交或推送.
+2026-09-29 (Asia/Shanghai), branch `sdk`, HEAD `9dd362814921017cc8a676d9f1ab9f0233951a16` plus frozen uncommitted inputs. This run authorized ordinary regression, explicitly excluding Sentinel. It used existing Python, CMake, MSVC 19.51, GCC 16.2, Go 1.27.1, and prepared dependencies, without downloads, commits, pushes, or deployment changes.
 
-已写入配置/证据/批准/规则四份 Draft 2020-12 Schema、规则依赖注册表、`validate/collect/gate` 入口、28 个门禁测试方法 (含多组反向子场景) 和四个存储契约观察用例. 已执行已有 Black/gofmt 格式化、两份 Python 静态语法解析、六份 JSON 语法解析、相关文档本地链接检查及差异格式检查; 不将其写成运行器、Schema 行为或组件测试通过.
-
-只读环境核查确认 Ubuntu 已有 Python 3.14.4、jsonschema 4.19.2、项目 Go 1.27.1/GCC 16.2.0 目录及 Go 模块缓存; 可复用, 不需要自动安装. Windows 项目 Python 没有 jsonschema. 采集器的进程排干、超时、日志上限、探针关联和正式 Schema 拒绝行为尚待实际验证.
-
-试点整体资格当前为 **未判定**, 不是已产生的 `eligible` 或 `blocked` 报告. 配置保留 29 条完整规则义务和六项 L3 专项缺口, 不以四个有限样例冒充完整 L3; CI 隔离、覆盖/模型/变异、实际基线和收敛期限均尚未完成. 运行后更新本节与 `build/results/verification/` 原生证据, 保留失败目录. 以下既有结果仍仅对应各自原始源码身份.
-
-## Comet C++ 完整接口整理与普通回归
-
-2026-09-28, 分支 `sdk`, HEAD `08554baf79617b69c210d04e595a8e7ebd7e0494` 加目录迁移和未提交工作区. 本轮获准整理优化、补充用例并运行普通测试. 使用既有工具和依赖; 未下载、提交、推送、修改部署或恢复已停止的无限长测.
-
-冻结输入 `build/results/comet-review/inputs.json` 包含 542 个非 Markdown 文件, SHA-256 为 `b66415f4f469a2ab6d886ae3ca04c1c0519ed2e125730f086e079be30ceecb50`. 该身份包含本轮源码、测试、构建入口及生成协议, 不能仅用 HEAD 代替. Windows windows-5 使用前一份 `c449a255b79227de997ad89f7c03cc4101c0df24fb6e2f7913c4d51678636f90`; 此后仅增加编辑器 LF 约定并统一两个 proto 和生成 orbit.grpc.pb.h 的换行, SDK 实现、公共头、测试和构建入口均未改变. 文档单独维护.
-
-| 范围 | 实际结果 |
+| Scope | Actual result |
 | --- | --- |
-| Windows MSVC SDK Release | 6/6 CTest、源码消费、安装包消费和导出审计通过, 证据 windows-5 |
-| Windows Python 夹具 | 24 项: 22 通过、2 个 Linux 专用用例按平台跳过 |
-| Linux 普通 Release | linux-3 的 60/60 CTest 通过, 无失败或跳过, 含真实 RPC、多进程和独立包消费 |
-| Go 与协议生成 | 8 个有测试的 Go 包通过, C++/Go 生成源码逐字节比较通过 |
-| Linux Python 夹具 | 24/24 通过 |
-| 有界三 Star 故障恢复 | A/B/C 各一次强杀恢复, 随后 60 秒常驻阶段通过; 总阶段 146.537 秒, 正常清理 |
-| 静态检查 | 本轮 10 个手写 C++ 文件格式、23 个 Python 文件语法、8 份相关文档的 170 个本地文件链接及 git diff --check 通过 |
+| Linux Release | `tools/build.py regression --profile release --jobs 6 --test-jobs 4` succeeded; 62/62 CTest, no failures/skips |
+| Go | `go test -mod=readonly -count=1 -p 4 -parallel 1 ./...` succeeded; eight packages with tests passed |
+| Protocol generation | C++/Go generated-file comparisons passed, without tracked-output changes |
+| Windows native adapters | MSVC Release built; native_clock, native_platform, native_metrics 3/3 passed |
+| Windows Comet | Standalone Release SDK built; 6/6 CTest passed |
+| IDE generation/build | Six Python generator cases passed; actual MSBuild of build/Astra.sln succeeded, building Comet only with the other four projects remaining browse targets |
+| Windows service capability rejection | Actual /std:c++latest probes confirmed missing reflection/contracts; configuration correctly returned nonzero. Negative checks passed, not service compilation |
 
-本轮补充首次注册/更新的截止和直接取消、通知和采样自解除后的捕获析构、采样抛错、selector 重入、相同字节的新权威淘汰旧估计、容量拒绝后的原视图与记账保持. 独立 cpp_comet_sampling 同时接入 SDK 与总工程, 检查两个实际工作者、64 个候选槽、满额/关闭拒绝、关闭排空和重复等待. 既有用例继续覆盖丢失回执不补发、独立保活、迟到采样、慢通知、原子 Map、Almanac 下限、能力/代次校验和同 ID 多来源恢复; 用例数量不代表穷尽代码覆盖率.
+Linux includes independent SDK package consumption, Pulsar processes, and real three-Star cases; the latter two took 11.91 s/56.69 s. CTest took 164.88 s; build-through-generation regression took 573.78 s. Bounded multi-node cases are not soak or mixed Windows/Linux acceptance. Linux used a separate source directory without replacing the remote workspace. About 7.0 GB memory was available beforehand; build/test concurrency was 6/4. Windows mostly used two build jobs; IDE execution reused completed SDK artifacts.
 
-本轮实际发现并修复:
+Three build issues were fixed without weakening assertions:
 
-- Watching/Beacon 通知回调在执行中解除自身后, 最后一份业务捕获原先可能在重新取得对象锁后析构. 改为锁外释放, 同时保留回调上下文标记, 使析构重入 state 安全并拒绝等待自身. tick 正常/异常路径同样在恢复标记前释放捕获.
-- Observer 引入本地估计后, 单页单条更新多建一次去重节点, 原分配断言在 Windows/Linux 均失败. 恢复直接借该条 UUID 淘汰估计的路径, 并避免条件表达式复制整份 Table 根; 不降低断言要求.
-- 协议生成检查发现两个 proto 的 CRLF 与既有生成头注释换行不一致. 按仓库 LF 约定整理输入并用已有生成器重建, 只改变换行; .editorconfig 同步声明 LF, 不放宽逐字节比较.
-- MSVC 首次编译发现采样参数遮蔽内部 callback 标记, 以及新测试缺少显式 chrono 头. 修正命名和 include, 保留原有警告视为错误设置.
+- Windows Metrics helper `socket` conflicted through Winsock argument-dependent lookup; renamed `create`.
+- New test names clock/random conflicted with standard functions; renamed timing/entropy. Initial Windows/Linux failure logs remain.
+- CMake's CXX26 flag mapping prevented actual MSVC syntax probes. Only probe-function scope now uses latest mode, preserving production C++26. Both real probes then ran and correctly rejected missing capabilities.
 
-所有失败证据保留在同一 results 根目录的独立轮次中: Windows windows-1/2 为编译诊断, windows-3 为分配断言, windows-4/5 为通过轮次; Linux linux-1 为修复前冻结输入的 58/59, 唯一失败为同一分配断言. linux-2 保留上述生成检查失败及全部运行用例通过的记录. 每轮退出和所属进程清理核实后才启动下一轮, 没有覆盖失败目录或并行开启第二套集群.
+Raw `build/results/windows-port/run-1/` contains stage commands, per-file source hashes, exits, monotonic durations, and raw-log hashes. Final Linux input has 608 entries, manifest SHA-256 `eb784dedec0c12663f3629a896c955eee9b7e4765529b05ef7236d3d90900fa8`, also used by passing Windows native/SDK rounds. Later Windows-only capability-probe input is `621f2039361b93da5d77c067ff1cb526e4153139a50f91c34100c53f5365f016`, in runtime-rejection-2.json. Linux input was unchanged while running; the later cmake/compiler.cmake change is not loaded on Linux. Documentation followed execution; not every final file ran under one identity.
 
-三台 Star 均同时接受自身来源写入, 各 16 个 Publisher 和 16 个 Beacon, 两域各 48 条 2 KiB 正文; 故障轮检查稳定 UUID、跨节点传播及恢复后的完整内容. 常驻阶段完成 396 个实际业务轮次, 不是仅检查进程存活. 整个有界场景记录 24 次资源采样; Star 采样 RSS 峰值约 74.1 MiB, SDK 探针约 32.8 MiB, 对应 FD 峰值 19/14、线程峰值 21/62. 这些数字是采样峰值; RSS 随历史建立上升, 该短窗口不证明长期无泄漏.
+Linux evidence was retrieved to run-1/linux; archive SHA-256 `1d3b0e195068f76ca9b026bcc5867dd2210848c1b8c7f70fe50589285abf076b` was verified. Frozen sources were rechecked unchanged, with 63 Linux/13 Windows artifact hashes. Linux controller/runner exited and owned groups had no live processes. Failed/fixed stages remain separate. MSBuild exited 0; subsequent console summary printing hit GBK encoding after logs/exits were saved. Only presentation encoding was corrected; that wrapper exception was not relabeled as zero exit.
 
-Linux 实测 16 vCPU, 运行前约 6.5 GiB 可用内存; 主构建/CTest 为 4/4, 独立包消费串行进入并按当时可用内存选择编译并行度. 使用已有 GCC 16.2、Go 1.27.1、protoc 36.1/gRPC 1.84 及配套依赖. Windows 使用既有 VS 18/MSVC 19.51 与 Comet 依赖前缀. 三节点在同一 VM, 不外推跨物理机故障域.
+Existing Windows SDK test compilation still reports encoding/upstream gRPC deprecation warnings; Linux SQLite emits string diagnostics. No dependency edits/new suppressions hide them. **Full Windows services remain unready:** W32Time quality, logging backpressure, native Ledger/directory durability, contract execution, and formal Windows gate configuration have gaps. This run excludes Sentinel, Sanitizers, benchmarks, soak, Admin browser acceptance, real suspend/resume, and mixed clusters; it is not unconditional release qualification.
 
-原始证据统一在 `build/results/comet-review/`: Windows 最终为 `windows-5`, Linux 取回到 `remote/linux-3`; 旧失败轮次原样保留. `linux-evidence.zip` 已取回并核对 SHA-256 `f9c6399be996e39703bb6dc8b13c5b3f5c497bfbf3a0ed0bcf9e2a98f837fbc4`. `remote/linux-3/verified.json` 核对全部 542 项源码及 81 项 Linux 产物, Windows 产物摘要另在 `windows-5/binaries.json`. 最终控制器/runner 身份已核实退出, 没有残留本轮可执行程序, 临时数据目录为空; 三个本轮空锁文件在确认没有所属进程并取得独占锁后清理. 原始失败证据没有删除.
+## Development gate and Polaris storage pilot: execution pending
 
-本轮不包含 Sanitizer、性能基准、数小时长测、跨物理机分区、Admin 浏览器验收或 Go SDK 实现. SDK C++23、Star C++26, 新协议要求 Star/SDK 配套; core-only 原生状态仍需要既有 gRPC 前缀中的配套 Crypto 库. 三节点有界恢复不能解释为长期稳定性或发布的无条件保证.
+2026-09-29, branch sdk, HEAD `61694d8a3ffd146f71fdf258461da05a1acece4d` plus then-uncommitted workspace. Implementation of schemas/gate/pilot integration was authorized; behavior tests/prerequisite builds still awaited scoped authorization. No dependencies were installed, Go tests/gate self-tests run, commits created, or pushes made in that implementation task.
 
-## 独立仓库整理的验证边界
+Delivered source includes four Draft 2020-12 schemas (configuration/evidence/approval/rules), dependency registry, validate/collect/gate entries, 28 gate test methods with negative subcases, and four storage-contract observation cases. Existing Black/gofmt, two Python static parses, six JSON parses, local documentation links, and diff formatting were checked. These are not runner/schema-behavior/component-test passes.
 
-2026-09-28, 未提交工作区整理为 `github.com/eosforge/astra`. 新版协议、Admin、工具与跨组件测试均收敛到本仓库; Go module/import/go_package 已改名, Go/C++ 协议文件由已有生成器重新生成. 自有代码使用 MIT, 第三方授权原文保持不变.
+Read-only inspection found Ubuntu Python 3.14.4, jsonschema 4.19.2, project Go 1.27.1/GCC 16.2 directories, and Go module cache; no installation is needed there. Windows project Python lacks jsonschema. Collector drain/timeouts/log bounds/probe association and formal schema rejection still need execution.
 
-**目录迁移当时未配置或构建工程, 未运行测试、Sanitizer、性能或长期任务.** 页首后续 Comet 回归覆盖当前冻结输入; 下文旧矩阵仍指向迁移前身份, 不能外推之后的改动. 静态检查只能发现路径、语法和清单问题, 不等于链接或运行成功.
+Pilot qualification is **undetermined**, not an emitted eligible/blocked report. Configuration retains 29 complete rule obligations and six L3 gaps; four samples do not qualify L3. CI isolation, coverage/model/mutation, measured baseline, and convergence deadline remain incomplete. After execution, update this section/native build/results/verification evidence while preserving failed directories. Other results below retain their own source identities; ordinary Go package regression does not complete this formal pilot.
 
-目录迁移时静态核对: 50 个 Python 文件语法解析通过, PowerShell/Bash 入口语法及文档本地链接无错误, 相对 C++ include 和可静态解析的 CMake 文件引用有效, `git diff --check` 无错误. 当时搬迁前 1,382 个文件均有对应位置; 原有 55 个公开身份文件和第三方许可原文保留. 新仓库 540 个非 Markdown 输入文件的路径/内容清单 SHA-256: `ab3c732807032fa516f4d39546813406d5c67cfd31540860ea28b7a878343c04`. 此身份包含协议生成结果, 不包含 build、依赖缓存和文档.
+## Complete Comet C++ interfaces and ordinary regression
 
-后续文档整理合并重复进度/审核说明, 将旧 Redis SDK 仍有效的测试方法收敛到其 testkit/README.md, 删除失效的 legacy-sdk.md; 统一源码路径、命令工作目录和实现/目标边界. 对剩余 59 份 Markdown 的本地文件链接及章节锚点完成静态检查, 50 个 Python 文件再次语法解析通过. Astra 上述 540 个非 Markdown 输入与整理前逐项一致; 另修正旧 SDK 测试配置示例的远端 sdk/ 根路径, 仅检查 JSON 和源码契约, 未执行运行器. 文档检查不构成新的 API、行为或发布验证.
+2026-09-28, sdk HEAD `08554baf79617b69c210d04e595a8e7ebd7e0494` plus layout migration/uncommitted inputs. Cleanup, added cases, and ordinary tests were authorized. Existing tools/dependencies were used; no download, commit, push, deployment change, or restart of the stopped indefinite soak.
 
-新原始日志与摘要统一进入 `build/results/`, 最新人工结论仅在本文件维护. 下文旧证据的 `build/...` 相对路径仍属于原 Verdandi 工作区, 历史 manifest 内路径保持原样; 已停止的长测和失败目录保留, 不因迁移重跑或改记为通过.
+build/results/comet-review/inputs.json freezes 542 non-Markdown files, SHA-256 `b66415f4f469a2ab6d886ae3ca04c1c0519ed2e125730f086e079be30ceecb50`, covering source/tests/build entries/generated protocols, not HEAD alone. Windows windows-5 used earlier `c449a255b79227de997ad89f7c03cc4101c0df24fb6e2f7913c4d51678636f90`; afterward only editor LF policy and line endings in two protos/generated orbit.grpc.pb.h changed. SDK implementation/headers/tests/build entries were unchanged. Docs are maintained separately.
 
-获准后建议验证 Linux 普通 Release 构建/回归及生成一致性、Windows Comet 构建与安装包消费、Go 包和 Admin 检查, 同时覆盖路径迁移前尚未验证的 Context 与 Broadcast 改动. 本次未下载、提交、推送或创建新远端.
-
-## SDK 完整回归结果
-
-2026-09-28 (Asia/Shanghai), 分支 `sdk`, HEAD `08554baf79617b69c210d04e595a8e7ebd7e0494` 加冻结的未提交输入. 用户明确授权完整测试及 Sanitizer, 本轮使用已有工具和依赖, 没有下载、提交或推送.
-
-**本轮冻结快照的完整矩阵通过, 不表示随后继续变化的整个工作区已经通过.** 最终输入清单 `build/sdk-full-validation/inputs.json` 含 934 个文件, SHA-256 为 `4a7c674b0b590571573b2283866fcc54711fe1efc948035177efedf8a79b7fc0`. SDK 与 Admin 的源码输入在收尾核对时未变化; 文档在测试后更新, 不计为重新测试.
-
-| 范围 | 实际结果 |
+| Scope | Actual result |
 | --- | --- |
-| Linux Debug | 59/59 CTest, 无失败或跳过 |
-| Linux Release | 59/59 CTest, 无失败或跳过 |
-| Linux Release probes | 59/59 CTest, 无失败或跳过 |
-| Linux ASan + UBSan, 含泄漏检查 | 59/59 CTest, 无失败或跳过, 未发现诊断 |
-| Linux TSan | 59/59 CTest, 无失败或跳过, 未发现诊断 |
-| Go 与生成协议 | 每配置 8 个 Go 包及 C++/Go 生成源码比较通过; 额外 8 个 Go 包 race 通过 |
-| Windows MSVC SDK | Release 构建、5/5 CTest、源码消费、安装包消费及导出审计通过 |
-| Python 构建入口 | 8/8 通过 |
-| 共享测试夹具 | Linux 39 项: 38 通过、1 个 Windows 专用用例跳过; Windows 34/34 通过, 包含该平台专用用例 |
-| Admin | 格式、217 项导入边界、102/102 Node 用例、类型检查及生产构建通过 |
-| 基准入口 | 已有依赖下构建通过; cpp_baseline_workload 1/1 通过, 未采集性能样本 |
-| 三 Star 有界系统冒烟 | 每台 16 个 Publisher 和 16 个 Beacon, 2 KiB 正文, A/B/C 各一次故障恢复, 随后 60 秒常驻阶段; 完整阶段 156.698 秒, 正常清理 |
+| Windows MSVC Release SDK | 6/6 CTest, source/package consumers, export audit passed; windows-5 |
+| Windows Python fixtures | 24 cases: 22 passed, two Linux-only skips |
+| Linux ordinary Release | linux-3: 60/60 CTest, no failures/skips, including real RPC/process/package cases |
+| Go/generated protocol | Eight tested packages passed; C++/Go generated bytes matched |
+| Linux Python fixtures | 24/24 passed |
+| Bounded three-Star recovery | Kill/recover A/B/C once each, then 60-second resident phase passed; total 146.537 s, normal cleanup |
+| Static checks | Ten handwritten C++ files formatted, 23 Python parses, 170 local links in eight docs, git diff --check passed |
 
-Linux 五配置均包含独立 SDK 源码/安装包消费和真实三 Star 多进程测试. 三台同时接受各自来源写入, 固定观察端验证跨节点传播. 有界冒烟参数为 `--fault-seconds 0 --steady-seconds 60 --interval 0 --records 16`, 不是数小时稳定性结论. 未重新启动先前已停止的无限长测, 旧正式长测失败不能由此次短冒烟改记为通过. 强杀节点也不声称经过退出时泄漏检查.
+Added cases cover initial registration/update deadlines/direct cancellation, capture destruction after notification/sampling self-unregistration, sampling exceptions, selector reentrancy, same-byte new authority invalidating old estimates, and old-view/accounting preservation on capacity rejection. Independent cpp_comet_sampling is registered in SDK/root builds and checks two real workers, 64 candidate slots, capacity/close rejection, drain, and repeated wait. Existing cases retain lost-receipt no-replay, keepalive, late samples, slow notifications, atomic Maps, Almanac floors, capability/generation checks, and same-ID multisource recovery. Case counts are not exhaustive coverage percentages.
 
-### 测试发现与修复
+Observed fixes:
 
-- TSan 首次运行的 `cpp_comet_publisher` 在 Protobuf 序列化中崩溃. SDK 已插桩但消费目标缺少编译插桩, Protobuf 的 TSan 条件成员导致两侧布局不同. 将 Comet Sanitizer 编译要求从 PRIVATE 改为 PUBLIC, 与已有链接要求一起传播到测试及安装包消费者. 修复后定向用例和上述完整矩阵通过; 没有关闭检查或修改第三方源码.
-- Windows 共享夹具首次出现两项导入错误: `testkit/soak.py` 遮蔽旧 `testkit/soak/` 命名空间. 将旧 Redis 夹具移至 `testkit/legacy_soak.py`, 同步调用、导入及文档路径; Windows/Linux 夹具均通过. 没有启动旧 Redis 服务或旧 SDK 性能负载.
-- Windows 首次辅助导出审计使用默认 GBK 读取 UTF-8 CMake 文件而失败, 修正为显式 UTF-8. 最终 `windows-2` 整套资格验证返回 0. 初次失败证据保留, 不把辅助脚本错误记成产品测试通过.
+- Watching/Beacon self-unregistration could destroy the final business capture after reacquiring the object lock. Release now occurs outside it while preserving callback context, permitting destructor state reentry and rejecting self-wait. tick success/exception paths release captures before restoring markers.
+- Observer estimates introduced an extra dedup node for single-page/single-item updates, failing allocation assertions on both platforms. Direct UUID-based estimate eviction and avoidance of a conditional-expression Table-root copy restored the path without weakening assertions.
+- Generation comparison exposed CRLF inconsistencies between two protos and existing generated header comments. Existing generators regenerated LF-only changes; .editorconfig declares LF. Byte comparison stayed strict.
+- Initial MSVC compile found sampling-parameter shadowing of an internal callback marker and a missing chrono include. Names/includes were corrected without relaxing warnings-as-errors.
 
-SDK 边界回归包括同步 Catalog 版本查询/一次明确冲突修复、未知提交结果不补发、有界版本基线、正文释放、版本上限、旧调度取消隔离、慢回调期间关闭、极端等待时长和 View 重入遍历. 当时冻结输入尚未包含 Beacon 新同步接口、同 ID 恢复和新版读取接口; 后续实现的边界见页首, 不归入这次历史通过结果.
+Separate rounds preserve failures: windows-1/2 compilation, windows-3 allocation assertion, windows-4/5 passes; linux-1 was 58/59 on pre-fix frozen input with the same allocation failure. linux-2 retains generation-comparison failure alongside passed runtime cases. Process exit/owned cleanup was verified before each next round, without overwriting evidence or another simultaneous cluster.
 
-### 环境、证据与清理
+All three Stars accepted their own writes: 16 Publishers/16 Beacons each, 48 records/domain, 2 KiB bodies. Fault rounds checked stable UUIDs, cross-node propagation, and complete recovered content. The resident phase executed 396 actual business rounds, not liveness-only checks. Twenty-four resource samples measured Star peak RSS about 74.1 MiB and SDK probe 32.8 MiB, FD peaks 19/14 and threads 21/62. These are sampled peaks; history growth increased RSS and the short window proves no long-term leak bound.
 
-Linux 实测 16 vCPU、开始时约 6.5 GiB 可用内存. 普通配置最多 4 路编译/4 路独立测试, Sanitizer 为 3/3, 五配置顺序运行并尊重 CTest 串行约束. 使用已有 GCC 16.2、Go 1.27.1 与固定依赖; SDK C++23、服务端 C++26. TSan 使用已有单独插桩的依赖. 格式检查及最终差异空白检查通过.
+Linux had 16 vCPU/about 6.5 GiB available; main build/CTest 4/4. Independent package consumption ran serially, adapting compilation to then-available memory. Tools were GCC 16.2, Go 1.27.1, protoc 36.1/gRPC 1.84 and existing dependencies. Windows used VS18/MSVC 19.51/current Comet prefix. All nodes shared one VM, not separate physical fault domains.
 
-原始证据保存在 `build/sdk-full-validation`: `remote/linux-1` 保留首次失败, `remote/linux-2` 包含最终全部阶段及五份 JUnit, `windows-2` 为最终 MSVC 验证, `admin-check.log` 与两份 Windows 夹具日志记录各自结果. `linux-evidence.zip` 已取回并核对 SHA-256 `3497d1c0031c974a874acf4735d76892dbd34e7d6e2480085de424348c6c8e39`. `remote/verified.json` 核对全部 934 项远端输入、40 个产物摘要及控制器/runner 的 PID、start ticks、boot ID; 所属测试进程已经退出, 没有遗留本任务的项目可执行程序.
+Evidence: build/results/comet-review/windows-5 and remote/linux-3, with old failures intact. Retrieved linux-evidence.zip SHA-256 `f9c6399be996e39703bb6dc8b13c5b3f5c497bfbf3a0ed0bcf9e2a98f837fbc4` verified. remote/linux-3/verified.json checks all 542 sources/81 Linux artifacts; windows-5/binaries.json records Windows artifacts. Verified controller/runner exited, no owned executables remained, temp-data directories were empty. Three empty owned lock files were removed only after no owners remained and exclusive locks were obtained. Failure evidence was not deleted.
 
-本轮未执行浏览器视觉/交互验收、吞吐/延迟对照、数小时长测或跨机器故障域测试. Admin 仍有约 502.69 kB 主包体积提示. Sanitizer 结果来自 Linux, 不扩展为 Windows Sanitizer 验证.
+Excluded: Sanitizers, benchmarks, multi-hour soak, physical-machine partitions, Admin browser acceptance, Go SDK implementation. SDK is C++23, Star C++26; new protocol requires matching Star/SDK. Core-only native state still needs matching Crypto from the existing gRPC prefix. Bounded recovery is no unconditional long-term/release guarantee.
 
-### 后续工作区变更的边界
+## Repository reorganization boundaries
 
-测试快照固定后, 工作区继续产生 Store、Agenda、Origin 以及两动态域 `Context<State>` 抽取和相关用例修改. 收尾记录 `workspace-final-drift.json` 列出 12 个变化的源码/测试文件及新增 `astra/star/src/context.hpp`: `astra/common/src/store.cpp`、`store.hpp`; `astra/star/src/agenda.hpp`、`origin.hpp`、`catalog_replica.cpp`、`catalog_state.cpp`、`catalog_state.hpp`、`ephemeris_replica.cpp`、`ephemeris_state.cpp`、`ephemeris_state.hpp`; `astra/star/tests/catalog_state_test.cpp`、`ephemeris_state_test.cpp`. 这些后续改动及相关文档未纳入本轮矩阵, 保留原样, 不用冻结快照的结果替代其回归.
+On 2026-09-28, the uncommitted layout was prepared for the intended github.com/eosforge/astra repository. Protocol, Admin, tools, and cross-component tests moved under Astra; Go module/import/go_package names changed and existing generators regenerated Go/C++ files. Owned code is MIT; third-party notices are unchanged. This records layout preparation, not creation/publication of a new remote.
 
-## Comet Windows/MSVC SDK 验证
+The migration itself ran no configure/build/tests/Sanitizers/performance/soak. Later Comet regression above covers its frozen input; older matrices below remain pre-migration identities. Static path/syntax/inventory checks do not prove linking/runtime behavior.
 
-本轮使用已有 Visual Studio 18 / MSVC 19.51, x64 Release, SDK 与依赖要求 C++23; 本机 CMake 映射为 `/std:c++latest`, 不表示完整 C++26 支持. 服务端标准未调整. SDK 的 projection、selection、subscription、lifetime、publisher 五项测试全部通过. 源码消费程序与安装包消费程序均完成配置、构建、运行; 自有安装产物位于 `build/comet-msvc/install`. 导出审计未发现工作区绝对路径、意外 `.proto`、私钥或服务端程序目录.
+Migration checks passed for 50 Python parses, PowerShell/Bash entry syntax, document links, relative C++ includes/statically resolvable CMake references, and diff whitespace. All 1,382 pre-move files had destinations; 55 public identity files/original third-party notices were retained. The 540 non-Markdown input manifest SHA-256 was `ab3c732807032fa516f4d39546813406d5c67cfd31540860ea28b7a878343c04`, including generated protocol but excluding build/cache/docs.
 
-复用已获准的 `build/deps/comet-msvc/install` 依赖及既有 `GrpcMSVC.cmake` 兼容入口: 仅在 gRPC `fused_filters.cc` 禁用可选融合实现. 本次没有下载、重装第三方依赖或扩大兼容开关. 测试/消费代码仍有 C4819 和 gRPC 弃用提示, 不声称零告警; SDK 原 `/W4 /WX /utf-8` 要求保留. 独立消费程序不等于真实 Windows 服务端或部署验收.
+Subsequent consolidation removed redundant progress/review text and invalid legacy-sdk.md, placing still-valid old Redis SDK methods in its testkit/README.md. Paths/working directories/implementation-vs-target statements were normalized. Static links/anchors in the then-remaining 59 Markdown files and 50 Python parses passed. Astra's 540 non-Markdown inputs remained byte-identical. The old SDK remote-root JSON example was corrected and statically checked, without running its runner. Documentation checks provide no new behavior/release qualification.
 
-## 当前动态域局部抽取
+New raw evidence belongs in build/results, with current human conclusions here. Older build/... paths below belong to the original Verdandi workspace and historical manifests retain them. Stopped/failed soak directories remain, without rerunning/relabeling after migration. Ordinary Linux/Windows/Go follow-up is recorded above; Admin and configuration-specific gaps must still use their own evidence. The migration task downloaded nothing, committed/pushed nothing, and created no remote.
 
-2026-09-28 (Asia/Shanghai), 当前未提交工作区新增私有 `Context<State>` 共用时钟校验、投影目录查找/创建、历史预算与单条通知记账. 两域保留自身成员、锁、Pending/Retired、提交与到期处理; Catalog 原子批次通知路径独立保留. 两域状态用例补充回退读数、未就绪未来读数及缺失读数拒绝后的恢复检查.
+## Full SDK regression results
 
-**抽取当时仅完成源码整理与静态检查.** 上方旧冻结快照矩阵不包含此次抽取; 当前普通回归按页首的新源码身份记录, 包括 Catalog/Ephemeris 状态、副本、分配故障及 preparation 用例; 不自动启动 Sanitizer、性能或长期测试.
+2026-09-28 (Asia/Shanghai), sdk HEAD `08554baf79617b69c210d04e595a8e7ebd7e0494` plus frozen uncommitted input. Full tests/Sanitizers were explicitly authorized. Existing tools/dependencies only; no download/commit/push.
 
-## 当前弱页缓存诊断
+**The complete matrix passed for this frozen snapshot, not the subsequently changing workspace.** build/sdk-full-validation/inputs.json contains 934 files, SHA-256 `4a7c674b0b590571573b2283866fcc54711fe1efc948035177efedf8a79b7fc0`. SDK/Admin inputs were unchanged at final audit; later documentation updates are not reruns.
 
-2026-09-28 (Asia/Shanghai), 在上述冻结测试输入之后, 当前未提交工作区继续修改 `astra/star/src/broadcast.hpp` 和 `astra/star/tests/broadcast_test.cpp`. 新增成功重建次数与对应探针, 保留弱页所有权; 两域共用分页用例补充空弱槽重试不误计、首次构造/命中不计重建、反复释放后重建的内容一致性检查. SDK 调度未因本次审查改变.
+| Scope | Actual result |
+| --- | --- |
+| Linux Debug | 59/59 CTest, no failures/skips |
+| Linux Release | 59/59 CTest, no failures/skips |
+| Linux Release probes | 59/59 CTest, no failures/skips |
+| Linux ASan + UBSan, leak checks included | 59/59 CTest, no failures/skips/diagnostics |
+| Linux TSan | 59/59 CTest, no failures/skips/diagnostics |
+| Go/protocol | Eight packages and generated C++/Go comparisons per configuration; additional race run passed all eight |
+| Windows MSVC SDK | Release build, 5/5 CTest, source/package consumption, export audit passed |
+| Python build entry | 8/8 passed |
+| Shared fixtures | Linux 39: 38 passed, one Windows-only skip; Windows 34/34 including that platform case |
+| Admin | Format, 217 import boundaries, 102/102 Node cases, type checks, production build passed |
+| Benchmark entry | Built with existing dependencies; cpp_baseline_workload 1/1 passed, no performance samples |
+| Bounded three-Star smoke | 16 Publishers/16 Beacons per Star, 2 KiB bodies, A/B/C fault recovery once each, then 60 seconds resident; total 156.698 s, normal cleanup |
 
-**新增诊断当时只完成源码格式化和静态审阅.** 页首当前普通 Release 已覆盖 `cpp_broadcast` 及动态域用例; 上方旧完整矩阵不能代替新输入的探针开启、Sanitizer、性能或长期验证. 当前这轮未执行探针开启配置.
+All five Linux configurations include independent SDK source/package consumers and real three-Star processes. Each Star writes locally, with fixed observers checking cross-node delivery. Smoke parameters were `--fault-seconds 0 --steady-seconds 60 --interval 0 --records 16`, not multi-hour stability. The stopped indefinite soak was not restarted; its earlier formal failure cannot become passed through this smoke. Killed nodes do not claim exit-time leak checks.
 
-## 测试完整度与发布边界
+### Findings and fixes
 
-| 能力 | 当前证据 | 仍未证明的边界 |
+- Initial TSan cpp_comet_publisher crashed during Protobuf serialization because SDK was instrumented but consumers lacked compile instrumentation, changing conditional TSan members/layout. Comet compile requirements changed PRIVATE→PUBLIC alongside existing link propagation. Targeted and full reruns passed without disabling checks/editing third-party source.
+- Initial Windows fixtures had two import errors: testkit/soak.py shadowed the old testkit/soak namespace. Legacy Redis fixture moved to testkit/legacy_soak.py with call/import/doc updates; both platforms passed. No old Redis services/SDK performance workloads ran.
+- Initial Windows export-audit helper decoded UTF-8 CMake using default GBK. Explicit UTF-8 fixed it; windows-2 qualification exited 0. Initial failures remain and are not product-test successes.
+
+SDK cases cover synchronous Catalog queries/one definite conflict repair, uncertain no-replay, bounded baseline cache, payload release, version limits, stale scheduler cancellation, close during slow callbacks, extreme waits, and reentrant View traversal. This frozen input predates new synchronous Beacon, same-ID recovery, and new reader interfaces; their later evidence is above, not part of this historical pass.
+
+### Environment, evidence, cleanup
+
+Linux had 16 vCPU/about 6.5 GiB initially available. Ordinary builds/tests used at most 4/4; Sanitizers 3/3. Five configurations ran sequentially respecting CTest serial constraints. Existing GCC 16.2/Go1.27.1/pinned dependencies; SDK C++23, servers C++26. TSan used existing separately instrumented dependencies. Formatting/final whitespace checks passed.
+
+build/sdk-full-validation retains remote/linux-1 initial failure, remote/linux-2 final stages/five JUnit files, windows-2 final qualification, admin-check.log, and two Windows fixture logs. Retrieved linux-evidence.zip SHA-256 `3497d1c0031c974a874acf4735d76892dbd34e7d6e2480085de424348c6c8e39` verified. remote/verified.json checks 934 remote inputs, 40 artifact hashes, and controller/runner PID/start ticks/boot ID. Owned processes exited without leftover project executables.
+
+No browser visual/interaction acceptance, throughput/latency comparison, multi-hour soak, or cross-machine fault tests ran. Admin still reported an approximately 502.69 kB main bundle. Linux Sanitizer results do not extend to Windows.
+
+### Later workspace changes
+
+After snapshot freeze, Store, Agenda, Origin, both dynamic domains' Context<State> extraction, and tests changed. workspace-final-drift.json records twelve changed files plus new astra/star/src/context.hpp: astra/common/src/store.cpp/store.hpp; astra/star/src/agenda.hpp/origin.hpp/catalog_replica.cpp/catalog_state.cpp/catalog_state.hpp/ephemeris_replica.cpp/ephemeris_state.cpp/ephemeris_state.hpp; astra/star/tests/catalog_state_test.cpp/ephemeris_state_test.cpp. These later changes/docs were outside that matrix and preserved, not qualified by its result.
+
+## Comet Windows/MSVC SDK validation
+
+Existing VS18/MSVC 19.51 x64 Release used C++23 for SDK/dependencies, locally mapped to /std:c++latest, not full C++26 support. Server standard stayed unchanged. Five projection/selection/subscription/lifetime/publisher tests passed. Source/package consumers configured, built, and ran; owned installation was build/comet-msvc/install. Export audit found no workspace absolute paths, accidental .proto/private keys/server-program directories.
+
+Approved build/deps/comet-msvc/install and existing GrpcMSVC.cmake were reused, disabling optional fusion only in gRPC fused_filters.cc. No download/reinstall/expanded compatibility flags. Test/consumer compilation retained C4819/gRPC deprecation warnings; SDK /W4 /WX /utf-8 remained. Independent consumers do not qualify real Windows servers/deployment.
+
+## Dynamic-domain helper extraction
+
+2026-09-28: private Context<State> shares clock checks, projection directory lookup/create, history budget, and single-item notifications. Domains retain fields/locks/Pending/Retired/commit/expiry, with Catalog batch notifications separate. State tests add recovery after backward, unready-future, and missing readings.
+
+At extraction, only source cleanup/static checks were complete. The older full matrix excludes it; newer ordinary regression above covers state, replica, allocation-fault, and preparation cases under its own identity. No automatic Sanitizer/performance/soak follows.
+
+## Weak-page-cache diagnostics
+
+2026-09-28 changes after the frozen full matrix affected astra/star/src/broadcast.hpp and astra/star/tests/broadcast_test.cpp: successful-rebuild counters/probes retain weak ownership. Shared pagination cases check empty weak-slot retries not counted, initial construction/hits not counted as rebuilds, and content consistency after repeated release/rebuild. SDK scheduling did not change in that review.
+
+Initially only formatting/static review were complete. New ordinary Release above covers cpp_broadcast/dynamic domains; the older complete matrix does not qualify these new inputs under probes/Sanitizers/performance/soak. That newer ordinary run did not enable probes.
+
+## Coverage and release boundaries
+
+| Capability | Evidence | Unproven boundary |
 | --- | --- | --- |
-| 三域状态与快照 | 原生、分配失败、历史断档、版本/TTL/旧视图用例及 Sanitizer | 不提供行/分支覆盖率百分比, 未穷举所有配置组合 |
-| SDK 生命周期 | 三域安装、登录/撤销、取消、回执丢失、半批停滞、Beacon 自动保活、实际 OnDone 清理 | 多机代理和长时网络黑洞需单独系统验证 |
-| 多 Star 基础 | 三个独立来源、九条来源到目标路径、强杀/恢复、可见性断言 | 同一 VM 的环回网络, 不等于跨机器网络分区/丢包验收 |
-| 控制面 | Pulsar 持久事务/对时保持与恢复, Polaris SQLite 提交/重启, Astrolabe 管理和指标 | 未进行宿主机掉电、真实磁盘满和 NTP 阶跃 |
-| 诊断探针 | 独立采样器与解析负例, 含 Sanitizer; 普通构建不含采样状态 | 本轮未重做性能 A/B, 不宣称新增优化已实测提速 |
-| 长时运行 | [长测规约](soak.md)、本轮三次故障/60 秒常驻冒烟通过; 旧无限长测保持停止 | 数小时正式运行尚未完成, 短冒烟不能证明长期无泄漏 |
-| 交付 | Windows/Linux SDK 源码及安装包消费、Admin 构建 | 目标机依赖、完整部署与升级回滚仍待验收 |
+| Three-domain state/snapshots | Native, allocation-fault, history-gap, version/TTL/old-view cases and source-bound Sanitizers | No line/branch percentage or exhaustive configurations |
+| SDK lifecycle | Install/login/revoke/cancel/lost receipts/partial stalls/Beacon keepalive/actual OnDone cleanup | Multi-machine proxies/prolonged network blackholes |
+| Multi-Star basics | Three sources, nine source-target paths, kill/recovery, visibility assertions | Same-VM loopback is not physical partition/loss acceptance |
+| Control plane | Pulsar transactions/holdover/recovery, Polaris SQLite/restart, Astrolabe management/metrics | No host power loss, real disk full, or NTP step |
+| Probes | Sampler/parser negatives, including Sanitizers; ordinary build has no sampling state | No current performance A/B or measured new optimization gains |
+| Long-running | [Soak specification](soak.md), three faults/60-second smoke; indefinite soak remains stopped | Formal multi-hour run incomplete; smoke proves no long-term leak bound |
+| Delivery | Windows/Linux SDK source/package consumption, Admin build | Target dependencies, complete deployment, upgrade/rollback |
 
-当前结果支持继续作为发布候选验收, 不能仅凭有限测试称为“无 BUG”或“已完成生产交付”. 长测、部署和故障域验证分别记账.
+Evidence supports continued release-candidate acceptance, not “bug-free” or completed production delivery. Soak, deployment, and fault domains require separate accounting.
 
-## 最近性能证据的适用范围
+## Applicability of recent performance evidence
 
-下文为 **2026-09-25** 已执行性能基线, 保留其原源码身份和证据. 普通版及探针版各 58/58 CTest、32 个配对性能样本、2 个 CPU 探索样本、2 个冒烟样本全部通过. 这些性能数字**不代表 2026-09-26 发送路径修改后的性能**, 本轮不重跑 Redis/6 Star 比赛.
+The following is the executed **2026-09-25** baseline with original source/evidence identity. Ordinary/probe configurations each passed 58/58 CTest; 32 paired samples, two CPU explorations, and two smoke samples passed. Numbers do **not** measure sending-path changes from 2026-09-26 onward. Redis/six-Star comparisons were not rerun.
 
-## 输入、执行与修复
+## Inputs, execution, fixes
 
-- 普通 Release 和 `release-probes` 分开构建, 使用已有 GCC 16.2.0 和项目依赖, 4 路编译 / 4 路独立测试. 未下载、运行 Sanitizer、长期测试或提交推送. 未重跑 Admin、冻结 SDK、Redis 和 6 Star 对照.
-- 最终输入清单含 751 个项目文件, 另核对 55 个复用测试夹具; Windows、Ubuntu 摘要一致, 测量期间未变化. 原始输入和二进制摘要在证据包内.
-- 首次编译发现 SDK 表测试缺少探针头目录, 已补齐. GCC 16 对 RAII 临时借用 TLS 栈指针误报 `-Wdangling-pointer`, 仅在保存指针的一行局部抑制; 嵌套、提前结束、异常展开和并发用例验证恢复边界, 未关闭项目级警告.
-- 初次采集暴露固定每 N 次取样与 Runtime 等待/工作交替相位重合: 记录格式完整, 却没有 `Runtime::step` 样本. 已改为线程内 xorshift32 顶层伪随机选择, 子树继承采样决定; 新增交替入口用例. 最终逐台 Star 验证工作步骤确实有样本, 不沿用修复前的热点排名.
-- 修复后重编开/关夹具并重跑普通 58 项; 普通 Star/Pulsar/Comet 二进制 SHA-256 与修复前完全相同. 探针版重新构建并完成全部 58 项、Go 回归和生成比较.
-- 初轮辅助 I/O 统计在进程退出时读取 `/proc/<pid>/io` 发生权限竞争; 仅将该可选统计改为容忍 OSError, 保留失败记录和补测. 最终独立复测无此中断. 初轮证据保留于 `build/profile-validation/evidence.zip`, 不混入下列最终统计.
+- Separate ordinary/release-probes builds used existing GCC 16.2.0/dependencies with 4 build/4 independent test jobs. No downloads, Sanitizers, soak, commit/push, Admin, frozen SDK, Redis, or six-Star rerun.
+- Final manifest had 751 project files plus 55 reused fixtures; Windows/Ubuntu hashes agreed and stayed unchanged during measurement. Inputs/binaries are in evidence.
+- Initial SDK table-test build lacked probe include paths, corrected. GCC 16's RAII temporary TLS-stack borrow triggered a -Wdangling-pointer false positive; only the pointer-storage line is suppressed. Nested/early-end/unwind/concurrent tests cover restoration, without project-wide warning disablement.
+- Fixed-every-N sampling aligned with Runtime alternating wait/work, producing valid records but no Runtime::step samples. Thread-local xorshift32 now selects top-level spans, inherited by children; an alternating-entry case was added. Final every-Star work-step samples were checked; pre-fix hotspot ranks are excluded.
+- Rebuilt enabled/disabled fixtures and reran 58 ordinary cases. Ordinary Star/Pulsar/Comet hashes were identical before/after probe fix. Probe build reran all 58, Go, and generation checks.
+- Initial optional /proc/<pid>/io reads raced process exit permissions. Only that statistic now tolerates OSError; initial failure/retest evidence remains. Final independent rerun had no interruption. Initial build/profile-validation/evidence.zip is excluded from final statistics.
 
-## 环境与模型
+## Environment and workload
 
-- Ubuntu VM: 16 vCPU, affinity 0..15, 固定实际内存 7419 MiB (约 7.25 GiB). 最终测量期间可用内存最低约 6.39 GiB; 各样本 MemTotal 不变. 开始和结束已有 Swap 占用均为 16 KiB, 换入/换出计数不变, 本轮性能窗口无新增换页.
-- 3 Star 同时接受各自本地写入并向另外两台复制, 消费 Client 分布在三台 Star. 单 VM 回环, 内部 TLS/准入开启, 公共 TLS/auth 关闭.
-- 96 条记录、3 Scope、每 Scope 12 个订阅 (共 36 个), 3 生产 Client + 3 消费 Client、6 写工作者, TTL 30 s. Catalog 正文 2048 B; Ephemeris Data 64 B、Attr 256 B.
-- 每样本新建/清理独占集群, 正式窗口 20 s; 每域四轮, 编译关闭/运行关闭/1:64/1:256 的顺序按轮旋转. 两次 2 s 冒烟不计正式统计. CPU 模式每域额外一次, 不作为四轮配对或置信区间.
-- `visible` 闭环在下一次写入前等待所有目标订阅可见, SDK 视图观测周期 1 ms. QPS 是复制与订阅全部可见的应用吞吐, **不是裸 RPC 峰值或 100k 容量验收**. 构建和离线解析均不与性能负载同时运行.
+- Ubuntu VM: 16 vCPU, affinity 0..15, actual fixed 7419 MiB (~7.25 GiB). Minimum available during final measurement ~6.39 GiB; MemTotal unchanged. Existing swap was 16 KiB at both ends, with unchanged swap-in/out counters and no new paging.
+- Three Stars accepted local writes and replicated to both peers; consumer Clients spanned all three. Same-VM loopback, internal TLS/admission enabled, public TLS/auth disabled.
+- 96 records, three Scopes, twelve subscriptions/Scope (36 total), three producer plus three consumer Clients, six writers, TTL 30 s. Catalog body 2048 B; Ephemeris Data 64 B/Attr 256 B.
+- Each sample created/cleaned an exclusive cluster; window 20 s. Four rounds/domain rotated compiled-out/runtime-disabled/1:64/1:256 order. Two 2 s smoke runs are excluded. One extra CPU run/domain is exploratory, not four-round paired/confidence evidence.
+- Visible closed-loop waits for every target before the next write; SDK views sampled every 1 ms. QPS includes replication/subscription visibility, **not bare RPC peak or 100k capacity qualification**. Builds/offline parsing did not overlap load.
 
 <a id="performance"></a>
 <a id="baseline"></a>
 
-## 实测性能与探针开销
+## Measured performance and probe overhead
 
-关闭和墙钟配置分别为四轮指标中位数, CPU 模式为单次探索. 延迟单位 ms. 总 CPU/RSS 覆盖三台 Star、Pulsar、Polaris 和基准 SDK; CPU 由资源采样窗口计算, 包含该窗口内准备与收尾.
+Disabled/wall configurations show medians over four rounds; CPU is one exploration. Latencies are ms. CPU/RSS cover three Stars, Pulsar, Polaris, and benchmark SDK; resource sampling includes preparation/cleanup within its window.
 
-| 负载 | 配置 | QPS | 回执 p99 | 可见 p99 | 可见 p99.9 | CPU 核数 | 峰值 RSS MiB |
+| Workload | Configuration | QPS | Receipt p99 | Visible p99 | Visible p99.9 | CPU cores | Peak RSS MiB |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Catalog 2048 B | 编译关闭 | 1712.63 | 2.198 | 6.541 | 8.571 | 8.59 | 176.3 |
-| Catalog 2048 B | 编入但未记录 | 1705.01 | 2.107 | 6.006 | 7.314 | 8.64 | 178.7 |
-| Catalog 2048 B | 墙钟约 1/64 | 1692.18 | 2.125 | 6.168 | 7.867 | 8.61 | 218.6 |
-| Catalog 2048 B | 墙钟约 1/256 | 1680.87 | 2.205 | 6.168 | 7.362 | 8.54 | 189.1 |
-| Catalog 2048 B | CPU 约 1/256 (单次) | 1687.47 | 2.247 | 5.810 | 7.153 | 8.22 | 189.6 |
-| Ephemeris 64 B | 编译关闭 | 1748.48 | 2.339 | 6.868 | 8.859 | 8.69 | 135.5 |
-| Ephemeris 64 B | 编入但未记录 | 1753.22 | 2.212 | 5.845 | 7.606 | 8.69 | 137.8 |
-| Ephemeris 64 B | 墙钟约 1/64 | 1695.25 | 2.437 | 7.558 | 9.400 | 8.70 | 177.0 |
-| Ephemeris 64 B | 墙钟约 1/256 | 1766.01 | 2.190 | 5.754 | 6.960 | 8.53 | 148.5 |
-| Ephemeris 64 B | CPU 约 1/256 (单次) | 1467.20 | 3.044 | 9.846 | 12.640 | 8.76 | 148.3 |
+| Catalog 2048 B | Compiled out | 1712.63 | 2.198 | 6.541 | 8.571 | 8.59 | 176.3 |
+| Catalog 2048 B | Compiled in, inactive | 1705.01 | 2.107 | 6.006 | 7.314 | 8.64 | 178.7 |
+| Catalog 2048 B | Wall ~1/64 | 1692.18 | 2.125 | 6.168 | 7.867 | 8.61 | 218.6 |
+| Catalog 2048 B | Wall ~1/256 | 1680.87 | 2.205 | 6.168 | 7.362 | 8.54 | 189.1 |
+| Catalog 2048 B | CPU ~1/256, single | 1687.47 | 2.247 | 5.810 | 7.153 | 8.22 | 189.6 |
+| Ephemeris 64 B | Compiled out | 1748.48 | 2.339 | 6.868 | 8.859 | 8.69 | 135.5 |
+| Ephemeris 64 B | Compiled in, inactive | 1753.22 | 2.212 | 5.845 | 7.606 | 8.69 | 137.8 |
+| Ephemeris 64 B | Wall ~1/64 | 1695.25 | 2.437 | 7.558 | 9.400 | 8.70 | 177.0 |
+| Ephemeris 64 B | Wall ~1/256 | 1766.01 | 2.190 | 5.754 | 6.960 | 8.53 | 148.5 |
+| Ephemeris 64 B | CPU ~1/256, single | 1467.20 | 3.044 | 9.846 | 12.640 | 8.76 | 148.3 |
 
-配对百分比先逐轮计算该配置 / 当轮普通版 - 1, 再取中位数, 因而不同于上述两列中位数相除. CPU 单次结果不计算配对开销.
+Paired percentages first compute configuration/ordinary−1 per round, then median, so they differ from ratios of table medians. No paired CPU overhead is calculated.
 
-| 负载 | 配置 | QPS 配对中位数 | 可见 p99 配对中位数 | 四轮 QPS 差异, % |
+| Workload | Configuration | Paired QPS median | Paired visible p99 median | Four-round QPS differences, % |
 | --- | --- | ---: | ---: | --- |
-| catalog | 编入但未记录 | -4.07% | -1.98% | -10.74, 2.61, -15.85, 14.21 |
-| catalog | 墙钟约 1/64 | -5.55% | 11.59% | -12.95, 1.29, -3.51, -7.59 |
-| catalog | 墙钟约 1/256 | -6.04% | -0.23% | -12.13, 0.06, -12.21, 13.87 |
-| ephemeris | 编入但未记录 | 0.21% | -13.15% | -2.33, 2.75, -21.27, 19.17 |
-| ephemeris | 墙钟约 1/64 | -2.80% | 1.53% | -4.02, -4.58, -1.57, 2.85 |
-| ephemeris | 墙钟约 1/256 | -0.26% | -13.11% | -3.29, 2.78, -19.16, 20.88 |
+| catalog | Compiled in, inactive | -4.07% | -1.98% | -10.74, 2.61, -15.85, 14.21 |
+| catalog | Wall ~1/64 | -5.55% | 11.59% | -12.95, 1.29, -3.51, -7.59 |
+| catalog | Wall ~1/256 | -6.04% | -0.23% | -12.13, 0.06, -12.21, 13.87 |
+| ephemeris | Compiled in, inactive | 0.21% | -13.15% | -2.33, 2.75, -21.27, 19.17 |
+| ephemeris | Wall ~1/64 | -2.80% | 1.53% | -4.02, -4.58, -1.57, 2.85 |
+| ephemeris | Wall ~1/256 | -0.26% | -13.11% | -3.29, 2.78, -19.16, 20.88 |
 
-**轻量目标尚未全面得到证明.** 默认 1/64 在 Catalog 上的配对吞吐差异为 -5.55%, 可见 p99 为 +11.59%, 略超约 5% / 10% 的筛选目标; Ephemeris 为 -2.80% / +1.53%. 降至 1/256 确实减少记录和内存, 但本轮没有证明它对所有尾延迟都更好.
+**Low-overhead goals are not fully established.** Default 1/64 Catalog paired throughput−5.55%/visible p99+11.59% slightly exceed ~5%/10% screening goals; Ephemeris is−2.80%/+1.53%. 1/256 reduces records/memory but is not proven better for every tail.
 
-普通版自身 Catalog QPS 为 1976.36、1700.80、1724.45、1457.69, Ephemeris 为 1857.33、1711.38、1785.58、1466.75. 相同二进制也出现明显漂移和尾延迟尖峰; 没有宿主机频率/抢占同期证据, 不能断言原因, 也不能把上述小幅差异当成精确因果估计. 所有不利样本均保留. **生产默认保持编译关闭; 探针用于有限时长诊断, 不作为生产性能排名版本.**
+Ordinary Catalog QPS across rounds was 1976.36,1700.80,1724.45,1457.69; Ephemeris 1857.33,1711.38,1785.58,1466.75. Identical binaries drifted and had tail spikes. Without concurrent host-frequency/preemption evidence, neither cause nor precise small causal overhead can be claimed. All unfavorable samples remain. **Production defaults to compiled-out probes; probes serve bounded diagnostics, not production performance ranking.**
 
-## 微基准、容量与完整性
+## Microbenchmarks, capacity, integrity
 
-每配置五次, 每次一百万次相同 work, 计时前执行一次 work 完成初始化; 所有校验和一致. 一次 work 包含 3 个同步跨度、1 个计数点和固定整数运算, 下表不是单个探针成本, 也不包含首次文件预留开销.
+Five runs/configuration, one million identical work calls each, with one warmup call before timing. All checksums matched. One work contains three synchronous spans, one counter, and fixed integer work; these are not single-probe costs and exclude initial file reservation.
 
-| 配置 | 每次 work 中位数 ns | 相对编译关闭增加 ns |
+| Configuration | Median ns/work | Increase over compiled-out ns |
 | --- | ---: | ---: |
-| 编译关闭 | 28.130 | 0.000 |
-| 编入但未记录 | 31.501 | 3.371 |
-| 墙钟约 1/64 | 44.220 | 16.090 |
-| 墙钟约 1/256 | 38.384 | 10.254 |
-| CPU 约 1/256 | 62.091 | 33.961 |
+| Compiled out | 28.130 | 0.000 |
+| Compiled in, inactive | 31.501 | 3.371 |
+| Wall ~1/64 | 44.220 | 16.090 |
+| Wall ~1/256 | 38.384 | 10.254 |
+| CPU ~1/256 | 62.091 | 33.961 |
 
-- 最终 95 个服务/SDK 记录文件和 15 个微基准记录文件全部通过解析. 服务/SDK 共 4,973,661 个同步跨度、235,103 个计数事件、126,837 个异步间隔; 包含 21,925 个 Runtime 工作步骤样本. `missed=0`, `errors=0`; 开关、异常展开、跨线程时间戳、采样相位及容量溢出用例通过. 这不是代码分支覆盖率或请求端到端关联数量.
-- 每个启用进程预留 64 MiB 文件, 每个集群样本 5 个文件, 固定磁盘预算 320 MiB; 实际触碰的页和 RSS 较小. 1/64 相比普通版合计峰值 RSS 增约 42 MiB, 1/256 增约 13 MiB.
-- 20 s 资源窗口的 `/proc/<pid>/io` 写入差值中位数: Catalog 1/64 为 39.66 MiB、1/256 为 9.89 MiB; Ephemeris 为 38.94 / 10.64 MiB. 包含少量服务日志, 不包含测量前预留及可能在退出后发生的全部内核刷盘, 不能当作总物理磁盘写量.
+- All 95 service/SDK and 15 microbenchmark files parsed. Service/SDK totals:4,973,661 synchronous spans,235,103 counters,126,837 async intervals, including 21,925 Runtime work steps; missed=0/errors=0. Toggle, unwind, cross-thread timestamp, sampling-phase, and overflow cases passed. This is neither branch coverage nor correlated end-to-end request count.
+- Each enabled process reserves 64 MiB; five files/cluster sample reserve 320 MiB disk. Touched pages/RSS are smaller. Aggregate peak RSS increased about 42 MiB at1/64 and 13 MiB at1/256.
+- Median /proc I/O write deltas during 20 s: Catalog 39.66/9.89 MiB at1/64/1/256; Ephemeris 38.94/10.64 MiB. Includes some logs, excludes prior reservation and potentially later kernel flushing; not total physical disk writes.
 
-## 热点证据与下一步
+## Hotspot evidence and next steps
 
-CPU 数据每域仅一次约 1/256 采样, 只作候选排序; `own` 扣除了已插桩同步子调用, 仍含未插桩工作和探针成本. 以下数值不是无探针函数成本, 不可将不同函数的分位数相加.
+CPU data is one ~1/256 run/domain for candidate ranking only. own subtracts instrumented synchronous children but includes uninstrumented work/probe overhead. These are not uninstrumented function costs; quantiles from different functions cannot be summed.
 
-| Star 路径 | Catalog 平均自身 CPU μs / 样本 | Ephemeris 平均自身 CPU μs / 样本 |
+| Star path | Catalog mean own CPU μs / samples | Ephemeris mean own CPU μs / samples |
 | --- | ---: | ---: |
-| 下行 advance | 50.09 / 3366 | 59.09 / 3083 |
-| 对等出站 begin_write | 112.03 / 205 | 135.76 / 174 |
-| 对等入站 begin_write | 111.24 / 194 | 135.60 / 179 |
-| Runtime step 自身 | 16.63 / 510 | 20.95 / 457 |
+| Downstream advance | 50.09 / 3366 | 59.09 / 3083 |
+| Peer outbound begin_write | 112.03 / 205 | 135.76 / 174 |
+| Peer inbound begin_write | 111.24 / 194 | 135.60 / 179 |
+| Runtime step own | 16.63 / 510 | 20.95 / 457 |
 
-下行 advance 约占 Star 已记录同步跨度自身 CPU 总和的 35.4%, **不是整个进程 CPU 的 35.4%**. 此区间仍包含 gRPC StartWrite 等未细分工作, 不能直接归因于 Protobuf、内存分配或网络.
+Downstream advance accounts for about 35.4% of recorded synchronous own-CPU sum, **not total process CPU**. It still includes unsplit gRPC StartWrite work and cannot be attributed directly to Protobuf/allocation/network.
 
-以下是四轮 1/256 墙钟采样按观测次数合并的均值, 非同一请求时间线:
+The next table pools four 1/256 wall rounds by observation count; it is not one request timeline.
 
-| 区间 | Catalog μs / 样本 | Ephemeris μs / 样本 |
+| Interval | Catalog μs / samples | Ephemeris μs / samples |
 | --- | ---: | ---: |
-| 对等读取就绪 → Runtime 消费 | 225.71 / 1421 | 208.16 / 1506 |
-| 对等 StartWrite → 完成回调 | 174.06 / 1457 | 169.56 / 1568 |
-| 下行 StartWrite → 完成回调 | 131.41 / 4629 | 124.56 / 4995 |
-| SDK 就绪 → 消费 | 38.74 / 4227 | 35.79 / 4449 |
-| 本地 change 范围锁等待 | 13.95 / 534 | 10.60 / 583 |
-| 远端 receive 范围锁等待 | 0.69 / 1039 | 0.63 / 1151 |
+| Peer read ready → Runtime consumption | 225.71 / 1421 | 208.16 / 1506 |
+| Peer StartWrite → completion | 174.06 / 1457 | 169.56 / 1568 |
+| Downstream StartWrite → completion | 131.41 / 4629 | 124.56 / 4995 |
+| SDK ready → consumption | 38.74 / 4227 | 35.79 / 4449 |
+| Local change Scope-lock wait | 13.95 / 534 | 10.60 / 583 |
+| Remote receive Scope-lock wait | 0.69 / 1039 | 0.63 / 1151 |
 
-1. 优先细分并优化下行 advance 和对等 begin_write: 先区分页面准备、gRPC 提交、回调/唤醒成本, 再对单一候选作 A/B. 当前证据不支持直接把 Scope 锁、Actor 或全局 RCU 作为首要重构.
-2. 接着验证有界就绪收发穿插、完成通知合并是否能缩短约 200 μs 的对等消费等待. 保留已有单一所有者、公平性和关闭排空, 不盲改 Runtime 额度或删 ACK.
-3. 容量测试单独使用递增并发的提交吞吐模型, 并同时报告复制/订阅滞后; 当前 6 写工作者的全可见闭环不能回答能否达到 100k QPS. 精确比较微小收益前需要更稳定的宿主负载窗口.
+1. Separate page preparation, gRPC submission, callback/wakeup costs in downstream advance/peer begin_write, then A/B one candidate. Evidence does not justify Scope-lock, Actor, or global-RCU redesign as first priority.
+2. Evaluate bounded interleaving of ready reads/writes and completion coalescing against ~200 μs peer-consumption waits, preserving ownership/fairness/drain rather than blindly changing Runtime quotas/removing ACK.
+3. Capacity needs separately increasing concurrent commit load with replication/subscription lag. Six-writer all-visible closed-loop cannot answer 100k QPS. Small-gain comparisons require more stable host windows.
 
-gRPC/TLS 内部、内核调度、Go 控制面、跨机、高 Key 数、大恢复和大量空闲 Watch 不在此次细分归因范围. 低样本站点的 P99.9 不作稳定结论. 详细方法见 [profile.md](profile.md).
+gRPC/TLS internals, kernel scheduling, Go control plane, cross-machine/high-key/large-recovery/idle-Watch behavior are outside this attribution. Low-sample P99.9 is not stable evidence. See [methods](profile.md).
 
-## 性能基线的证据与清理
+## Performance evidence and cleanup
 
-最终证据: `build/profile-verification/evidence.zip`, SHA-256 `1d751c85cf6f1811e0978398ae56a3de58d91ae5986ec1e882195413a9e4c753`. 包含命令/脚本、输入摘要、回归日志、逐样本资源/结果、二进制记录和离线报告. 最终 36 个样本的所有受管进程退出码均为 0, 无所属服务残留. 没有后台负载继续运行.
+Final build/profile-verification/evidence.zip SHA-256 `1d751c85cf6f1811e0978398ae56a3de58d91ae5986ec1e882195413a9e4c753` contains commands/scripts, input hashes, regressions, per-sample resources/results, binary records, and offline reports. All managed processes across 36 final samples exited 0, with no owned services/background load remaining.
 
-| 产物 | 普通版 SHA-256 | 探针版 SHA-256 |
+| Artifact | Ordinary SHA-256 | Probe SHA-256 |
 | --- | --- | --- |
 | star | `490fd750591239ec3cc2d683bc0a00fcf99f3bbc36cdbdccda9d8e0a1e2f92da` | `511b9e7ddbf0d99efa3be3bf7184c06be675f4b1c9fe6d42da580ec2e3159872` |
 | baseline_comet | `79e8a5301345c94a99a690445e3079de4a096c8054ed2082b49caf1fc561e934` | `1206e36b16dad43dad4ab41cd59ac620a0e52f31b0b4a85c0b04c1e554324b91` |

@@ -1,389 +1,354 @@
-# Comet 首版验收规约
-
-本文为验收规约, 不代表其中每条边界都已获得运行证据. Pulsar/Polaris/Star 三域、对等来源恢复、Comet C++ 和必要管理观测已接线; 当前源码及用例入口统一见 [进度](progress.md), 不在此累加逐轮实施日志. 实际执行范围与结果只写 [validation.md](validation.md).
-
-测试分为原生规则/分配故障、真实 SQLite 持久、真实 gRPC/TLS、SDK 生命周期及跨进程故障恢复; 各层不能互相替代. cpp_comet_process 包含专有控制服务/三台 Star、Polaris 重启、旧缓存读取、指标抓取、源 Star 强制退出、SDK 换节点/稳定逻辑 UUID 和原端口重启; 所有进程、数据库和秘密材料由夹具清理. 不启动 Planet/Moon, 不依赖 Comet Go.
-
-独立用例 cpp_comet_publisher 不链接 Star, 用于 MSVC/C++23 的同步版本、冲突、未知结果、截止和取消验证. 边界用例 cpp_comet_catalog_fault 包含 Publish 提交后丢回执及 Watch 首帧/半批停滞; cpp_metrics 和 Go bridge 检查慢头、期限、实例关联及不完整观察. Admin 适配测试检查 uint64、分块 UTF-8、完整快照门、无自动写重试和陈旧状态; 浏览器交互另行验收, 不能用适配单元测试替代.
-
-协议及服务端规则见 [协议](../proto/README.md#comet), SDK API 见 [Comet C++](../comet/cpp/README.md), 存储见 [三域原生结构](../common/README.md#data), 管理见 [Astrolabe](../astrolabe/README.md). 本文只组织下列固定编号的场景与预期, 不定义另一份协议.
-
-当前 [SDK 接口](../comet/cpp/README.md) 已完成源码接线, Beacon 故障夹具、Reader/Subscriber 回调、Observer 本地估计以及三节点同 ID 恢复探针已同步迁移. 实际运行结果按验证页的配置和冻结输入解释, 不将用例存在或相同编号的旧成绩视为当前工作区通过.
-
-## 执行边界
-
-新增用例覆盖首次注册失败不重试、未知更新不补发、Data 在途继续保活、慢采样/手动更新隔离、通知停顿不阻塞同步结果、空基线和原子 Map 通知、本地估计 CAS/网络权威优先、三来源同 ID 合并/到期回退及旧代次拒绝. cpp_comet_beacon 另覆盖首次注册/更新的截止与直接取消、通知/采样解除自身后的捕获析构重入及采样抛错; cpp_comet_client 覆盖读取通知解除自身和 selector 重入. cpp_comet_selection 检查相同字节的新权威仍淘汰旧估计, 容量拒绝保留原视图/记账. cpp_comet_sampling 在独立 SDK 与总工程中共同验证两个真实工作者、64 个排队槽、满额/关闭拒绝、排空与幂等等待.
-
-- 关闭等待补充 milliseconds::min/max 边界: 负值立即检查, 极大正值不回绕; 这不改变 wait 必须等待真实清理且不隐式 close 的语义.
-
-- 本批 C++ SDK 整改已通过冻结快照回归, 范围见 validation.md: cpp_comet_publisher 新增同目标/Key 集合换序复用、集合改变/未知结果后重新查询、正文不留存、版本到达 UINT64_MAX、旧控制轮空绑定不取消有效调用、慢用户回调中关闭 Client 和不支持 Query 的错误分类. 确定性停顿由每个夹具自己的门控制, 清理幂等放行, 不共享端口或数据.
-- cpp_comet_projection / cpp_comet_subscription / cpp_comet_selection 补充 each 回调清空唯一 View 后仍完成旧根遍历. 原有用例验证不可变快照重入; 新回调与 Pool/Item 另有定向用例, 实际运行状态见 validation.md. cpp_catalog_state 的版本查询独立进入 main, 保留输入顺序与已过期 Key 水位.
-
-- 当前锁拆分新增 `cpp_preparation`: 两域锁外准备时本地写入/其他来源继续执行、同来源查询不占域锁等待、撤销优先、准备期间到期后的读取、Catalog 同 Key 新水位、逐分配点失败回滚. `cpp_catalog_replica` / `cpp_ephemeris_replica` 覆盖多个 Scope 安装中断后保留各自覆盖记录.
-- 下行共享新增 `cpp_broadcast`: 独立页位置、同页复用、快慢读者错开、弱缓存回收、reset/apply/目标/起始游标隔离及完整 Record/Data-only 区别; `cpp_ephemeris_rpc` 增加真实多 Watch、追加后缀、取消与精确目标交错. 新写用例的运行状态仅见 validation.md, 不因已接入 CTest 就视为通过.
-
-- 实现时按下列固定编号映射到真实用例, 每条可以拆成多个可定位的子用例. 规则变更先修改其所属文档, 再同步对应验收, 不只改这里的期望值.
-- 先用确定性的时钟、分配失败点和提交屏障验证核心边界, 再验证真实 gRPC/TLS. 超时、取消、乱序和关闭场景必须观察最终存储及资源回收, 不只检查客户端状态码.
-- 业务单元、真实单 Star RPC、独立消费工程及资源回收属于首版交付范围. 跨 Star 复制/切换、Planet 和业务持久化不因当前连接骨架通过而视为已验收.
-- Debug/Release、Sanitizer、性能、规模和长时分别记录范围, 不用一种结果替代另一种. 每轮运行及前置构建先获得明确授权, 执行方法与并行/清理规则见 [测试入口](../tests/README.md).
-- 性能验收区分协议字节、实际传输、内存/分配、吞吐与尾延迟; 只有测量完成才能声称收益. 不将测试数量当作代码覆盖率.
-
-## 协议与实例
-
-- **P01** 建连不调用 Inspect 或强制 Health 握手, TLS/auth 使用静态配置, 不匹配明确失败且不降级; 本地限制与服务端限制不同以服务端拒绝为准, 非法 TTL 返回合法范围而不自动钳制. Health 就绪不绕过具体请求的权限/时钟检查. 必需标识的空值、NUL、UTF-8、字节边界、大小写及数值溢出均覆盖.
-- **P02** Session、匿名响应及错误详情关联实际实例. 初次 Publish/Create 确认丢失保留原结果不确定, 返回后不后台重发; 已确认 Beacon 的注册恢复独立处理, 不改投旧写入. 新实例 reset 不承接旧游标, Almanac 保留 Reader 下限.
-- **P03** 原请求响应丢失后重试遇到权限拒绝、注册已过期或判定证据被淘汰, 不将这次尝试未修改状态误写成原请求从未提交, 不重复完成或改写原操作结果.
-- **P04** 参数、版本、权限、容量及超时以 std::expected 同步返回, 原因与提交确定性分开. 首次 Beacon 工厂返回 expected<Beacon, Error>, 初次失败无可用句柄/后台注册. 公共签名不暴露生成类型.
-- **P05** Ephemeris 裸 order 回复覆盖 1、127、128、2^63−1、2^63、最大值及零值拒绝, 不回绕; 最大载荷 11 字节不代表总线长. Catalog.Renew 无 order, 空成功回复仍关联原尝试.
-- **P06** 请求保留目标实例/Scope, 不增加 Inspect/动态 Limits. Catalog 支持内部相关 Key 版本查询及完整原子批次, 应用不传 version; 无公开 Delete/Renew. 恢复 RPC 字段按最终 Schema 验证, 不把旧编码表当成新功能已实现.
-
-- **P07** 成功消息也需校验: Publish 回执版本/实例不符、Create 的 TTL/UUID/实例不符、Update/Renew 裸 order 不符不得安装为成功, 已发操作仍可能已提交. 错误详情缺失/重复/畸形/未知 Effect 不产生伪造的未提交证明, 已知传输分类仍可触发正确退避或暂停.
-- **P08** 在提交前准备、最终提交、提交后通知、编码和回复分别注入失败/取消. 只有提交前可证明本次未提交; 提交后 Watch/回复失败仍保持数据、版本、幂等依据, 取消慢订阅不阻塞写入确认. 被拒请求前的独立到期维护可推进分组, 不据此误判该请求已提交.
-- **P09** 不叠加配置的 retry/hedging 或解析器业务重放. 区分库透明重试、一次调用内明确版本冲突修复、已成功 Beacon 的注册恢复; 同步失败后不后台重放 Data.
-
-- **P10** 最大合法 Almanac/Catalog 值及 Attr + Data 完整注册能通过内部复制和外部 Watch, 页面目标不截断单条大记录. 收发硬上限不足、编码开销越界和沿用旧 4 KiB 控制限制时明确识别配置/容量不相容, 不只验证写入成功; 新数据预算不扩大 Admission/Pulse 的接纳面.
-
-## Catalog 同步发布与 TTL
-
-- **C01** 版本逐 Key 比较且可跳号, 一批共用一个版本. 不同 Publisher 写不同 Key 可以同号, Scope 最大内容版本不得拒绝无关 Key 的更新. 成功只确认接入 Star 内存提交.
-- **C02** Publisher 绑定 Scope, 每次 update 指定键集合及 TTL, 单键是批次特例. 工厂不发布空值或启动续租; 多 Publisher 共享 Client, 不要求应用指定 version.
-- **C03** 同版本同内容重新保活, 仍有载荷时精确比较, 不同内容拒绝. 已释放内容则须完整恢复, 不伪称比较过旧字节, 不用哈希或视图游标证明内容相同.
-- **C04** 原生内容、最高版本、期限和必要来源历史共同受理. 各准备阶段失败不先发布数据或组位置, 纯期限变化也维护正确的原生快照与调度; 无可见变化时不额外提交 Scope 视图.
-- **C05** 到期释放值但进程内最高版本仍在, 历史/空分组回收不清零, 元数据满拒绝新增而不驱逐旧水位. 重启不能声称保有旧内存证据.
-- **C06** 更高版本但已过期的对等事件仍保留新版本依据并排除旧值, 不显示过期内容. 同版本期限取大, 新版本不继承旧内容的截止, 重放不从接收时加 TTL.
-- **C07** 相同目标及精确 Key 集合的连续成功更新可以复用已确认基线; 换序不改变集合, 换目标/集合或未知结果后必须重新查询, 仅保留有界元数据而不保留 Data. SDK 版本高于相关 Key 查询结果与本对象已发出版本, 未知请求占用过的号不配新内容复用. 多线程调用有明确分配/提交顺序, 不覆盖未返回调用的内容或合并其结果; 溢出明确拒绝.
-- **C08** 单次 deadline 包含认证、版本准备、发送与允许的修复; 未发送超时不再发送, 已发超时保留不确定. 返回失败后没有期望缓存或后台补发, 取消未实际完成仍计资源.
-- **C09** 每次 update 携带新的 ttl, 非法单位/零值/溢出整批拒绝. Publisher 不固定 TTL, 不自动 Renew, 空闲超过期限由 Star 删除. SDK 不对时或按本机墙钟伪造删除.
-- **C10** 现有 Catalog.Renew 若保留, 仅对本机有效完整来源且版本未落后整体保活; 仅远端副本/水位/过期拒绝. 新版 SDK 不调用该入口, 缺失 Key 由下一次显式完整 update 建立.
-- **C11** 切换 Star 后保留已经发出的版本依据, 必要时查询新目标. 下一次显式完整 update 可创建目标缺失 Key; 不自动恢复旧内容/Scope, 不改投原失败请求. 旧目标回执不污染新目标.
-- **C12** 对象释放/Client 关闭停止后续调用, 不发送 Delete 或自动恢复. 原在途请求仍可能提交并带来期限, 不声称 close + TTL 是全网删除硬上界, 不改写已返回结果.
-- **C13** Catalog SDK 不维护自动续租计时器或存活结论. Star 到期经完整 Watch 边界呈现, 客户端时钟偏移/暂停不自行删除. 返回后仅保留版本元数据和真实在途所需引用, 不保留待发内容缓存.
-- **C14** Key 内容版本、来源组版本和本地 Scope 视图游标分别验证. 两 Key 版本 7/100、其他 Scope 源端写入、无内容变化的续租和本地到期交错仍正确恢复; 组版本与视图游标可以只推进其一, 无映射字典.
-- **C15** 零字节值合法, 单条/编码/准备超限拒绝且不分块. 无普通 Delete/多 Key Patch, 下游到期 erase 不变成对等权威删除.
-- **C16** 明确版本冲突且整批 unapplied 时, 同一调用/deadline 内向同目标查询相关 Key 并重发原 batch 一次. 查询失败、第二次冲突、超时或目标改变即返回; 不改用户 Data, 不转成无限自动加号.
-
-- **C17** timeout/断链/未知 Effect/结果丢失不触发 C16 的重试; 明确输入/权限/容量错误也不走版本修复. 用提交后丢回执确认失败返回后无新 Publish, 又不错误断言原请求未提交.
-- **C18** 进程重启/新建 Publisher 用内部 RPC 查询目标 Star 已知版本并创建新批次, 不要求业务持久化 version. 目标落后不伪装成全网最新; 已知更高版本及版本耗尽分别处理, 不从 Watch 游标或墙钟造版本.
-
-- **C19** 同 Scope 批次覆盖 1/128 项、重复键、空批次、单值及总编码/准备超限. 任一 Key 冲突或资源失败整批不提交, 同一完整快照/全 Scope 回调不出现半批; 两条精确订阅不当成联合快照.
-- **C20** 不同 Publisher 在不相交键使用同一版本, 来源/历史不能将它们拼成一个事务或跳过较低无关 Key. 版本空洞合法; 跨 Star 异步传播及切换不承诺全局事务顺序, 部分历史不冒充完整批次.
-
-## Almanac 权威写入与读取
-
-- **L01** Polaris 每 Scope 初始 0、首写 1, 单 Key 或同 Scope 原子多键 Set/Delete 每批严格 +1, 同值 Set/缺失 Delete 也提交. 空值与删除分开, 不用版本 0 绕过.
-- **L02** 数据、权威版本、证据持久提交同成败, 并发同版本只提交一份, 资源拒绝及溢出无部分状态. Star 不可达不回滚持久成功.
-- **L03** 原版本精确 Key/操作/字节重试只确认旧结果, 不重复提交; 不比较原始 Protobuf 顺序或最终值. 历史裁剪后不伪造原确认, 同版本异内容拒绝.
-- **L04** 空分组保留权威版本, Polaris 重启不从 1 编号, Star 安装不按收到条数生成版本. 空库、空范围及新范围有明确完成边界.
-- **L05** Comet 只有 Reader/Almanac.Watch, 无 Almanac Publisher 或绕过 Astrolabe 的写入口, __auth 不进入外部视图.
-- **L06** Reader 首批未完成不冒充空集合; watch 交付完整 Map 或 Key/optional, state/changed 分别反映同步状态. 后台 Watch 持续同步, 不每次回调重拉整表; 断线保留陈旧完整视图, 已交付内容不变.
-- **L07** 同 Reader 同范围不安装低于已见权威版本的 Star 视图, 有界等待而不反复重下; 不把此下限套到 Catalog Subscriber.
-- **L08** Polaris 核对实际安装位置, 不以发送/部分页确认, 只修差异范围, 慢节点不无限固定历史; 副本高于权威时报告异常而不静默覆盖.
-- **L09** Star 从可信 Pulsar 名单筛选同 Galaxy 的唯一 Polaris, 同 principal 替换与多个独立部署分别处理. 零目标有界等待, 多目标明确冲突而非按在线顺序或 epoch 大小选主; 不能跳过冷启动基线, 已安装业务视图保持并报告同步异常.
-- **L10** 名单存在、TLS 可达和数据库就绪分别注入, 错误 Galaxy/角色/凭证或被可信替换的旧实例不能安装 Almanac. Polaris 数据库未恢复时不返回临时空快照, 无 Astrolabe/浏览器在线仍可完成初始化.
-- **L11** Star 主动建立一条双向流完成全部 Almanac 分组恢复, Polaris 不反向补流. 一流中清单、快照、增量、安装确认与低频版本核对可正确交错, 不按分组建连接或引入 Star 来源序号. 无基线与明确版本 0 区分, 半页不报告安装.
-- **L12** Polaris 从同一权威库重启后用新 Member.id 接入, Star 保有的完整版本可继续恢复, 持久版本不归零. 内存安装确认表/发送队列丢失不影响底稿; 旧库落后、空范围版本缺失和安装确认晚到均不能静默回退.
-- **L13** 断流后保留已安装状态, 新流隔离旧回调和半份基线; Pulsar 失联时已准入节点可用既有可信身份重连, 不反复登录或擅自信任新身份. 同一 Star 多次取消/重连的未完成流仍计费, 慢目标不阻塞其他目标或写事务.
-
-- **L14** Star 内部接收 Patch 严格逐 Scope 承接 +1, 跳号不安装, 已安装范围内重放不重做. 打包多个连续补丁仍保留同值 Set/缺失 Delete 的中间版本; 初始全量可直接安装较高权威版本, 内部补丁不得借用下游 Watch 的按 Key 合并跳号.
-
-- **L15** 初始清单捕获 Scope 及最低版本后, 各 Scope 在不同时间准备快照, 每份版本/内容一致且不低于清单要求. 连续写入不扩张首轮等待范围, 全部初始 Scope 与明确结束边界满足后才完成; 清单交接期间新 Scope 不丢失, 合法空清单、缺页和重连均覆盖, 不长期持有全库读事务等网络.
-
-- **L16** Polaris 合并同 Scope 多次提交通知后仍从持久历史发送全部连续 +1 补丁, 不丢中间凭据轮换. 注入提交后最后一次通知遗漏, 版本核对能发现并恢复; 无额外 Outbox/逐 Star 持久队列. 同基线快照被并发目标共享, 慢目标不长期固定 SQL 事务或阻挡后续版本.
-
-## Star 来源恢复
-
-来源组版本按实例/域独立并覆盖全部 Scope, 缺一条载荷精确回补, 连续历史不足才取整个来源组快照. 以下列出需验证的不变量, 已有用例映射见本页末尾; 未映射或未执行的场景仍为待办.
-
-- **N01** 同来源同域重连从组连续位置增量恢复, 窗口不足恢复该来源、本域全部 Scope. 不借用本地 Scope 视图游标, 不把第三方数据转播, 副本本地 TTL 不增加来源版本.
-- **N02** 入队/发送完成不推进安装确认, 准备失败、缺号、超限及半快照不伪造追平; 按版本明确忽略的旧事件可完成处理.
-- **N03** 确认丢失重放不延长期限, 旧流晚到不改新槽位/进度, 取消不提前返还未完成资源.
-- **N04** 来源写入和恢复依据共同准备, 不先业务成功再分配日志; 当前值与日志共享载荷, 慢副本不无限固定历史或队列.
-- **N05** 只导出来源自有数据, Ephemeris 安装只替换该源, Catalog 缺项不删除其他来源恢复值. 安装重查版本/期限/身份, 不覆盖同期新提交.
-- **N06** 空来源组、组内空 Scope、快照期间新 Scope 和持续更新有完整组基线/衔接. 页可以跨 Scope, 但无每 Scope ACK 或独立恢复位置; 仅完成一页/一个 Scope 不算组完成, 超限保留原完整状态且不持锁等待网络.
-- **N07** 同 principal 新可信 epoch 替换后拒绝旧进程新事件/修复, 旧来源期限不被补满. 新对象可有新 id; 已确认 Beacon 在新实例恢复同一逻辑 id 时须经独立注册恢复路径, 旧来源与新代次隔离, 不把旧帧当成迁移.
-- **N08** 普通失联、未验证名单及不同 principal 的高 epoch 不构成替换; 隔离副本不被误称即时撤销, 本地清理仅向下游.
-- **N09** 副本到期但来源仍有效时, 有效新截止加完整内容可恢复同 Ephemeris UUID. Catalog 回补也绑定版本; 晚修复、新版本竞争、来源替换及修复中到期不得覆盖或复活.
-- **N10** 双向单流并发拨号、晚完成与慢发送保持唯一当前流和有界候选, 不等同固定 TCP 数量; 恢复与保活额度不互相无界挤占.
-
-- **N11** 来源/域独立编号, 同来源同域跨 Scope 提交共用一个序列; 两个域不互相等待同一个版本锁. 空组、Scope 回收和裁剪不归零, 元数据/序号耗尽明确拒绝; 组位置超出来源头部不静默当 reset.
-- **N12** 精确回补只针对来源组内某个 Scope/Key 或 UUID, 关联触发组位置; 来源在同一边界返回完整原生记录与组位置 R. 不拼接跨时刻 Attr/Data, 不借第三方记录, 不为一个目标构造整组快照或新建 RPC.
-- **N13** 组位置 10 缺 Scope A 的 Key X, 回补返回组位置 15 的 X 时, 11..15 中其他 Key 和 Scope B 的全部事实仍须处理. 覆盖标记只约束相同来源/域/Scope/目标的 <=15 旧帧, 连续 ACK 不能直接跳至 15.
-- **N14** 完整修复/明确缺失和局部覆盖标记同时准备, 任处分配失败无半次生效. 本地 TTL、同来源断线及旧回调不提前丢掉防旧帧依据, 连续处理覆盖 R 或合格来源快照接管后才能释放; 被替换来源不继续接受修复.
-- **N15** 来源已结束 Ephemeris 时完整缺失只删除该 UUID 本地投影, 不向对等广播; Catalog 缺载荷不删除其他来源有效值或重置已知版本. 超时/容量失败/未完整回复不能当成权威缺失, 较新业务版本和安装时到期均按协议判定.
-- **N16** 同来源组/Scope/目标缺失合并为一个当前回补, 在途回复、覆盖标记和后续组增量计费. 超限停止受影响组推进并退避, 不无限并发或提前返还取消额度. 完整组快照接管时覆盖位置足够, 不以单 Scope 快照绕过标记.
-- **N17** Star 回补并恢复已被下游删除的 Ephemeris 时, Comet 接收完整 record, 不仅收到 data/期限. 旧 Observer 视图不被改写, Comet 不承担源节点回补和来源序号对账.
-- **N18** 来源已直接受理 Key 版本 10, 内容过期且对应增量裁剪后, 完整快照仍发送正版本 10 的仅水位项. 副本仍有版本 8 时原子保留水位并下游删除旧值, 不显示空 Buffer、补 TTL 或转播为自身写入; 零字节有效值与无载荷水位明确区分.
-- **N19** 同版本 10 从相同/其他来源取得的本地有效内容不因仅水位或快照缺项被删除/延长. 注入来源已过期而副本尚未过期的时钟差, Catalog 仍只在副本自身到期时清理; 更高水位到达则排除旧版本, 本地版本 12 不被水位 10 降低. 仅水位不能恢复已过期内容, 没有载荷不能声称已经逐字节校验, 仍有载荷时同版本异内容依旧拒绝.
-- **N20** A 直接受理版本 8、从 B 学到版本 10 时, A 的自有来源快照/回补不把版本 10 伪装成自身写入. 合并防回退水位与自有版本在并发发布、来源替换和清理时保持各自范围; 已接纳水位不随对端断开/历史裁剪被遗忘.
-- **N21** 组位置、全部 Scope 的原生记录与仅水位在同一冻结边界捕获. 快照期间本地过期、新 Scope 和更高内容版本不被错误混入旧组版本. 元数据/准备超限不提前改源组、投影、水位或 ACK; 不漏页、驱逐水位或持锁全量复制.
-- **N22** 精确 Catalog 回补覆盖来源已过期但保有水位、来源从未受理、来源存在更高活动版本三种结果. 已知水位不得隐瞒为未知, 缺失不能删除其他来源同版本有效值; 回补位置覆盖规则继续约束后续旧帧, Comet 不接收内部墓碑清单.
-
-- **N23** 同域不同 Scope 并发准备, 先开始的操作暂停/失败而后开始者先提交时, 组编号依真实提交连续产生, 不提前 fetch_add 形成空洞或数据/日志倒序. 源端批次跨 Scope 时完整处理后才 ACK, 两域仍独立.
-- **N24** 组全量包含多个 Scope, 在页间更新旧 Scope、新建 Scope 和结束最后一条记录, 所有页属于同一 B, 后续从 B 接续而不漏新范围. 未完整接收时任何失败都不发布候选; 完整接收后逐 Scope 安装, 后续投影准备失败不撤销先前已提交 Scope, 覆盖证据保留. 全来源完成前不能提前确认组位置.
-- **N25** Catalog 同 Key 存在多个来源时, 来源整组恢复与其他来源新版本/续租竞争, 重查并保留较高水位和合法期限. 不以换组根回退合并视图, 不覆盖其他来源; 准备/重试预算覆盖整个组, 最大合法组可在声明预算内恢复.
-- **N26** 单来源组历史承受大量纯续租而下游内容几乎不变时, 来源恢复窗口和内容恢复窗口分别计量. 历史不足只回退受影响域的整组, 不无限固定日志、重取所有域或为每个 Scope 建恢复任务.
-- **N26a** Origin/Scene 中超龄但尚未裁剪的连续历史仍可重放, 有界来源发送保留条数/字节限制和删除事件. 下一次写入在年龄边界实际裁剪后, 断档请求必须恢复基线; 零历史预算继续禁用恢复. 重放的过期 Catalog 仅留下版本水位, 过期 Ephemeris 不公开注册, 不因读取原事件重新计算 TTL.
-
-- **N27** 已确认组位置 20 后收到基线 19 的完整快照拒绝安装, 确认位置与数据均不回退. 已安装精确回补 25 时基线 20 也不能接管; 开始接收后本地覆盖位置变化须最终重查. 相等基线可修复缺载荷但保留原截止, 不复活已过期或已替换身份.
-- **N28** 提交发生在发送器准备休眠/合并唤醒期间, 后续没有任何写入时最后一条事实仍会发送或明确触发恢复. 注入提交后调度/编码失败, 不丢尾部后报告追平, 不回滚成功写入或靠全 mesh 轮询掩盖丢通知.
-- **N29** 缺失记录触发回补后, 同一双向流先到达其他数据再到回复. 读取/控制分派继续, 受影响组 ACK 不越过未完整处理的批次; 暂存满时明确终止恢复并退避, 不因停读而永远等不到回复. 旧流未完成继续计费, 已安装覆盖标记不提前释放.
-- **N30** 同 principal 多次可信重启后, 旧来源动态记录按原 TTL 清理, 完成实际流/恢复/快照引用回收后不永久积累空来源组或时间轮. Catalog 合并水位和较新身份依据保留, 旧凭据晚到不能重新建组, 普通失联不误按退役处理.
-
-- **N31** 空闲时小事件立即进入发送, Write 在途期间产生的多个连续提交在下一次机会有界装包. 包含纯续租、不同 Scope 和多个有界到期提交时保留原编号/期限, 不按 Key 丢掉中间事实; 后一提交准备失败只确认已完成前缀. 覆盖 1 秒 TTL、少量尾部和持续大快照, 没有凑批定时延迟或另一域永久饥饿.
-- **N32** 尚未发送的累计 ACK 合并为最新完整位置, 空闲尾部仍发出, 无 ACK 往返自激. Write 完成不充当安装成功, ACK 不能超前于已确认恢复起点/已交给 gRPC 的完整提交边界, 合法 ACK 可以先于本地 OnWriteDone 到达, 旧流与精确回补位置不能冒充连续前缀; 源端不逐提交停等往返.
-- **N33** 一个慢对端与多个正常对端并存, 各流只持有有界发送引用和位置, 不复制整份来源事件队列或被最慢 ACK 无限钉住历史. 窗口淘汰时慢端单独恢复, 普通对端、控制/回补和源端内存提交仍可推进; 实际取消完成前额度不返还.
-
-来源同步的并发补充验收:
-
-- **N34** 两动态域的 tick 持有域写锁且暂时阻塞取时时, 自有 source/events/deliver/resolve 可以独立完成, 且不调用时钟或触发到期清理. 时钟暂不可取时来源事实仍能导出, 公开读取明确报错. 接收者按原绝对期限过滤, 不因导出而续命.
-- **N35** 各 Agenda 保持自己的下一整拍相位, 跨界才推进; 初建轮、异常未完成、来源退役和最大时间饱和不使 due 跳过维护. 读取到期删除与公开游标一起提交, 不只隐藏点查而让快照仍暴露旧项.
-- **N36** 多 Scope 完整恢复在没有新网络消息时报告仍有本地任务, 控制循环主动续调度; 每轮仍只安装一个 Scope, 在途写/网络等待不引发空转. ACK 在全来源完成后产生, 容量失败及取消不提前确认.
-
-## 成员发现
-
-以下覆盖 [Pulsar 只读目录](../proto/README.md#directory). C++ Star/Pulsar 和 Go Polaris/Astrolabe 使用同一身份与角色规则, 普通 Comet 不参与.
-
-- **M01** 查询使用已有准入正文/签名, 不携带账号密码或创建新启动记录. 覆盖重复/缺失 metadata、畸形签名、错误 Galaxy/角色、已被替换实例和 Pulsar 恢复中; 校验失败不以生成新 request_id 重新抢占, 合法查询不递增 epoch 或触发 KDF/持久写入.
-- **M02** 成员替换与查询并发时, 身份有效性和返回名单来自同一已提交快照. 回复无账号/启动历史/健康结论, 新角色不误入 Star 全互联, 不把暂时无 Polaris 或未完成恢复伪装成可跳过的空基线.
-- **M03** 同时出现多个失联对端、周期到期和管理页面刷新, 每进程仍至多一个实际在途查询. 按需触发合并, 周期失败遵守退避和抖动, cancel 未完成继续计费; 重试次数、字节和等待有界, 不按分组/浏览器请求额外拉名单.
-- **M04** 查询捕获旧 epoch 后新握手已确认更高同 principal 实例, 旧回复不能回退已知替换关系、关闭新流或重启旧来源. 相同 epoch 冲突身份报错, 名单缺项不当作权威退出, 不新增目录 revision 兜底.
-- **M05** Pulsar 失联、超时、畸形/超限名单保留上次完整发现视图并标记陈旧, 已准入通信和本地 TTL 继续. 新发现候选按既有连接预算拨号, 健康流不因每轮全量名单而重建, 整份名单不再对等广播.
-- **M06** 最大合法成员配置的完整编码可在预算内传输. 查询准备/编码失败不返回成功截断列表, 不等待数据库写锁或阻塞 Pulse; 反复慢读、取消及多客户端查询均回收引用并遵守服务端并发预算.
-
-- **M07** Polaris 首次初始化记录账号名/Galaxy/规范登记端点绑定, 同库同部署重启取得新 Member.id/epoch 且保留 Almanac 版本与提交依据. 正常启动缺失绑定、改账号名或改端点时在 Pulsar 登记前拒绝, 不制造新成员或自动迁移; 密码/证书轮换不被误作部署变更. 覆盖旧部署离线仍在名单、另一权威库形成多个 principal 的情况, 不按可达性自动选主、清库或裁剪旧启动依据.
-
-## Ephemeris 生命周期
-
-- **R01** 单 TCP、多 RPC 并发和断线重连均人为阻塞旧 Update, 在新 order 提交后释放旧请求, 验证不回写旧 Data; 客户端超时/取消不被当作服务端处理完成. 一个 UUID 只有最新顺序保护, 无无限操作历史.
-- **R02** Data/Renew 顺序独立推进, 覆盖大于/等于/小于、同号异内容、跨会话及注册代次隔离. 新 Update 原子更新 Data 和固定 TTL 截止; 同 order Update/Renew 均不再次延期, 准备失败不推进确认.
-- **R03** 同 Star 重连、切换 Star、来源过期/重建时, 已成功 Beacon 自动恢复同逻辑 id, 原句柄/tick/回调保留. 旧端停续租, 允许 TTL 内残留, 单份投影不出现同 id 两条记录.
-- **R04** 当前 UUIDv4 原始 16 字节格式回归仍保留; 新版逻辑 id/注册代次/恢复凭据按实际最终 Schema 另验. 随机失败/身份碰撞不覆盖旧记录, 新对象不任意接管外部 id, 不通过删除格式检查伪装完成稳定身份恢复.
-- **R05** 首次 client.beacon 同步等确认; 本地/服务端明确失败返回错误且无后台注册. 提交后丢回执返回不确定, 没有句柄, 不自动新 Create. 外部再次调用是新的独立创建, 迟到回执不生成可用对象.
-- **R06** 首次创建不确定后外部手动重建可暂留多个不同 id, 不按 Attr/Data 合并. 孤立记录按实际提交 TTL 到期并计容量; 与成功对象同 id 迁移的多来源去重分别验收.
-- **R07** SDK Create 不叠加配置的自动 retry/hedging, 单对象只有当前创建尝试, 不并行请求所有候选. 参数/权限/TTL 的不可恢复错误不无限创建. Catalog 提交判定和 Pulsar 节点登记幂等不受本次简化影响.
-- **R08** 不接管传入的任意 id, 新对象/进程创建新注册; 原对象移动/重连/换 SECRET 延续身份. Observer 不产生写句柄, APIKEY 不自动成为注册所有者; 同 id 恢复凭据单独验证.
-- **R09** 创建、Update+延期、Renew、到期/注销及来源历史/投影共同准备提交. 任一点失败不出现 Data 新但 TTL 旧或相反, Attr 不变, 不拆双物理 Key.
-- **R10** Attr/Data 分别或同时空字节仍是完整记录. update(empty Data) 合法并按新 Update 延期, 不当作删除、tick 跳过或错误; 编解码错误另行报告.
-- **R11** 底层精确 id Watch 取得完整 Attr/Data, 删除后同 id 恢复必须重新发送 record, 不发缺 Attr 的 data. Observer 初版公共入口只提供 Scope 的 one/stop, 不借底层 Watch 扩展新公共 API.
-- **R12** APIKEY 仅登录, 普通范围操作仍校验实际目标、注册代次、id/order/TTL, 外部 __ 拒绝. 副本不能仅凭收到旧来源记录续租它; 稳定 id 的恢复有独立边界, 旧代次更新/注销不能影响新代次.
-- **R13** 创建时校验 0 < beat < ttl, beat 不可关闭; tick 可不设置, 配置 interval 必须 > 0. Create/Update/Renew 迟到或重复确认均保留首次发送计时, 不从回执给满 TTL; 已耗尽报告不确定, 有界恢复不忙循环.
-- **R14** 默认 TTL 范围下 1000、1500、30000、600000 ms 均可受理, 999、600001 ms、零及 SDK 可表达的负值明确拒绝, 不向上取整或钳制; 公开接口若支持更细单位, 非整毫秒输入拒绝且不截断. 自定义上限按配置生效, 非法上限配置拒绝, 时间转换和绝对截止溢出不变成永久租约. 非法续租保留原截止, 1 秒租约的正常续租不会被调度间隔下限推迟到到期后.
-- **R15** 固定 Attr/TTL/beat, 新 Update 与 Renew 使用固定 TTL. 恢复代次与 Data 版本分别隔离, 不因换 Star 就把旧缓存加号. 目标已知更高 Data 版本不被覆盖, 非法 TTL/容量永久错误不钳制或绕过.
-- **R16** 每次同步 update 分别结算, 不合并掉其他调用. tick 串行不重叠、不追赶积压; 有效手动 update 重置倒计时, 旧采样晚返回丢弃. 采样回调仅返回 Data, 空值有效, 异常报告且不发送伪数据.
-- **R17** 只缓存最近成功确认 Data/版本. v10 已确认、v11 在 A 提交但丢回执时, 不缓存/重放 v11; B 未知 v11 可暂恢复 v10, 不冒充 v12. B 已知较高版本时不覆盖. 原 update 不确定结果不因后来恢复改变.
-- **R18** 成功 Update 回执匹配本次 order/目标/代次后确认新 Data 与相应租约预算. 同 order 重复只确认原提交, 旧代次/错误 order/零值不能延长预算, 已返回结果不改写.
-- **R19** Remove 的成功消息复用 Empty, 客户端以请求上下文识别目标. 返回 OK 后该次 UUID 不活动; 已不存在的授权目标明确 NOT_FOUND, 越权/错实例不能伪装空成功. 注销响应丢失及旧 UUID 的迟到 OK/NOT_FOUND 不结束新注册, 不把注销成功当作旧 Update 从未提交的证明.
-- **R20** 续租只修改原生租约/顺序、来源根及调度位置, Attr/Data 字节共享. 持有旧来源快照时旧截止不变, 新组版本与新截止一致; 失败/取消/到期竞争没有半次延期. Observer 内容根、游标和历史不因纯续租重建, 同 order 确认也不新增组事实.
-- **R21** 在原生记录、order、来源版本/历史与可见投影发布之间注入屏障, 验证 Update/Renew/Remove/到期不能看到撕裂状态. 最终身份、时间和 Session 校验不省略, 分配失败不先推进位置, 不靠先改记录再异步补日志维持原子性.
-
-- **R22** 在业务锁等待或分配准备期间推进注入时钟跨越原截止, Update/Renew 按最终受理时刻拒绝, 不用 RPC 到达时间复活注册. 新 Create/Update/Renew 以实际受理时间计算截止, 时钟/分配失败不先提交 order 或半条期限.
-- **R23** 已首次校准的 Star 在 Pulsar 失联超过 5 s、参考失效或误差预算超限后仍正常推进既有期限, 接受新 Create/新 order Update/Renew, 未续租项继续到期; 同 order Renew 不重复延长. 恢复只平滑校正, 不修改已提交截止或复活记录. 验证本地计时 ready 与 synchronized 质量独立; 未首次校准、本地读时故障、计数反序/耗尽仍拒绝新期限. SDK 不把 clock 当 ended、不产生创建或全 Client 换端风暴.
-- **R24** 成功 Beacon 恢复期间调用 update 时, 必须在同一 deadline 内取得可提交注册并获 Update 确认, 否则失败; 不只因缓存或恢复请求含相同字节就返回 update 成功. 失败后不补发这个 Data.
-- **R25** 参数/容量失败、明确拒绝、超时不覆盖已确认缓存. 永久 Data 错误不以换 id 绕过, 合法注册的 beat 仍可推进; 后续显式合法更新独立处理, 不无限重试失败值.
-
-- **R26** 注入包含/不包含 suspend 的两种本地时钟, 覆盖睡眠超过 TTL、进程暂停、响应在恢复后才到达及本地读时失败. 首版 Linux 预算随 BOOTTIME 经过, state()/计时器恢复不沿用旧确认, 不按错过次数突发补发 Renew, 不用墙钟/NTP 偏移改变预算.
-- **R27** 分别覆盖来源组版本和 Scope 视图游标耗尽. 需要对应新位置的操作拒绝且不回绕; 无可见变化的合法续租不因未使用的视图位置耗尽而伪造内容提交. 无法提交实际到期时结束受影响 Watch 的追平承诺, 两类 order 耗尽也不通过自动换 UUID 掩盖.
-
-- **R28** 固定 Attr 共享, Data/期限更新按必要路径准备. 同逻辑 id 的合法恢复可形成多个来源但单份投影唯一; 不拼接不同 Attr/代次, 不以到达顺序让已知旧 Data 覆盖新值. 非法身份冲突仍明确拒绝.
-
-- **R29** beat 窗口内有实际新 Update 时省略冗余 Renew; 长期没有更新时持续续租. 本地参数失败/只缓存/相等比对不能无限重置保活, 实际发送失败也不误标租约成功.
-- **R30** state/changed 同时可用, 报告恢复/ready/永久错误/租约不确定/关闭, 不要求每个未变 beat 都通知. 成功迁移不使原句柄或 tick 失效.
-- **R31** destroy 在空闲、同步更新、采样、回调和恢复中立即逻辑完成, 不关闭共享 Client. 不再启动新工作, 已开始的回调安全结束, 晚 Remove 不删新代次, 失败清理由 TTL 兜底.
-
-## 订阅与视图
-
-- **W01** 快照接增量、快照期间写入、历史不足、删除传播及慢消费者资源限制.
-- **W02** 三种类型化 Watch 响应分别覆盖空/单页/多页快照及增量、空增量版本进度、重复 Key/UUID、批内 mode 改变、非法完成字段与未完成时断流. action 缺失、reset 出现 erase 或 Ephemeris data-only 拒绝, Set 空 bytes 与含空 Attr/Data 的 record 仍表示存在. 只有 complete=true 的完整批次可一起发布视图和位置, 快照 B 与并发更新间无缺口, 历史不足明确断流; 三种响应共用安装规则.
-- **W03** Watch version 缺失与显式 0 区分, 带版本却缺实例拒绝; Catalog/Ephemeris 实例变化、历史不足或版本超前使用 reset, Almanac 先满足 W23 的权威版本下限. 范围变更清除旧恢复版本, SDK 不串用实例/业务域/Scope/target; 精确订阅跳过无关提交合法. target 省略或为空只订阅当前分组, 非空精确 Key/UUID, 非法 UUID 不退化为全量, * 不作通配; 精确与全量切换不得沿用原恢复版本. 中间页没有 version/instance, 完成页两者齐全, apply 不回退或跨实例, 末页数据必须应用后才确认.
-- **W04** 慢订阅合并后仍超限时仅结束该流, 不影响正常写入和共享 Client 的其他对象; 从最后完整应用位置退避恢复, 历史不足转快照, 持续超限不形成快速重连循环, 关闭后不重连.
-- **W05** 全 Scope/精确 Key 的范围隔离与游标隔离, Key 暂不存在后的创建、删除及重建; 一个订阅关闭不影响共享 Client 的其他对象.
-- **W06** 获授权但 Sector/Spectrum 尚未创建时, Almanac/Catalog/Ephemeris 的全范围与精确订阅均完成就绪空基线, 首次写入可自动到达; 空基线建立与并发首写不丢变化, 订阅不创建业务提交或推进版本. 原有空分组保留版本, 会话失效/内部范围/非法标识不返回成功空视图, 等待范围超限或关闭后资源正确清理.
-- **W07** 断线保留完整旧视图并标记陈旧, 初次同步未就绪, 全量安装中断不混合新旧状态; 合并多次 Set/Delete 后与目标边界的完整状态一致.
-- **W08** 持有旧读取视图时持续修改、完整注册替换、重同步及关闭, 旧容器/Attr/Data 仍有效且不变, 新视图与其实例/范围/游标一致. 状态陈旧不修改旧句柄, 内容未变不复制整图, 仅持有视图不维持后台业务.
-- **W09** 每对象与全局预算同时生效, 页面目标不误当成单记录硬上限, 编码字节与逻辑载荷分别检查. WatchRequest 无 view_bytes, 正常流控但累计快照超出 SDK 视图/在建预算时仍取消且不安装半份状态, 不自动反复重连下载, 旧视图标记陈旧并保留恢复位置. Star 发送积压超限仍按慢消费者规则恢复, 暂停读取不持有业务锁或无限固定历史. 普通写入超限后续租/到期/关闭仍能推进, 接纳失败和在途缓冲释放不会泄漏计量或提前释放共享存储.
-- **W10** Ephemeris reset 的每条存活记录必须携带完整 Attr/Data, data-only 和 erase 均拒绝. apply 的 data 分支仅替换已有完整注册的 Data; Attr 字节与 TTL 不变, 空 data 明确区别于 action 缺失和 erase, 旧不可变视图仍保留旧 Data.
-- **W11** 一批包含同 UUID 的创建及多次 Data 更新时只发送一个完整 record, 其中 Data 对应批次目标版本; 创建后删除以最终 erase 表示, 不留下幽灵记录. 已有注册多次 Data 更新可以合并为一个 data, 不串用不同 UUID 或 Scope 的基线.
-- **W12** apply 遇到未在完整基线中的 UUID 或已删除 UUID 的 data 时, 整批回滚, 旧视图标记陈旧, 已安装版本不推进; 恢复省略 version 取得新 reset. 不构造空 Attr、不忽略错误后推进、不无限等待未来 record, 永久协议错误不形成快速重连循环.
-- **W13** 完整 record 回退可补足合法基线, 但同一现有 UUID 的 Attr 不得变化. 服务端不能证明已知 Attr 时选择 record; 历史不足则 reset, 不凭最新 Data 猜测接收者已有 Attr. 精确 UUID 初次订阅与断线恢复同样覆盖.
-- **W14** Ephemeris 原生投影历史保留创建/内容变化/结束, 同批合并不得丢失创建事实. 固定目标 T 时不混入 T+1 值; 纯续租没有内容历史或回调, 恢复无差异仍可用空完成确认同一游标; 同批 UUID 最多一个最终 action.
-- **W15** 使用较大 Attr 和频繁微小 Data 更新验证实际编码的增量不重复携带 Attr, 新建/reset 仍完整. 在固定协议夹具中比较实际消息体字节, 不硬写吞吐或纳秒阈值; 分配、吞吐与尾延迟另列获准后的性能测量.
-- **W16** apply 同版本且有 changes 时拒绝整个批次, 空完成用于追平确认合法; 不把重复版本下的不同内容安装为新状态. 跨页重复 Key/UUID、完成实例不匹配与异常第二次 Session 确认分别覆盖.
-- **W17** 精确 Key/UUID 首次快照只捕获相关记录, 不扫描完整分组; 全量订阅共享同一边界的服务端快照基础, 不为每个连接复制整表. 旧 View 长期持有时的新 Data 更新不改旧值, 分配峰值/更新时间与分组规模的关系进入性能测量, 不只检查 view() 本身返回句柄的成本.
-
-- **W18** apply erase 缺失 Key/UUID 合法且推进版本, 覆盖基线后创建再删除的合并. 没有完整基线的首个 apply、越界 target 和畸形页停止自动恢复; 缺 Attr 最多触发一次新快照恢复, 修复无效时不在 reset/失败间循环. 流 OK 结束不补足未收到的 complete, 旧完整视图和位置保持一致.
-- **W19** Ephemeris 捕获前的到期推进、捕获后发送前到期及准备/读时失败分别验证. 过期通过实际删除版本传播, 不在同一快照版本下按发送时刻过滤; 拍内允许的清理延迟不被误报为提前到期或实时存活保证. 参考质量下降但本地计时正常时不误停 Watch, 同时仍可观察失联期间的新建与续租提交.
-- **W20** 连续写入使有界内容历史在快照结束前淘汰时, 基线起的有界合并仍能衔接; 积压真的超限才结束流, 不跳删除或固定无限历史. 增量固定目标后再次写入, 已准备各页仍对应原目标, 新值进入下一批, 不将当前值标成旧版本.
-- **W21** 三域分别捕获其原生/投影冻结根, 按可继续位置分页, 不逐页重扫前缀或先复制完整 Map. Ephemeris 每个节点已有完整 Attr/Data, 不构造配对表、不从实时表补字段. 暂停/取消与写者复用页面交错时仍有读完同步, 实际读完前根及所属容器不析构.
-
-- **W22** 新 Catalog Subscriber 从持有 Key 版本 10 的 Star 切换到仅有版本 8 或缺少该 Key 的 Star, 仅在新完整快照安装后呈现其状态, 不保留旧 Key 拼成合成视图, 不累积 SDK 生命周期逐 Key 版本表. 同一 Star 的版本校验仍拒绝低版本写入; 旧流晚到、快照中断、取消和预算拒绝不能污染新目标或安装半份视图. 恢复完成只证明取得该 Star 基线, 不宣称全网最新.
-- **W23** Almanac Reader 切到落后 Star 时复用 WatchRequest.version 作为已见下限, Star 在发快照页前报告暂时落后, 不新增 Inspect 或最低版本字段. SDK 保留陈旧旧视图和下限并退避, 不当作永久内容冲突或触发全 Client 切换. 追平后跨实例用合格 reset, 同实例历史足够可增量; 首个无下限 Reader、版本 0、精确 target 及空分组均覆盖, 不套用 Catalog 回退规则.
-
-- **W24** 纯期限更新、同字节的新 Ephemeris Data order 和无可见变化的来源进度/水位均不推进 Scope 视图, 不通知内容观察者. Catalog 字节相同但内容版本提高仍是可见变化; 本地 TTL 删除只推进视图, 源端续租只推进组版本, 不新增两者映射或 SDK 来源表.
-
-- **W25** 大量无关精确订阅与全 Scope 订阅并存, 单 Key 可见更新只通知相关集合, 纯续租不遍历内容观察列表. 空目标初建与订阅关闭/首次写入交错不漏观察, 失败查找不偷建来源组或业务记录; 通过受控访问计数验证查找路径, 不把机器耗时写成正确性阈值.
-- **W26** 当前状态接近合法容量时仍能完成声明上限的来源/Almanac 完整恢复, 旧根、并发准备及实际在途同时计费. 临时压力退避、确定超过硬上限停止重复下载并报告容量不相容; 新写入不侵占维护预留, 旧状态保留. 大旧根最后引用在锁外销毁, 不因清理重新引入全表持锁停顿.
-
-- **W27** Subscriber/Reader 全 Scope 首次完整 Map 回调包含合法空集; 后续交付完整逻辑状态, 网络仍增量. 精确 Key 的 optional 空值/删除/未就绪/错误四种情况明确分开, 多页未完成不回调半表.
-- **W28** state/changed 反映未就绪、陈旧、恢复、失败及关闭, 挂接前已同步也不丢基线. stop 幂等立即角色关闭, 与回调开始定序, 已交付数据独立存活, 其他角色不受影响.
-- **W29** Observer 仅 one(selector)/stop; 从本地池选择, 不逐次 RPC. 未就绪/已停止/没有匹配/选中分别表达, 不新增公开 watch/change.
-- **W30** 业务在选中 Data 中作短期估计并影响下次选择, 新服务端 Data 覆盖该估计. 新代次安装后旧视图迟到修改不得覆盖, 删除/停止后的旧视图仍内存安全但不能修改池.
-- **W31** Selector 覆盖禁止使用、立即选中、最小权重及优先填满等自定义策略; SDK 不硬编码加 M/阈值. 大池高并发支持业务选择抽样/索引, 不强制全池扫描, 不将用户长逻辑置于全池写锁.
-
-## SDK 所有权与并发
-
-- **S01** 公共写入同步返回 expected, 成功只代表接入 Star 确认, 失败/取消/超时只结算一次. 无最新待发值替代或返回失败后自动补发, 在途请求内容固定, 远端未知效果与本地返回分别记录.
-- **S02** 最后一个 Client 公开句柄销毁后, 存活子对象仍可发布、订阅或续租; 显式 Client::close() 则关闭全部关联对象且不可因其他句柄仍存活而恢复. 最后一个外部拥有者释放后资源可清理, 无引用环、后台续租泄漏或迟到回调悬空访问.
-- **S03** Client 存活时, 每类业务对象的最后一个应用句柄析构仍启动自身关闭, 不影响其他对象; Beacon 不再续租、恢复 Data 或重注册, 尽力注销失败后由 TTL 清理. 在自身回调中销毁不等待自身, 内部任务及操作结果句柄不维持后台业务, 在途结果不丢失且不访问已销毁公开对象. 重复关闭、移动后空句柄析构及延迟清理均不重复生效.
-- **S04** 断流、端点退避、旧回调、取消、用户回调重入和进程清理.
-- **S05** 工厂和 update 在本地拒绝、明确拒绝、成功、超时、取消及迟到回调竞争中各返回一次. 同步等待不阻塞共享 I/O reaction, 关闭不遗留永远等待的本地调用, 不为每个请求新建线程.
-- **S06** 单一 deadline 包含认证、查询、一次版本修复与发送, 每步使用剩余时长. 未发到期不再发送, 已发超时保持不确定; 返回不依赖用户观察回调, 不新增 Task/Executor.
-- **S07** 通知在内部状态锁外, 可立即 stop/destroy; 禁止在共享 I/O 回调内执行同步 RPC/等待清理. 单订阅内容通知有序, 状态及跨对象回调可并发; 耗时工作由拥有数据的有界外部队列处理.
-- **S08** stop/destroy 与回调开始定序, 关闭先发生则不启动新通知, 已开始的可完成且采样结果丢弃. 不等待自己, 在途状态直到真实完成才释放, 本地立即关闭不等于远端删除.
-- **S09** C++ 回调异常被边界捕获并有界诊断, 不重放通知、不回退安装或改写同步结果; 自身关闭后抛错不复活对象. 采样异常不能将默认空 Data 发成业务更新.
-- **S10** 原始 Buffer 可独立读写, 编解码适配与原始接口产生相同业务状态; 编码失败不发送, 解码失败不伪装删除或改变原始载荷, 临时缓冲不会被异步任务悬空引用.
-- **S11** 按各方法明确支持的入口验证 vector 移动、span 复制和 shared_ptr 不可变共享, 不要求每个方法都有三套重载. 同一共享 Data 用于多个 update 或应用显式重试时不额外复制载荷, 排队/发送/恢复期间均拥有正确字节, span 来源在返回后释放不影响请求. 空 vector 合法、nullptr shared_ptr 拒绝; const 不消除应用可写别名的契约明确. Data 更新、超时或关闭不提前释放在途存储, 读取 View 关闭后仍有效, 不宣称序列化零拷贝.
-- **S12** 三类订阅用同一故障矩阵覆盖分页中断、预算耗尽、取消、旧流回调及退避, 都只发布完整视图. Almanac Set/Delete、Catalog 值/版本/本地 erase 与 Ephemeris record/data/erase 分别验证, Ephemeris 缺 Attr 基线不能因公共 Watch 核心而被放宽; 私有复用不在公共头暴露生成类型.
-- **S13** 一个 Client 只选择一个活动 Star, 认证、unary 和 Watch 绑定同一实例; 候选列表不逐 RPC 轮询. 旧端点回调、会话更新、单业务错误交错时, 不误切换全部对象或把旧 Catalog 写入改投. 此项用独立无复制 Star/确定性假端点验证路由与拒绝, 不冒充跨 Star 数据恢复通过.
-- **S14** 阻塞取消完成后反复触发超时与自动恢复, 实际在途条数/字节仍受预算, 未完成的旧 RPC 不被提前退还额度. 显式写入饱和时续租/清理仍有保留额度, 清理 Remove 不被停止新增业务的门禁误拦, 关闭不新建 UUID.
-- **S15** 人为压低 HTTP/2 并发流额度并建立长期 Watch, 验证 unary 通道没有与长期流共享同一底层瓶颈, 续租仍可到达服务端; 不能只数 Channel 对象证明隔离. Session 凭据跨两类同 Star 通道复用, 无每流连接和无限 Channel 池.
-- **S16** 大量 Beacon 共用有界调度, 注册恢复与当前代次操作隔离, 自动任务不会每项新建线程. 每条流保持合法的在途 read/write 数量, 消息缓冲不提前复用; 回调/定时触发与最后拥有者释放交错时无自身 join、脱管任务、重复完成或悬空引用.
-
-- **S17** Beacon 本地失败不发 RPC, 远端首次失败不留自动初次注册; 成功才返回句柄. 订阅早于 watch/changed 挂接完成时仍交付当前完整基线/状态, 关闭后不开始通知, 逻辑关闭与排空分开.
-- **S18** 大量空 Scope/精确空目标的 Watch 仍受对象和真实流数限制, 显式发布/更新共用 unary 额度. 降低传输流数并触发重认证, 旧 Watch 取消/Session 完成后新 Session 优先于订阅恢复, 不以无限加 Channel 化解; 保留配额不被误当成网络延迟保证.
-- **S19** 按 SDK 恢复表逐项检查 Session 拒登、旧 Session 失效、内部 Scope 拒绝、Data 拒绝、视图超限、畸形页、暂时忙及 clock. SECRET 的相同值显式更新可恢复认证暂停, 不恢复已关闭或永久业务失败对象. 部分页面/仅 TLS 连通不清零持续失败退避, 错误提示不能越过本次 deadline.
-
-- **S20** 应用持有旧 View, 关闭并排空订阅/Client 后继续查询、遍历并最终释放, 不访问已销毁的核心或互斥量, 不让视图保持后台连接. 在写者检查页共享、读者结束和最后引用释放处交错, 验证独占页复用具有读完同步, 不能以 use_count 观察替代同步或直接外送内部 Index::View.
-
-SDK 定向调度补充验收:
-
-- **S21** 一个 Client 的多个角色中仅一个持续更新, 空闲 Beacon 仍按 beat 续租, Catalog 不发生自动保活. 纯期限变化不推进内容投影; 共享关闭无须额外流量即可清理.
-- **S22** 对象 poll 期间收到下一事件不会因本轮清标记而丢失; 匿名重连取得新绑定、凭据变更和满额归还会唤醒原本等待的对象. 一次 callback 的连续推进有界, 无事件不忙等, 下一轮不沿用已经消费的过去截止. 生命周期、匿名切换及容量用例与定向调度一起回归, 不用吞吐成绩替代这些边界.
-- **S23** 多线程在首次推进前反复唤醒同一组对象, 就绪队列按对象合并. 通知内部关闭自身、已完成但仍持有的旧对象迟到唤醒、反复接纳替换及所有者释放不漏清理或恢复旧对象. 普通事件处理 O(K), 期限/共享状态维护仍可 O(N); 性能验收另记录目录扫描与就绪数量, 不用功能通过证明复杂度收益.
-- **S24** 同一冻结批次至少三页, 快慢流交错访问页 0/1/2 时复用仍在途的各页, 页全部归还后正文立即释放且可从独立游标重建. 页槽扩容不使在途消息失效, 非连续巨大页号与已完成游标明确拒绝. 同时覆盖 Catalog、Ephemeris 与后者 Data-only 区间隔离.
-- **S25** Catalog 2048 字节二进制正文包含零字节与高位字节, 按字节软上限形成多页; 页缓存复用前后正文、内容版本与所有 Key 完整且无重复. 三 Star 基线另外对普通/高扇出分别测 receipt/visible, 按相同参数对照 128 字节场景, 不混淆逻辑载荷与完整协议带宽.
-- **S26** Catalog/Ephemeris 公共分页在两种真实字段策略下覆盖精确缺项与零字节值、独立复制位置、非法实例不消费位置、软上限大行与硬预算拒绝. 后缀过滤前校验非法事件, 逆序同名变化正确排序合并, 业务版本不冒充游标; Ephemeris Create+Data 保留 Attr, 末次 Delete 压缩为删除, 冻结之后的新变化不污染旧批次. 共用读取边界仍由两域 reads/reclaim 及准备交错用例验证重新取时、异常释放和锁外回收.
-
-- **S27** C++ expected/optional 与 Go error/明确存在性、Rust Result/Option 使用同一语义向量. Go map/[]byte、C++ 可写别名和 Rust 共享可变访问不绕过数据拥有权/代次保护; 只写跨语言设计不算各语言已实现或通过.
-
-## 鉴权管理与传输
-
-- **A01** 单机/多机使用相同基础设施准入, 无 --standalone/credentials 本地文件分支. Star 业务 TLS/auth 独立且默认开启, 显式关闭不取消内部链路和 __ 限制, 缺材料不降级.
-- **A02** TLS 材料缺失/无效拒绝, Comet CA 与节点签发公钥分开. Almanac 完整安装但 __auth 为空时拒绝普通登录, 内部 Astrolabe -> Polaris 管理可初始化凭据, 不依赖 Comet 自举.
-- **A03** TLS 开关、外部和内嵌信任材料、自签和正规证书链、错误主机名/证书拒绝且不自动降级.
-- **A04** Client 默认启用 TLS, 不因单机部署、证书/握手失败自动关闭. 明文必须两端明确匹配, 不通过业务试探后降级.
-- **A05** 未知/失效凭据拒绝, Comet 不能写内部 Almanac 或借节点凭证调用业务. Comet 不连接 Pulsar, Astrolabe 不能绕过 Polaris 写 Star Almanac.
-- **A06** 登录后 RPC 复用 Session metadata 并检查当前有效性, 不重复 SECRET/KDF. 缺失/未知/重复/跨实例凭据拒绝, 匿名仅在明确配置下允许且不建假 Session.
-- **A07** Session 首次确认前禁止受保护业务, 同 Client/目标并发对象只建立一个认证过程; 初始等待超时取消流, 迟到凭据不能安装. 确认后撤销短等待计时, 空闲超过旧五分钟期限也不自动回收, 长流不被错误的三秒 deadline 切断, 无 Release 或应用层认证心跳要求.
-- **A08** Session 取消、异常断链检测、撤销和 SECRET 轮换均先使凭据失效再清理资源; 流终止与正在提交的写入有确定顺序, 已提交结果不回滚, 关联订阅终止. 新流建立后旧流回调不能清除新凭据, 业务恢复按各自不确定规则进行, 不因重新认证改变未过期 UUID.
-- **A09** 正常关闭先有界尽力注销再取消 Session, 网络失败仍能完成本地清理; Session 结束本身不删除 Ephemeris 或改写 Catalog. 单对象关闭不影响共享会话, 最后应用拥有者释放可终止 Session 且无引用环. 未完成认证与空闲长流均计入资源上限, 明确永久认证失败不形成重连风暴.
-- **A10** 轮换/撤销与写入最终提交定序, 旧会话不越过失效边界, 已提交不回滚. 连续安装普通凭据变更时无关 APIKEY 不受影响, 管理离线不放行未知凭据; 跨历史完整安装按 A38 验收.
-- **A11** 合法 Session 访问全部普通数据, 无 Grant 或读写/Scope ACL. __ 始终隔离; * 是字面值, (a/b,c) 与 (a,b/c) 为不同 Scope, 不由路径拼接混淆数据.
-- **A12** Credential 解析/索引准备失败不部分安装, 成功时记录、索引、必要 Session 失效与安装版本共同生效. 只有 secret, 无 grants/所有者索引, 多 APIKEY 普通提交仍分别生效.
-- **A13** 连续安装轮换时关闭该 Star 对应 APIKEY 的旧 Session, 登录竞争不装入迟到旧凭据; 连续同 SECRET Set 及相同安装版本的重复确认不误关. 跨 Star 安装延迟如实报告, 不宣称全网同时撤销.
-- **A14** 原 Client 更新 SECRET 后恢复认证, 旧回执不覆盖新 Session, 已关闭不恢复. 已有 Beacon 按同 id/代次恢复, Publisher 只准备后续显式 update, 不恢复失败内容或改变旧结果.
-- **A15** 外部业务端口无法调用内部管理/复制 RPC; Prometheus HTTP 指标端口独立配置, 不承载凭据写入或业务接口. 关闭业务认证/TLS 不改变管理权限或自动开启指标监听. 空闲 Session/Watch 不阻塞其他业务的服务线程, 控制面与业务消息预算分别生效.
-- **A16** Prometheus text 0.0.4 的 Content-Type、HELP/TYPE、转义、单位、直方图桶和 Counter 重启语义正确. 标签值集合有界, 输出无 APIKEY、UUID、业务 Key、SECRET、会话凭据或原始业务载荷; 未启用时不存在监听.
-- **A17** 指标抓取不全量扫描分组、不持有业务锁发送, 缓冲/连接/读写等待超限可回收; 慢抓取、断链和关闭不阻塞正常业务或留下悬空回调. 真实 Prometheus 解析/抓取作为集成项显式执行, 缺工具需另获授权, 不用自写宽松解析器冒充生态兼容通过.
-- **A18** 三种 Watch 与带 Scope 写入口统一拒绝 __ Sector, auth=false 不绕过. 非法 Scope 不查内部表, metadata 不覆盖消息字段; 接收预算与解码后业务校验分层生效.
-- **A19** 阻塞旧 Session 的取消完成及独立在途 unary, 在 SECRET 轮换/撤销提交后释放, 旧请求不能在最终提交处通过授权. 轮换前已经提交的结果仍保留, 新 Session 可正常工作, 旧流的迟到清理不能抹掉它; 只取消流但继续接受旧凭据的实现必须失败.
-- **A20** 凭据轮换、普通写入、到期和 Watch 首次捕获交错时遵循 Session 有效性保护 -> 对应域/Almanac 分组提交保护的顺序, 不嵌套旧 Store 状态锁或跨域等待. 故意拖慢快照构建/网络取消/用户回调, 不把耗时工作放到上层业务锁中; 相关撤销仍在最终提交前生效.
-- **A21** Astrolabe 仅管理登录, 后端验证会话, 无管理角色/Scope ACL. 业务版本、输入和内部服务角色仍校验, 管理登录不等于基础设施/Comet 凭据.
-- **A22** 浏览器只经 Go Astrolabe, 不登记节点或取得签发私钥/Comet SECRET. Astrolabe 登记后端端点, 不进入 mesh; 新角色的各语言消费者不得误当 Star, 渲染器不连接基础设施.
-
-- **A23** Watch 检查 Session、挂入关联索引与撤销交错不漏关. 先停新发送许可再锁外取消, 已在途不可撤回; 连续单账号变更不错误关闭其他 APIKEY, 跨历史快照按 A38-A40 验收.
-- **A24** Star auth=false 而 Client 请求 Session 时明确配置不符, 不签发匿名 token 或降级. Session token 随机碰撞不覆盖已有会话, 随机源失败不安装空凭据; 登录的 UNAUTHENTICATED 暂停, 普通 RPC 的失效触发合并认证, 不形成递归登录风暴.
-- **A25** 两端 Keepalive 参数一致, 覆盖长期无业务数据、黑洞断链、代理仅保持前段连接及停止所有调用; 不增加应用认证 Ping, 不因空闲超过旧时限删除合法会话, 不把 HTTP/2 PONG 当成 Ephemeris 仍存活. 定时故障先用可控时钟, 真实等待仅在授权范围运行.
-- **A26** Admin 演示与真实模式分开, 真实登录失效、Astrolabe 不可达、Prometheus 缺数据及过期观测不自动替换成演示拓扑或误判黑洞. 账号来源与同名 APIKEY 主体连续性按 A27/A28 验收, 已确认会话/跨源按 A29/A30 验收; 未定的 HTTP 字段不伪造通过条件.
-
-- **A27** 同名 APIKEY 重建不恢复旧 Session/回调. 原 Beacon 新认证仍按来源 UUID/order/TTL 处理, 不清零或延期; 新对象不自动接管. 无 APIKEY 所有者, 其他合法会话不受虚构所有权限制.
-- **A28** Astrolabe 从部署配置加载单个管理账号, 不连接账号数据库、不读取 Polaris 管理账号 Almanac、不导入基础设施账号或 Comet SECRET. 缺失账号、非法摘要与配置加载失败不退化为免登录; 错误密码、越界输入和并发额度正确拒绝. KDF 不持有会话锁, 正常管理请求不重复 KDF; Pulsar/Polaris 暂时不可达不直接阻断本地登录, 实际管理操作单独报告依赖状态. 账号配置修改并重启后旧会话失效, 不新增在线账号 CRUD.
-- **A29** 管理会话仅存进程内存, 从登录成功起固定 8 小时, 活动/刷新/状态查询不延期. 覆盖截止边界、重复注销、重启、随机源失败/碰撞及容量耗尽; Cookie 残留不恢复失效会话, 同库的其他后端实例不接受该 token. 注销移除服务端授权并以一致 Cookie 属性清理, 已提交写入不因注销回滚, 不持久化会话或自动刷新登录.
-- **A30** 同源与跨源共用管理 API. 覆盖精确 Origin 名单、相似域名/端口/协议不匹配、null/缺失 Origin 写入、非法请求头和无 Cookie 预检; 预检不执行业务, 写入须在副作用前检查来源, 不仅省略 CORS 响应头. 允许来源的错误响应可被前端识别, 凭据请求不使用 *; 覆盖 HttpOnly/Secure/SameSite、credentials: include、退出清 Cookie、浏览器第三方 Cookie 拒绝和代理配置, 不降级认证或将 token 写入 URL/localStorage.
-- **A31** 单机部署与多机部署遵守相同准入链路, 不存在 standalone 免节点认证路径. Astrolabe 不能直接修改 Star Almanac, Star 对等身份也不能冒充 Polaris; Comet auth/TLS 的切换不改变内部管理角色或 __ 隔离. 未通过准入或依赖不可达时不自动降低验证要求.
-- **A32** Astrolabe 无持久管理库或外部内容适配器, Almanac 管理底稿只来自 Polaris. 读取失败、分页中断、搜索过滤、精确 Key 结果或落后 Star 的缺项不能推导管理 Delete; 空 Buffer 与 Delete 分开, 观测状态不回写为权威数据.
-- **A33** Almanac 管理提交保持同 Scope 单键/多键原子批次与权威版本条件. 覆盖批内全有或全无、不同批次的部分成功、冲突/未知/取消及重启; 不回滚已完成批次或自动改号覆盖旧编辑, 历史裁剪后不伪造原确认.
-- **A34** 必要管理接口与 Star 初始恢复不依赖 Comet Go 或浏览器在线. 未来经 Go SDK 读取普通业务也不把 Orbit 身份自动兑换为 Comet Session, 内部 __ 仍只能经内部入口读取; 前端普通响应不泄露 SECRET. Star 不引入业务 SQLite 或异步落盘.
-- **A35** Astrolabe 仅在 Polaris 持久确认后报告提交成功, 不以 RPC 入队或 Star 内存安装代替. 持久提交后 Star 不可达、Astrolabe 重启或回执丢失不撤销效果, 已提交与结果不确定分别呈现, 不产生 Astrolabe 持久补发队列或第二份底稿.
-- **A36** 两个并发管理编辑与后台 Star 观测交错时, 版本条件仍阻止旧编辑静默覆盖. 观测推送不触发再次发布, 界面等待 Star 追平不是持久提交条件. Polaris 和多个 Star 的状态分别展示, 不把全部安装完成当作同步数据库事务.
-- **A37** 按 [启动恢复](../astrolabe/README.md#star-启动恢复) 检查 Pulsar 准入及首次校准、Polaris 完整 Almanac、首轮动态数据同步和公共业务开放. 合法空库可明确完成基线, 读取失败与半份快照不算空基线; 认证开启且无 Comet 凭据时拒绝业务登录, 独立内部管理仍可初始化凭据. 旧实例完成不能使新进程就绪, 对等预算到期仅按已确认规则降级, 不跳过 Almanac; Astrolabe/Go SDK 不在线不能成为隐藏启动依赖.
-
-- **A38** Star 已安装凭据版本 20, 期间同 APIKEY 被删除/轮换再以原 SECRET 重建至 22, 历史不足只能获取最终快照. 成功完整安装时该 Star 全部旧 Comet Session 失效, 包括未变账号, 其他 Star 不受本机安装动作影响. Credential 仍仅 secret, 不增加逐账号代次或依赖最终字节相同保留旧会话.
-- **A39** 覆盖初始加载、auth=false、普通 Almanac Scope、旧版本、半份快照、解析/预算失败和同版本重传. 只有较新完整凭据快照替代未连续安装提交才统一撤销; 失败保留原表/版本/会话, ACK 丢失后的同版本重试不再踢掉新会话. 版本判定使用最终安装位置, 准备期间已被其他合法安装追平的快照不重复失效; Polaris 重启或同步断链本身不撤销.
-- **A40** 凭据快照与登录最终检查、写入提交、Watch 注册/发送许可交错, 新表/索引/版本与旧集合失效共同生效. 旧提交不回滚, 迟到旧登录不能逃过最终检查, 旧流锁外取消不关新 Session. C++/Go 的已确认 Session 失效触发合并重认证, SECRET 未变时不需应用更新配置, 新登录被拒绝才暂停; 保留尚有效 UUID/order/TTL 及陈旧完整视图, 不制造逐对象登录风暴或仅因此切换 Star.
-
-## 管理与成员存储
-
-以下覆盖 [Polaris Almanac 持久化](../polaris/README.md) 与 [Pulsar 成员库](../pulsar/README.md#sqlite). 两项持久核心已有 SQLite 用例, 实际结果见 [验证记录](validation.md); 旧 journal 回归不计作这些场景已经通过. Astrolabe 不建立数据库, 故障注入只使用隔离的测试数据库.
-
-- **D01** Polaris 的 Almanac 数据、分组权威版本及所需增量记录共同持久提交. 重启恢复当前完整数据和有界历史, 空分组保留版本, 不因新进程身份从 1 重新编号; 不保存 Astrolabe 会话、动态 Catalog 或 Ephemeris, 不回退临时内存库.
-- **D02** 覆盖新库初始化、已有 SQLite 恢复、未知格式、损坏文件、只读目录、锁繁忙、磁盘满和请求取消. 失败不删除已有文件, 写事务不等待 Star 网络, 不把旧备份的较低版本静默覆盖给较新副本. 备份恢复与普通进程重启分开验证, 提交前后故障不产生半份底稿.
-- **D03** Pulsar 成员更新与启动绑定在同一事务提交; 在写入之间、COMMIT 前后及应答丢失处注入终止, 恢复不得出现只有成员或只有启动记录的半登记. 同启动重试保留原身份/代次并取得当前名单, 已被替换的旧启动不能复活; 不以回执丢失推断没有提交.
-- **D04** SQLite 提交失败覆盖 SQLITE_BUSY、IOERR、FULL、NOMEM 与回滚失败. 不把 COMMIT 错误一律当作已回滚, 不提前发布候选快照; 结果不确定时停止新登记并经重启确认, 不自动换 ID 补发. 明确成功后的内存发布不依赖新的可失败节点分配, 慢事务不阻塞 Pulse 内存读取.
-- **D05** Pulsar 恢复验证 Galaxy/签发公钥/Schema、成员与启动绑定、重复请求、角色容量及累计启动上限. 覆盖 INT64_MAX 两侧和 UINT64_MAX 代次, 持久表示不得发生符号截断或浮点精度损失, 最大值不溢出续签. 两个进程不能同时成为同一状态文件的签发者, Astrolabe 不打开成员库, Star 不新增 SQLite 路径.
-- **D06** Pulsar 显式同步配置生效后才开放登记, 不因默认 PRAGMA 或连接重建降低持久确认. 新群组初始化需明确执行, 正常启动缺库失败, 初始化遇已有文件/journal/bbolt 拒绝覆盖或导入; 错误信任边界、半次初始化及未知 Schema 均不成为合法空群组. 同 SQLite 重启完整保留成员与启动历史. 进程崩溃与真实断电耐久性分开报告, 备份不许可身份回滚, SQLite 不替代物理时间校准.
-- **D07** Polaris 历史按条数/字节及配置时间裁剪, 当前数据和空分组版本不被裁掉, 离线或慢 Star 不无限固定历史. 裁剪与增量取数交错时保有稳定载荷和连续区间, 缺口切换完整快照而非伪造追平, 超出历史窗口不提供无依据的原提交确认.
-- **D08** Almanac 完整快照绑定明确版本和范围清单, 同步期间的新分组与更新有连续衔接. 只在 Star 原子安装后确认版本, 发送完成、部分分页和唤醒丢失均不误记安装; 暂存超限中止并退避, 单个慢目标不阻塞其他目标或权威持久提交. 未部署外部监控时上述业务路径仍成立.
-- **D09** Polaris 的 GORM 提交在一个 tx 内完成版本条件、Key 修改、分组版本和历史. 各语句之间及 COMMIT 前后注入失败, 不误用根 db 留下部分提交, 不在事务闭包中提前回复/发推送; 外层 COMMIT 失败或不确定不伪造成功或自动加版本重试.
-- **D10** GORM 更新覆盖空 Buffer、从非空改为空、缺失 Delete、同值 Set、首次 Scope/Key 和并发冲突. 版本条件未命中不能通过 Save 转为 Create, 零值不因结构体筛选被漏写; 空 BLOB、无行与 Delete 语义不混同, 不因内容行影响数为 0 跳过合法版本推进.
-- **D11** Polaris uint64 版本覆盖 0、INT64_MAX 两侧及 UINT64_MAX 的保存、恢复、排序、条件比较和历史裁剪, 检查固定 8 字节 BLOB、非法长度/类型及最大值拒绝. 复合地址不因大小写、斜杠或字符串拼接发生别名, 不新增软删除/自动编号影响业务版本.
-- **D12** 正常启动核对明确 Schema/索引, 不用 AutoMigrate 修改未知或损坏库. 写等待、读事务和连接池有界, 连接重建不丢失同步/超时配置; SQL 日志及错误不泄露 Credential 或业务载荷. 官方 CGO 驱动在声明的目标平台可构建, 锁定实际 SQLite 引擎及适用修复, 不以模块名称或系统中另一个 SQLite 的版本作为构建证据.
-- **D13** Polaris 主库实际为 WAL, 所有新建/重建连接保持 FULL 及规定的忙等待和检查点设置. 模式不支持、配置被覆盖或读取确认失败均不开放写入; Pulsar 仍使用独立 DELETE + EXTRA. 相互隔离地验证读写并发、单写者和服务级独占, 不因启用 WAL 就允许两个权威进程.
-- **D14** 覆盖成功 COMMIT 后尚未检查点、提交应答丢失、检查点不完整/繁忙和进程崩溃. 重启保留 WAL 中已确认的提交及空分组版本, 不删除边车文件重建, 后续检查点失败不将原成功改成未提交. 真实断电耐久性须另列设备/文件系统与故障条件, 不由普通进程终止用例推导.
-- **D15** 慢 Star、快照准备取消、长读事务和持续写入并发时, SQL 游标/读事务不存活到网络等待阶段, 快照仍对应一致版本且准备资源真实计费. WAL/磁盘压力达到阈值后停止新增写事务和准备, 已有有界读完成后可继续检查点及受理; 不以 journal_size_limit 假设 WAL 硬上限, 不进入无限重试或永久暂停.
-- **D16** 使用一致备份恢复当前值、版本及所保留历史, 覆盖备份时仍有未检查点提交的情形. 正常启动保留恢复材料且不临时返回空底稿, 独占冲突不修改库. 单独复制运行中主文件不属于有效备份步骤, 旧备份也不获得降低权威版本覆盖 Star 的许可.
-
-## 集成与交付
-
-- **I01** 真实 RPC/TLS 的单 Star 定向闭环与至少三 Star 标准系统验收分别记录. 三 Star 各自接受本地写入, 覆盖交叉订阅、双向复制、切换与已确认 Beacon 同 id 恢复, 不用模拟成功代替.
-- **I02** 独立外部 CMake 工程使用安装后的 comet 静态库与导出目标, 不依赖仓库内相对源码路径或开发机 RPATH. 同时验证源码树接入, 普通构建不隐式生成协议、运行测试或下载依赖. 覆盖原始字节接口、默认/外部/嵌入 CA、禁用 TLS 的显式配置及必要静态链接依赖; 公共头不泄露生成协议/gRPC 类型, 第三方许可完整.
-- **I03** 未写入 Scope 的 Watch 只创建有界观察状态, 不创建通用 Store 或时间轮. Almanac 无轮, 动态来源组首次有限租约才准备轮, 不每 Scope 建轮/线程; 一个 Ephemeris 一个调度节点, Catalog 仅水位无活动节点. 空投影游标、组版本和水位保留且计费, 初次准备失败无半写.
-- **I04** 外部 Comet、内部接口与指标监听分开, 单机也不绕过准入. 外部 TLS 只读显式材料, 端口冲突拒绝; 空 COMET_CA_FILE 不生成或引用证书字节文件, 构建不暗中测试或下载.
-- **I05** Comet Go 留待后续, 必要 Astrolabe 与首版 C++ 不依赖它. 将来复用三域向量验薄适配, 不把本计划视为现在新增 Go SDK/依赖的授权.
-
-## 交错与失败注入覆盖
-
-每个适用入口至少覆盖下表阶段, 复用可控屏障/分配故障点, 不机械运行所有事件的笛卡尔积. 测试观察原生状态、可见投影、上层身份/顺序、安装位置和真实在途资源, 不仅断言某一次同步返回值.
-
-| 阶段 | 交错事件 | 必查不变量 |
+# Comet v1 Acceptance Specification
+
+This is an acceptance specification, not evidence that every boundary has passed. Pulsar, Polaris, the three Star domains, peer recovery, Comet C++, and essential management observations are wired. See [implementation status](architecture.md#status) for current source and test entry points; actual execution scope and results belong exclusively in [validation.md](validation.md).
+
+Native rules/allocation faults, real SQLite persistence, real gRPC/TLS, SDK lifetimes, and cross-process recovery are separate verification layers. `cpp_comet_process` owns control services and three Stars and covers Polaris restart, stale-cache reads, metrics, source termination, SDK switching with a stable logical UUID, and restart on the same ports. Fixtures clean up processes, databases, and secrets. They do not start Planet/Moon or require Comet Go.
+
+`cpp_comet_publisher` is independent of Star and exercises synchronous versions, conflicts, unknown outcomes, deadlines, and cancellation under MSVC/C++23. `cpp_comet_catalog_fault` covers lost post-commit Publish receipts and first-frame/partial-batch Watch stalls. `cpp_metrics` and the Go bridge cover slow headers, deadlines, instance association, and incomplete observations. Admin adapter checks cover uint64, chunked UTF-8, complete-snapshot gates, no automatic write retries, and stale state. Browser interaction requires separate acceptance.
+
+Authoritative rules are in the [protocol](../proto/README.md#comet), [C++ API](../comet/cpp/README.md), [native storage](../common/README.md#data), and [Astrolabe](../astrolabe/README.md) documents. This page assigns stable scenario IDs; it does not define another protocol.
+
+The current SDK interfaces are wired, including Beacon fault fixtures, Reader/Subscriber callbacks, Observer estimates, and three-node same-ID recovery probes. Interpret results against their frozen inputs and configurations; existing tests or older results with matching IDs do not prove the current workspace passes.
+
+## Execution Boundaries
+
+Added cases cover no retry after initial registration failure, no replay of unknown updates, keepalive during Data writes, slow sampling/manual-update isolation, nonblocking notifications, empty baselines, atomic Map notifications, local-estimate CAS/network-authority precedence, three-source same-ID merging/expiry fallback, and stale-generation rejection. `cpp_comet_beacon` also covers creation/update deadlines and direct cancellation, reentrant capture destruction after notification/sampler removal, and throwing samplers. `cpp_comet_client` covers self-removing read notifications and selector reentry. `cpp_comet_selection` checks that a new authority with identical bytes invalidates an old estimate and that capacity rejection preserves the view/accounting. `cpp_comet_sampling` checks two real workers, 64 queued slots, full/closed rejection, draining, and idempotent waiting in standalone and aggregate builds.
+
+- Close-wait boundaries include `milliseconds::min/max`: negative durations check immediately; large positive durations cannot wrap. `wait` still waits for actual cleanup and does not implicitly close.
+- The frozen SDK repair regression recorded in validation includes Publisher target/key-set reuse despite ordering changes, fresh queries after changed sets or unknown outcomes, no retained bodies, `UINT64_MAX`, old empty control bindings not cancelling valid calls, Client closure from slow callbacks, and unsupported Query classification. Each fixture owns deterministic barriers, idempotent cleanup releases, ports, and data.
+- Projection/subscription/selection cases destroy the only View inside `each` while completing traversal of its pinned old root. Immutable-snapshot reentry and new callbacks/Pool/Item have separate cases. Catalog version-query cases run independently from `main`, retain input order, and include expired-key watermarks.
+- `cpp_preparation` covers local/other-source progress during preparation outside domain locks, same-source queries waiting outside the domain lock, revocation precedence, expiry during preparation, higher Catalog watermarks, and rollback at every allocation point. Replica cases retain individual Scope coverage after interrupted multi-Scope installs.
+- `cpp_broadcast` covers independent page positions, page reuse, staggered readers, weak-cache reclamation, reset/apply/target/start isolation, and full-record versus Data-only encoding. Ephemeris RPC cases add real multiple Watches, appended suffixes, cancellation, and exact-target interleavings. CTest registration alone is not a pass.
+- Map each ID below to real, locatable cases; an ID may have several subcases. Change the owning contract before changing its acceptance expectations.
+- Test deterministic clocks, allocation failures, and commit barriers before real gRPC/TLS. Timeout, cancellation, reordering, and closure cases inspect final storage and resource reclamation, not just a client status code.
+- Business units, targeted real single-Star RPC, standalone consumers, and reclamation are v1 obligations. Peer replication/switching, Planet, and business persistence are not accepted merely because connection scaffolding passes.
+- Record Debug/Release, Sanitizer, performance, scale, and long-run scopes separately. Each run and prerequisite build needs explicit authorization; see [test entry](../tests/README.md).
+- Separate protocol bytes, actual transport, memory/allocations, throughput, and tail latency. Claim benefits only after measurement; test counts are not code coverage.
+
+## Protocol and Instances
+
+- **P01** No mandatory Inspect/Health handshake. TLS/auth use static configuration; mismatches fail without downgrade. Server rejection governs differing local/server limits; invalid TTL reports the legal range without clamping. Health readiness does not bypass permission/clock checks. Cover empty required IDs, NUL, UTF-8, byte limits, case, and overflow.
+- **P02** Session, anonymous responses, and error details identify the actual instance. Lost initial Publish/Create confirmation leaves an unknown outcome without background replay. Recovery of an established Beacon is separate and does not redirect old writes. A new instance resets cursors; Almanac retains the Reader floor.
+- **P03** A retry denied by permissions, expiry, or evicted evidence does not prove the original request never committed. Do not complete twice or rewrite the original outcome.
+- **P04** Parameters, versions, permissions, capacity, and timeouts return synchronously through `std::expected`; reason and commit certainty are separate. Initial Beacon creation returns `expected<Beacon, Error>`; failure leaves no usable handle/background registration. Public signatures expose no generated types.
+- **P05** Raw Ephemeris order replies cover 1, 127, 128, 2^63−1, 2^63, maximum, and zero rejection without wraparound. An 11-byte maximum payload is not total wire size. Catalog.Renew has no order; an empty success still belongs to its request attempt.
+- **P06** Keep target instance/Scope; add no Inspect/dynamic Limits. Catalog has internal related-key version queries and full atomic batches, with no application-supplied version or public Delete/Renew. Validate recovery fields against the final schema; old encoding tables are not implementation evidence.
+- **P07** Validate success too: mismatched Publish version/instance, Create TTL/UUID/instance, or Update/Renew order cannot install success; a sent operation may still have committed. Missing, duplicate, malformed, or unknown Effect details cannot fabricate non-commit proof. Known transport classifications still govern backoff/pause.
+- **P08** Inject failure/cancellation before preparation, at final commit, and during post-commit notification/encoding/reply. Only pre-commit failure proves this attempt unapplied. Later failures preserve data, versions, and idempotency evidence; cancelling slow subscribers does not block write receipts. Independent expiry maintenance before a rejected request is not that request's commit.
+- **P09** Do not layer configured retry/hedging or resolver replay. Distinguish library transparent retry, one explicit version-conflict repair within a call, and established-Beacon recovery. No background Data replay after synchronous failure.
+- **P10** Maximum legal Almanac/Catalog values and full Attr + Data registrations must traverse replication and Watch. Soft page targets cannot truncate one large item. Detect hard receive/send limits, encoding overhead, and obsolete 4 KiB control limits as incompatibilities; write success alone is insufficient. Larger data budgets do not expand Admission/Pulse admission limits.
+
+## Catalog Synchronous Publishing and TTL
+
+- **C01** Per-key versions may have gaps; one atomic batch uses one version, and disjoint Publishers may use the same version. An unrelated Scope maximum cannot reject a write. Success means local memory commit only.
+- **C02** Bind Scope/key set; TTL is per call. Factory creation neither writes nor starts Renew. Share Client; applications do not manage versions.
+- **C03** The same version and exact retained body can refresh TTL; differing content conflicts. Compare actual retained content, not hashes/final cursors. Freed bodies require full restoration and cannot be pretended comparable.
+- **C04** Prepare native data, watermarks, deadlines, and history atomically. Allocation failure advances no source position. Pure deadline changes remain native/source facts; invisible changes do not publish content views. Cover controlled scheduling as well as native units.
+- **C05** Expiry frees bodies but preserves watermarks. Empty history does not reset positions. Metadata exhaustion rejects new entries without dropping old evidence; process restart does not pretend old in-memory evidence survived.
+- **C06** An expired higher peer version retains its watermark and suppresses older content without becoming visible. Equal versions take the later valid deadline; newer versions never inherit old deadlines. Replay uses absolute deadlines.
+- **C07** Reuse version knowledge only for the same target and exact key set, independent of key order. Changed target/set or unknown outcome requires Query. Keep bounded metadata, no Data. Choose above known and issued versions; never reuse an uncertain version with new content. Order concurrent writes independently, do not merge outcomes, and reject exhaustion.
+- **C08** One deadline includes authentication, preparation, write, and allowed conflict repair. An unsent expired operation is not sent; a sent timeout is unknown. Failure does not seed future cache; cancellation remains charged until actual completion.
+- **C09** Reject invalid units, zero, overflow, or an invalid per-call TTL atomically, without rounding/clamping. There is no fixed Publisher TTL or automatic Renew. Star expiry, not the client clock, removes content.
+- **C10** Retained server Renew applies only to valid, full, local content not behind known watermarks. It cannot renew remote, watermark-only, or expired content. New SDK Publishers never call it; a missing key requires the next full publish.
+- **C11** A target change retains the issued floor, queries the target, and uses a subsequent full publish to recreate missing keys. No automatic restoration/replay; fence old receipts.
+- **C12** Release/close prevents future work without Delete or recovery. In-flight operations may commit; close + TTL is not a global hard bound and does not rewrite results.
+- **C13** Publisher has no SDK timer/liveness lease. Star Watch carries expiry deletion; clock changes/suspension do not make the client delete content. Retain only bounded metadata/in-flight data.
+- **C14** Query keys at versions 7/100 alongside unrelated source/Scope state. Renewal invisible to content and local expiry must preserve correct source cursors, without inventing source-to-view mappings.
+- **C15** Empty bytes are valid. Reject a single item exceeding encoded/preparation budgets rather than splitting it. No ordinary Delete or partial multi-key Patch API; full atomic batches are distinct. Expiry erase is not peer deletion.
+- **C16** Only a definite version conflict proves the entire attempt unapplied and permits one same-target Query/version correction/resend of the original request within the original deadline. Any repair failure stops the call.
+- **C17** Unknown outcomes, timeouts, missing Effect, and lost replies never enter C16. Parameter/auth/capacity failures are not repairable this way. A lost post-commit receipt must cause no extra Publish and no false non-commit claim.
+- **C18** Restart queries known target state, not a global latest value. Applications need no persisted version counter; Watch/wall-clock positions cannot supply write versions. Cover maximum exhaustion.
+- **C19** Cover 1/128 entries, duplicates, empty values, per-value/encoded/preparation limits, and conflicts on any key. Failures are atomic; full-Scope Watch cannot expose half a batch. Separate exact-key Watches are not a joint snapshot.
+- **C20** Disjoint Publishers may share a version without history merging. Skip unrelated lower versions; gaps are legal. Async replication is not a global transaction, and partial history is not a complete batch.
+
+## Almanac Authoritative Writes and Reads
+
+- **L01** A new Scope starts at 0; each accepted Set/Delete batch advances exactly once, including same-value Set and missing-key Delete. Distinguish empty value/delete; no version-zero bypass.
+- **L02** Persist data, version, and commit evidence atomically. Competing writes at one version have one winner. OOM/exhaustion cannot partially apply. Offline Stars cannot roll back an authoritative commit.
+- **L03** Retry proof matches the original request, independent of Protobuf field ordering, not merely its final values. Evicted evidence cannot confirm it; different content conflicts.
+- **L04** Empty Scopes retain versions across restart; do not restart at 1 or infer version from snapshot record count. Cover empty/new-Scope completion.
+- **L05** Reader uses Watch only. No Almanac Publisher, hidden write path, or authorization bypass.
+- **L06** Unready is not an empty ready view. Watch/Map readiness, optional values, standalone synchronous Delta, full cache, and immutable stale views remain distinct.
+- **L07** A Reader that observed 100 cannot accept 90. Waiting is bounded. Do not apply Catalog's rollback semantics.
+- **L08** Actual installation differs from sending/writing or partial pages. Publish only real differences; slow readers cannot pin history indefinitely. A replica ahead of authority reports an error.
+- **L09** Pulsar trust and Galaxy identify one Polaris authority. Same-principal replacement differs from independent principals; zero/multiple bounded candidates conflict. Do not select by reachability/epoch, bypass the cold-start baseline, or discard an existing view on authority conflict.
+- **L10** Membership, TLS, and database readiness are separate. Reject wrong role/Galaxy/credentials/old instance. Database recovery failure is not an empty baseline; Admin is not a startup dependency.
+- **L11** Star initiates one synchronization stream for all Scopes, with inventory, snapshots, deltas, ACKs, and assessment interleavings. No per-Scope connections/source versions. Version-zero baseline and differences remain distinct; partial batches are not ACKed.
+- **L12** Restarting the same database creates a new member while retaining versions. Lost queues do not invalidate durable baselines. Missing/rolled-back authority versions or late ACKs cannot cause fallback.
+- **L13** Disconnect retains installed data; new streams fence old partial batches. Existing trust permits reconnect during Pulsar outage, not admission of unknown peers or repeated login. Old cancellation remains charged; slow peers cannot block others.
+- **L14** Internal Patch advances strictly by one. Reject gaps; old commits do not execute again. Batching preserves no-op commits. Full snapshots may jump forward; internal synchronization cannot use Watch-style coalescing.
+- **L15** Initial inventory captures Scope/minimum-version pairs, then consistent independent baselines at or above those minima. Concurrent writes do not expand that initial obligation. Require all entries and final completion; cover empty/drop/reconnect and newly created Scopes at handoff. Never hold an SQL transaction across network waits.
+- **L16** Coalesced notifications still deliver every +1 commit, including credential rotation. Assessment detects a lost final notification. No Outbox/per-Star durable log is required. Shared snapshots and slow peers cannot pin SQL transactions or newer versions.
+
+## Star Source Recovery
+
+- **N01** Source/domain groups sequence all Scopes. A gap restores only that source/domain, without per-Scope cursors, third-party export, or source versions for local TTL maintenance.
+- **N02** Enqueue/send is not ACK. Failed preparation, gaps, oversize data, and partial installation cannot claim catch-up. Explicitly account for processed ignored old events.
+- **N03** Replay after lost ACK never extends leases. Fence old streams; cancellation cost persists until real cleanup.
+- **N04** Prepare local data and source log atomically. Share payloads; slow history retention stays bounded.
+- **N05** Export only local facts. Ephemeris replaces its own source; absent Catalog data cannot remove other sources. Recheck positions, TTL, and identity; concurrent newer state cannot be overwritten.
+- **N06** Cover empty groups/Scopes and new Scopes during a continuous group snapshot B. Pages may cross Scopes; per-Scope completion is not group ACK. One page per Scope is not a full group baseline. Failures preserve state; no network wait under domain locks.
+- **N07** A trusted newer epoch of the same principal rejects old events. Repair retains original TTL; a new object receives a new ID. Established Beacon recovery uses its separately authorized stable identity; an old frame is not an identity transfer.
+- **N08** Ordinary disconnect, untrusted claims, or a higher epoch of another principal is not replacement. Isolation is not immediate revocation. Local deletion affects downstream views only.
+- **N09** Expired replicas can restore a full record with a valid source fact/deadline, respecting UUID/Catalog version bounds. Late, replaced, expired, or concurrent-expiry replies cannot resurrect invalid state.
+- **N10** Simultaneous dial, late replies, and slow connections still permit one current stream and bounded candidates. Recovery is not tied to a fixed TCP connection; keepalive stays bounded.
+- **N11** Each source/domain sequences all its Scopes; domains are independent. Empty state/history trimming cannot reset sequence. Reject capacity/max exhaustion; an ahead group cannot reset to the sender's head.
+- **N12** Exact repair identifies source, Scope, key/UUID, and triggering position. Capture the full record and boundary R together; never combine Attr/Data from different instants, consult third parties, or add a full-snapshot RPC for this purpose.
+- **N13** If X is missing at 10 and repaired at 15, events 11–15 for other keys/Scopes still apply. Coverage is exact through 15, not an ACK jump.
+- **N14** Install repair/absence and coverage atomically. OOM cannot partially publish. TTL, disconnect, or old callbacks cannot drop coverage before contiguous progress reaches R or an adequate full snapshot replaces it. Reject replacement-identity replies.
+- **N15** Authoritative Ephemeris absence removes only that source's UUID without broadcasting it. Catalog absence cannot delete other sources/reset state. Failure is not absence. Respect newer versions and final-install expiry.
+- **N16** Coalesce one outstanding repair per missing target. Charge replies, coverage, and queued events. At capacity stop the group and back off; cancellation does not release cost early. A replacement snapshot must cover the obligation; one Scope cannot bypass it.
+- **N17** After downstream erase, restored Ephemeris content must send a full record, not Data-only. Old Views remain immutable; SDKs do not perform internal source repair.
+- **N18** After source key v10 expires and history is trimmed, its snapshot watermark atomically advances a v8 replica's floor and erases obsolete content. It is neither empty bytes nor local expiry; valid empty values remain distinct.
+- **N19** A v10 watermark/omission neither deletes nor extends still-valid equal-version local/other-source content. Source expiry and replica expiry may differ. Higher floors suppress lower versions; v12 cannot become v10. Watermarks cannot restore bodies or fabricate equality; retained equal-version conflicting bodies still conflict.
+- **N20** If A accepted v8 and learned B's v10, A still exports its own v8 fact, not a fabricated v10. Separate learned floors and owned facts. Cover replacement/cleanup races; disconnect/trimming retains floors.
+- **N21** Freeze all Scope records/watermarks at B. Concurrent expiry, new Scopes, or higher versions cannot enter old B. Metadata OOM cannot publish roots/projections/ACKs early. Missing pages cannot evict floors; avoid full-copy work under locks.
+- **N22** Exact Catalog repair distinguishes expired-with-watermark, never-known, and higher-active content. Known floors cannot become unknown; absence cannot delete other sources. Cover coverage and old frames; SDKs do not receive internal tombstones.
+- **N23** When an early Scope preparation stalls/fails and another commits, assign source sequence in actual commit order without holes or premature `fetch_add`. History remains ordered; cross-Scope batch ACK waits for all covered commits. Domains remain independent.
+- **N24** Mutations/new Scopes during multi-Scope pagination cannot change frozen B or publish an incomplete baseline. Subsequent per-Scope installs may complete before a later failure; retain their coverage, but ACK only after all obligations complete.
+- **N25** Full Catalog restoration racing newer versions/renewals rechecks higher floors and deadlines. No root rollback or overwriting other sources. Budget the whole preparation and ensure maximum legal snapshots fit.
+- **N26** Separate renewal-heavy source history from content history. Gaps affect only the relevant source/domain, not all domains or per-Scope task trees; never pin history indefinitely.
+- **N26a** Over-age, not-yet-trimmed Origin/Scene replay still obeys limits/deletions; the next write performs actual trimming. Gaps require a baseline. Zero history budget disables retention. Expired Catalog watermarks remain and Ephemeris content stays hidden; preserve original deadlines.
+- **N27** ACK 20 rejects snapshot 19; repair 25 rejects snapshotB 20. Recheck coverage at final install. Equal boundaries may repair missing content with original deadlines, never revive expired/replaced state.
+- **N28** A final commit racing sleep/wakeup coalescing still sends or resynchronizes without another write. Post-commit encoding failure cannot fabricate catch-up, roll back, or rely on polling to hide lost notification.
+- **N29** A repair reply behind other data cannot deadlock reading/control progress. ACK stays behind unprocessed batch entries. If staging fills, terminate/back off rather than stop reading forever. Old-stream cost/coverage remains accounted.
+- **N30** After trusted replacement, old TTLs and references drain; reclaim empty groups/wheels while retaining Catalog floors for the new identity. Old credentials cannot recreate the group. Disconnect alone is not retirement.
+- **N31** Send immediately when idle; after an in-flight write, form the next bounded batch. Renewal, Scope, and expiry facts retain sequence/deadlines. Never omit key facts. Later preparation failure ACKs only the completed prefix. Cover 1-second leases, sparse tails, and large-snapshot fairness; batching cannot starve another domain.
+- **N32** Coalesce unsent ACKs to the latest complete boundary while still sending the final tail. No ACK ping-pong. Write completion is not installation; ACK cannot exceed the recovery baseline/submitted complete boundary, although it may precede OnWriteDone. Old streams/repair coverage are not contiguous progress. No stop-and-wait per commit.
+- **N33** Slow peers retain bounded references/positions, not copied FIFO payloads or pinned history. Resynchronize them while other links, control, repairs, and local commits progress. Charge actual cancellation lifetimes.
+- **N34** A domain-lock/clock stall cannot prevent independent export/delivery/resolution of source facts. Export remains possible when local clock reads fail; public reads report errors and receive paths filter deadlines again, never extend them.
+- **N35** Agenda phases advance to the next complete tick. Cover initialization failure, retirement, maximum timestamps, and saturation. Do not skip maintenance: expiry must publish deletion/cursor progress, not merely hide data in `find`.
+- **N36** Interrupted multi-Scope work remains scheduled without fresh network input. Each round advances bounded Scope work; no busy loop while awaiting network. ACK waits for all covered work; cancellation never releases capacity early.
+
+## Member Discovery
+
+These cases cover the [read-only Pulsar directory](../proto/README.md#directory). C++ Star/Pulsar and Go Polaris/Astrolabe share identity/role rules; ordinary Comet clients do not participate.
+
+- **M01** Query with existing admission body/signature, without passwords or a new startup record. Cover duplicate/missing metadata, malformed signatures, wrong Galaxy/role, replaced instances, and Pulsar recovery. Failure cannot trigger takeover with a fresh request ID; valid queries neither advance epochs nor perform KDF/persistent writes.
+- **M02** Concurrent replacement and queries validate identity and return members from one committed snapshot. Exclude accounts, startup history, and health claims. New roles cannot join the Star mesh. Missing Polaris/incomplete recovery is not a skippable empty baseline.
+- **M03** Concurrent missing peers, periodic refresh, and management refresh still allow at most one actually in-flight query per process. Coalesce demand; use bounded retries/bytes/waits and backoff/jitter. Cancelled but unfinished queries remain charged. No per-group/browser directory fetches.
+- **M04** An old-epoch query reply cannot undo a newer same-principal handshake, close its stream, or restart the old source. Conflicting identities at one epoch fail; omission is not authoritative departure. Do not add a directory revision workaround.
+- **M05** Pulsar outage, timeout, or malformed/oversized lists retain the last complete view as stale. Existing admitted communication and local TTL continue. Dial candidates within existing budgets, without rebuilding healthy streams or rebroadcasting full lists.
+- **M06** Maximum legal membership fits encoded budgets. Preparation/encoding failure cannot return a truncated success. Avoid database write-lock waits/Pulse blocking. Slow reads, cancellation, and concurrent queries reclaim references within server budgets.
+- **M07** Polaris initialization binds account name, Galaxy, and canonical endpoint. Same-deployment restart creates a new Member.id/epoch while retaining Almanac versions/evidence. Missing binding or changed account/endpoint fails before Pulsar registration, without auto-migration/new membership; password/certificate rotation is not deployment replacement. Cover offline old deployments and distinct authority principals; no reachability-based election, database clearing, or trimming startup evidence.
+
+## Ephemeris Lifecycle
+
+- **R01** Stall old Update across one TCP connection, concurrent RPCs, and reconnect; release it after a newer order commits and verify no old Data overwrite. Client timeout/cancellation is not server completion. Retain latest-order protection, not unlimited operation history.
+- **R02** Data and Renew orders advance independently. Cover greater/equal/lower, equal order with different content, sessions, and registration generations. New Update atomically changes Data and its fixed-TTL deadline. Duplicate Update/Renew never extends again; preparation failure advances no confirmation.
+- **R03** An established Beacon restores its logical ID after reconnect, Star switching, or source expiry/recreation. Preserve handle/tick/callbacks. Stop renewing the old endpoint, allow TTL-bounded remnants, and expose only one record per ID in a projection.
+- **R04** Retain raw 16-byte UUIDv4 validation; test logical ID/generation/recovery credentials against the final schema. Random-source failure/collision cannot overwrite records; new objects cannot take arbitrary external IDs. Removing format validation does not implement stable recovery.
+- **R05** Initial `client.beacon` waits synchronously for confirmation. Definite failure yields no handle/background registration. Lost post-commit receipt is unknown, with no handle/automatic Create. A manual new call is independent; late receipts cannot create a usable object.
+- **R06** Manual recreation after unknown initial creation may leave multiple IDs temporarily. Do not merge by Attr/Data; orphan records consume capacity until their actual TTL. Test separately from same-ID multi-source deduplication.
+- **R07** Create adds no configured retry/hedging. One object has one current creation attempt, not parallel attempts at every candidate. Permanent parameter/auth/TTL failures cannot create indefinitely. Catalog outcome rules and Pulsar registration idempotency remain unchanged.
+- **R08** New objects/processes create new registrations, not take supplied IDs. Moving an existing object, reconnecting, or changing SECRET preserves identity. Observer cannot create write handles; APIKEY does not imply ownership. Validate recovery credentials independently.
+- **R09** Prepare creation, Update + renewal, Renew, expiry/removal, source history, and projection together. Failure cannot leave new Data with old TTL or vice versa. Attr remains fixed; do not split the record into two physical keys.
+- **R10** Empty Attr/Data individually or together remains a complete record. Updating to empty Data is valid and renews on a new order; it is not deletion, skipped sampling, or an error. Report codec failures separately.
+- **R11** Exact-ID Watch receives full Attr/Data; restoration after deletion sends `record`, not incomplete `data`. Public Observer v1 remains Scope `one/stop`, without exposing additional Watch APIs.
+- **R12** APIKEY authenticates only. Operations validate actual target, generation, ID/order/TTL and reject external `__`. Old replica facts cannot renew themselves. Recovery has separate authorization; old-generation Update/Remove cannot affect the new generation.
+- **R13** Require `0 < beat < ttl`; beat cannot be disabled. Tick is optional; its configured interval is positive. Late/duplicate receipts retain first-send timing, not a fresh TTL. Exhausted budgets report uncertainty; bounded recovery cannot busy-loop.
+- **R14** Default TTL accepts 1000, 1500, 30000, and 600000 ms; reject 999, 600001, zero, and expressible negatives. Reject fractional milliseconds rather than truncate. Respect valid custom maxima; reject invalid configuration/overflow instead of creating permanent leases. Invalid Renew preserves the old deadline; scheduling cannot postpone a valid 1-second renewal beyond expiry.
+- **R15** Attr/TTL/beat are fixed; Update/Renew use that TTL. Recovery generation and Data version are independent. Switching Stars cannot increment old cached Data into a fictitious newer version. Never overwrite a known higher version or bypass permanent TTL/capacity errors.
+- **R16** Each synchronous update settles independently. Tick is serialized, nonoverlapping, and does not catch up queued samples. Valid manual update resets sampling; discard late old samples. Sampling returns Data only, including valid empty bytes; exceptions report failure without sending invented data.
+- **R17** Cache only last confirmed Data/version. If v10 is confirmed and v11 commits at A with lost reply, never cache/replay v11. B unaware of v11 may restore v10, not pretend it is v12; B's known higher version wins. Later recovery cannot change the original unknown result.
+- **R18** Confirm Data/lease budget only for a matching order/target/generation. Duplicate order confirms its original commit. Wrong/zero/old-generation orders cannot extend budgets or rewrite returned outcomes.
+- **R19** Remove returns Empty associated by request context. OK means that registration is inactive; authorized absence is NOT_FOUND, not success. Wrong identity/instance cannot masquerade as empty success. Lost or late old Remove results cannot end a new registration or prove old Update unapplied.
+- **R20** Renew changes native lease/order, source root, and scheduling while sharing Attr/Data. Old source snapshots retain old deadlines. New group version/deadline agree; failures/cancellation/expiry cannot half-renew. Pure renewal does not rebuild Observer roots/history/cursors; duplicate order adds no source fact.
+- **R21** Barrier native records, order, source version/history, and projection publication. Update/Renew/Remove/expiry cannot expose torn state. Recheck identity/time/Session at final commit; allocation failure advances no position. No record-first/asynchronous-log atomicity substitute.
+- **R22** Advance injected time past expiry during lock waits/preparation. Update/Renew reject at final admission rather than resurrect using RPC-arrival time. Calculate new deadlines at admission; clock/allocation failure cannot commit partial order/deadline state.
+- **R23** Once calibrated, Star keeps local timing and accepts new Create/new-order Update/Renew after Pulsar loss beyond 5 seconds, reference invalidation, or excessive reference error. Unrenewed entries expire; duplicate Renew does not extend. Recovery slews without changing committed deadlines/reviving records. Timing readiness differs from synchronization quality. No initial calibration, local clock failure, reversal, or exhaustion still rejects new deadlines. SDK clock errors are not ended registrations or Client-wide switching storms.
+- **R24** Update during Beacon recovery must acquire a valid registration and confirm that Update within the same deadline. Cached/recovery bytes alone cannot count as update success. Failure never queues later Data replay.
+- **R25** Parameter/capacity errors, rejection, and timeout preserve confirmed cache. Permanent Data errors cannot be bypassed with a new ID; valid beat continues. Later explicit valid updates are independent; no endless failed-value retry.
+- **R26** Inject clocks both including/excluding suspend. Cover sleep beyond TTL, process pause, post-resume receipts, and read failure. Initial Linux budgets use BOOTTIME; resumed state/timers cannot reuse expired confirmations or burst missed Renew calls. Wall time/NTP does not adjust budgets.
+- **R27** Exhaust source-group and Scope-view positions independently. Operations needing an exhausted position reject without wrap. Invisible valid renewal must not invent a content commit because an unused view cursor is exhausted. If actual expiry cannot commit, end affected Watches' catch-up promise. Order exhaustion cannot be hidden by auto-replacing UUIDs.
+- **R28** Share fixed Attr; prepare only necessary Data/deadline paths. Legitimate same-ID recovery may span sources but produces one projected record, without mixing Attr/generations or letting arrival order replace newer Data. Reject invalid identity conflicts.
+- **R29** Actual new Update within a beat window suppresses redundant Renew; idle Beacons keep renewing. Local failure, caching, or equality comparisons cannot indefinitely reset keepalive. Failed sends are not lease success.
+- **R30** `state/changed` report recovery, ready, permanent error, uncertain lease, and closure; unchanged beats need no notification. Migration preserves the handle and tick.
+- **R31** Destroy logically completes immediately during idle/update/sampling/callback/recovery without closing shared Client. Start no new work; existing callbacks finish safely. Late Remove cannot delete a new generation; TTL cleans up failed removal.
+
+## Subscriptions and Views
+
+- **W01** Cover snapshot-to-delta handoff, concurrent writes, insufficient history, deletion propagation, and slow-consumer resource limits.
+- **W02** For all three typed responses cover empty/single/multipage reset/apply, empty progress, duplicate keys/UUIDs, mode changes, invalid completion fields, and incomplete disconnect. Reject absent actions, reset erase, and Ephemeris reset Data-only. Empty Set/full empty Attr/Data still exists. Publish view and position only on a complete batch; no gap after B. Insufficient history explicitly ends the stream.
+- **W03** Distinguish absent version from explicit zero; version requires instance. Catalog/Ephemeris instance changes, insufficient history, or ahead cursors reset; Almanac obeys W23 first. Range changes clear resume state. Never mix instance/domain/Scope/target. Exact watches may skip unrelated commits. Empty target means the current group; nonempty means exact key/UUID, never wildcard `*` or fallback on invalid UUID. Full/exact switching needs a new baseline. Intermediate pages omit version/instance; final pages carry both. Apply cannot regress/change instance; apply final data before confirming.
+- **W04** End only a slow stream whose coalesced backlog still exceeds limits. Preserve writes/other Client objects. Resume with backoff from the last complete position, resetting on history gaps; persistent overload cannot cause reconnect loops, nor can closed subscriptions reconnect.
+- **W05** Isolate full/exact ranges and cursors, including absent-target creation/deletion/recreation. Closing one subscription cannot affect others.
+- **W06** Authorized absent Sector/Spectrum yields a ready empty baseline for full/exact Watches in all domains, followed by the first write without a race. Watch creates no business commit/version. Existing empty groups retain versions. Invalid sessions/internal ranges/IDs cannot return successful empty views. Bound and reclaim waiting-scope resources.
+- **W07** Disconnect retains a complete stale view; initial synchronization stays unready. Interrupted reset never mixes old/new state. Coalesced Set/Delete matches the full target-boundary state.
+- **W08** Old views/Attr/Data remain valid and immutable through writes, registration replacement, reset, and closure. New view identity/range/cursor agrees. Stale status cannot mutate old handles; unchanged content avoids whole-map copying. Views alone do not keep background business alive.
+- **W09** Enforce object/global budgets, distinguishing page targets, record hard limits, encoded bytes, and logical payload. WatchRequest has no `view_bytes`. Even with normal transport flow control, oversized cumulative SDK views/preparation cancel without partial installation or repeated downloads. Keep old view stale and its position. Server backlog follows slow-consumer recovery; paused reads cannot hold domain locks/infinite history. Renewal/expiry/closure must progress under write saturation; accounting cannot leak or release shared storage early.
+- **W10** Ephemeris reset requires full Attr/Data; reject Data-only/erase. Apply `data` changes only Data of an existing complete registration, preserving Attr/TTL and old Views. Empty data differs from missing action and erase.
+- **W11** Creation plus Data updates for one UUID coalesces to one full final record; creation then removal becomes final erase. Existing-record updates may coalesce to one data action, without mixing UUID/Scope baselines.
+- **W12** Data for an absent/deleted UUID rolls back the whole batch, marks the old view stale, and does not advance position. Recover without version using reset. Never invent empty Attr, ignore-and-advance, wait indefinitely for a future record, or rapidly reconnect on permanent protocol failure.
+- **W13** Full record can restore a valid baseline, but cannot change Attr for an existing UUID. Send record if retained Attr knowledge is unproven; reset on history shortage. Latest Data cannot prove the receiver has Attr. Cover exact-ID first subscriptions and resume.
+- **W14** Native projection history retains creation/content/end. Coalescing preserves creation; target T cannot include T+1. Pure Renew adds no content history/callback. Unchanged recovery may confirm the same cursor with an empty completion; one final action per UUID per batch.
+- **W15** Large Attr/small frequent Data verifies actual delta encoding omits Attr, while Create/reset remains complete. Compare encoded fixture bytes, not fixed throughput/nanosecond thresholds; allocations/throughput/tails need separately authorized measurements.
+- **W16** Reject same-version apply with changes; allow empty catch-up confirmation. Cover cross-page duplicates, wrong completion instance, and an invalid second Session confirmation.
+- **W17** Initial exact watches capture only the target, without scanning the group. Full watchers share a boundary snapshot, not per-connection copies. Updates preserve held old Views. Measure allocation/update scaling, not merely cheap `view()` handle creation.
+- **W18** Erasing an absent key/UUID is valid and advances progress, including coalesced create/delete. First apply without baseline, out-of-target entries, and malformed pages stop automatic recovery. Missing Attr allows at most one fresh reset attempt; failed repair cannot loop. Stream OK does not replace missing completion; preserve old complete view/position.
+- **W19** Cover expiry before capture, expiry between capture/send, and preparation/clock failure. Actual deletion versions propagate expiry; never filter a frozen version by send time. Allowed tick cleanup delay is not early expiry or a real-time liveness guarantee. Poor reference quality with valid local timing cannot stop Watch; writes/renewals remain observable during disconnection.
+- **W20** Bounded coalescing bridges writes even if content history expires before snapshot completion. End only on actual backlog overflow; preserve deletions without pinning history. Frozen delta pages keep their target while newer writes form the next batch.
+- **W21** Capture native/projected frozen roots and paginate by continuation, without repeated prefix scans or full Map copies. Ephemeris nodes already contain Attr/Data; no pairing tables/live-field lookup. Reader completion synchronizes with page reuse; roots/owners survive actual reads and cancellation.
+- **W22** Switching Catalog from a Star with key v10 to one with v8/no key installs only the new complete baseline. Do not synthesize a view by retaining old keys or maintain lifelong per-key SDK version tables. Same-Star writes still reject lower versions. Fence old streams; partial/cancelled/overbudget snapshots cannot contaminate the target. Recovery proves that Star's baseline, not global freshness.
+- **W23** Almanac carries the Reader floor in WatchRequest.version. A lagging Star reports temporary lag before pages, without new Inspect/minimum-version fields. Keep stale view/floor and back off; no permanent-conflict or Client-wide switch. Once caught up, cross-instance reset or same-instance contiguous deltas are valid. Cover first readers, zero, exact target, and empty groups; Catalog fallback does not apply.
+- **W24** Pure deadlines, same-byte new Ephemeris orders, and invisible source progress/floors do not advance/notify Scope content. Higher Catalog content versions remain visible even with identical bytes. Local expiry advances view only; source renewal advances group only. No mapping table/SDK source directory.
+- **W25** With many unrelated exact/full Watches, notify only relevant sets on a key change; pure Renew never scans content observers. Empty-target creation/closure/first-write races cannot miss observation. Failed lookup cannot create source/business state. Verify lookup paths using controlled access counts, not machine-time correctness thresholds.
+- **W26** Near legal capacity, declared-maximum source/Almanac recovery still fits while charging old roots, parallel preparation, and actual in-flight data. Back off transient pressure; stop repeated downloads for certain hard incompatibility. New writes cannot consume maintenance reserves. Preserve old state; destroy large last roots outside locks.
+- **W27** Reader/Subscriber first full Map callback includes valid empty state; later callbacks deliver full logical state over incremental transport. Exact-key empty value, deletion, unready, and error remain distinct. No partial multipage callbacks.
+- **W28** `state/changed` reports unready/stale/recovery/failure/closed even if attachment follows synchronization. Idempotent stop closes the role immediately, ordered against callback start. Delivered data lives independently; other roles are unaffected.
+- **W29** Observer exposes only `one(selector)/stop`, selecting from a local pool without per-call RPC. Distinguish unready, stopped, no match, and selected; no public watch/change API.
+- **W30** Business estimates in selected Data affect later selection until authoritative Data replaces them. Late old-generation edits cannot overwrite a new install. Views after deletion/stop stay memory-safe but cannot edit the pool.
+- **W31** Selectors support exclusion, immediate choice, minimum weight, and fill-first policies. No SDK hardcoded increments/thresholds. Large pools may use business sampling/indexing rather than forced full scans. Long user logic cannot run under a pool-wide write lock.
+
+## SDK Ownership and Concurrency
+
+- **S01** Public writes synchronously return expected; success means the connected Star confirmed. Settle failure/cancel/timeout once. No latest-pending replacement or replay after failure. Freeze in-flight content and distinguish remote uncertainty from local return.
+- **S02** Children remain usable after the last public Client handle disappears; explicit Client::close closes all associated objects permanently. Reclaim after the final external owner without cycles, leaking renewals, or dangling late callbacks.
+- **S03** Destroying a role's last application handle closes that role even while Client lives. Beacon stops renewal/recovery/re-registration, attempts removal, then relies on TTL. Self-destruction never waits for itself. Internal tasks/result handles do not retain background business; in-flight results survive without accessing destroyed public objects. Repeated close, moved-from destruction, and delayed cleanup are idempotent.
+- **S04** Cover stream failure, endpoint backoff, old callbacks, cancellation, callback reentry, and process cleanup.
+- **S05** Factories/update return once across rejection, success, timeout, cancel, and late-callback races. Synchronous waits cannot block shared I/O reactions or survive close forever. No thread per request.
+- **S06** One deadline covers auth, Query, one conflict repair, and send using remaining time. Unsent expiry prevents send; sent timeout stays unknown. User callbacks do not gate return. Add no public Task/Executor.
+- **S07** Notify outside state locks; immediate stop/destroy is valid. No synchronous RPC/cleanup waits inside shared I/O callbacks. Content callbacks are ordered per subscription; state/cross-object callbacks may overlap. Offload expensive work into bounded queues owning their data.
+- **S08** Order stop/destroy against callback start. No new notification after close wins; started callbacks may finish, but late samples are discarded. No self-wait; charge until actual completion. Immediate local close is not remote deletion.
+- **S09** Catch C++ callback exceptions at boundaries with bounded diagnostics. Do not replay notifications, roll back installs, rewrite outcomes, resurrect self-closed roles, or publish default empty Data after sampler failure.
+- **S10** Raw Buffer and codec adapters produce equivalent state. Encoding failure sends nothing; decoding failure is not deletion or payload mutation. Async work owns temporary buffers.
+- **S11** Verify each supported vector-move/span-copy/shared immutable overload; not every method needs all three. Shared Data reused in updates/manual retries avoids extra payload copies. Queue/send/recovery retain ownership; releasing a span after return is safe. Empty vector is valid, null shared_ptr invalid; const does not remove application writable aliases. Timeout/close cannot free in-flight bytes early; Views survive close. Do not claim serialization is zero-copy.
+- **S12** All three subscribers share interruption/budget/cancel/old-stream/backoff scenarios and publish complete views only. Separately verify Almanac Set/Delete, Catalog value/version/local erase, and Ephemeris record/data/erase. Shared Watch machinery cannot relax Attr-baseline rules or expose generated types publicly.
+- **S13** One Client has one active Star for auth/unary/Watch, not per-RPC round-robin. Old callbacks, Session refresh, and role errors cannot unnecessarily switch all roles or redirect old Catalog writes. Independent nonreplicating Stars/fake endpoints prove routing, not replicated recovery.
+- **S14** Repeated timeout/recovery while cancellation is stalled remains within real in-flight count/byte budgets. Reserve renewal/cleanup capacity under write saturation. Stop-new-business gates cannot block cleanup Remove; closure creates no UUID.
+- **S15** Lower HTTP/2 stream limits and hold Watches open; prove unary/renewal traffic is not sharing the same underlying bottleneck, not merely distinct Channel objects. Reuse Session on both channel classes; no connection per stream/unbounded channel pool.
+- **S16** Many Beacons share bounded scheduling. Isolate recovery/current-generation work; no thread per automatic task. Respect in-flight read/write counts and buffer lifetimes. Callback/timer/final-owner races cannot self-join, orphan tasks, complete twice, or dangle.
+- **S17** Local Beacon failure sends no RPC; failed initial remote creation leaves no automatic registration. Return handles only on success. Late watch/changed attachment still delivers current complete state/baseline. Separate logical close from drain; no notification starts after close.
+- **S18** Empty Scope/exact Watches still consume object/real-stream limits. Explicit writes share unary capacity. Under stream pressure/reauthentication, after old Watch/Session cleanup prioritize the new Session before subscription recovery, without unlimited channels. Reserved capacity is not a network-latency guarantee.
+- **S19** Exercise the recovery table for login rejection, invalidated Session, internal Scope, rejected Data, oversized views, malformed pages, busy, and clock. Explicitly setting the same SECRET may resume auth pause, not closed/permanently failed roles. Partial pages/TLS alone cannot reset failure backoff or extend this deadline.
+- **S20** Old Views remain queryable/traversable after subscription/Client close and drain, without dead core/mutex access or background connections. Interleave page-sharing checks, read completion, and final release. Exclusive reuse needs read-completion synchronization, not use_count observation or exporting internal Index::View.
+
+Targeted scheduling acceptance:
+
+- **S21** One active role cannot starve idle Beacon beats; Catalog never auto-renews. Pure deadlines do not change content. Shared close cleans up without extra traffic.
+- **S22** Events arriving during poll survive flag clearing. New anonymous bindings, credentials, and capacity returns wake waiters. Bound callback advancement; no event means no busy wait or reusing a consumed past deadline. Regress lifecycle/switch/capacity together; throughput is no substitute.
+- **S23** Concurrent repeated wakes coalesce by object. Self-close, late wakes of completed retained objects, admission replacement, and owner release cannot lose cleanup/resurrect old roles. Ordinary handling is O(K); deadline/shared maintenance may remain O(N). Measure directory scans and ready counts separately; functional passes do not prove complexity gains.
+- **S24** At least three frozen pages: staggered readers of 0/1/2 reuse still-in-flight pages. Release bodies when all page references return; independent cursors can rebuild them. Slot expansion preserves in-flight messages; reject huge noncontiguous page IDs/completed cursors. Cover Catalog/Ephemeris and Data-only range isolation.
+- **S25** Catalog 2048-byte binary bodies include NUL/high bytes and form soft-byte-limit pages. Cache reuse preserves bodies, versions, all keys, and uniqueness. Three-Star ordinary/high-fanout benchmarks measure receipt/visible separately and compare equal-parameter 128-byte cases; logical payload is not full protocol bandwidth.
+- **S26** Both domain field policies cover absent exact targets, empty values, independent cursors, invalid instances not consuming positions, soft-limit large rows, and hard-budget rejection. Validate events before suffix filtering; sort/coalesce reversed same-name changes. Business versions are not cursors. Create + Data retains Attr; final Delete becomes erase; later writes cannot contaminate frozen batches. Domain read/reclaim/preparation cases still verify resampling time, exception release, and lock-free reclamation boundaries.
+- **S27** C++ expected/optional, Go error/presence, and Rust Result/Option use common semantic vectors. Go map/[]byte, writable C++ aliases, and shared mutable Rust access cannot bypass ownership/generation guards. Cross-language designs are not implementations or passes.
+
+## Authentication, Management, and Transport
+
+- **A01** Single/multi-host deployments use the same infrastructure admission; no standalone/credential-file bypass. Business TLS/auth are independent and default on; explicitly disabling them preserves internal links and `__` isolation. Missing material cannot downgrade.
+- **A02** Reject missing/invalid TLS material. Separate Comet CA from node signing keys. A complete Almanac with empty __auth denies ordinary login; internal Astrolabe → Polaris can initialize credentials without Comet bootstrap.
+- **A03** Cover TLS switches, external/embedded trust, self-signed/standard chains, and hostname/certificate rejection without downgrade.
+- **A04** Client defaults to TLS even on one host or after handshake failure. Plaintext requires explicit matching settings at both ends, not trial-and-downgrade.
+- **A05** Reject unknown/revoked credentials. Comet cannot write internal Almanac/use node credentials for business or connect to Pulsar. Astrolabe cannot bypass Polaris to write Star Almanac.
+- **A06** Reuse current Session metadata without SECRET/KDF per RPC. Reject absent/unknown/duplicate/cross-instance tokens. Anonymous mode requires explicit configuration and creates no fake Session.
+- **A07** No protected work before Session confirmation; concurrent roles share one Client/target authentication. Initial timeout cancels the stream and fences late tokens. Remove the short confirmation timer afterward: no old five-minute expiry or three-second long-stream deadline, Release, or application authentication heartbeat.
+- **A08** Invalidate credentials before cleanup on cancel/disconnect/revocation/rotation. Order stream end against writes; retain committed effects and end associated subscriptions. Old callbacks cannot clear a new Session. Recovery follows each domain's uncertainty rules and does not change an unexpired UUID merely for reauthentication.
+- **A09** Normal close attempts bounded removal before Session cancellation; network failure still permits local cleanup. Session end itself deletes no Ephemeris/changes no Catalog. Role close preserves shared Session; final application ownership can end it without cycles. Count pending/idle Sessions; permanent auth failure cannot storm.
+- **A10** Order rotation/revocation against final commit. Old Sessions cannot cross invalidation; previous commits stay. Continuous credential changes spare unrelated APIKEYs; management outage cannot admit unknown credentials. Full gap-crossing snapshots follow A38.
+- **A11** Valid Sessions access ordinary data without Grant/read-write/Scope ACLs. Always isolate `__`; `*` is literal. `(a/b,c)` and `(a,b/c)` are distinct, not path-concatenation aliases.
+- **A12** Credential parse/index failure installs nothing. On success atomically install records/index/version and required invalidations. Credential contains secret only, without grants/ownership indexes; different APIKEY writes remain independent.
+- **A13** Continuous rotation closes that Star's old Sessions for the changed APIKEY and fences late login. Same-SECRET Set or duplicate installed-version confirmation cannot spuriously close Sessions. Report cross-Star lag, not simultaneous global revocation.
+- **A14** Explicit SECRET update resumes authentication; old receipts cannot overwrite the new Session or revive closed Client. Existing Beacon follows same-ID/generation recovery. Publisher prepares only subsequent explicit writes; no replay/result rewriting.
+- **A15** External business ports expose no internal management/replication RPC. Separately configured metrics HTTP carries no credential writes/business APIs. Disabling auth/TLS neither changes management rights nor enables metrics. Idle Session/Watch cannot block service threads; control/business budgets are separate.
+- **A16** Prometheus text 0.0.4 Content-Type, HELP/TYPE, escaping, units, buckets, and counter restart semantics are correct. Bound label sets; exclude APIKEY, UUID, business keys, SECRET, tokens, and payloads. Disabled metrics has no listener.
+- **A17** Scrapes do not scan every group or send while holding domain locks. Bound/reclaim buffers, connections, and waits. Slow scrapes/disconnect/close cannot block business or leave callbacks dangling. Real Prometheus integration needs explicit execution/tool authorization; a permissive custom parser is not ecosystem compatibility proof.
+- **A18** All three Watches and scoped writes reject external `__`, even with auth=false. Invalid Scope never queries internal tables; metadata cannot override message fields. Transport budgets and decoded business validation both apply.
+- **A19** Stall old Session cancellation and independent unary work, then rotate/revoke before release. Old requests fail final authorization; prior commits survive and new Sessions work. Late cleanup cannot erase new credentials. Merely cancelling streams while accepting old tokens must fail.
+- **A20** Rotation, writes, expiry, and first Watch capture follow Session-validity protection → domain/Almanac commit protection, without nesting obsolete Store locks or cross-domain waits. Slow snapshots/cancellation/callbacks stay outside upper business locks; revocation still wins before final commit.
+- **A21** Astrolabe validates management login server-side without management role/Scope ACLs. Still validate versions, input, and internal roles. Management login is neither infrastructure nor Comet credentials.
+- **A22** Browsers use Go Astrolabe only; no node registration/signing keys/Comet SECRET. Astrolabe registers its backend endpoint but never joins mesh. Cross-language consumers cannot treat new roles as Stars; renderer never connects to infrastructure.
+- **A23** Race Session checks, Watch-index insertion, and revocation without missing closure. Stop new send permits before cancelling outside locks; in-flight sends are irreversible. Continuous single-account changes spare other accounts; gap snapshots follow A38–A40.
+- **A24** Session requested against auth=false is a configuration error, not an anonymous token/downgrade. Token collision cannot overwrite and random failure cannot install empty credentials. Login UNAUTHENTICATED pauses; ordinary invalidated Sessions trigger coalesced reauthentication, not recursion.
+- **A25** Match Keepalive settings; cover idle streams, blackholes, proxies retaining only the front connection, and no active calls. No auth Ping/old idle expiry. HTTP/2 PONG does not prove Ephemeris liveness. Use controlled clocks first; real waits require authorization.
+- **A26** Separate Admin demo/live modes. Login expiry, unavailable Astrolabe, missing Prometheus data, or stale observations cannot silently become demo topology/blackhole conclusions. Account continuity follows A27/A28 and Session/origin rules A29/A30; undefined HTTP fields are not fabricated acceptance conditions.
+- **A27** Recreating APIKEY cannot restore old Sessions/callbacks. Existing Beacon reauthentication retains source UUID/order/TTL without resetting/extending; new objects do not take ownership. No APIKEY owner or invented ownership restrictions on other valid Sessions.
+- **A28** Load one management account from deployment configuration, not account databases, Polaris Almanac, infrastructure accounts, or Comet SECRET. Missing/invalid account/digest/config cannot disable login. Reject wrong passwords, oversized input, and capacity excess. KDF stays outside Session locks and ordinary requests. Pulsar/Polaris outage does not block local login; operations report dependencies separately. Restart after account change invalidates old Sessions; no online account CRUD.
+- **A29** Management Sessions are process-local, fixed at 8 hours from login, with no activity/refresh extension. Cover boundary, repeated logout, restart, random failure/collision, and capacity. Cookies cannot revive expiry; another backend cannot accept the token. Logout removes authorization and clears matching Cookie attributes without undoing writes. No persisted Sessions/automatic login refresh.
+- **A30** Same/cross-origin use one API. Verify exact Origins, near-match host/port/scheme, null/missing Origin writes, invalid headers, and cookieless preflight. Preflight performs no business; origin checks precede side effects, not just CORS headers. Allowed-origin errors remain readable; credential requests never use `*`. Cover HttpOnly/Secure/SameSite, credentials: include, logout clearing, third-party-cookie denial, and proxy configuration without auth downgrade or URL/localStorage tokens.
+- **A31** No single-host admission bypass. Astrolabe cannot write Star Almanac directly; Star identity cannot impersonate Polaris. Business auth/TLS switches preserve internal roles/`__`. Admission/dependency failure cannot relax verification.
+- **A32** Astrolabe owns no persistent management database/content adapter; Polaris alone supplies authoritative drafts. Failed/partial/filtered/exact/lagging reads cannot imply Delete. Empty Buffer is not Delete; observations cannot become authoritative writes.
+- **A33** Management single/multi-key batches preserve same-Scope atomicity and authority-version conditions. Cover all-or-none, independent-batch partial success, conflict/unknown/cancel/restart. Never undo completed batches, auto-renumber old edits, or invent receipts after evidence trimming.
+- **A34** Essential management/Star bootstrap needs neither Go SDK nor browser. Future Go reads do not exchange Orbit identity for Comet Session. Internal `__` remains internal; frontend responses reveal no SECRET. Star adds no business SQLite/asynchronous persistence.
+- **A35** Report success only after Polaris durable confirmation, not RPC enqueue/Star memory install. Later Star outage, Astrolabe restart, or lost receipt cannot undo effects. Separate committed/unknown results; no Astrolabe persistent replay queue/second draft store.
+- **A36** Concurrent editors and Star observations still reject stale edits through version conditions. Observation pushes never republish; waiting for Star is not part of durable commit. Display Polaris/Star states separately rather than treating all installations as one database transaction.
+- **A37** Verify [startup recovery](../astrolabe/README.md#star-bootstrap-recovery): Pulsar admission/initial calibration, full Polaris Almanac, first dynamic synchronization, then public admission. Valid empty databases complete explicitly; read failure/partial snapshots do not. Auth with no credentials rejects business login while internal management can initialize it. Old-instance completion cannot ready a new process. Peer-budget expiry uses only agreed degradation and never skips Almanac. Astrolabe/Go SDK is no hidden startup dependency.
+- **A38** After credential v20, delete/rotate/recreate the same APIKEY/SECRET through v22 with insufficient history. Installing the newer complete snapshot invalidates all old Sessions on that Star, including unchanged accounts, but not other Stars. Credential remains secret-only; identical final bytes/per-account generations cannot preserve old Sessions.
+- **A39** Cover initial load, auth=false, ordinary Scopes, old/same versions, partial snapshots, parse/budget failure. Blanket invalidation applies only to a newer complete credential snapshot replacing missed continuity. Failure preserves table/version/Sessions; same-version retry after lost ACK cannot kick newly created Sessions. Decide against final installation position, including concurrent catch-up; Polaris restart/disconnect alone does not revoke.
+- **A40** Race credential snapshots with final login/write checks and Watch registration/send permission. Table/index/version/old-set invalidation take effect together. Preserve prior commits, reject late old logins, and cancel old streams outside locks without touching new Sessions. C++/Go invalidation coalesces reauthentication; unchanged SECRET needs no application edit, and only rejected new login pauses. Preserve valid UUID/order/TTL and stale full views; no per-object login storm or automatic Star switch solely for invalidation.
+
+## Management and Membership Storage
+
+Cover [Polaris persistence](../polaris/README.md) and the [Pulsar member database](../pulsar/README.md#sqlite). Both have SQLite cases; execution evidence is in [validation](validation.md), not old journal regressions. Astrolabe has no database; inject faults only into isolated test databases.
+
+- **D01** Persist Almanac data, authoritative Scope versions, and required history together. Restart restores current data/bounded history and empty-Scope versions without renumbering from 1. Store no Astrolabe Sessions/Catalog/Ephemeris or fallback memory database.
+- **D02** Cover initialization/recovery, unknown formats, corruption, read-only directories, busy locks, full disk, and cancellation. Preserve files on failure. SQL writes never wait on Stars. Old backups cannot silently overwrite newer replicas. Distinguish backup restoration from restart; pre/post-commit failures leave no partial draft.
+- **D03** Pulsar member/startup binding commits in one transaction. Terminate between writes, around COMMIT, and after lost replies; never recover half-registration. Same-startup retries retain identity/epoch and return the current directory; replaced startups cannot revive. Lost reply is not non-commit proof.
+- **D04** Cover SQLITE_BUSY/IOERR/FULL/NOMEM and rollback failure. COMMIT error does not always mean rollback. Do not publish candidates early. On unknown outcome stop new admission and recover through restart, without fresh-ID retry. Post-success memory publication cannot require fallible node allocation. Slow transactions do not block in-memory Pulse reads.
+- **D05** Recovery validates Galaxy/signing key/schema, bindings, duplicate requests, role capacity, and cumulative startup limits. Cover both sides of INT64_MAX and UINT64_MAX without signed truncation/floating-point loss/epoch wrap. Two processes cannot issue from one state file. Astrolabe never opens this database; Star adds no SQLite path.
+- **D06** Open admission only after explicit durability settings take effect; defaults/reconnection cannot weaken them. New-Galaxy initialization is explicit; normal missing-database startup fails. Existing SQLite/journal/bbolt files cannot be overwritten/imported implicitly. Wrong trust, partial initialization, or unknown schema is not an empty Galaxy. Restart retains full membership/startup history. Process-crash evidence differs from power-loss durability; backup cannot authorize identity rollback. SQLite does not replace clock calibration.
+- **D07** Trim Polaris history by counts/bytes/configured time without removing current data/empty-Scope versions. Slow/offline Stars cannot pin it forever. Concurrent extraction/trimming preserves owned payloads and continuous ranges; gaps reset, never fabricate catch-up or old commit evidence.
+- **D08** Full Almanac snapshots bind version and Scope inventory with continuous handoff for new Scopes/writes. ACK only atomic Star installation, not send/partial pages/lost wakeups. Overbudget staging aborts/backoffs; one slow target cannot block other targets/durable authority. No external monitoring dependency.
+- **D09** GORM checks version, modifies keys, advances Scope, and writes history within one tx. Inject between statements/around COMMIT. Never use root db accidentally, reply/push inside the transaction early, fabricate success after outer COMMIT failure, or automatically increment/retry uncertainty.
+- **D10** Cover empty Buffer, nonempty-to-empty, missing Delete, same-value Set, first Scope/key, and conflicts. A missed version condition cannot turn Save into Create; struct zero-value filtering cannot skip writes. Empty BLOB/no row/Delete differ. Zero affected content rows cannot suppress valid version advancement.
+- **D11** Save/restore/sort/compare/trim uint64 at 0, around INT64_MAX, and UINT64_MAX. Validate fixed 8-byte BLOB/type/length and exhaustion rejection. Composite addresses cannot alias by case/slashes/concatenation. No soft-delete/auto-numbering distortion.
+- **D12** Normal startup checks schema/indexes, never AutoMigrates unknown/corrupt data. Bound write waits/read transactions/pools; reconnection retains durability/timeouts. SQL logs/errors reveal no credentials/payload. Build the official CGO driver on declared targets and identify its actual SQLite engine/fixes, not a module name or unrelated installed SQLite.
+- **D13** Polaris actually uses WAL; every created/recreated connection retains FULL and required busy/checkpoint settings. Unsupported/overridden/unverifiable configuration cannot admit writes. Pulsar remains separate DELETE + EXTRA. Verify read/write concurrency, single writer, and service exclusivity in isolation; WAL never permits two authority processes.
+- **D14** Cover committed but uncheckpointed WAL, lost receipts, busy/incomplete checkpoints, and crashes. Restart retains acknowledged commits/empty-Scope versions without deleting sidecars. Later checkpoint failure does not rewrite successful commits. Power-loss claims require separate device/filesystem/fault evidence.
+- **D15** With slow Stars, cancelled snapshot preparation, long reads, and sustained writes, SQL cursors/transactions end before network waits. Snapshots remain consistent and fully charged. At WAL/disk thresholds stop new writes/preparation, then allow checkpoint/admission progress as bounded reads drain. journal_size_limit is not a hard WAL bound; no endless retry/permanent pause.
+- **D16** Consistent backups restore values, versions, and retained history, including uncheckpointed commits. Startup preserves recovery material, never briefly serves an empty authority, and changes nothing on exclusive-lock conflict. Copying a live main file alone is not backup; old backup does not authorize reducing Star authority versions.
+
+## Integration and Delivery
+
+- **I01** Record targeted real single-Star RPC/TLS separately from standard systems with at least three Stars. Every Star accepts local writes; cover cross-subscriptions, bidirectional replication, switching, and established-Beacon same-ID recovery using real processes.
+- **I02** A standalone external CMake consumer uses installed static comet/exported targets without repository-relative sources/developer RPATH; also verify source-tree integration. Ordinary builds cannot implicitly generate protocol, run tests, or download. Cover raw bytes, default/external/embedded CA, explicit TLS-off, and static-link dependencies. Public headers hide generated/gRPC types; retain third-party licenses.
+- **I03** Watch on unwritten Scope allocates bounded observation state, not generic Store/time wheels. Almanac has no wheel; dynamic source groups prepare one only for the first finite lease, not per Scope/thread. One Ephemeris record has one schedule node; watermark-only Catalog has none. Charge retained empty cursors/group versions/floors; initial failure leaves no partial state.
+- **I04** Separate external Comet, internal RPC, and metrics listeners. Single-host still admits nodes; TLS reads explicit material and port conflicts fail. Empty COMET_CA_FILE generates/references no certificate-byte file. Builds neither test nor download silently.
+- **I05** Comet Go remains future work; essential Astrolabe/C++ v1 do not depend on it. Future thin adapters reuse domain vectors; this plan authorizes neither a new Go SDK nor dependencies now.
+
+## Interleaving and Fault-Injection Coverage
+
+Every applicable entry covers these phases through controlled barriers/allocation faults, without a mechanical Cartesian product. Inspect native state, projection, identity/order, installed position, and actual in-flight resources, not just one synchronous result.
+
+| Phase | Interleaving | Required invariant |
 | --- | --- | --- |
-| 校验/等待接纳 | 关闭、deadline、容量、凭据变化 | 未接纳不发送, 已拥有字节可回收, 独立维护不算本次提交 |
-| 已准备/最终提交前 | 撤销、到期、取消、其他版本/order 先提交 | 在最终边界重查, 无半条 Ephemeris 或部分元数据 |
-| 已提交/确认未送达 | 回复丢失、推送失败、断链、重试 | 效果不回滚, 不伪报未提交, 原结果不被后来拒绝覆盖 |
-| 冻结基线/分页中 | 新写入、到期、历史淘汰、慢消费者、取消 | 同一目标状态, 有界衔接, 未 complete 不安装 |
-| 完整安装/通知中 | 下一批、关闭、回调重入/抛错、旧流迟到 | 完整视图不变, 通知次序受控, 不等自身结束 |
-| 恢复/实际清理中 | SECRET 更新、换实例、晚回执、旧 RPC 未完 | 不串用身份, 旧资源仍计费, 已关闭不复活 |
+| Validation/admission wait | Close, deadline, capacity, credential change | Unadmitted work sends nothing; owned bytes are reclaimable; independent maintenance is not this commit |
+| Prepared/before final commit | Revocation, expiry, cancel, competing version/order | Final revalidation; no half-record/partial metadata |
+| Committed/unacknowledged | Lost reply, failed push, disconnect, retry | Preserve effect; no false non-commit or later rejection rewriting original outcome |
+| Frozen baseline/pagination | Writes, expiry, history eviction, slow reader, cancel | One target state, bounded handoff, no install without complete |
+| Installed/notifying | Next batch, close, reentry/exception, late old stream | Immutable complete view, ordered notification, no self-wait |
+| Recovery/actual cleanup | SECRET change, instance switch, late receipt, unfinished old RPC | Identity isolation, continued old-resource accounting, no revival after close |
 
-新增场景仍须建立实际用例与上述编号的映射. 用例列表不等于代码覆盖率, 尚未运行的场景、未选择的管理分支和静态设计推断均不计作通过; 执行范围统一见 [验证记录](validation.md).
+Map new cases to IDs above. Case lists are not code coverage. Unrun scenarios, unselected management alternatives, and static inference are not passes; see [validation](validation.md).
 
-## 性能与规模矩阵
+## Performance and Scale Matrix
 
-标准系统模型为至少三台 Star, 三台同时承担各自来源的写入, 订阅覆盖其他节点的来源. 单/双节点及无网络组件用例用于定向诊断, 不能代替此验收. 同时保留单 Scope 多来源合并、多 Scope 独立写入、一台恢复时另外两台持续写入/续租三类负载; 一台慢对端不能停止其他链路. 来源 ACK、最终内容、TTL、无副本反向广播与资源回收均须检查. 三节点基线接线见 [统一应用基线](../bench/baseline/README.md), 新模型是否已执行以验证页为准.
+The standard system starts at three Stars, each writing its own sources while subscribing across nodes. One/two-node and in-memory cases are diagnostics, not substitutes. Retain single-Scope multi-source merging, independent multi-Scope writes, and two active writers/renewers during another node's recovery. A slow peer cannot stop other links. Check source ACKs, final data, TTL, no reverse replica broadcast, and reclamation. See [application baseline](../bench/baseline/README.md); execution status remains in validation.
 
-以下为获准后分层选择的固定场景, 不是立即执行的压力命令, 也不做全部维度的笛卡尔积. 先检查 VM 实际内存/CPU 和限额, 在受控预算内逐级放大; 大载荷与最大记录数不机械组合. 每项保留编译配置、机器资源、预热/采样时长、负载分布和请求成功率, 把资源拒绝与实际成功吞吐分开.
+Choose these fixed scenarios by layer after authorization, not as immediate stress commands or a full Cartesian product. Inspect actual VM CPU/memory/limits and scale within budgets; do not blindly combine largest payload/count. Record build/machine, warmup/sample durations, load distribution, and success rate. Separate rejection rates from successful throughput.
 
-| 编号 | 场景 | 主要观测 |
+| ID | Scenario | Measurements |
 | --- | --- | --- |
-| B01 | 1/100/1000 个 Spectrum, 分别为空、永久 Almanac、有限 TTL Catalog/Ephemeris | 原生域/来源组固定成本, Scope 增长时的轮数量、线程数和元数据预算 |
-| B02 | 单 Scope 1/100/1000/10000/100000 条, Almanac 单 Key Set/Delete、Catalog 发布/到期与精确订阅 | 提交和查询增长趋势, 分配/复制字节, 锁等待与尾延迟 |
-| B03 | Ephemeris Attr=0/256B/4KiB/64KiB, Data=0/16B/128B/1KiB, 1/10/100 个订阅 | data-only 实际编码/传输字节, 扇出 CPU, QPS, p50/p95/p99/p99.9 |
-| B04 | TTL=1s/30s/10min, Beacon 高频 Update 延期与空闲 beat, Catalog 显式更新/到期 | 续租发起/提交延迟, 误过期与重注册数, 历史淘汰速率和可增量恢复窗口 |
-| B05 | 空基线、正常增量、历史刚好够用/不足的重连, 全量时持续写入 | 首次就绪时间, reset 次数, 衔接正确性, 原生记录分页及来源整组恢复的准备成本, 发送积压和内存峰值 |
-| B06 | 慢订阅、持有旧 View、旧 RPC 取消迟迟不完成, 多对象同时恢复 | 真实在途与受控字节, RSS/分配器开销, 资源释放, 对正常续租的影响 |
-| B07 | 授权关闭/开启、TLS 关闭/开启的独立组合, 凭据轮换与指标抓取并发 | 热路径与安全开销分别归因, 请求拒绝率, 长期流/unary 隔离与锁竞争 |
-| B08 | 固定来源数下增加 Scope 并发写入, 同域与跨域分别采样, 同时执行组快照/续租/本地到期 | 来源组定序与投影锁竞争, 组恢复内存峰值及旧根析构, 对其他域和 Polaris 安装的延迟影响 |
-| B09 | 3/4/8 台 Star 同时接受各自写入, 正常/慢对端, 小 Data/纯续租及不同装包上限, 另增加无关精确订阅数 | 各节点与合计吞吐/CPU、逻辑流数、每提交网络扇出、包/ACK 数、编码 CPU、分配及 p99/p99.9, 检查批量是否增加低流量等待或续租误过期 |
-| B10 | 同一 Client 的 1/10/50/500 个 Beacon, 单 Scope/多 Scope、同 TTL/混合 TTL, 包含 1s 最短租约; 独立多进程作为不能自动合并的对照 | 每秒 Renew RPC 与成功续租记录数分别统计, CPU、编码/实际传输字节、调度/提交 p99/p99.9、误过期、续租重试及来源日志成本, 不以减少调用数代替端到端收益 |
-| B11 | 同域同 Scope 的 1/5/50 个精确目标, 对比全 Scope Watch, 固定相关更新率并增加无关记录/更新; 包含重连与慢消费者 | 逻辑流、实际连接/文件描述符、服务端状态、RSS、过滤/唤醒 CPU、初始/恢复流量和完整视图延迟, 区分协议流成本与连接成本 |
-| B12 | 3/4/8 台 Star, 分别保持空闲、稀疏 TTL 与相同总量的多来源小更新; 单/双 Star 另列诊断; 补充长暂停后的空轮/稀疏轮追赶 | 每控制轮的 State::advance/副本扫描次数、空闲 CPU、锁等待、到期与续租 p99; 检查工作是否随对端数和来源数相乘, 追赶不能留下内部时间迟滞 |
-| B13 | 固定正常写入/续租负载, 逐级增大完整来源安装, 并保留旧 View/安排一条慢接收流; Polaris 历史达到稳态容量后持续提交 | 来源准备/提交/回收分别计时, 域锁持有 p99、RSS 峰值与正常业务延迟; 记录每次历史淘汰读取的元数据行数及持久提交时间, 不以根交换 O(1) 代表完整恢复成本 |
-| B14 | 相同总记录量的单/多 Beacon 与 Reader/Subscriber, 突发同时唤醒、正常短回调和明确阻塞回调分开运行 | Core 活动扫描/句柄复制/临时分配次数、单轮耗时及续租发起 p99; 阻塞回调为契约边界对照, 不计入声称受支持的非阻塞吞吐 |
+| B01 | 1/100/1000 Spectra: empty, permanent Almanac, finite-TTL Catalog/Ephemeris | Fixed domain/source cost; wheels, threads, and metadata as Scopes grow |
+| B02 | 1/100/1000/10000/100000 records per Scope; Almanac Set/Delete, Catalog publish/expiry/exact Watch | Commit/query scaling, allocated/copied bytes, lock waits, tail latency |
+| B03 | Attr=0/256 B/4 KiB/64 KiB; Data=0/16 B/128 B/1 KiB; 1/10/100 subscribers | Actual Data-only encoding/wire bytes, fanout CPU, QPS, p50/p95/p99/p99.9 |
+| B04 | TTL=1 s/30 s/10 min; frequent Beacon Update/idle beat; explicit Catalog update/expiry | Renewal initiation/commit latency, false expiry/re-registration, history eviction and delta window |
+| B05 | Empty baseline, normal delta, just-sufficient/insufficient history, writes during reset | Readiness/reset count, handoff, native pagination/group recovery preparation, backlog/peak memory |
+| B06 | Slow readers, held old Views, stalled cancellation, concurrent object recovery | Actual in-flight/controlled bytes, RSS/allocator overhead, release, renewal interference |
+| B07 | Independent auth/TLS on/off combinations; rotation with metrics | Security/hot-path costs, rejection, long-stream/unary isolation, lock contention |
+| B08 | Fixed sources, increasing concurrent Scopes, same/cross-domain with snapshots/renewal/local expiry | Group sequencing/projection locks, recovery peaks/root destruction, other-domain/Polaris latency |
+| B09 | 3/4/8 Stars writing locally; normal/slow peers, small Data/pure Renew, packet limits, unrelated exact Watches | Per-node/total throughput/CPU, streams, fanout, packet/ACK counts, encoding/allocations/tails; sparse-delay/false-expiry effects |
+| B10 | 1/10/50/500 Beacons per Client; single/multiple Scopes, equal/mixed TTL including 1 s; separate-process controls | Renew RPCs versus renewed records, CPU/encoded/wire bytes, scheduling/commit tails, false expiry/retries/log cost; fewer calls alone is not a benefit |
+| B11 | 1/5/50 exact targets per domain/Scope versus full Watch; fixed relevant updates and more irrelevant data; reconnect/slow readers | Streams versus connections/FDs, server state/RSS, filter/wakeup CPU, initial/recovery bytes, complete-view latency |
+| B12 | 3/4/8 Stars idle, sparse TTL, or equal-total multi-source small updates; single/two-node diagnostics; long-pause wheel catch-up | Per-round State::advance/replica scans, idle CPU/locks, expiry/renewal p99; avoid peer×source work and internal clock lag |
+| B13 | Fixed ordinary writes/renewals, larger full-source installs, held old View/slow receiver; steady-capacity Polaris history | Separate prepare/commit/reclaim time, domain-lock p99, RSS/ordinary latency, metadata rows per eviction/durable commit; O(1) root swap is not total recovery cost |
+| B14 | Equal total records over single/multiple Beacons and Readers/Subscribers; burst wakes, short callbacks, separately blocked callbacks | Core scans/handle copies/temp allocations, round duration/renewal p99; blocking callbacks are contract controls, not supported nonblocking throughput |
 
 <a id="rpc-batching"></a>
 
-B10/B11 首先测量当前单目标协议, 不把尚未实现的批量 Renew 或多目标 Watch 记为通过. 只有基线证实 RPC 派发或多流状态是瓶颈时, 再决定是否实施有界原型, 对照须保持相同成功记录吞吐、相关更新量、TTL 与资源预算. 若进入原型阶段, 续租覆盖重复目标、不同 order/期限、混合成功失败、提交后回执丢失及会话切换; 多目标覆盖集合去重/限额、目标不存在、集合变化重建基线、空增量完成及慢流取消. 语义约束只在 [协议批量化边界](../proto/README.md#comet-batching) 定义, Catalog 已确认的同 Scope 原子 batch 独立验收, 不把多目标运输聚合当成新的跨域事务.
+B10/B11 first measure existing single-target RPCs. Unimplemented batch Renew/multi-target Watch is not a pass. Only measured dispatch/multi-stream bottlenecks justify bounded prototypes, compared at equal successful-record throughput, relevant updates, TTL, and resources. Renewal prototypes cover duplicate targets, distinct orders/deadlines, mixed outcomes, post-commit receipt loss, and Session switching. Multi-target prototypes cover deduplication/limits, absent targets, set-change baselines, empty progress, and slow-flow cancellation. Semantics belong in [batching boundaries](../proto/README.md#comet-batching). Existing same-Scope Catalog atomic batches are accepted separately; transport aggregation is no cross-domain transaction.
 
-按固定外部到达率及不同负载测量, 不仅使用“上一请求完成才发下一请求”的闭环来报告尾延迟. 没有事先确定业务吞吐目标时报告测量曲线和饱和点, 不把某台 VM 的数字定为通用保证. 有界运输装包按既定方案验收; 只有明确的新热点证据才推动 Arena、跨连接预编码复用、容器替换或额外线程池; 不为“最高性能”提前引入第二套网络/调度框架.
+Measure fixed external arrival rates and different loads, not only closed-loop request-after-completion tails. Without a predetermined throughput target, report curves/saturation rather than universal VM guarantees. Accept bounded transport batching against its agreed design. Arena, cross-connection preencoding, container replacement, or extra pools require new measured hotspots; do not preemptively add a second network/scheduling framework.
 
-现有实现用例映射: cpp_catalog_state / cpp_catalog_fault 检查正版本水位、TTL 末次采样、维护不广播和逐分配点回滚; cpp_comet_subscription 检查完整安装、不同版本域、跨 Star 重置与畸形页; cpp_comet_client 检查真实 Catalog 发布/续租/观察/关闭、身份切换、显式结果额度和关闭后的拥有权释放. 具体执行配置及结果见 [验证记录](validation.md).
+Current mappings: catalog_state/catalog_fault cover positive-version floors, final TTL sampling, nonbroadcast maintenance, and per-allocation rollback. comet_subscription covers complete installs, version domains, Star reset, and malformed pages. comet_client covers real Catalog publish/renew/observe/close, identity switching, result budgets, and ownership release; execution configurations remain in validation.
 
-原生来源恢复用例: `cpp_dispatch` 检查来源捕获/装包/真实交接/累计 ACK 和私有完整基线; `cpp_scene` 检查内部多目标投影准备失败的完整回滚, 不能单独证明 SDK 原子 batch API; `cpp_ephemeris_replica` 检查真实原生状态的多来源隔离、TTL、本机广播不扩散副本删除、精确回补目标覆盖、身份冻结及回收. 这些组件用例不替代 Runtime 双向网络和多进程故障验收, 后者由独立真实进程用例验证.
+Native recovery mappings: `cpp_dispatch` covers capture, packets, real handoff, cumulative ACK, and private full baselines. `cpp_scene` covers atomic rollback of internal multi-target projection preparation, not SDK batch API acceptance by itself. `cpp_ephemeris_replica` covers actual multi-source state, TTL, nonbroadcast local replica deletion, exact repair coverage, frozen identity, and reclamation. Components do not replace Runtime bidirectional transport or independent process-fault tests.
