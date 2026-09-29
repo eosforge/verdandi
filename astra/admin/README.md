@@ -84,7 +84,7 @@ docs/                          # 架构说明与浏览器验收清单
 当前快照替换会重建场景并回到总览; 高频实时更新需要另行设计增量更新和背压.
 
 参阅 [架构与生命周期](docs/architecture.md)、[贡献与代码规范](CONTRIBUTING.md)、[浏览器验收](docs/verification.md).
-仓库总体规则以 [AGENTS.md](../AGENTS.md) 和 [coding.md](../coding.md) 为准.
+仓库总体规则以 [AGENTS.md](../AGENTS.md)、[开发规范](../docs/development.md) 和 [编码与文件组织规范](../docs/coding.md) 为准; 项目补充见 [维护指南](CONTRIBUTING.md).
 
 ## 已有交互
 

@@ -1,6 +1,6 @@
 # Admin 贡献与代码规范
 
-本文补充仓库的 [coding.md](../coding.md), 不改变根目录的发布、依赖授权或分支规则.
+本文补充 [通用编码与文件组织规范](../docs/coding.md) 和 [Astra 维护指南](../CONTRIBUTING.md). 开发及验收遵循 [开发规范](../docs/development.md), 授权与分支规则遵循 [AGENTS.md](../AGENTS.md).
 
 ## 开发流程
 
@@ -16,12 +16,12 @@
 
 ## TypeScript 与 Vue
 
-- 使用 Composition API、`<script setup lang="ts">` 和显式 props/emits 契约.
-- 模块使用具名导出, Vue 单文件组件按约定默认导出. 本地 TypeScript 导入显式写 `.ts`, 兼容 Node.js 原生测试.
-- 保持 strict、索引越界检查、可选属性精确检查和可擦除类型语法. 不以 `any`、非空断言或 `@ts-ignore` 掩盖契约问题.
-- 数据模型使用只读字段和只读集合. 对外传递稳定 ID, 不用对象引用相等表达实体身份.
+语言写法、命名与错误处理统一遵循 [JS/TS 章节](../docs/coding.md#typescript) 和 [前端章节](../docs/coding.md#web). 本应用的具体选择如下:
+
+- 使用 Composition API 和 `<script setup lang="ts">`; 本地 TypeScript 导入显式写 `.ts`, 兼容 Node.js 原生测试.
+- 现有 tsconfig 保持 strict、索引越界检查、可选属性精确检查和可擦除类型语法.
+- 数据模型落实只读字段、只读集合和稳定实体 ID 的通用约定.
 - Three.js 对象不进入 Vue 深层响应式系统. 每帧计算留在运行时, Vue 仅接收选择、错误、FPS 和限频相机坐标.
-- 组件名使用 PascalCase, 函数和变量使用 camelCase, 文件按职责命名; composable 使用 `use` 前缀.
 - 全局样式仅位于 `app/styles/`; 布局和功能组件使用 scoped 样式, 公共颜色与字体由 CSS 变量管理.
 - 当前仅一页, 由 App 装配布局和功能. 增加真实页面后再引入路由; 出现跨功能共享状态后再评估状态库.
 
@@ -43,8 +43,8 @@
 ## 格式、注释与验证
 
 采用 UTF-8、LF、两个空格缩进; Prettier 为格式权威, 手写代码上限 160 列.
-遵循仓库当前的中文维护注释阶段, 注释使用 ASCII 标点; 发布准备时按根规范审查英文 API 注释.
-生产函数提供简短的声明级契约注释, 重点说明所有权、前置条件、状态转换和失败路径, 不重复代码字面含义.
+注释遵循 [编码规范第 7 节](../docs/coding.md) 的标准英文及 JS/TS、前端格式和密度, 适用范围见 [项目语言与工具约定](../CONTRIBUTING.md#项目语言与工具约定).
+文件、类型、函数和变量按通用规范说明职责或用途, 简单局部变量可由相邻代码块说明覆盖. 公共接口说明必要契约, 内部实现补充所有权、前置条件、状态转换和失败路径, 不重复声明文档.
 
 测试使用 Node.js 内置 `node:test` 和 `node:assert/strict`. 测试直接导入生产 TypeScript 模块;
 帧调度通过假时钟验证, 几何与拾取使用真实 Three.js 数学实现, GPU 着色器仍需浏览器验证.

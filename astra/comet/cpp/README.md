@@ -36,7 +36,7 @@ auto result = publisher->update("service-a", {1, 2, 3}, std::chrono::seconds(30)
 
 公共头文件归属 include/comet, 私有实现 src, 测试 tests, C++ 命名空间 comet. gRPC/Protobuf 类型仅在适配层, 不进入应用签名. 首版交付静态库, 不同时实现共享库、C ABI 或其他语言绑定.
 
-SDK 最低语言标准为 C++23, 遵循 [C++ 规范](../../cpp-coding.md); 服务器继续使用 C++26. Windows/MSVC 19.51 x64 Release 已通过 SDK 编译链接、五项本地测试、源码接入和安装包接入; 本机 CMake 将 C++23 映射到 `/std:c++latest`. Linux/GCC 16.2 的 C++23 SDK 已随 Debug、Release、探针版、ASan/UBSan、TSan 完整矩阵及独立安装包验证通过. Sanitizer 构建向消费端传播编译及链接要求, 避免 Protobuf 插桩布局不一致. 复用既定 gRPC/Protobuf 与配套 BoringSSL, 不引入独立 OpenSSL 或隐式下载依赖. SDK 不承担 Star 复制、日志保留、发布权威裁决或对时.
+SDK 最低语言标准为 C++23, 遵循 [C++ 规范](../../docs/coding.md#cpp); 服务器继续使用 C++26. Windows/MSVC 19.51 x64 Release 已通过 SDK 编译链接、五项本地测试、源码接入和安装包接入; 本机 CMake 将 C++23 映射到 `/std:c++latest`. Linux/GCC 16.2 的 C++23 SDK 已随 Debug、Release、探针版、ASan/UBSan、TSan 完整矩阵及独立安装包验证通过. Sanitizer 构建向消费端传播编译及链接要求, 避免 Protobuf 插桩布局不一致. 复用既定 gRPC/Protobuf 与配套 BoringSSL, 不引入独立 OpenSSL 或隐式下载依赖. SDK 不承担 Star 复制、日志保留、发布权威裁决或对时.
 
 ## 公共职责
 

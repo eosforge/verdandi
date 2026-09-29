@@ -8,14 +8,13 @@
 | --- | --- |
 | [AGENTS.md](../AGENTS.md) | 授权、项目内工具和测试并行约定 |
 | [AI 开发与长期维护](development.md) | 面向重要设计的跨语言高强度规范; 含覆盖门槛、可信证据、规则 ID、项目配置与公开依据 |
+| [多语言编码与文件组织](coding.md) | 编码与文件组织的唯一正文; 包含 C++、C、Go、Rust、Python、JS/TS、前端、Java/Kotlin、C#、Lua、SQL、Shell 与协议配置章节 |
 | [开发门禁与首个试点](features/verification.md) | 正式 Schema、命令与授权格式、门禁判定及 Polaris 存储试点; 执行状态见验证记录 |
-| [coding.md](../coding.md) | 通用质量、语言工具与跨语言审查 |
-| [cpp-coding.md](../cpp-coding.md) | C++ 唯一编码习惯定义 |
 | [架构](architecture.md) | 星图拓扑、组件边界、阶段与实施边界 |
 | [推进进度](progress.md) | 当前实施检查点、已完成边界、依赖与待验证项 |
 | [代码审核](review.md) | 当前确认的问题、修复、性能机会、规范及测试缺口 |
 | [协议](../proto/README.md) | 当前 Schema、身份与签名、三域业务及来源恢复契约 |
-| [构建与运行](build.md) / [维护指南](../CONTRIBUTING.md) | C++ 构建、启动、文件职责与生命周期 |
+| [构建与运行](build.md) / [维护指南](../CONTRIBUTING.md) | 项目语言与工具约定、构建、启动、文件职责与生命周期 |
 | [三域存储](../common/README.md) | 原生记录、来源组、读取投影、提交与底层工具 |
 | [Pulsar](../pulsar/README.md) | 登记、只读目录、SQLite 成员库、物理参考与连续时间 |
 | [Polaris](../polaris/README.md) | Go/GORM 官方 SQLite 驱动、WAL 持久提交、有界历史与 Star 恢复 |

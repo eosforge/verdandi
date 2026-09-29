@@ -1,14 +1,33 @@
-# 维护 Astra 核心服务
+# 维护 Astra
 
-开始 C++ 工作前先阅读 [C++ 编码规范](cpp-coding.md), 命名、作用域、性能取舍、注释和排版以该文为准.
+开发流程与验收遵循 [开发规范](docs/development.md), 所有语言的编码与文件组织遵循 [coding.md](docs/coding.md) 及其中对应语言章节. 本文只补充 Astra 的工具配置、支持范围和实现约束. C++ 工作须读取 [C++ 章节](docs/coding.md#cpp), 不在本指南维护另一份语言规则.
 
-从仓库根目录操作. 项目约定见 [coding.md](coding.md), 协议与范围见
+从仓库根目录操作. 授权与环境约定见 [AGENTS.md](AGENTS.md), 协议与范围见
 [当前架构](docs/architecture.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
 Pulsar 使用 C++ 提供独立登记与对时, Polaris/Astrolabe 使用 Go. 各服务数据库不互换, 已删除的 Go Supervisor 只从 Git 历史查阅.
 旧 Rust Star 已废弃; 当前准入见[协议契约](proto/README.md#admission),
 当前实现与部署边界见 [Pulsar](pulsar/README.md).
 时间模型与单一期限规则见 [Store](common/README.md), 最新执行结果见 [验证记录](docs/validation.md).
 物理时间质量由宿主对时服务提供, 程序只读校验, 不自动安装/配置服务.
+
+## 项目语言与工具约定
+
+活动范围与完成度以 [推进进度](docs/progress.md) 为准. C++ 用于 Star/Pulsar/Comet, Go 用于 Polaris/Astrolabe, TypeScript/Vue 用于 Admin, Python 用于构建和测试工具. 旧 SDK 的语言版本、Lua 与 C ABI 约束不自动成为 Comet 契约, 也不将旧列宽要求重新施加到 Astra C++.
+
+本项目采用编码规范第 7 节的标准英文注释, 格式与密度按所属语言适配; 手写生产文件头说明当前职责. 新增或本次需要修改的注释遵循该规则, 保留有效契约信息, 不因规范调整批量翻译无关源码. 项目特殊编码要求按 [项目级覆盖](docs/coding.md#overrides) 登记, 不再保留与通用规则冲突的中文注释要求.
+
+修改手写源码后立即运行已有的所属格式化器; 具体文件范围和工具配置不得随意放宽. 非 C++ 列宽遵循所属已提交配置, 通常上限 160; C++ 的长行规则独立适用. 工具与缓存传给所属子进程, 不新增仓库外缓存或修改 shell、用户及系统全局环境.
+
+| 语言/组件 | 项目约定 |
+| --- | --- |
+| C++ | 对应目录的 clang-format 配置; 项目使用 RAII、expected 表达资源和失败, 具体写法见 [C++ 章节](docs/coding.md#cpp) |
+| Go | 使用 gofmt 及 [Go 章节](docs/coding.md#go); 准入路径短锁内不做 KDF/慢 I/O, 协议修改同时检查 C++ 消费端 |
+| Rust 工具 | 使用 rustfmt/Clippy 及 [Rust 章节](docs/coding.md#rust); 不因此恢复已冻结的 Rust 服务 |
+| Python | 使用现有 Black 配置及 [Python 章节](docs/coding.md#python); SSH、工具与缓存沿用项目约定 |
+| Admin | Prettier 与 TypeScript 配置见 [Admin 维护指南](admin/CONTRIBUTING.md); 语言写法见 [JS/TS](docs/coding.md#typescript) 和 [前端章节](docs/coding.md#web) |
+| Proto | 写法遵循 [协议章节](docs/coding.md#protocol), 实际字段与生成入口见 [协议文档](proto/README.md) |
+
+格式化和静态语法核对不代替行为测试. 下载、构建、测试及提交权限仍以 AGENTS.md 为准; 不因工具表中列出名称就自动安装或启动检查.
 
 ## 代码归属
 
@@ -68,7 +87,7 @@ flowchart TD
 
 ## 注释与排版
 
-仅引用根目录 [C++ 编码规范](cpp-coding.md), 不在本指南复制命名、枚举、变量和代码块规则. 文件职责、线程交接与生命周期的具体约束见下文及所属源码.
+仅引用 [编码规范的 C++ 章节](docs/coding.md#cpp), 不在本指南复制命名、枚举、变量和代码块规则. 文件职责、线程交接与生命周期的具体约束见下文及所属源码.
 
 ## 生命周期审查
 
@@ -133,6 +152,8 @@ bash build.sh regression --profile debug
 `dependencies.lock.json` 是来源、版本与校验值的唯一清单. 普通构建、生成检查和测试都不下载.
 依赖准备需要针对具体项目的授权, 不因缺少包而自动运行 fetch/install.
 子进程工具路径和缓存留在项目下, 不修改用户或系统配置.
+
+C++ TLS/加密使用 gRPC 配套 BoringSSL, 不另混用独立 OpenSSL 运行库. 公开测试身份只用于隔离夹具; 日志和诊断不输出秘密或任意远端错误正文. 不提交真实账号密码、签名私钥、环境文件、数据库或个人 IDE 状态.
 
 CMake 安装复制既有 C++ `star`, `planet`, `pulsar`、Comet SDK、根许可证和第三方授权文本. Go `polaris`/`astrolabe` 由 build.py 显式构建, 不再以占位入口代替.
 开发构建的 GCC RPATH 不进入安装树.
