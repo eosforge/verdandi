@@ -1,0 +1,266 @@
+{
+  "schema_version": 1,
+  "global": [
+    "DEV-SCOPE",
+    "DEV-CONFIG",
+    "DEV-EVIDENCE",
+    "DEV-GATE",
+    "DEV-STOP"
+  ],
+  "rules": [
+    {
+      "id": "DEV-SCOPE",
+      "sections": "1, 2.1",
+      "subject": "采用范围、权限与适用性",
+      "depends_on": []
+    },
+    {
+      "id": "DEV-TRACE",
+      "sections": "2.3-2.4, 3.1, 10.2",
+      "subject": "功能设计准入、需求到证据、公共示例",
+      "depends_on": [
+        "DEV-CONFIG",
+        "DEV-CONTRACT"
+      ]
+    },
+    {
+      "id": "DEV-CORE",
+      "sections": "3.2",
+      "subject": "可测边界与执行载体",
+      "depends_on": [
+        "DEV-CONTRACT"
+      ]
+    },
+    {
+      "id": "DEV-ASYNC",
+      "sections": "4.1, 7.3",
+      "subject": "任务归属、取消与排干",
+      "depends_on": [
+        "DEV-CONTRACT",
+        "DEV-STOP"
+      ]
+    },
+    {
+      "id": "DEV-TIME",
+      "sections": "4.4",
+      "subject": "时间域、虚拟时间与租约",
+      "depends_on": [
+        "DEV-CONTRACT"
+      ]
+    },
+    {
+      "id": "DEV-CONTRACT",
+      "sections": "3, 4.1",
+      "subject": "行为、失败保证与提交边界",
+      "depends_on": [
+        "DEV-SCOPE"
+      ]
+    },
+    {
+      "id": "DEV-SECURITY",
+      "sections": "3.3, 4.3, 4.6",
+      "subject": "信任、秘密、输入与故障隔离",
+      "depends_on": [
+        "DEV-SCOPE",
+        "DEV-CONTRACT"
+      ]
+    },
+    {
+      "id": "DEV-CAPACITY",
+      "sections": "4.2, 4.6, 7.2",
+      "subject": "聚合预算与过载",
+      "depends_on": [
+        "DEV-CONTRACT"
+      ]
+    },
+    {
+      "id": "DEV-RETRY",
+      "sections": "3.3, 4.2",
+      "subject": "幂等、结果未知与重试控制",
+      "depends_on": [
+        "DEV-TIME",
+        "DEV-CONTRACT"
+      ]
+    },
+    {
+      "id": "DEV-ORACLE",
+      "sections": "5.1-5.2, 5.4",
+      "subject": "独立判定、有效性与防弱化",
+      "depends_on": [
+        "DEV-CONTRACT",
+        "DEV-EVIDENCE"
+      ]
+    },
+    {
+      "id": "DEV-REDGREEN",
+      "sections": "5.2",
+      "subject": "旧失败、新通过及调度证据",
+      "depends_on": [
+        "DEV-ORACLE",
+        "DEV-REPLAY"
+      ]
+    },
+    {
+      "id": "DEV-COVERAGE",
+      "sections": "5.3-5.4",
+      "subject": "覆盖分母、变异与排除",
+      "depends_on": [
+        "DEV-ORACLE",
+        "DEV-MATRIX"
+      ]
+    },
+    {
+      "id": "DEV-REPLAY",
+      "sections": "4.4, 6.1",
+      "subject": "确定性输入、重放与语料",
+      "depends_on": [
+        "DEV-EVIDENCE",
+        "DEV-TIME"
+      ]
+    },
+    {
+      "id": "DEV-NUMERIC",
+      "sections": "4.4",
+      "subject": "数值语义与跨平台条件",
+      "depends_on": [
+        "DEV-CONTRACT",
+        "DEV-REPLAY"
+      ]
+    },
+    {
+      "id": "DEV-FAULT",
+      "sections": "3.3, 4, 5.1",
+      "subject": "故障边界与恢复",
+      "depends_on": [
+        "DEV-CONTRACT",
+        "DEV-STOP",
+        "DEV-REPLAY"
+      ]
+    },
+    {
+      "id": "DEV-MODEL",
+      "sections": "5.1-5.3",
+      "subject": "模型假设、独立依据与真实补充",
+      "depends_on": [
+        "DEV-ORACLE",
+        "DEV-REPLAY"
+      ]
+    },
+    {
+      "id": "DEV-STOP",
+      "sections": "7.3",
+      "subject": "自有任务停止与残留核验",
+      "depends_on": [
+        "DEV-SCOPE",
+        "DEV-CAPACITY"
+      ]
+    },
+    {
+      "id": "DEV-IMPACT",
+      "sections": "2.2",
+      "subject": "影响闭包与证据失效",
+      "depends_on": [
+        "DEV-CONFIG",
+        "DEV-TRACE"
+      ]
+    },
+    {
+      "id": "DEV-MATRIX",
+      "sections": "5.1, 5.3, 7.1",
+      "subject": "适用能力与配置矩阵",
+      "depends_on": [
+        "DEV-CONFIG",
+        "DEV-CONTRACT"
+      ]
+    },
+    {
+      "id": "DEV-GATE",
+      "sections": "8.3, 9",
+      "subject": "受控验收及负向自检",
+      "depends_on": [
+        "DEV-EVIDENCE"
+      ]
+    },
+    {
+      "id": "DEV-FAILURE",
+      "sections": "6.2-6.3",
+      "subject": "失败处置与隔离恢复",
+      "depends_on": [
+        "DEV-EVIDENCE",
+        "DEV-REPLAY"
+      ]
+    },
+    {
+      "id": "DEV-AUDIT",
+      "sections": "2.3, 10.1",
+      "subject": "复杂度依据、反向分析与终点",
+      "depends_on": [
+        "DEV-TRACE",
+        "DEV-ORACLE"
+      ]
+    },
+    {
+      "id": "DEV-SUPPLY",
+      "sections": "4.3, 10.2",
+      "subject": "依赖准入、锁定与交付身份",
+      "depends_on": [
+        "DEV-SECURITY",
+        "DEV-CONFIG"
+      ]
+    },
+    {
+      "id": "DEV-COMPAT",
+      "sections": "4.5, 10.2",
+      "subject": "接口、版本、迁移与回退",
+      "depends_on": [
+        "DEV-CONTRACT",
+        "DEV-MATRIX"
+      ]
+    },
+    {
+      "id": "DEV-RELEASE",
+      "sections": "9, 10.2",
+      "subject": "实际候选门槛与发布权限",
+      "depends_on": [
+        "DEV-GATE",
+        "DEV-SUPPLY",
+        "DEV-COMPAT"
+      ]
+    },
+    {
+      "id": "DEV-OPERATE",
+      "sections": "4.6, 7.3, 10.3",
+      "subject": "稳态运行、维护与恢复",
+      "depends_on": [
+        "DEV-CAPACITY",
+        "DEV-STOP",
+        "DEV-FAILURE"
+      ]
+    },
+    {
+      "id": "DEV-EVIDENCE",
+      "sections": "8",
+      "subject": "原生事实、关联与内容核验",
+      "depends_on": [
+        "DEV-CONFIG"
+      ]
+    },
+    {
+      "id": "DEV-CONFIG",
+      "sections": "2.1-2.2, 7.1-7.2",
+      "subject": "有效配置、继承和环境",
+      "depends_on": [
+        "DEV-SCOPE"
+      ]
+    },
+    {
+      "id": "DEV-ADOPTION",
+      "sections": "11",
+      "subject": "接入成熟度与规范演进",
+      "depends_on": [
+        "DEV-GATE",
+        "DEV-COVERAGE"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,822 @@
+{
+  "schema_version": 1,
+  "project": "astra",
+  "rules": "tools/rules.json",
+  "standard": "docs/development.md",
+  "design": "docs/features/verification.md",
+  "inputs": [
+    "go.mod",
+    "go.sum",
+    "tools/verify.py",
+    "tools/schemas",
+    "tests/test_verify.py",
+    "polaris/internal/storage"
+  ],
+  "platforms": [
+    {
+      "id": "linux-amd64-cgo",
+      "system": "Linux",
+      "machine": "x86_64"
+    }
+  ],
+  "components": [
+    {
+      "id": "polaris-storage",
+      "role": "storage-core",
+      "paths": [
+        "polaris/internal/storage"
+      ],
+      "level": "L3",
+      "evidence_trust": "ci",
+      "platforms": [
+        "linux-amd64-cgo"
+      ],
+      "contracts": [
+        {
+          "id": "STORAGE-ATOMIC",
+          "statement": "同一 scope 一版本多键提交后, 快照与回放保留整个批次; 此检查只证明受控串行样例, 并发交错另列缺口."
+        },
+        {
+          "id": "STORAGE-RETRY",
+          "statement": "同版本同内容重试不增加历史; 同版本异内容拒绝且状态不变."
+        },
+        {
+          "id": "STORAGE-ROLLBACK",
+          "statement": "第二条 SQL 插入失败后, 第一条更新、版本和历史都回滚; 解除故障后可提交."
+        },
+        {
+          "id": "STORAGE-HISTORY",
+          "statement": "有界历史拒绝落后游标, 保留连续后缀; 正常关闭重开保持数据与版本, 不代替断电耐久."
+        },
+        {
+          "id": "STORAGE-ASSURANCE",
+          "statement": "组件完整维护准入: 规范全部适用规则及 L3 覆盖、独立模型、故障、变异和交付矩阵. 首次接入不据已有测试反推完整性."
+        }
+      ],
+      "applicability": {
+        "DEV-SCOPE": {
+          "status": "applicable",
+          "reason": "采用范围、权限与适用性",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-TRACE": {
+          "status": "applicable",
+          "reason": "功能设计准入、需求到证据、公共示例",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-CORE": {
+          "status": "applicable",
+          "reason": "可测边界与执行载体",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-ASYNC": {
+          "status": "applicable",
+          "reason": "任务归属、取消与排干",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-TIME": {
+          "status": "applicable",
+          "reason": "时间域、虚拟时间与租约",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-CONTRACT": {
+          "status": "applicable",
+          "reason": "行为、失败保证与提交边界",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-SECURITY": {
+          "status": "applicable",
+          "reason": "信任、秘密、输入与故障隔离",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-CAPACITY": {
+          "status": "applicable",
+          "reason": "聚合预算与过载",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-RETRY": {
+          "status": "applicable",
+          "reason": "幂等、结果未知与重试控制",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-ORACLE": {
+          "status": "applicable",
+          "reason": "独立判定、有效性与防弱化",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-REDGREEN": {
+          "status": "applicable",
+          "reason": "旧失败、新通过及调度证据",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-COVERAGE": {
+          "status": "applicable",
+          "reason": "覆盖分母、变异与排除",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-REPLAY": {
+          "status": "applicable",
+          "reason": "确定性输入、重放与语料",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-NUMERIC": {
+          "status": "applicable",
+          "reason": "数值语义与跨平台条件",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-FAULT": {
+          "status": "applicable",
+          "reason": "故障边界与恢复",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-MODEL": {
+          "status": "applicable",
+          "reason": "模型假设、独立依据与真实补充",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-STOP": {
+          "status": "applicable",
+          "reason": "自有任务停止与残留核验",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-IMPACT": {
+          "status": "applicable",
+          "reason": "影响闭包与证据失效",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-MATRIX": {
+          "status": "applicable",
+          "reason": "适用能力与配置矩阵",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-GATE": {
+          "status": "applicable",
+          "reason": "受控验收及负向自检",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-FAILURE": {
+          "status": "applicable",
+          "reason": "失败处置与隔离恢复",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-AUDIT": {
+          "status": "applicable",
+          "reason": "复杂度依据、反向分析与终点",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-SUPPLY": {
+          "status": "applicable",
+          "reason": "依赖准入、锁定与交付身份",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-COMPAT": {
+          "status": "applicable",
+          "reason": "接口、版本、迁移与回退",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-RELEASE": {
+          "status": "applicable",
+          "reason": "实际候选门槛与发布权限",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-OPERATE": {
+          "status": "applicable",
+          "reason": "稳态运行、维护与恢复",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-EVIDENCE": {
+          "status": "applicable",
+          "reason": "原生事实、关联与内容核验",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-CONFIG": {
+          "status": "applicable",
+          "reason": "有效配置、继承和环境",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        },
+        "DEV-ADOPTION": {
+          "status": "applicable",
+          "reason": "接入成熟度与规范演进",
+          "fact": "Polaris 持久状态核心; 此次为完整维护义务登记, 仅本地样例采集不替代整条规则."
+        }
+      },
+      "requirements": [
+        {
+          "rule": "DEV-CONTRACT",
+          "contract": "STORAGE-ATOMIC",
+          "scenario": "bounded-example",
+          "checks": [
+            "storage-examples"
+          ]
+        },
+        {
+          "rule": "DEV-RETRY",
+          "contract": "STORAGE-RETRY",
+          "scenario": "bounded-example",
+          "checks": [
+            "storage-examples"
+          ]
+        },
+        {
+          "rule": "DEV-FAULT",
+          "contract": "STORAGE-ROLLBACK",
+          "scenario": "bounded-example",
+          "checks": [
+            "storage-examples"
+          ]
+        },
+        {
+          "rule": "DEV-COMPAT",
+          "contract": "STORAGE-HISTORY",
+          "scenario": "bounded-example",
+          "checks": [
+            "storage-examples"
+          ]
+        },
+        {
+          "rule": "DEV-SCOPE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-scope"
+          ]
+        },
+        {
+          "rule": "DEV-TRACE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-trace"
+          ]
+        },
+        {
+          "rule": "DEV-CORE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-core"
+          ]
+        },
+        {
+          "rule": "DEV-ASYNC",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-async"
+          ]
+        },
+        {
+          "rule": "DEV-TIME",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-time"
+          ]
+        },
+        {
+          "rule": "DEV-CONTRACT",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-contract"
+          ]
+        },
+        {
+          "rule": "DEV-SECURITY",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-security"
+          ]
+        },
+        {
+          "rule": "DEV-CAPACITY",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-capacity"
+          ]
+        },
+        {
+          "rule": "DEV-RETRY",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-retry"
+          ]
+        },
+        {
+          "rule": "DEV-ORACLE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-oracle"
+          ]
+        },
+        {
+          "rule": "DEV-REDGREEN",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-redgreen"
+          ]
+        },
+        {
+          "rule": "DEV-COVERAGE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-coverage"
+          ]
+        },
+        {
+          "rule": "DEV-REPLAY",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-replay"
+          ]
+        },
+        {
+          "rule": "DEV-NUMERIC",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-numeric"
+          ]
+        },
+        {
+          "rule": "DEV-FAULT",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-fault"
+          ]
+        },
+        {
+          "rule": "DEV-MODEL",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-model"
+          ]
+        },
+        {
+          "rule": "DEV-STOP",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-stop"
+          ]
+        },
+        {
+          "rule": "DEV-IMPACT",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-impact"
+          ]
+        },
+        {
+          "rule": "DEV-MATRIX",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-matrix"
+          ]
+        },
+        {
+          "rule": "DEV-GATE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-gate"
+          ]
+        },
+        {
+          "rule": "DEV-FAILURE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-failure"
+          ]
+        },
+        {
+          "rule": "DEV-AUDIT",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-audit"
+          ]
+        },
+        {
+          "rule": "DEV-SUPPLY",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-supply"
+          ]
+        },
+        {
+          "rule": "DEV-COMPAT",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-compat"
+          ]
+        },
+        {
+          "rule": "DEV-RELEASE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-release"
+          ]
+        },
+        {
+          "rule": "DEV-OPERATE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-operate"
+          ]
+        },
+        {
+          "rule": "DEV-EVIDENCE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-evidence"
+          ]
+        },
+        {
+          "rule": "DEV-CONFIG",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-config"
+          ]
+        },
+        {
+          "rule": "DEV-ADOPTION",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "full-rule",
+          "checks": [
+            "gap-adoption"
+          ]
+        },
+        {
+          "rule": "DEV-COVERAGE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "structure",
+          "checks": [
+            "gap-structure"
+          ]
+        },
+        {
+          "rule": "DEV-COVERAGE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "mcdc",
+          "checks": [
+            "gap-mcdc"
+          ]
+        },
+        {
+          "rule": "DEV-COVERAGE",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "mutation",
+          "checks": [
+            "gap-mutation"
+          ]
+        },
+        {
+          "rule": "DEV-MODEL",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "finite-model",
+          "checks": [
+            "gap-finite-model"
+          ]
+        },
+        {
+          "rule": "DEV-FAULT",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "fault-matrix",
+          "checks": [
+            "gap-fault-matrix"
+          ]
+        },
+        {
+          "rule": "DEV-MATRIX",
+          "contract": "STORAGE-ASSURANCE",
+          "scenario": "delivery-matrix",
+          "checks": [
+            "gap-delivery-matrix"
+          ]
+        }
+      ],
+      "convergence": {
+        "metric": "同一源码身份与固定义务集合的缺口数",
+        "baseline": null,
+        "target": 0,
+        "deadline": null,
+        "approval_ref": null
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "storage-examples",
+      "component": "polaris-storage",
+      "adapter": "go-test-json",
+      "argv": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "-parallel=4",
+        "-p=4",
+        "-timeout=180s",
+        "./polaris/internal/storage"
+      ],
+      "environment": {
+        "CGO_ENABLED": "1",
+        "GOMAXPROCS": "4",
+        "GOPATH": "{cache}/deps/go",
+        "GOMODCACHE": "{cache}/deps/go/pkg/mod",
+        "GOCACHE": "{root}/build/cache/go",
+        "TMPDIR": "{run}/tmp",
+        "GOPROXY": "off",
+        "GOSUMDB": "off",
+        "GOTOOLCHAIN": "local",
+        "GOWORK": "off",
+        "GOFLAGS": "-mod=readonly",
+        "PATH": "{cache}/tools/go-1.27.1/bin:{cache}/tools/gcc-16.2.0/bin:/usr/bin:/bin",
+        "CC": "{cache}/tools/gcc-16.2.0/bin/gcc",
+        "CXX": "{cache}/tools/gcc-16.2.0/bin/g++",
+        "LD_LIBRARY_PATH": "{cache}/tools/gcc-16.2.0/lib64"
+      },
+      "package": "github.com/eosforge/astra/polaris/internal/storage",
+      "expected_tests": [
+        "TestAtomicity",
+        "TestBatchEncoding",
+        "TestBatchPersistence",
+        "TestBatchRollback",
+        "TestBatchSnapshot",
+        "TestCancellation",
+        "TestCommit",
+        "TestConcurrent",
+        "TestDatabasePath",
+        "TestExhaustion",
+        "TestFeedBoundary",
+        "TestFeedCapacity",
+        "TestHistory",
+        "TestHistoryPrefix",
+        "TestInvalidDatabase",
+        "TestLargeBatchPersistence",
+        "TestLimits",
+        "TestRestart",
+        "TestUncertain",
+        "TestVerification",
+        "TestVerification/atomic",
+        "TestVerification/history",
+        "TestVerification/retry",
+        "TestVerification/rollback",
+        "TestVersion"
+      ],
+      "probes": [
+        {
+          "contract": "STORAGE-ATOMIC",
+          "test": "TestVerification/atomic",
+          "minimum_hits": 7
+        },
+        {
+          "contract": "STORAGE-RETRY",
+          "test": "TestVerification/retry",
+          "minimum_hits": 6
+        },
+        {
+          "contract": "STORAGE-ROLLBACK",
+          "test": "TestVerification/rollback",
+          "minimum_hits": 7
+        },
+        {
+          "contract": "STORAGE-HISTORY",
+          "test": "TestVerification/history",
+          "minimum_hits": 9
+        }
+      ],
+      "timeout_s": 240,
+      "log_bytes": 8388608
+    },
+    {
+      "id": "gap-scope",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-SCOPE 验收适配器与证据; 对照规范 1, 2.1 (采用范围、权限与适用性) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-trace",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-TRACE 验收适配器与证据; 对照规范 2.3-2.4, 3.1, 10.2 (功能设计准入、需求到证据、公共示例) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-core",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-CORE 验收适配器与证据; 对照规范 3.2 (可测边界与执行载体) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-async",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-ASYNC 验收适配器与证据; 对照规范 4.1, 7.3 (任务归属、取消与排干) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-time",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-TIME 验收适配器与证据; 对照规范 4.4 (时间域、虚拟时间与租约) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-contract",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-CONTRACT 验收适配器与证据; 对照规范 3, 4.1 (行为、失败保证与提交边界) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-security",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-SECURITY 验收适配器与证据; 对照规范 3.3, 4.3, 4.6 (信任、秘密、输入与故障隔离) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-capacity",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-CAPACITY 验收适配器与证据; 对照规范 4.2, 4.6, 7.2 (聚合预算与过载) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-retry",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-RETRY 验收适配器与证据; 对照规范 3.3, 4.2 (幂等、结果未知与重试控制) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-oracle",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-ORACLE 验收适配器与证据; 对照规范 5.1-5.2, 5.4 (独立判定、有效性与防弱化) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-redgreen",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-REDGREEN 验收适配器与证据; 对照规范 5.2 (旧失败、新通过及调度证据) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-coverage",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-COVERAGE 验收适配器与证据; 对照规范 5.3-5.4 (覆盖分母、变异与排除) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-replay",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-REPLAY 验收适配器与证据; 对照规范 4.4, 6.1 (确定性输入、重放与语料) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-numeric",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-NUMERIC 验收适配器与证据; 对照规范 4.4 (数值语义与跨平台条件) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-fault",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-FAULT 验收适配器与证据; 对照规范 3.3, 4, 5.1 (故障边界与恢复) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-model",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-MODEL 验收适配器与证据; 对照规范 5.1-5.3 (模型假设、独立依据与真实补充) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-stop",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-STOP 验收适配器与证据; 对照规范 7.3 (自有任务停止与残留核验) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-impact",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-IMPACT 验收适配器与证据; 对照规范 2.2 (影响闭包与证据失效) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-matrix",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-MATRIX 验收适配器与证据; 对照规范 5.1, 5.3, 7.1 (适用能力与配置矩阵) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-gate",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-GATE 验收适配器与证据; 对照规范 8.3, 9 (受控验收及负向自检) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-failure",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-FAILURE 验收适配器与证据; 对照规范 6.2-6.3 (失败处置与隔离恢复) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-audit",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-AUDIT 验收适配器与证据; 对照规范 2.3, 10.1 (复杂度依据、反向分析与终点) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-supply",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-SUPPLY 验收适配器与证据; 对照规范 4.3, 10.2 (依赖准入、锁定与交付身份) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-compat",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-COMPAT 验收适配器与证据; 对照规范 4.5, 10.2 (接口、版本、迁移与回退) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-release",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-RELEASE 验收适配器与证据; 对照规范 9, 10.2 (实际候选门槛与发布权限) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-operate",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-OPERATE 验收适配器与证据; 对照规范 4.6, 7.3, 10.3 (稳态运行、维护与恢复) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-evidence",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-EVIDENCE 验收适配器与证据; 对照规范 8 (原生事实、关联与内容核验) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-config",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-CONFIG 验收适配器与证据; 对照规范 2.1-2.2, 7.1-7.2 (有效配置、继承和环境) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-adoption",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "尚无完整 DEV-ADOPTION 验收适配器与证据; 对照规范 11 (接入成熟度与规范演进) 补足. 已有样例不消除此项."
+    },
+    {
+      "id": "gap-structure",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "语句及可达分支原始分母、修改部分 100% 与存量基线尚未采集."
+    },
+    {
+      "id": "gap-mcdc",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "关键决策的独立条件用例对与实际命中 100% 尚未交付."
+    },
+    {
+      "id": "gap-mutation",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "核心范围有效非等价变异 100% 识别及等价台账尚未交付."
+    },
+    {
+      "id": "gap-finite-model",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "独立有限域穷举、进展假设、剪枝依据和模型敏感度尚未交付."
+    },
+    {
+      "id": "gap-fault-matrix",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "完整故障点、恢复边界、关键交错与再次失败的命中分母尚未交付."
+    },
+    {
+      "id": "gap-delivery-matrix",
+      "component": "polaris-storage",
+      "adapter": "unavailable",
+      "reason": "实际非插桩产物、所有受支持平台与消费者矩阵尚未交付."
+    }
+  ]
+}

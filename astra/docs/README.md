@@ -8,6 +8,7 @@
 | --- | --- |
 | [AGENTS.md](../AGENTS.md) | 授权、项目内工具和测试并行约定 |
 | [AI 开发与长期维护](development.md) | 面向重要设计的跨语言高强度规范; 含覆盖门槛、可信证据、规则 ID、项目配置与公开依据 |
+| [开发门禁与首个试点](features/verification.md) | 正式 Schema、命令与授权格式、门禁判定及 Polaris 存储试点; 执行状态见验证记录 |
 | [coding.md](../coding.md) | 通用质量、语言工具与跨语言审查 |
 | [cpp-coding.md](../cpp-coding.md) | C++ 唯一编码习惯定义 |
 | [架构](architecture.md) | 星图拓扑、组件边界、阶段与实施边界 |

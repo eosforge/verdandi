@@ -12,6 +12,7 @@ bash build.sh regression --profile release
 python3 -B tests/test_build.py
 python3 -B tests/test_pulsar_harness.py
 python3 -B tests/test_soak.py
+python3 -B -m unittest tests.test_verify -v
 ```
 
 `regression` 顺序执行离线构建、Go 用例、CTest 和生成源码比较, 尊重资源限制和 CTest 的串行约束. Sanitizer、性能和长期测试分别授权, 不作为普通回归的隐式附加项. 缺少工具或依赖不自动下载.
@@ -21,6 +22,7 @@ python3 -B tests/test_soak.py
 ## 方法与证据
 
 - [Comet 场景](../docs/comet.md): 业务契约及用例映射.
+- [开发门禁与试点](../docs/features/verification.md): 正式 Schema、负向门禁用例、Linux 原生采集及 Polaris 存储契约观察; 不把合成夹具当作真实证据.
 - [三 Star 长测](../docs/soak.md): 每台接受本地写入、跨节点传播和故障恢复, 入口为 `tests/soak.py`.
 - [诊断探针](../docs/profile.md): 采集边界与 `tools/profile.py` 离线分析; 所属进程退出后才解析.
 - [性能负载](../bench/README.md) 与 [可选 Redis 对照](../bench/baseline/README.md): 不属于常规业务回归.
