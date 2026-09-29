@@ -359,11 +359,65 @@ void pages() {
     }
     CHECK(rejected);
 }
+
+// 并发快照只能看到同一批的两个值, 旧视图保持固定, 重复键和部分历史不能泄漏.
+void batches() {
+
+    astra::Almanac book; // 本例唯一范围, 固定基线后由一个写者修改.
+    initialize(book);
+    const auto changes = [](std::uint8_t value) {
+        std::vector<astra::Almanac::Change> result; // 两个键共用不可变正文, 提交复制元数据而非载荷.
+        const auto body = std::make_shared<const astra::Almanac::Buffer>(1, value);
+        for (const auto* key : {"a", "b"})
+            result.push_back({std::make_shared<const std::string>(key), body, 0});
+        return result;
+    };
+    CHECK(book.apply(1, changes(1), 1024 * 1024));
+    const auto old = book.view(); // 后续写入必须经过 COW, 不覆盖这份完整旧根.
+    std::atomic_bool valid{true};
+    std::latch observed{1}; // 写入前至少完成一次读, 避免线程未调度导致空验收.
+    std::jthread reader([&](std::stop_token stop) {
+        bool first = true; // 只有读取线程递减 latch, 后续轮次保持无等待.
+        while (!stop.stop_requested()) {
+            const auto view = book.view(); // 一次冻结同时取得版本与全部记录.
+            std::size_t count{};
+            view->each([&](const auto&, const auto& value) { valid.store(valid.load() && value->at(0) == view->version()); ++count; });
+            if (count != 2)
+                valid.store(false);
+            if (first) {
+                first = false;
+                observed.count_down();
+            }
+        }
+    });
+    observed.wait();
+    for (std::uint64_t version = 2; version <= 64; ++version)
+        CHECK(book.apply(version, changes(static_cast<std::uint8_t>(version)), 1024 * 1024));
+    reader.request_stop();
+    reader.join();
+    CHECK(valid.load());
+    old->each([](const auto&, const auto& value) { CHECK(value->at(0) == 1); });
+    auto duplicate = changes(65); // 同键二次修改不是有序脚本, 必须整批拒绝.
+    duplicate[1].key = duplicate[0].key;
+    CHECK(!book.apply(65, std::move(duplicate), 1024 * 1024));
+    CHECK(book.view()->version() == 64);
+    CHECK(book.replay(63)->changes.size() == 2);
+
+    astra::Almanac::Limits limits; // 历史预算不足整批时不能保留仅最后一项.
+    limits.history = 1;
+    astra::Almanac small(limits);
+    initialize(small);
+    CHECK(small.apply(1, changes(1), 1024 * 1024));
+    CHECK(small.replay(0).error() == astra::Almanac::Error::history);
+    CHECK(small.apply(2, "a", astra::Almanac::Buffer{2}));
+    CHECK(small.replay(1)->changes.size() == 1);
+}
 } // namespace
 
 // 独立单元入口, 不连接服务或下载依赖; 仅在取得本轮测试授权后运行.
 int main() {
     try {
+        batches();
         baseline();
         versions();
         snapshots();

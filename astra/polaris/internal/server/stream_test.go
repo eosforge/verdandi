@@ -3,23 +3,26 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/admission"
-	"github.com/eosforge/verdandi/astra/internal/generated/astra"
-	"github.com/eosforge/verdandi/astra/internal/generated/comet"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
-	"github.com/eosforge/verdandi/astra/internal/generated/polaris"
-	"github.com/eosforge/verdandi/astra/polaris/internal/storage"
+	"github.com/eosforge/astra/internal/admission"
+	"github.com/eosforge/astra/internal/generated/astra"
+	"github.com/eosforge/astra/internal/generated/comet"
+	"github.com/eosforge/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/polaris"
+	"github.com/eosforge/astra/polaris/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -65,7 +68,7 @@ type system struct {
 // environment 使用仓库公开身份和独立 SQLite 文件, 返回前完成实际准入但不修改系统设置.
 func environment(t *testing.T, limits storage.Limits) *system {
 	t.Helper()
-	root := filepath.Join("..", "..", "..", "..", "cluster", "tests", "fixtures")
+	root := filepath.Join("..", "..", "..", "tests", "fixtures")
 	identity, err := admission.Load(filepath.Join(root, "star-a"), "127.0.0.1:7443")
 	if err != nil {
 		t.Fatal(err)
@@ -260,6 +263,73 @@ func TestAuthorityRPC(t *testing.T) {
 	}
 }
 
+// TestAuthorityBatch 验证真实 RPC 的整批确认和同步编码, 大批次不能按装包目标拆成两个 Patch.
+func TestAuthorityBatch(t *testing.T) {
+	t.Parallel()
+	system := environment(t, storage.Default())
+	client := polaris.NewAuthorityClient(system.channel)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	manager := metadata.AppendToOutgoingContext(ctx, "astra-admission-bin", string(system.manager.Admission), "astra-signature-bin", string(system.manager.AdmissionSignature))
+	scope := &comet.Scope{Sector: []byte("batch"), Spectrum: []byte("main")}
+	request := &polaris.CommitRequest{Scope: scope, Version: 1}
+	for _, key := range []string{"a", "b"} {
+		request.Changes = append(request.Changes, &comet.AlmanacChange{Key: key, Action: &comet.AlmanacChange_Value{Value: make([]byte, 300<<10)}})
+	}
+	for range 2 {
+		result, err := client.Commit(manager, request)
+		if err != nil || result.Version != 1 {
+			t.Fatal("complete batch confirmation failed", err)
+		}
+	}
+	invalid := proto.Clone(request).(*polaris.CommitRequest)
+	invalid.Version = 2
+	invalid.Changes[1].Key = "a"
+	if _, err := client.Commit(manager, invalid); status.Code(err) != codes.InvalidArgument {
+		t.Fatal("duplicate batch accepted", err)
+	}
+	invalid.Changes[1].Key = "b"
+	invalid.Change = invalid.Changes[0]
+	if _, err := client.Commit(manager, invalid); status.Code(err) != codes.InvalidArgument {
+		t.Fatal("mixed single and batch accepted", err)
+	}
+	loaded, err := system.store.Load(ctx, storage.Scope{Sector: "batch", Spectrum: "main"})
+	if err != nil || loaded.Version != 1 || len(loaded.Records) != 2 {
+		t.Fatal("invalid batch changed durable state", err)
+	}
+
+	stream := system.connect(t, &polaris.Inventory{Complete: true, Positions: []*polaris.Position{{Scope: scope, Version: 0}}})
+	installed := false
+	for {
+		packet, err := stream.Recv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch body := packet.Body.(type) {
+		case *polaris.Packet_Plan:
+		case *polaris.Packet_Updates:
+			if installed || len(body.Updates.Patches) != 1 {
+				t.Fatal("batch split into multiple patches")
+			}
+			patch := body.Updates.Patches[0]
+			if patch.Version != 1 || patch.Change != nil || len(patch.Changes) != 2 || !proto.Equal(patch.Changes[0], request.Changes[0]) || !proto.Equal(patch.Changes[1], request.Changes[1]) {
+				t.Fatal("partial or changed batch payload")
+			}
+			installed = true
+			if err := stream.Send(&polaris.Packet{Body: &polaris.Packet_Acknowledged{Acknowledged: &polaris.Position{Scope: scope, Version: 1}}}); err != nil {
+				t.Fatal(err)
+			}
+		case *polaris.Packet_Ready:
+			if !installed {
+				t.Fatal("ready before complete batch")
+			}
+			return
+		default:
+			t.Fatal("unexpected batch frame")
+		}
+	}
+}
+
 // TestWindow 累计确认只释放相应范围的前缀, 版本零有效, 已取消等待不滞留整个同步 worker.
 func TestWindow(t *testing.T) {
 	t.Parallel()
@@ -286,5 +356,146 @@ func TestWindow(t *testing.T) {
 	transfer.release(b, 2)
 	if transfer.bytes != 0 || len(transfer.credits) != 0 {
 		t.Fatal("window retained released credits")
+	}
+}
+
+// TestAuthorityBatchStream 验证大于 RPC 单帧的批次只在完整 EOF 后提交, 同步退回分页快照.
+func TestAuthorityBatchStream(t *testing.T) {
+	limits := storage.Default()
+	limits.Backlog = 16 << 20 // 保留整条大历史, 确保覆盖超帧补丁的快照分支而非历史断档.
+	limits.Timeout = 30 * time.Second
+	system := environment(t, limits)
+	client := polaris.NewAuthorityClient(system.channel)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	manager := metadata.AppendToOutgoingContext(ctx, "astra-admission-bin", string(system.manager.Admission), "astra-signature-bin", string(system.manager.AdmissionSignature))
+	scope := &comet.Scope{Sector: []byte("large"), Spectrum: []byte("stream")}
+	target := storage.Scope{Sector: "large", Spectrum: "stream"}
+	changes := make([]*comet.AlmanacChange, 257)
+	for index := range changes {
+		changes[index] = &comet.AlmanacChange{Key: fmt.Sprint(index), Action: &comet.AlmanacChange_Value{Value: bytes.Repeat([]byte{byte(index)}, 40<<10)}}
+	}
+	for attempt := range 2 {
+		stream, err := client.Batch(manager)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for begin := 0; begin < len(changes); begin += 16 {
+			end := min(begin+16, len(changes))
+			if err := stream.Send(&polaris.BatchRequest{Scope: scope, Version: 1, Changes: changes[begin:end], Complete: end == len(changes)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// 末页已经交给传输, 但没有 EOF; 首次提交仍不能被任何读取观察.
+		if attempt == 0 {
+			if version, err := system.store.Version(ctx, target); err != nil || version != 0 {
+				t.Fatalf("batch committed before EOF: %v %v", version, err)
+			}
+		}
+		result, err := stream.CloseAndRecv()
+		if err != nil || result.Version != 1 {
+			t.Fatalf("large batch confirmation: %v", err)
+		}
+	}
+	replay, err := system.store.Since(ctx, target, 0)
+	if err != nil || len(replay.Changes) != 1 || len(replay.Changes[0].Value) <= 8<<20 {
+		t.Fatalf("large history missing: %v", err)
+	}
+	stream := system.connect(t, &polaris.Inventory{Complete: true, Positions: []*polaris.Position{{Scope: scope}}})
+	received := make(map[string][]byte)
+	pages, installed := 0, false
+	for {
+		packet, err := stream.Recv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch body := packet.Body.(type) {
+		case *polaris.Packet_Plan:
+		case *polaris.Packet_Snapshot:
+			page := body.Snapshot
+			if installed || page.Version == nil || page.GetVersion() != 1 {
+				t.Fatal("invalid snapshot boundary")
+			}
+			pages++
+			for _, entry := range page.Entries {
+				if _, duplicate := received[entry.Key]; duplicate {
+					t.Fatal("duplicate snapshot key")
+				}
+				received[entry.Key] = entry.GetValue()
+			}
+			if page.Complete {
+				if pages < 2 || len(received) != len(changes) {
+					t.Fatal("partial large batch")
+				}
+				for _, entry := range changes {
+					if !bytes.Equal(received[entry.Key], entry.GetValue()) {
+						t.Fatal("large batch value changed")
+					}
+				}
+				installed = true
+				if err := stream.Send(&polaris.Packet{Body: &polaris.Packet_Acknowledged{Acknowledged: &polaris.Position{Scope: scope, Version: 1}}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+		case *polaris.Packet_Ready:
+			if !installed {
+				t.Fatal("ready before complete large batch")
+			}
+			return
+		default:
+			t.Fatal("oversized batch was not sent as complete snapshot")
+		}
+	}
+}
+
+// TestAuthorityBatchIncomplete 取消、缺尾页、位置漂移、重复键及完整页后的多余数据均不能写入前缀.
+func TestAuthorityBatchIncomplete(t *testing.T) {
+	system := environment(t, storage.Default())
+	client := polaris.NewAuthorityClient(system.channel)
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	manager := metadata.AppendToOutgoingContext(ctx, "astra-admission-bin", string(system.manager.Admission), "astra-signature-bin", string(system.manager.AdmissionSignature))
+	scope := &comet.Scope{Sector: []byte("incomplete"), Spectrum: []byte("stream")}
+	entry := &comet.AlmanacChange{Key: "a", Action: &comet.AlmanacChange_Value{Value: []byte("new")}}
+	for _, scenario := range []string{"missing", "cancel", "version", "scope", "duplicate", "after"} {
+		t.Run(scenario, func(t *testing.T) {
+			current, cancel := context.WithCancel(manager)
+			defer cancel()
+			stream, err := client.Batch(current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			first := &polaris.BatchRequest{Scope: scope, Version: 1, Changes: []*comet.AlmanacChange{entry}, Complete: scenario == "after"}
+			if err := stream.Send(first); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "cancel" {
+				cancel()
+			}
+			if scenario != "missing" && scenario != "cancel" {
+				final := &polaris.BatchRequest{Scope: scope, Version: 1, Changes: []*comet.AlmanacChange{entry}, Complete: true}
+				if scenario == "version" {
+					final.Version = 2
+				}
+				if scenario == "scope" {
+					final.Scope = &comet.Scope{Sector: scope.Sector, Spectrum: []byte("other")}
+				}
+				// 服务端可能已拒绝前帧, Send 的 EOF 由 CloseAndRecv 取得最终状态.
+				if err := stream.Send(final); err != nil && !errors.Is(err, io.EOF) {
+					t.Fatal(err)
+				}
+			}
+			_, err = stream.CloseAndRecv()
+			wanted := codes.InvalidArgument
+			if scenario == "cancel" {
+				wanted = codes.Canceled
+			}
+			if status.Code(err) != wanted {
+				t.Fatalf("invalid batch returned %v", err)
+			}
+			if version, err := system.store.Version(ctx, storage.Scope{Sector: "incomplete", Spectrum: "stream"}); err != nil || version != 0 {
+				t.Fatalf("partial commit: %v %v", version, err)
+			}
+		})
 	}
 }

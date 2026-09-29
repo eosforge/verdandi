@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/eosforge/verdandi/astra/polaris/internal/storage"
+	"github.com/eosforge/astra/polaris/internal/storage"
 )
 
 // cache 仅保留正在准备/发送的快照, 无引用后立即解除拥有关系, 不长期复制第二份权威库.

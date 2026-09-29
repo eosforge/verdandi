@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <grpcpp/server_builder.h>
 #include <iostream>
+#include <limits>
 #include <source_location>
 #include <thread>
 
@@ -15,6 +16,9 @@ using namespace std::chrono_literals;
 // 故障发生在真实原生提交之后, Watch 的一次停滞不替换后续生产下行逻辑.
 class Faults final : public proto::comet::v1::Catalog::CallbackService {
 public:
+    std::atomic_uint queries{};      // 实际版本查询次数, 不计 Watch.
+    std::atomic_uint conflicts{};    // 剩余注入次数, Publish 前由另一写者抬高同一批版本.
+    std::atomic_bool malformed{};    // 下一次查询返回缺项, 必须在提交前拒绝.
     std::atomic_bool lost{};         // 下一次 Publish 已提交但回执丢失.
     std::atomic_int stalled{};       // 0 正常, 1 首帧停滞, 2 半批停滞, 3 半批 EOF, 4 首帧前 EOF.
     std::atomic_uint writes{};       // 实际 Publish 到达次数, 不是业务版本.
@@ -26,14 +30,41 @@ public:
     // 对外 Gateway 比本夹具活得更久, state 比 service 活得更久.
     explicit Faults(astra::Gateway& gateway) : state([] { return std::optional(astra::Clock::Reading{.time = astra::Clock::Time(1s), .ready = true}); }, {}), service(state, gateway), gateway_(gateway) {}
 
+    // 查询使用真实服务水位, 非法响应只用于验证 SDK 对应关系检查.
+    grpc::ServerUnaryReactor* Query(grpc::CallbackServerContext* context, const proto::comet::v1::CatalogQueryRequest* request, proto::comet::v1::CatalogQueryReply* reply) override {
+        ++queries;
+        if (!malformed.exchange(false))
+            return service.Query(context, request, reply);
+        reply->set_instance("catalog-fault"); // 故意缺少所有 Key, 不应发送 Publish.
+        auto* reactor = context->DefaultReactor();
+        reactor->Finish(grpc::Status::OK);
+        return reactor;
+    }
+
     grpc::ServerUnaryReactor* Publish(grpc::CallbackServerContext* context, const proto::comet::v1::PublishRequest* request, proto::comet::v1::PublishReply* reply) override {
 
         ++writes;
+        if (conflicts.load() > 0) {
+            --conflicts;
+            std::vector<astra::Catalog::State::Entry> entries; // 模拟 Query 与 Publish 之间明确发生的版本竞争.
+            for (const auto& entry : request->entries())
+                entries.push_back({entry.key(), std::make_shared<const astra::Catalog::Buffer>(1, 42)});
+            if (!state.publish({request->scope().sector(), request->scope().spectrum()}, entries, request->version() + 10, request->ttl_ms()))
+                valid.store(false);
+        }
         if (!lost.exchange(false))
             return service.Publish(context, request, reply);
-        auto permit = gateway_.enter(*context); // 不绕过真实登录/就绪检查.
-        auto body = std::make_shared<const astra::Catalog::Buffer>(request->value().begin(), request->value().end());
-        const auto result = state.publish({request->scope().sector(), request->scope().spectrum()}, request->key(), std::move(body), request->version(), request->ttl_ms());
+        auto permit = gateway_.enter(*context);                   // 不绕过真实登录/就绪检查.
+        std::expected<void, astra::Catalog::State::Error> result; // 故障在生产原生提交之后, 不绕过批次边界.
+        if (request->entries().empty()) {
+            auto body = std::make_shared<const astra::Catalog::Buffer>(request->value().begin(), request->value().end());
+            result = state.publish({request->scope().sector(), request->scope().spectrum()}, request->key(), std::move(body), request->version(), request->ttl_ms());
+        } else {
+            std::vector<astra::Catalog::State::Entry> entries; // 整批一次提交, 然后丢失完整回执.
+            for (const auto& entry : request->entries())
+                entries.push_back({entry.key(), std::make_shared<const astra::Catalog::Buffer>(entry.value().begin(), entry.value().end())});
+            result = state.publish({request->scope().sector(), request->scope().spectrum()}, entries, request->version(), request->ttl_ms());
+        }
         if (!permit || !result)
             valid.store(false);
         auto* reactor = context->DefaultReactor(); // 默认 reactor 归 gRPC 持有, 注入不确定且不附 unapplied.
@@ -189,19 +220,76 @@ void eventually(auto&& condition, std::source_location location = std::source_lo
     }
 }
 
+// 丢失确认仍报告 unknown, 等过旧续租周期也不能后台重发; 新对象通过 Query 恢复版本基线.
 void lost() {
 
     Fixture fixture;
     fixture.faults.lost.store(true);
-    auto publisher = fixture.client.publisher({"source", "main"}, "key", 1s);
+    auto publisher = fixture.client.publisher({"source", "main"});
     CHECK(publisher);
-    auto future = publisher->publish(10, std::vector<std::uint8_t>{7});
-    CHECK(future.wait_for(5s) == std::future_status::ready);
-    const auto result = future.get(); // 不确定原结果不会因后台恢复成功而改写.
+    const auto result = publisher->update("key", {7}, 1s);
     CHECK(!result && result.error().effect == comet::Error::Effect::unknown);
-    eventually([&] { return fixture.faults.writes.load() >= 2 && publisher->state().phase == comet::Publisher::Phase::ready; });
-    CHECK(publisher->state().confirmed->version == 10 && fixture.faults.valid.load());
-    CHECK(fixture.faults.state.find({"source", "main"}, "key")->record->version == 10);
+    std::this_thread::sleep_for(500ms); // 有界负向观察窗口, 专门捕获旧版约 TTL/3 的自动恢复.
+    CHECK(fixture.faults.writes.load() == 1 && fixture.faults.queries.load() == 1 && fixture.faults.valid.load());
+    CHECK(fixture.faults.state.find({"source", "main"}, "key")->record->version == 1);
+    auto restarted = fixture.client.publisher({"source", "main"});
+    CHECK(restarted);
+    const auto next = restarted->update("key", {8}, 1s);
+    CHECK(next && next->version == 2);
+}
+
+// 同步批次在分页推流中仍原子安装, 回调保留的旧视图不受新提交覆盖.
+void batches() {
+
+    Fixture fixture;
+    auto publisher = fixture.client.publisher({"batch", "main"});
+    auto subscriber = fixture.client.subscriber({"batch", "main"});
+    CHECK(publisher && subscriber);
+    eventually([&] { return subscriber->watch().state() == comet::Subscriber::State::ready; });
+    const auto initial = subscriber->watch();                                           // 后续批次不得改写旧基线.
+    const auto body = std::make_shared<const std::vector<std::uint8_t>>(300 * 1024, 7); // 合计 600 KiB, 强制跨页.
+    const auto result = publisher->update({{"a", body}, {"b", body}}, 1s);
+    CHECK(result && result->version == 1);
+    eventually([&] { const auto view = subscriber->watch(); CHECK(view.size() == 0 || view.size() == 2); return view.size() == 2; });
+    CHECK(initial.size() == 0 && fixture.faults.valid.load());
+    const auto frozen = subscriber->watch();
+    const auto next = publisher->update({{"b", body}, {"a", body}}, 2s); // 每次显式 TTL, 同一完整批次允许换序.
+    CHECK(next && next->version == 2);
+    eventually([&] { const auto view = subscriber->watch(); CHECK(view.find("a")->version == view.find("b")->version); return view.find("a")->version == 2; });
+    CHECK(frozen.find("a")->version == 1 && frozen.find("b")->version == 1);
+    const auto position = fixture.faults.state.source().position();
+    std::this_thread::sleep_for(800ms); // 超过旧版 2s 租约的自动续租周期, 来源不得新增 Renew.
+    CHECK(fixture.faults.state.source().position() == position);
+}
+
+// 仅明确整批未提交的版本冲突可修复一次, 第二次冲突直接返回.
+void conflicts() {
+
+    Fixture fixture;
+    auto publisher = fixture.client.publisher({"repair", "main"});
+    CHECK(publisher);
+    fixture.faults.conflicts.store(1);
+    const auto repaired = publisher->update("key", {7}, 1s);
+    CHECK(repaired && repaired->version == 12 && fixture.faults.writes.load() == 2 && fixture.faults.queries.load() == 2);
+    fixture.faults.conflicts.store(2);
+    const auto rejected = publisher->update("key", {8}, 1s);
+    CHECK(!rejected && rejected.error().code == comet::Error::Code::version && rejected.error().effect == comet::Error::Effect::unapplied);
+    CHECK(fixture.faults.writes.load() == 4 && fixture.faults.queries.load() == 3 && fixture.faults.valid.load());
+}
+
+// 不完整版本响应及版本耗尽都在发送前拒绝, 不通过溢出或缺项隐式覆盖数据.
+void queries() {
+
+    Fixture fixture;
+    auto publisher = fixture.client.publisher({"query", "main"});
+    CHECK(publisher);
+    fixture.faults.malformed.store(true);
+    const auto malformed = publisher->update("key", {7}, 1s);
+    CHECK(!malformed && malformed.error().code == comet::Error::Code::protocol && malformed.error().effect == comet::Error::Effect::unapplied);
+    CHECK(fixture.faults.writes.load() == 0);
+    CHECK(fixture.faults.state.publish({"query", "main"}, "key", std::make_shared<const astra::Catalog::Buffer>(1, 7), std::numeric_limits<std::uint64_t>::max(), 1000));
+    const auto exhausted = publisher->update("key", {8}, 1s);
+    CHECK(!exhausted && exhausted.error().code == comet::Error::Code::limit && fixture.faults.writes.load() == 0);
 }
 
 void stalled() {
@@ -237,6 +325,9 @@ void cancelled() {
 // 真实 gRPC/TLS 故障测试, 由获准的 CTest 入口显式执行.
 int main() {
     try {
+        batches();
+        conflicts();
+        queries();
         lost();
         stalled();
         cancelled();

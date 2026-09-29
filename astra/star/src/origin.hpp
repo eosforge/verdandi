@@ -69,7 +69,7 @@ public:
         std::size_t history = 4096;
         // 历史记录和被引用载荷的保守字节上限, 默认 8 MiB, 零禁用.
         std::size_t backlog = 8 * 1024 * 1024;
-        // 写入时按本地单调时间裁剪发送历史, 默认 10 分钟, 零禁用; 未淘汰的连续后缀仍可读取.
+        // 写入时按本地单调时间裁剪发送历史, 默认 10 分钟, 零表示提交时淘汰新历史, 不是仅关闭年龄限制; 未淘汰的连续后缀仍可读取.
         std::chrono::steady_clock::duration retention = std::chrono::minutes(10);
     };
 
@@ -316,8 +316,8 @@ public:
         Retired retired_;            // 大块旧资源在 commit 后交由外层锁外析构.
     };
 
-    // 内部整组恢复的保留式合并候选, 用于 Catalog 最高水位. 只允许逐唯一目标 upsert, 不编号或保留广播历史.
-    // 原生字段含义仍由业务层决定, 不开放成 Comet 多 Key API, 也不能给自有来源绕过连续位置.
+    // 内部整组恢复的保留式合并候选, 用于 Catalog 最高水位. 逐唯一目标 upsert, 本机模式准备完整连续发送历史.
+    // 原生字段含义仍由业务层决定, 外层负责原子可见性和业务验证, 自有来源不能绕过连续位置.
     class Batch {
     public:
         // 失败只撤销新增查找项/空组, 原根、旧记录及来源位置不变.
@@ -326,7 +326,7 @@ public:
         }
 
         // 唯一回滚责任可以移动, 禁止复制多个拥有者.
-        Batch(Batch&& other) noexcept : owner_(std::exchange(other.owner_, nullptr)), tree_(std::move(other.tree_)), added_(std::move(other.added_)), removed_(std::move(other.removed_)), created_(std::move(other.created_)), seen_(std::move(other.seen_)), bytes_(other.bytes_), records_(other.records_), failed_(other.failed_) {}
+        Batch(Batch&& other) noexcept : owner_(std::exchange(other.owner_, nullptr)), tree_(std::move(other.tree_)), added_(std::move(other.added_)), removed_(std::move(other.removed_)), created_(std::move(other.created_)), seen_(std::move(other.seen_)), bytes_(other.bytes_), records_(other.records_), failed_(other.failed_), history_(std::move(other.history_)), position_(other.position_), backlog_(other.backlog_) {}
 
         // 不覆盖未结束事务.
         Batch& operator=(Batch&&) = delete;
@@ -347,9 +347,9 @@ public:
         }
 
         // 一个候选中每个 Scope/Key 至多修改一次. 任意失败后只能放弃整批, 不提交先前准备的子集.
-        std::expected<typename Tree::Key, Error> set(const Scope& scope, std::string_view key, Item record) {
+        std::expected<typename Tree::Key, Error> set(const Scope& scope, std::string_view key, Item record, Form form = Form::record) {
 
-            if (failed_ || !owner_ || !scope.valid() || !valid_key(key)) {
+            if (failed_ || !owner_ || !scope.valid() || !valid_key(key) || (owner_->local_ && form != Form::record && form != Form::renew)) {
                 failed_ = true;
                 return std::unexpected(Error::input);
             }
@@ -390,19 +390,66 @@ public:
             tree_.set(slot, exists ? nullptr : name, record);
             bytes_ = bytes_ - *before + *after;
             records_ += !exists;
+            if (history_) {
+                if (position_ == UINT64_MAX)
+                    return std::unexpected(Error::version);
+                const auto now = std::chrono::steady_clock::now();                     // 来源发送历史只计本地单调保留期.
+                const auto metadata = sizeof(Event) + sizeof(Name) + name->key.size(); // 历史成本独立于当前来源行计费.
+                const auto payload = owner_->measure_(record);
+                if (payload > std::numeric_limits<std::size_t>::max() - metadata || metadata + payload > std::numeric_limits<std::size_t>::max() - backlog_)
+                    return std::unexpected(Error::capacity);
+                const auto cost = metadata + payload;
+                history_->push_back(Event{name, record, ++position_, form, cost, now});
+                backlog_ += cost;
+                while (!history_->empty() && (history_->size() > owner_->limits_.history || backlog_ > owner_->limits_.backlog || now - history_->front().stored >= owner_->limits_.retention)) {
+                    backlog_ -= history_->front().bytes;
+                    history_->pop_front();
+                }
+            }
             failed_ = false;
             return name;
         }
 
-        // 无分配发布候选根/计费, 返回旧根须在域锁外释放, 不更改来源位置/历史.
-        Tree commit() noexcept {
+        // 最终时间复核只改变等计费的期限, 页面已经私有化; 不可用来增加第二次业务修改.
+        bool revise(const Scope& scope, std::string_view key, const Item& record) noexcept {
+            if (!owner_ || failed_)
+                return false;
+            const auto* group = owner_->locate(scope); // 准备期目录固定, 本方法不分配.
+            if (!group)
+                return false;
+            const auto found = group->entries.find(key);
+            if (found == group->entries.end())
+                return false;
+            const auto row = tree_.find(found->second);
+            if (!row.first || !seen_.contains(row.first->get()) || owner_->measure_(record) != owner_->measure_(*row.second))
+                return false;
+            tree_.set(found->second, nullptr, record);
+            if (history_) {
+                for (auto iterator = history_->rbegin(); iterator != history_->rend() && iterator->position > owner_->position_; ++iterator) {
+                    if (iterator->name->key == key && *iterator->name->scope == scope) {
+                        iterator->record = record;
+                        break;
+                    }
+                }
+            }
+            return true;
+        }
+
+        // 无分配发布候选根/计费, 本机同时发布连续位置/历史; 本机必须传 retired 接走旧历史, 与返回根一起在域锁外释放.
+        Tree commit(std::unique_ptr<std::deque<Event>>* retired = nullptr) noexcept {
 
             ASTRA_PROFILE_SCOPE("star.origin.commit");
-            assert(owner_ && !failed_);
+            assert(owner_ && !failed_ && (!history_ || retired));
             auto old = std::move(owner_->tree_);
             owner_->tree_ = std::move(tree_);
             owner_->bytes_ = bytes_;
             owner_->records_ = records_;
+            if (history_) {
+                owner_->history_.swap(*history_);
+                owner_->position_ = position_;
+                owner_->backlog_ = backlog_;
+                *retired = std::move(history_);
+            }
             for (const auto& item : removed_) {
                 item.group->entries.erase(item.name->key);
             }
@@ -422,8 +469,10 @@ public:
         // 仅用于来源 Scope 的完整替换, 删除候选中旧有项; 同一目标仍只能修改一次.
         std::expected<void, Error> erase(const Scope& scope, std::string_view key) {
 
-            if (failed_ || !owner_)
+            if (failed_ || !owner_ || owner_->local_) {
+                failed_ = true;
                 return std::unexpected(Error::input);
+            }
             failed_ = true;                      // 分配失败必须保留整个 Scope 的回滚责任.
             auto* group = owner_->locate(scope); // 借用到本批提交/放弃, 在提交前不删除真实目录.
             const auto found = group ? group->entries.find(key) : typename Table::iterator{};
@@ -452,8 +501,8 @@ public:
             typename Tree::Key name; // 保持借用字符串有效, 不是载荷副本.
         };
 
-        // 本构造不复制 Key 哈希表, 只增加一个根引用, 所有新页按需 COW.
-        explicit Batch(Origin& owner) : owner_(&owner), tree_(owner.tree_), bytes_(owner.bytes_), records_(owner.records_) {
+        // 不复制 Key 哈希表, 页面按需 COW; 仅本机准备有界历史元数据副本, 不复制正文.
+        explicit Batch(Origin& owner) : owner_(&owner), tree_(owner.tree_), bytes_(owner.bytes_), records_(owner.records_), history_(owner.local_ ? std::make_unique<std::deque<Event>>(owner.history_) : nullptr), position_(owner.position_), backlog_(owner.backlog_) {
             owner.editing_ = true;
         }
 
@@ -480,6 +529,9 @@ public:
         std::size_t bytes_{};                               // 候选记录计费, 目录在 owner 暂存但被 editing_ 隔离.
         std::size_t records_{};                             // 候选记录数.
         bool failed_{};                                     // 任意失败后不允许再提交此候选.
+        std::unique_ptr<std::deque<Event>> history_;        // 本机批次才准备有界发送历史副本, 不复制载荷.
+        std::uint64_t position_{};                          // 每条事实连续编号, 全批与来源根一起发布.
+        std::size_t backlog_{};                             // 候选发送历史计费.
     };
 
     // 来源完整快照的私有候选, 不开放捕获接口, 安装前不存在使用另一同步域读取新页的读者.
@@ -779,8 +831,16 @@ public:
         ASTRA_PROFILE_SCOPE("star.origin.prepare");
         idle();
         if (local_) {
-            throw std::logic_error("Local source cannot bypass ordered commits");
+            throw std::logic_error("Local source requires ordered batch commits");
         }
+        return Batch(*this);
+    }
+
+    // 本机原子批次仍逐事实连续编号并准备有界历史, 不允许维护性删除绕过来源日志.
+    Batch batch() {
+        idle();
+        if (!local_)
+            throw std::logic_error("Ordered batch requires local source");
         return Batch(*this);
     }
 

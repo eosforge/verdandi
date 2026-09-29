@@ -164,7 +164,10 @@ func (store *Store) history(tx *gorm.DB, scope Scope, state group, after Version
 	for rows.Next() {
 		var change Change
 		var cost int64
-		if err := rows.Scan(&change.Version, &change.Key, &change.Value, &change.Erase, &cost); err != nil || position == state.Version || change.Version != position+1 || !text(change.Key, 1024) || change.Value == nil || len(change.Value) > 1<<20 || change.Erase && len(change.Value) != 0 || cost != int64(64+len(change.Key)+len(change.Value)) {
+		if err := rows.Scan(&change.Version, &change.Key, &change.Value, &change.Erase, &cost); err != nil || position == state.Version || change.Version != position+1 || change.Value == nil || cost != int64(64+len(change.Key)+len(change.Value)) {
+			return Replay{}, ErrCorrupt
+		}
+		if _, err := change.Entries(); err != nil {
 			return Replay{}, ErrCorrupt
 		}
 		total += cost

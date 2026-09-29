@@ -16,11 +16,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/astrolabe/internal/bridge"
-	"github.com/eosforge/verdandi/astra/astrolabe/internal/web"
-	"github.com/eosforge/verdandi/astra/internal/admission"
-	"github.com/eosforge/verdandi/astra/internal/command"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/astrolabe/internal/bridge"
+	"github.com/eosforge/astra/astrolabe/internal/web"
+	"github.com/eosforge/astra/internal/admission"
+	"github.com/eosforge/astra/internal/command"
+	"github.com/eosforge/astra/internal/generated/orbit"
 )
 
 // options 的 public/origins 属于部署可信配置, 不从任意反向代理请求头推导; 密码只在 account 文件中保存摘要.

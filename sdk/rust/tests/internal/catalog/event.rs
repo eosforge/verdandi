@@ -32,7 +32,7 @@ struct EventField {
 
 #[test]
 fn decodes_shared_catalog_event_corpus() {
-    let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testkit/conformance/v1/catalog_events.json"));
+    let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../testkit/conformance/v1/catalog_events.json"));
     let corpus: EventCorpus = serde_json::from_str(source).unwrap_or_else(|error| panic!("invalid conformance corpus: {error}"));
     for vector in corpus.events {
         let payload = hex::decode(&vector.payload_hex).unwrap_or_else(|error| panic!("{} has invalid payload: {error}", vector.name));

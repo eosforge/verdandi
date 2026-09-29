@@ -32,7 +32,7 @@ type catalogEventVector struct {
 
 func TestCatalogEventConformanceCorpus(t *testing.T) {
 	t.Parallel()
-	content, err := os.ReadFile(filepath.Join("..", "..", "..", "testkit", "conformance", "v1", "catalog_events.json"))
+	content, err := os.ReadFile(filepath.Join("..", "..", "testkit", "conformance", "v1", "catalog_events.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

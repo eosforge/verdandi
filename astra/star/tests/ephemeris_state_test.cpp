@@ -176,13 +176,16 @@ void reads() {
 
     Time time; // 与其他组合层用例共用确定性业务时钟.
     time.ready = false;
-    bool fail{};          // 下一次取时是否抛错, 默认关闭, 触发后立即复原.
-    State::Limits limits; // 只有一个范围名额, 失败路径不能占用它.
+    bool available = true; // false 表示采样器没有返回读数.
+    bool fail{};           // 下一次取时是否抛错, 默认关闭, 触发后立即复原.
+    State::Limits limits;  // 只有一个范围名额, 失败路径不能占用它.
     limits.scopes = 1;
-    State state([&] {
+    State state([&]() -> std::optional<Clock::Reading> {
         if (std::exchange(fail, false)) {
             throw std::bad_alloc{};
         }
+        if (!available)
+            return std::nullopt;
         return time.read();
     },
                 limits);
@@ -213,6 +216,21 @@ void reads() {
         CHECK(replay && replay->empty());
         CHECK(state.changes(unknown, 1) == std::unexpected(State::Error::input));
     }
+
+    // 回退读数不能降低已确认的 1 s 水位; 未就绪的未来读数同样不能将水位推高.
+    time.value = 500ms;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    time.value = 750ms;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    time.value = 10s;
+    time.ready = false;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    time.ready = true;
+    time.value = 1s;
+    available = false;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    available = true;
+
     const auto empty = state.capture(active); // 未创建时的冻结根不能因后来首次写入而发生变化.
     CHECK(empty && state.create(active, bytes("attr"), bytes("data"), 1000));
     CHECK(empty->page(0, 1, [](const auto&, const auto&) { CHECK(false); return true; }) == 0);

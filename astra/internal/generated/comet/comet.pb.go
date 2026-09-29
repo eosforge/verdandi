@@ -106,6 +106,8 @@ const (
 	Reason_REASON_CLOCK Reason = 11
 	// 无法确认先前提交结果.
 	Reason_REASON_UNCERTAIN Reason = 12
+	// 相同逻辑身份或操作版本对应不同内容.
+	Reason_REASON_CONFLICT Reason = 13
 )
 
 // Enum value maps for Reason.
@@ -124,6 +126,7 @@ var (
 		10: "REASON_INSTANCE",
 		11: "REASON_CLOCK",
 		12: "REASON_UNCERTAIN",
+		13: "REASON_CONFLICT",
 	}
 	Reason_value = map[string]int32{
 		"REASON_UNSPECIFIED": 0,
@@ -139,6 +142,7 @@ var (
 		"REASON_INSTANCE":    10,
 		"REASON_CLOCK":       11,
 		"REASON_UNCERTAIN":   12,
+		"REASON_CONFLICT":    13,
 	}
 )
 
@@ -713,22 +717,138 @@ func (x *SessionReply) GetSession() []byte {
 	return nil
 }
 
-// 首次定位允许空 instance; version 必须为正, TTL 明确指定整数毫秒.
-type PublishRequest struct {
+// 与 Publish 使用同一认证和范围边界; 1..128 个唯一 Key, 空 instance 仅用于首次定位.
+type CatalogQueryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Version       uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	Key           string                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
-	Value         []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
-	TtlMs         uint32                 `protobuf:"varint,6,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	Keys          []string               `protobuf:"bytes,3,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogQueryRequest) Reset() {
+	*x = CatalogQueryRequest{}
+	mi := &file_comet_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogQueryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogQueryRequest) ProtoMessage() {}
+
+func (x *CatalogQueryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_comet_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogQueryRequest.ProtoReflect.Descriptor instead.
+func (*CatalogQueryRequest) Descriptor() ([]byte, []int) {
+	return file_comet_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *CatalogQueryRequest) GetInstance() []byte {
+	if x != nil {
+		return x.Instance
+	}
+	return nil
+}
+
+func (x *CatalogQueryRequest) GetScope() *Scope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *CatalogQueryRequest) GetKeys() []string {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+// 同一个本地捕获边界的逐 Key 水位, 顺序对应请求, 未知 Key 明确返回零.
+type CatalogQueryReply struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Instance      []byte                     `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Entries       []*CatalogQueryReply_Entry `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogQueryReply) Reset() {
+	*x = CatalogQueryReply{}
+	mi := &file_comet_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogQueryReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogQueryReply) ProtoMessage() {}
+
+func (x *CatalogQueryReply) ProtoReflect() protoreflect.Message {
+	mi := &file_comet_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogQueryReply.ProtoReflect.Descriptor instead.
+func (*CatalogQueryReply) Descriptor() ([]byte, []int) {
+	return file_comet_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *CatalogQueryReply) GetInstance() []byte {
+	if x != nil {
+		return x.Instance
+	}
+	return nil
+}
+
+func (x *CatalogQueryReply) GetEntries() []*CatalogQueryReply_Entry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+// 首次定位允许空 instance; version 必须为正, TTL 明确指定整数毫秒.
+type PublishRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Instance []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Scope    *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	Version  uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Key      string                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	Value    []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	TtlMs    uint32                 `protobuf:"varint,6,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	// 与 key/value 互斥; 同 Scope、同业务版本和 TTL 的 1..128 个唯一 Key, 合计键/正文至多 1 MiB.
+	Entries       []*CatalogEntry `protobuf:"bytes,7,rep,name=entries,proto3" json:"entries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PublishRequest) Reset() {
 	*x = PublishRequest{}
-	mi := &file_comet_proto_msgTypes[7]
+	mi := &file_comet_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -740,7 +860,7 @@ func (x *PublishRequest) String() string {
 func (*PublishRequest) ProtoMessage() {}
 
 func (x *PublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[7]
+	mi := &file_comet_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -753,7 +873,7 @@ func (x *PublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishRequest.ProtoReflect.Descriptor instead.
 func (*PublishRequest) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{7}
+	return file_comet_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PublishRequest) GetInstance() []byte {
@@ -798,6 +918,66 @@ func (x *PublishRequest) GetTtlMs() uint32 {
 	return 0
 }
 
+func (x *PublishRequest) GetEntries() []*CatalogEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+// 批量发布的完整值, 零字节仍表示存在; 不提供隐式删除.
+type CatalogEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogEntry) Reset() {
+	*x = CatalogEntry{}
+	mi := &file_comet_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogEntry) ProtoMessage() {}
+
+func (x *CatalogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_comet_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogEntry.ProtoReflect.Descriptor instead.
+func (*CatalogEntry) Descriptor() ([]byte, []int) {
+	return file_comet_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CatalogEntry) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CatalogEntry) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
 // 确认当前实例本次受理, 不承诺对等复制完成或固定重试期限.
 type PublishReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -809,7 +989,7 @@ type PublishReply struct {
 
 func (x *PublishReply) Reset() {
 	*x = PublishReply{}
-	mi := &file_comet_proto_msgTypes[8]
+	mi := &file_comet_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -821,7 +1001,7 @@ func (x *PublishReply) String() string {
 func (*PublishReply) ProtoMessage() {}
 
 func (x *PublishReply) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[8]
+	mi := &file_comet_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -834,7 +1014,7 @@ func (x *PublishReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishReply.ProtoReflect.Descriptor instead.
 func (*PublishReply) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{8}
+	return file_comet_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PublishReply) GetInstance() []byte {
@@ -853,19 +1033,21 @@ func (x *PublishReply) GetVersion() uint64 {
 
 // 仅续接该 Star 仍有效的本机来源记录, 缺失时须通过完整 Publish 恢复.
 type CatalogRenewRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
-	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
-	Key           string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
-	Version       uint64                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
-	TtlMs         uint32                 `protobuf:"varint,5,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Instance []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
+	Scope    *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	Key      string                 `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	Version  uint64                 `protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"`
+	TtlMs    uint32                 `protobuf:"varint,5,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	// 与 key 互斥, 整批续租失败不会只延长一部分; 对应同一 Star 的本机来源.
+	Keys          []string `protobuf:"bytes,6,rep,name=keys,proto3" json:"keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CatalogRenewRequest) Reset() {
 	*x = CatalogRenewRequest{}
-	mi := &file_comet_proto_msgTypes[9]
+	mi := &file_comet_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -877,7 +1059,7 @@ func (x *CatalogRenewRequest) String() string {
 func (*CatalogRenewRequest) ProtoMessage() {}
 
 func (x *CatalogRenewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[9]
+	mi := &file_comet_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -890,7 +1072,7 @@ func (x *CatalogRenewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogRenewRequest.ProtoReflect.Descriptor instead.
 func (*CatalogRenewRequest) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{9}
+	return file_comet_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CatalogRenewRequest) GetInstance() []byte {
@@ -928,7 +1110,14 @@ func (x *CatalogRenewRequest) GetTtlMs() uint32 {
 	return 0
 }
 
-// 每次成功受理分配新 UUID, 不提供客户端请求 ID 或创建结果查询.
+func (x *CatalogRenewRequest) GetKeys() []string {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+// 首次 generation=1 且 uuid/capability 为空; 恢复仅接受首次签发能力对应的逻辑 ID.
 type CreateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
@@ -936,13 +1125,17 @@ type CreateRequest struct {
 	Attr          []byte                 `protobuf:"bytes,3,opt,name=attr,proto3" json:"attr,omitempty"`
 	Data          []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
 	TtlMs         uint32                 `protobuf:"varint,5,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	Uuid          []byte                 `protobuf:"bytes,6,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Capability    []byte                 `protobuf:"bytes,7,opt,name=capability,proto3" json:"capability,omitempty"`
+	Generation    uint64                 `protobuf:"varint,8,opt,name=generation,proto3" json:"generation,omitempty"`
+	Order         uint64                 `protobuf:"varint,9,opt,name=order,proto3" json:"order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateRequest) Reset() {
 	*x = CreateRequest{}
-	mi := &file_comet_proto_msgTypes[10]
+	mi := &file_comet_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1147,7 @@ func (x *CreateRequest) String() string {
 func (*CreateRequest) ProtoMessage() {}
 
 func (x *CreateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[10]
+	mi := &file_comet_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1160,7 @@ func (x *CreateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRequest.ProtoReflect.Descriptor instead.
 func (*CreateRequest) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{10}
+	return file_comet_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateRequest) GetInstance() []byte {
@@ -1005,19 +1198,51 @@ func (x *CreateRequest) GetTtlMs() uint32 {
 	return 0
 }
 
+func (x *CreateRequest) GetUuid() []byte {
+	if x != nil {
+		return x.Uuid
+	}
+	return nil
+}
+
+func (x *CreateRequest) GetCapability() []byte {
+	if x != nil {
+		return x.Capability
+	}
+	return nil
+}
+
+func (x *CreateRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *CreateRequest) GetOrder() uint64 {
+	if x != nil {
+		return x.Order
+	}
+	return 0
+}
+
 // uuid 为 16 字节原始 UUIDv4 二进制; 注册时固定 TTL, 两种 order 初始均为 0.
 type CreateReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Uuid          []byte                 `protobuf:"bytes,2,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	TtlMs         uint32                 `protobuf:"varint,3,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	Capability    []byte                 `protobuf:"bytes,4,opt,name=capability,proto3" json:"capability,omitempty"`
+	Generation    uint64                 `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
+	Order         uint64                 `protobuf:"varint,6,opt,name=order,proto3" json:"order,omitempty"`
+	Data          []byte                 `protobuf:"bytes,7,opt,name=data,proto3" json:"data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateReply) Reset() {
 	*x = CreateReply{}
-	mi := &file_comet_proto_msgTypes[11]
+	mi := &file_comet_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1029,7 +1254,7 @@ func (x *CreateReply) String() string {
 func (*CreateReply) ProtoMessage() {}
 
 func (x *CreateReply) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[11]
+	mi := &file_comet_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1042,7 +1267,7 @@ func (x *CreateReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateReply.ProtoReflect.Descriptor instead.
 func (*CreateReply) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{11}
+	return file_comet_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateReply) GetInstance() []byte {
@@ -1066,7 +1291,35 @@ func (x *CreateReply) GetTtlMs() uint32 {
 	return 0
 }
 
-// Data 整体替换不延期; order 必须为正且按 UUID 独立验证.
+func (x *CreateReply) GetCapability() []byte {
+	if x != nil {
+		return x.Capability
+	}
+	return nil
+}
+
+func (x *CreateReply) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *CreateReply) GetOrder() uint64 {
+	if x != nil {
+		return x.Order
+	}
+	return 0
+}
+
+func (x *CreateReply) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+// 新 Data order 原子替换并延长固定 TTL; 相同 order 不重复延期.
 type UpdateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
@@ -1074,13 +1327,15 @@ type UpdateRequest struct {
 	Uuid          []byte                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	Order         uint64                 `protobuf:"varint,4,opt,name=order,proto3" json:"order,omitempty"`
 	Data          []byte                 `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
+	Capability    []byte                 `protobuf:"bytes,6,opt,name=capability,proto3" json:"capability,omitempty"`
+	Generation    uint64                 `protobuf:"varint,7,opt,name=generation,proto3" json:"generation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateRequest) Reset() {
 	*x = UpdateRequest{}
-	mi := &file_comet_proto_msgTypes[12]
+	mi := &file_comet_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1092,7 +1347,7 @@ func (x *UpdateRequest) String() string {
 func (*UpdateRequest) ProtoMessage() {}
 
 func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[12]
+	mi := &file_comet_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1105,7 +1360,7 @@ func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRequest.ProtoReflect.Descriptor instead.
 func (*UpdateRequest) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{12}
+	return file_comet_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UpdateRequest) GetInstance() []byte {
@@ -1143,6 +1398,20 @@ func (x *UpdateRequest) GetData() []byte {
 	return nil
 }
 
+func (x *UpdateRequest) GetCapability() []byte {
+	if x != nil {
+		return x.Capability
+	}
+	return nil
+}
+
+func (x *UpdateRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
 // 单次 RPC 上下文提供身份, 响应只回显成功确认的正 order.
 type UpdateReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1153,7 +1422,7 @@ type UpdateReply struct {
 
 func (x *UpdateReply) Reset() {
 	*x = UpdateReply{}
-	mi := &file_comet_proto_msgTypes[13]
+	mi := &file_comet_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1165,7 +1434,7 @@ func (x *UpdateReply) String() string {
 func (*UpdateReply) ProtoMessage() {}
 
 func (x *UpdateReply) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[13]
+	mi := &file_comet_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1178,7 +1447,7 @@ func (x *UpdateReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateReply.ProtoReflect.Descriptor instead.
 func (*UpdateReply) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{13}
+	return file_comet_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *UpdateReply) GetOrder() uint64 {
@@ -1195,13 +1464,15 @@ type RenewRequest struct {
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	Uuid          []byte                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
 	Order         uint64                 `protobuf:"varint,4,opt,name=order,proto3" json:"order,omitempty"`
+	Capability    []byte                 `protobuf:"bytes,5,opt,name=capability,proto3" json:"capability,omitempty"`
+	Generation    uint64                 `protobuf:"varint,6,opt,name=generation,proto3" json:"generation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RenewRequest) Reset() {
 	*x = RenewRequest{}
-	mi := &file_comet_proto_msgTypes[14]
+	mi := &file_comet_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1213,7 +1484,7 @@ func (x *RenewRequest) String() string {
 func (*RenewRequest) ProtoMessage() {}
 
 func (x *RenewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[14]
+	mi := &file_comet_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1226,7 +1497,7 @@ func (x *RenewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewRequest.ProtoReflect.Descriptor instead.
 func (*RenewRequest) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{14}
+	return file_comet_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RenewRequest) GetInstance() []byte {
@@ -1257,6 +1528,20 @@ func (x *RenewRequest) GetOrder() uint64 {
 	return 0
 }
 
+func (x *RenewRequest) GetCapability() []byte {
+	if x != nil {
+		return x.Capability
+	}
+	return nil
+}
+
+func (x *RenewRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
 // Renew order 与 Data order 是两条独立序列.
 type RenewReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1267,7 +1552,7 @@ type RenewReply struct {
 
 func (x *RenewReply) Reset() {
 	*x = RenewReply{}
-	mi := &file_comet_proto_msgTypes[15]
+	mi := &file_comet_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1279,7 +1564,7 @@ func (x *RenewReply) String() string {
 func (*RenewReply) ProtoMessage() {}
 
 func (x *RenewReply) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[15]
+	mi := &file_comet_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1292,7 +1577,7 @@ func (x *RenewReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewReply.ProtoReflect.Descriptor instead.
 func (*RenewReply) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{15}
+	return file_comet_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *RenewReply) GetOrder() uint64 {
@@ -1308,13 +1593,15 @@ type RemoveRequest struct {
 	Instance      []byte                 `protobuf:"bytes,1,opt,name=instance,proto3" json:"instance,omitempty"`
 	Scope         *Scope                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
 	Uuid          []byte                 `protobuf:"bytes,3,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Capability    []byte                 `protobuf:"bytes,4,opt,name=capability,proto3" json:"capability,omitempty"`
+	Generation    uint64                 `protobuf:"varint,5,opt,name=generation,proto3" json:"generation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RemoveRequest) Reset() {
 	*x = RemoveRequest{}
-	mi := &file_comet_proto_msgTypes[16]
+	mi := &file_comet_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1326,7 +1613,7 @@ func (x *RemoveRequest) String() string {
 func (*RemoveRequest) ProtoMessage() {}
 
 func (x *RemoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[16]
+	mi := &file_comet_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1339,7 +1626,7 @@ func (x *RemoveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRequest.ProtoReflect.Descriptor instead.
 func (*RemoveRequest) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{16}
+	return file_comet_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RemoveRequest) GetInstance() []byte {
@@ -1363,6 +1650,20 @@ func (x *RemoveRequest) GetUuid() []byte {
 	return nil
 }
 
+func (x *RemoveRequest) GetCapability() []byte {
+	if x != nil {
+		return x.Capability
+	}
+	return nil
+}
+
+func (x *RemoveRequest) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
 // target 空为全 Scope, 非空为精确 Key 或 16 字节 UUID 二进制; version 缺失与显式 0 不同.
 type WatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1376,7 +1677,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_comet_proto_msgTypes[17]
+	mi := &file_comet_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1388,7 +1689,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[17]
+	mi := &file_comet_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1401,7 +1702,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{17}
+	return file_comet_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *WatchRequest) GetInstance() []byte {
@@ -1446,7 +1747,7 @@ type AlmanacWatchReply struct {
 
 func (x *AlmanacWatchReply) Reset() {
 	*x = AlmanacWatchReply{}
-	mi := &file_comet_proto_msgTypes[18]
+	mi := &file_comet_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1759,7 @@ func (x *AlmanacWatchReply) String() string {
 func (*AlmanacWatchReply) ProtoMessage() {}
 
 func (x *AlmanacWatchReply) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[18]
+	mi := &file_comet_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1772,7 @@ func (x *AlmanacWatchReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlmanacWatchReply.ProtoReflect.Descriptor instead.
 func (*AlmanacWatchReply) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{18}
+	return file_comet_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AlmanacWatchReply) GetMode() Mode {
@@ -1523,7 +1824,7 @@ type CatalogWatchReply struct {
 
 func (x *CatalogWatchReply) Reset() {
 	*x = CatalogWatchReply{}
-	mi := &file_comet_proto_msgTypes[19]
+	mi := &file_comet_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1535,7 +1836,7 @@ func (x *CatalogWatchReply) String() string {
 func (*CatalogWatchReply) ProtoMessage() {}
 
 func (x *CatalogWatchReply) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[19]
+	mi := &file_comet_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1548,7 +1849,7 @@ func (x *CatalogWatchReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogWatchReply.ProtoReflect.Descriptor instead.
 func (*CatalogWatchReply) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{19}
+	return file_comet_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CatalogWatchReply) GetMode() Mode {
@@ -1600,7 +1901,7 @@ type EphemerisWatchReply struct {
 
 func (x *EphemerisWatchReply) Reset() {
 	*x = EphemerisWatchReply{}
-	mi := &file_comet_proto_msgTypes[20]
+	mi := &file_comet_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1612,7 +1913,7 @@ func (x *EphemerisWatchReply) String() string {
 func (*EphemerisWatchReply) ProtoMessage() {}
 
 func (x *EphemerisWatchReply) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[20]
+	mi := &file_comet_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1625,7 +1926,7 @@ func (x *EphemerisWatchReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EphemerisWatchReply.ProtoReflect.Descriptor instead.
 func (*EphemerisWatchReply) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{20}
+	return file_comet_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *EphemerisWatchReply) GetMode() Mode {
@@ -1683,7 +1984,7 @@ type Failure struct {
 
 func (x *Failure) Reset() {
 	*x = Failure{}
-	mi := &file_comet_proto_msgTypes[21]
+	mi := &file_comet_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1695,7 +1996,7 @@ func (x *Failure) String() string {
 func (*Failure) ProtoMessage() {}
 
 func (x *Failure) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[21]
+	mi := &file_comet_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1708,7 +2009,7 @@ func (x *Failure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Failure.ProtoReflect.Descriptor instead.
 func (*Failure) Descriptor() ([]byte, []int) {
-	return file_comet_proto_rawDescGZIP(), []int{21}
+	return file_comet_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Failure) GetReason() Reason {
@@ -1799,7 +2100,7 @@ type EphemerisChange_Record struct {
 
 func (x *EphemerisChange_Record) Reset() {
 	*x = EphemerisChange_Record{}
-	mi := &file_comet_proto_msgTypes[22]
+	mi := &file_comet_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1811,7 +2112,7 @@ func (x *EphemerisChange_Record) String() string {
 func (*EphemerisChange_Record) ProtoMessage() {}
 
 func (x *EphemerisChange_Record) ProtoReflect() protoreflect.Message {
-	mi := &file_comet_proto_msgTypes[22]
+	mi := &file_comet_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1839,6 +2140,58 @@ func (x *EphemerisChange_Record) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+type CatalogQueryReply_Entry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogQueryReply_Entry) Reset() {
+	*x = CatalogQueryReply_Entry{}
+	mi := &file_comet_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogQueryReply_Entry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogQueryReply_Entry) ProtoMessage() {}
+
+func (x *CatalogQueryReply_Entry) ProtoReflect() protoreflect.Message {
+	mi := &file_comet_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogQueryReply_Entry.ProtoReflect.Descriptor instead.
+func (*CatalogQueryReply_Entry) Descriptor() ([]byte, []int) {
+	return file_comet_proto_rawDescGZIP(), []int{8, 0}
+}
+
+func (x *CatalogQueryReply_Entry) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CatalogQueryReply_Entry) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
 }
 
 var File_comet_proto protoreflect.FileDescriptor
@@ -1875,53 +2228,102 @@ const file_comet_proto_rawDesc = "" +
 	"\x06secret\x18\x02 \x01(\fR\x06secret\"D\n" +
 	"\fSessionReply\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12\x18\n" +
-	"\asession\x18\x02 \x01(\fR\asession\"\xb2\x01\n" +
+	"\asession\x18\x02 \x01(\fR\asession\"r\n" +
+	"\x13CatalogQueryRequest\x12\x1a\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
+	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
+	"\x04keys\x18\x03 \x03(\tR\x04keys\"\xa7\x01\n" +
+	"\x11CatalogQueryReply\x12\x1a\n" +
+	"\binstance\x18\x01 \x01(\fR\binstance\x12A\n" +
+	"\aentries\x18\x02 \x03(\v2'.proto.comet.v1.CatalogQueryReply.EntryR\aentries\x1a3\n" +
+	"\x05Entry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\"\xea\x01\n" +
 	"\x0ePublishRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x04R\aversion\x12\x10\n" +
 	"\x03key\x18\x04 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\fR\x05value\x12\x15\n" +
-	"\x06ttl_ms\x18\x06 \x01(\rR\x05ttlMs\"D\n" +
+	"\x06ttl_ms\x18\x06 \x01(\rR\x05ttlMs\x126\n" +
+	"\aentries\x18\a \x03(\v2\x1c.proto.comet.v1.CatalogEntryR\aentries\"6\n" +
+	"\fCatalogEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value\"D\n" +
 	"\fPublishReply\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x04R\aversion\"\xa1\x01\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\"\xb5\x01\n" +
 	"\x13CatalogRenewRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x10\n" +
 	"\x03key\x18\x03 \x01(\tR\x03key\x12\x18\n" +
 	"\aversion\x18\x04 \x01(\x04R\aversion\x12\x15\n" +
-	"\x06ttl_ms\x18\x05 \x01(\rR\x05ttlMs\"\x97\x01\n" +
+	"\x06ttl_ms\x18\x05 \x01(\rR\x05ttlMs\x12\x12\n" +
+	"\x04keys\x18\x06 \x03(\tR\x04keys\"\x81\x02\n" +
 	"\rCreateRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
 	"\x04attr\x18\x03 \x01(\fR\x04attr\x12\x12\n" +
 	"\x04data\x18\x04 \x01(\fR\x04data\x12\x15\n" +
-	"\x06ttl_ms\x18\x05 \x01(\rR\x05ttlMs\"T\n" +
+	"\x06ttl_ms\x18\x05 \x01(\rR\x05ttlMs\x12\x12\n" +
+	"\x04uuid\x18\x06 \x01(\fR\x04uuid\x12\x1e\n" +
+	"\n" +
+	"capability\x18\a \x01(\fR\n" +
+	"capability\x12\x1e\n" +
+	"\n" +
+	"generation\x18\b \x01(\x04R\n" +
+	"generation\x12\x14\n" +
+	"\x05order\x18\t \x01(\x04R\x05order\"\xbe\x01\n" +
 	"\vCreateReply\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12\x12\n" +
 	"\x04uuid\x18\x02 \x01(\fR\x04uuid\x12\x15\n" +
-	"\x06ttl_ms\x18\x03 \x01(\rR\x05ttlMs\"\x96\x01\n" +
+	"\x06ttl_ms\x18\x03 \x01(\rR\x05ttlMs\x12\x1e\n" +
+	"\n" +
+	"capability\x18\x04 \x01(\fR\n" +
+	"capability\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x05 \x01(\x04R\n" +
+	"generation\x12\x14\n" +
+	"\x05order\x18\x06 \x01(\x04R\x05order\x12\x12\n" +
+	"\x04data\x18\a \x01(\fR\x04data\"\xd6\x01\n" +
 	"\rUpdateRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
 	"\x04uuid\x18\x03 \x01(\fR\x04uuid\x12\x14\n" +
 	"\x05order\x18\x04 \x01(\x04R\x05order\x12\x12\n" +
-	"\x04data\x18\x05 \x01(\fR\x04data\"#\n" +
+	"\x04data\x18\x05 \x01(\fR\x04data\x12\x1e\n" +
+	"\n" +
+	"capability\x18\x06 \x01(\fR\n" +
+	"capability\x12\x1e\n" +
+	"\n" +
+	"generation\x18\a \x01(\x04R\n" +
+	"generation\"#\n" +
 	"\vUpdateReply\x12\x14\n" +
-	"\x05order\x18\x01 \x01(\x04R\x05order\"\x81\x01\n" +
+	"\x05order\x18\x01 \x01(\x04R\x05order\"\xc1\x01\n" +
 	"\fRenewRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
 	"\x04uuid\x18\x03 \x01(\fR\x04uuid\x12\x14\n" +
-	"\x05order\x18\x04 \x01(\x04R\x05order\"\"\n" +
+	"\x05order\x18\x04 \x01(\x04R\x05order\x12\x1e\n" +
+	"\n" +
+	"capability\x18\x05 \x01(\fR\n" +
+	"capability\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x06 \x01(\x04R\n" +
+	"generation\"\"\n" +
 	"\n" +
 	"RenewReply\x12\x14\n" +
-	"\x05order\x18\x01 \x01(\x04R\x05order\"l\n" +
+	"\x05order\x18\x01 \x01(\x04R\x05order\"\xac\x01\n" +
 	"\rRemoveRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x12\n" +
-	"\x04uuid\x18\x03 \x01(\fR\x04uuid\"\x9a\x01\n" +
+	"\x04uuid\x18\x03 \x01(\fR\x04uuid\x12\x1e\n" +
+	"\n" +
+	"capability\x18\x04 \x01(\fR\n" +
+	"capability\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x05 \x01(\x04R\n" +
+	"generation\"\x9a\x01\n" +
 	"\fWatchRequest\x12\x1a\n" +
 	"\binstance\x18\x01 \x01(\fR\binstance\x12+\n" +
 	"\x05scope\x18\x02 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x16\n" +
@@ -1981,7 +2383,7 @@ const file_comet_proto_rawDesc = "" +
 	"\n" +
 	"MODE_RESET\x10\x01\x12\x0e\n" +
 	"\n" +
-	"MODE_APPLY\x10\x02*\x88\x02\n" +
+	"MODE_APPLY\x10\x02*\x9d\x02\n" +
 	"\x06Reason\x12\x16\n" +
 	"\x12REASON_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fREASON_INPUT\x10\x01\x12\x12\n" +
@@ -1996,15 +2398,17 @@ const file_comet_proto_rawDesc = "" +
 	"\x0fREASON_INSTANCE\x10\n" +
 	"\x12\x10\n" +
 	"\fREASON_CLOCK\x10\v\x12\x14\n" +
-	"\x10REASON_UNCERTAIN\x10\f*2\n" +
+	"\x10REASON_UNCERTAIN\x10\f\x12\x13\n" +
+	"\x0fREASON_CONFLICT\x10\r*2\n" +
 	"\x06Effect\x12\x12\n" +
 	"\x0eEFFECT_UNKNOWN\x10\x00\x12\x14\n" +
 	"\x10EFFECT_UNAPPLIED\x10\x012T\n" +
 	"\aGateway\x12I\n" +
 	"\aSession\x12\x1e.proto.comet.v1.SessionRequest\x1a\x1c.proto.comet.v1.SessionReply0\x012U\n" +
 	"\aAlmanac\x12J\n" +
-	"\x05Watch\x12\x1c.proto.comet.v1.WatchRequest\x1a!.proto.comet.v1.AlmanacWatchReply0\x012\xe3\x01\n" +
-	"\aCatalog\x12G\n" +
+	"\x05Watch\x12\x1c.proto.comet.v1.WatchRequest\x1a!.proto.comet.v1.AlmanacWatchReply0\x012\xb4\x02\n" +
+	"\aCatalog\x12O\n" +
+	"\x05Query\x12#.proto.comet.v1.CatalogQueryRequest\x1a!.proto.comet.v1.CatalogQueryReply\x12G\n" +
 	"\aPublish\x12\x1e.proto.comet.v1.PublishRequest\x1a\x1c.proto.comet.v1.PublishReply\x12C\n" +
 	"\x05Renew\x12#.proto.comet.v1.CatalogRenewRequest\x1a\x15.proto.comet.v1.Empty\x12J\n" +
 	"\x05Watch\x12\x1c.proto.comet.v1.WatchRequest\x1a!.proto.comet.v1.CatalogWatchReply0\x012\xe8\x02\n" +
@@ -2013,7 +2417,7 @@ const file_comet_proto_rawDesc = "" +
 	"\x06Update\x12\x1d.proto.comet.v1.UpdateRequest\x1a\x1b.proto.comet.v1.UpdateReply\x12A\n" +
 	"\x05Renew\x12\x1c.proto.comet.v1.RenewRequest\x1a\x1a.proto.comet.v1.RenewReply\x12>\n" +
 	"\x06Remove\x12\x1d.proto.comet.v1.RemoveRequest\x1a\x15.proto.comet.v1.Empty\x12L\n" +
-	"\x05Watch\x12\x1c.proto.comet.v1.WatchRequest\x1a#.proto.comet.v1.EphemerisWatchReply0\x01BCZAgithub.com/eosforge/verdandi/astra/internal/generated/comet;cometb\x06proto3"
+	"\x05Watch\x12\x1c.proto.comet.v1.WatchRequest\x1a#.proto.comet.v1.EphemerisWatchReply0\x01B:Z8github.com/eosforge/astra/internal/generated/comet;cometb\x06proto3"
 
 var (
 	file_comet_proto_rawDescOnce sync.Once
@@ -2028,80 +2432,89 @@ func file_comet_proto_rawDescGZIP() []byte {
 }
 
 var file_comet_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_comet_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_comet_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_comet_proto_goTypes = []any{
-	(Mode)(0),                      // 0: proto.comet.v1.Mode
-	(Reason)(0),                    // 1: proto.comet.v1.Reason
-	(Effect)(0),                    // 2: proto.comet.v1.Effect
-	(*Empty)(nil),                  // 3: proto.comet.v1.Empty
-	(*Scope)(nil),                  // 4: proto.comet.v1.Scope
-	(*AlmanacChange)(nil),          // 5: proto.comet.v1.AlmanacChange
-	(*CatalogChange)(nil),          // 6: proto.comet.v1.CatalogChange
-	(*EphemerisChange)(nil),        // 7: proto.comet.v1.EphemerisChange
-	(*SessionRequest)(nil),         // 8: proto.comet.v1.SessionRequest
-	(*SessionReply)(nil),           // 9: proto.comet.v1.SessionReply
-	(*PublishRequest)(nil),         // 10: proto.comet.v1.PublishRequest
-	(*PublishReply)(nil),           // 11: proto.comet.v1.PublishReply
-	(*CatalogRenewRequest)(nil),    // 12: proto.comet.v1.CatalogRenewRequest
-	(*CreateRequest)(nil),          // 13: proto.comet.v1.CreateRequest
-	(*CreateReply)(nil),            // 14: proto.comet.v1.CreateReply
-	(*UpdateRequest)(nil),          // 15: proto.comet.v1.UpdateRequest
-	(*UpdateReply)(nil),            // 16: proto.comet.v1.UpdateReply
-	(*RenewRequest)(nil),           // 17: proto.comet.v1.RenewRequest
-	(*RenewReply)(nil),             // 18: proto.comet.v1.RenewReply
-	(*RemoveRequest)(nil),          // 19: proto.comet.v1.RemoveRequest
-	(*WatchRequest)(nil),           // 20: proto.comet.v1.WatchRequest
-	(*AlmanacWatchReply)(nil),      // 21: proto.comet.v1.AlmanacWatchReply
-	(*CatalogWatchReply)(nil),      // 22: proto.comet.v1.CatalogWatchReply
-	(*EphemerisWatchReply)(nil),    // 23: proto.comet.v1.EphemerisWatchReply
-	(*Failure)(nil),                // 24: proto.comet.v1.Failure
-	(*EphemerisChange_Record)(nil), // 25: proto.comet.v1.EphemerisChange.Record
+	(Mode)(0),                       // 0: proto.comet.v1.Mode
+	(Reason)(0),                     // 1: proto.comet.v1.Reason
+	(Effect)(0),                     // 2: proto.comet.v1.Effect
+	(*Empty)(nil),                   // 3: proto.comet.v1.Empty
+	(*Scope)(nil),                   // 4: proto.comet.v1.Scope
+	(*AlmanacChange)(nil),           // 5: proto.comet.v1.AlmanacChange
+	(*CatalogChange)(nil),           // 6: proto.comet.v1.CatalogChange
+	(*EphemerisChange)(nil),         // 7: proto.comet.v1.EphemerisChange
+	(*SessionRequest)(nil),          // 8: proto.comet.v1.SessionRequest
+	(*SessionReply)(nil),            // 9: proto.comet.v1.SessionReply
+	(*CatalogQueryRequest)(nil),     // 10: proto.comet.v1.CatalogQueryRequest
+	(*CatalogQueryReply)(nil),       // 11: proto.comet.v1.CatalogQueryReply
+	(*PublishRequest)(nil),          // 12: proto.comet.v1.PublishRequest
+	(*CatalogEntry)(nil),            // 13: proto.comet.v1.CatalogEntry
+	(*PublishReply)(nil),            // 14: proto.comet.v1.PublishReply
+	(*CatalogRenewRequest)(nil),     // 15: proto.comet.v1.CatalogRenewRequest
+	(*CreateRequest)(nil),           // 16: proto.comet.v1.CreateRequest
+	(*CreateReply)(nil),             // 17: proto.comet.v1.CreateReply
+	(*UpdateRequest)(nil),           // 18: proto.comet.v1.UpdateRequest
+	(*UpdateReply)(nil),             // 19: proto.comet.v1.UpdateReply
+	(*RenewRequest)(nil),            // 20: proto.comet.v1.RenewRequest
+	(*RenewReply)(nil),              // 21: proto.comet.v1.RenewReply
+	(*RemoveRequest)(nil),           // 22: proto.comet.v1.RemoveRequest
+	(*WatchRequest)(nil),            // 23: proto.comet.v1.WatchRequest
+	(*AlmanacWatchReply)(nil),       // 24: proto.comet.v1.AlmanacWatchReply
+	(*CatalogWatchReply)(nil),       // 25: proto.comet.v1.CatalogWatchReply
+	(*EphemerisWatchReply)(nil),     // 26: proto.comet.v1.EphemerisWatchReply
+	(*Failure)(nil),                 // 27: proto.comet.v1.Failure
+	(*EphemerisChange_Record)(nil),  // 28: proto.comet.v1.EphemerisChange.Record
+	(*CatalogQueryReply_Entry)(nil), // 29: proto.comet.v1.CatalogQueryReply.Entry
 }
 var file_comet_proto_depIdxs = []int32{
 	3,  // 0: proto.comet.v1.AlmanacChange.erase:type_name -> proto.comet.v1.Empty
 	3,  // 1: proto.comet.v1.CatalogChange.erase:type_name -> proto.comet.v1.Empty
-	25, // 2: proto.comet.v1.EphemerisChange.record:type_name -> proto.comet.v1.EphemerisChange.Record
+	28, // 2: proto.comet.v1.EphemerisChange.record:type_name -> proto.comet.v1.EphemerisChange.Record
 	3,  // 3: proto.comet.v1.EphemerisChange.erase:type_name -> proto.comet.v1.Empty
-	4,  // 4: proto.comet.v1.PublishRequest.scope:type_name -> proto.comet.v1.Scope
-	4,  // 5: proto.comet.v1.CatalogRenewRequest.scope:type_name -> proto.comet.v1.Scope
-	4,  // 6: proto.comet.v1.CreateRequest.scope:type_name -> proto.comet.v1.Scope
-	4,  // 7: proto.comet.v1.UpdateRequest.scope:type_name -> proto.comet.v1.Scope
-	4,  // 8: proto.comet.v1.RenewRequest.scope:type_name -> proto.comet.v1.Scope
-	4,  // 9: proto.comet.v1.RemoveRequest.scope:type_name -> proto.comet.v1.Scope
-	4,  // 10: proto.comet.v1.WatchRequest.scope:type_name -> proto.comet.v1.Scope
-	0,  // 11: proto.comet.v1.AlmanacWatchReply.mode:type_name -> proto.comet.v1.Mode
-	5,  // 12: proto.comet.v1.AlmanacWatchReply.changes:type_name -> proto.comet.v1.AlmanacChange
-	0,  // 13: proto.comet.v1.CatalogWatchReply.mode:type_name -> proto.comet.v1.Mode
-	6,  // 14: proto.comet.v1.CatalogWatchReply.changes:type_name -> proto.comet.v1.CatalogChange
-	0,  // 15: proto.comet.v1.EphemerisWatchReply.mode:type_name -> proto.comet.v1.Mode
-	7,  // 16: proto.comet.v1.EphemerisWatchReply.changes:type_name -> proto.comet.v1.EphemerisChange
-	1,  // 17: proto.comet.v1.Failure.reason:type_name -> proto.comet.v1.Reason
-	2,  // 18: proto.comet.v1.Failure.effect:type_name -> proto.comet.v1.Effect
-	8,  // 19: proto.comet.v1.Gateway.Session:input_type -> proto.comet.v1.SessionRequest
-	20, // 20: proto.comet.v1.Almanac.Watch:input_type -> proto.comet.v1.WatchRequest
-	10, // 21: proto.comet.v1.Catalog.Publish:input_type -> proto.comet.v1.PublishRequest
-	12, // 22: proto.comet.v1.Catalog.Renew:input_type -> proto.comet.v1.CatalogRenewRequest
-	20, // 23: proto.comet.v1.Catalog.Watch:input_type -> proto.comet.v1.WatchRequest
-	13, // 24: proto.comet.v1.Ephemeris.Create:input_type -> proto.comet.v1.CreateRequest
-	15, // 25: proto.comet.v1.Ephemeris.Update:input_type -> proto.comet.v1.UpdateRequest
-	17, // 26: proto.comet.v1.Ephemeris.Renew:input_type -> proto.comet.v1.RenewRequest
-	19, // 27: proto.comet.v1.Ephemeris.Remove:input_type -> proto.comet.v1.RemoveRequest
-	20, // 28: proto.comet.v1.Ephemeris.Watch:input_type -> proto.comet.v1.WatchRequest
-	9,  // 29: proto.comet.v1.Gateway.Session:output_type -> proto.comet.v1.SessionReply
-	21, // 30: proto.comet.v1.Almanac.Watch:output_type -> proto.comet.v1.AlmanacWatchReply
-	11, // 31: proto.comet.v1.Catalog.Publish:output_type -> proto.comet.v1.PublishReply
-	3,  // 32: proto.comet.v1.Catalog.Renew:output_type -> proto.comet.v1.Empty
-	22, // 33: proto.comet.v1.Catalog.Watch:output_type -> proto.comet.v1.CatalogWatchReply
-	14, // 34: proto.comet.v1.Ephemeris.Create:output_type -> proto.comet.v1.CreateReply
-	16, // 35: proto.comet.v1.Ephemeris.Update:output_type -> proto.comet.v1.UpdateReply
-	18, // 36: proto.comet.v1.Ephemeris.Renew:output_type -> proto.comet.v1.RenewReply
-	3,  // 37: proto.comet.v1.Ephemeris.Remove:output_type -> proto.comet.v1.Empty
-	23, // 38: proto.comet.v1.Ephemeris.Watch:output_type -> proto.comet.v1.EphemerisWatchReply
-	29, // [29:39] is the sub-list for method output_type
-	19, // [19:29] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	4,  // 4: proto.comet.v1.CatalogQueryRequest.scope:type_name -> proto.comet.v1.Scope
+	29, // 5: proto.comet.v1.CatalogQueryReply.entries:type_name -> proto.comet.v1.CatalogQueryReply.Entry
+	4,  // 6: proto.comet.v1.PublishRequest.scope:type_name -> proto.comet.v1.Scope
+	13, // 7: proto.comet.v1.PublishRequest.entries:type_name -> proto.comet.v1.CatalogEntry
+	4,  // 8: proto.comet.v1.CatalogRenewRequest.scope:type_name -> proto.comet.v1.Scope
+	4,  // 9: proto.comet.v1.CreateRequest.scope:type_name -> proto.comet.v1.Scope
+	4,  // 10: proto.comet.v1.UpdateRequest.scope:type_name -> proto.comet.v1.Scope
+	4,  // 11: proto.comet.v1.RenewRequest.scope:type_name -> proto.comet.v1.Scope
+	4,  // 12: proto.comet.v1.RemoveRequest.scope:type_name -> proto.comet.v1.Scope
+	4,  // 13: proto.comet.v1.WatchRequest.scope:type_name -> proto.comet.v1.Scope
+	0,  // 14: proto.comet.v1.AlmanacWatchReply.mode:type_name -> proto.comet.v1.Mode
+	5,  // 15: proto.comet.v1.AlmanacWatchReply.changes:type_name -> proto.comet.v1.AlmanacChange
+	0,  // 16: proto.comet.v1.CatalogWatchReply.mode:type_name -> proto.comet.v1.Mode
+	6,  // 17: proto.comet.v1.CatalogWatchReply.changes:type_name -> proto.comet.v1.CatalogChange
+	0,  // 18: proto.comet.v1.EphemerisWatchReply.mode:type_name -> proto.comet.v1.Mode
+	7,  // 19: proto.comet.v1.EphemerisWatchReply.changes:type_name -> proto.comet.v1.EphemerisChange
+	1,  // 20: proto.comet.v1.Failure.reason:type_name -> proto.comet.v1.Reason
+	2,  // 21: proto.comet.v1.Failure.effect:type_name -> proto.comet.v1.Effect
+	8,  // 22: proto.comet.v1.Gateway.Session:input_type -> proto.comet.v1.SessionRequest
+	23, // 23: proto.comet.v1.Almanac.Watch:input_type -> proto.comet.v1.WatchRequest
+	10, // 24: proto.comet.v1.Catalog.Query:input_type -> proto.comet.v1.CatalogQueryRequest
+	12, // 25: proto.comet.v1.Catalog.Publish:input_type -> proto.comet.v1.PublishRequest
+	15, // 26: proto.comet.v1.Catalog.Renew:input_type -> proto.comet.v1.CatalogRenewRequest
+	23, // 27: proto.comet.v1.Catalog.Watch:input_type -> proto.comet.v1.WatchRequest
+	16, // 28: proto.comet.v1.Ephemeris.Create:input_type -> proto.comet.v1.CreateRequest
+	18, // 29: proto.comet.v1.Ephemeris.Update:input_type -> proto.comet.v1.UpdateRequest
+	20, // 30: proto.comet.v1.Ephemeris.Renew:input_type -> proto.comet.v1.RenewRequest
+	22, // 31: proto.comet.v1.Ephemeris.Remove:input_type -> proto.comet.v1.RemoveRequest
+	23, // 32: proto.comet.v1.Ephemeris.Watch:input_type -> proto.comet.v1.WatchRequest
+	9,  // 33: proto.comet.v1.Gateway.Session:output_type -> proto.comet.v1.SessionReply
+	24, // 34: proto.comet.v1.Almanac.Watch:output_type -> proto.comet.v1.AlmanacWatchReply
+	11, // 35: proto.comet.v1.Catalog.Query:output_type -> proto.comet.v1.CatalogQueryReply
+	14, // 36: proto.comet.v1.Catalog.Publish:output_type -> proto.comet.v1.PublishReply
+	3,  // 37: proto.comet.v1.Catalog.Renew:output_type -> proto.comet.v1.Empty
+	25, // 38: proto.comet.v1.Catalog.Watch:output_type -> proto.comet.v1.CatalogWatchReply
+	17, // 39: proto.comet.v1.Ephemeris.Create:output_type -> proto.comet.v1.CreateReply
+	19, // 40: proto.comet.v1.Ephemeris.Update:output_type -> proto.comet.v1.UpdateReply
+	21, // 41: proto.comet.v1.Ephemeris.Renew:output_type -> proto.comet.v1.RenewReply
+	3,  // 42: proto.comet.v1.Ephemeris.Remove:output_type -> proto.comet.v1.Empty
+	26, // 43: proto.comet.v1.Ephemeris.Watch:output_type -> proto.comet.v1.EphemerisWatchReply
+	33, // [33:44] is the sub-list for method output_type
+	22, // [22:33] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_comet_proto_init() }
@@ -2122,18 +2535,18 @@ func file_comet_proto_init() {
 		(*EphemerisChange_Erase)(nil),
 		(*EphemerisChange_Data)(nil),
 	}
-	file_comet_proto_msgTypes[17].OneofWrappers = []any{}
-	file_comet_proto_msgTypes[18].OneofWrappers = []any{}
-	file_comet_proto_msgTypes[19].OneofWrappers = []any{}
 	file_comet_proto_msgTypes[20].OneofWrappers = []any{}
 	file_comet_proto_msgTypes[21].OneofWrappers = []any{}
+	file_comet_proto_msgTypes[22].OneofWrappers = []any{}
+	file_comet_proto_msgTypes[23].OneofWrappers = []any{}
+	file_comet_proto_msgTypes[24].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_comet_proto_rawDesc), len(file_comet_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   23,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

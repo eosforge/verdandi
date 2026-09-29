@@ -44,3 +44,43 @@ bool Subscriber::wait(std::chrono::milliseconds timeout) const {
     return !subscribing_ || subscribing_->wait(timeout);
 }
 } // namespace comet
+
+namespace comet {
+Subscriber::View Subscriber::state() const {
+    return watch();
+}
+
+void Subscriber::stop() noexcept {
+    close();
+}
+
+Result<void> Subscriber::changed(std::move_only_function<void(View)> callback) {
+    return subscribing_ ? subscribing_->changed(std::move(callback)) : Result<void>(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
+}
+
+Result<void> Subscriber::watch(std::move_only_function<void(Map)> callback) {
+    if (!subscribing_) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    }
+    if (!callback) {
+        return subscribing_->watch({}, false);
+    }
+    return subscribing_->watch([callback = std::move(callback)](View view) mutable { callback(Map(std::move(view))); }, false);
+}
+
+Result<void> Subscriber::watch(std::move_only_function<void(std::string, std::optional<Value>)> callback) {
+    if (!subscribing_) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    }
+    if (!callback) {
+        return subscribing_->watch({}, true);
+    }
+    return subscribing_->watch([callback = std::move(callback)](View view) mutable {
+        auto key = view.target();
+        const auto record = view.find(key);
+        auto value = (record ? record->value : Value{});
+        callback(std::move(key), value ? std::optional<Value>(std::move(value)) : std::nullopt);
+    },
+                               true);
+}
+} // namespace comet

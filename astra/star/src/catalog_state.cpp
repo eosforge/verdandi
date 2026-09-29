@@ -1,4 +1,6 @@
 #include "catalog_state.hpp"
+#include <algorithm>
+#include <array>
 #include <astra/profile.hpp>
 #include <cassert>
 #include <utility>
@@ -97,66 +99,189 @@ void Catalog::State::notify(Notify notify, void* context) {
     context_ = context;
 }
 
-std::expected<Clock::Reading, Catalog::State::Error> Catalog::State::reading() {
+std::expected<std::vector<std::uint64_t>, Catalog::State::Error> Catalog::State::versions(const Scope& scope, std::span<const std::string_view> keys) const {
 
-    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.reading");
-
-    ASTRA_PROFILE_BEGIN(profile_lock_100, "star.catalog_state.Catalog.State.reading.wait.timing");
-    const std::lock_guard timing(timing_); // 共享读者仍按调用顺序验证注入时钟, 不并发修改 observed_.
-    ASTRA_PROFILE_END(profile_lock_100);
-    auto value = time_(); // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
-    if (!value || !value->ready || value->time.time_since_epoch().count() < 0 || (observed_ && value->time < *observed_)) {
-        return std::unexpected(Error::clock);
+    // 在锁外验证有界请求和准备输出, 失败不创建任何业务状态.
+    if (!scope.valid() || keys.empty() || keys.size() > 128)
+        return std::unexpected(Error::input);
+    std::array<std::string_view, 128> names;           // 栈内借用本次参数, 不为逐 Key 校验分配树节点.
+    auto unique = std::span(names).first(keys.size()); // 不改变调用方顺序, 回复仍与输入逐项对应.
+    for (std::size_t index = 0; index < keys.size(); ++index) {
+        if (!Scope::text(keys[index], 1024))
+            return std::unexpected(Error::input);
+        unique[index] = keys[index];
     }
-    observed_ = value->time;
-    return *value;
+    std::ranges::sort(unique);
+    if (std::ranges::adjacent_find(unique) != unique.end())
+        return std::unexpected(Error::input);
+    std::vector<std::uint64_t> result(keys.size()); // 未知 Key 保留零, 不伪造墓碑或业务版本.
+
+    // merged_ 保留过期后的最高水位; 不从可见投影中推测已丢失正文的版本.
+    const std::shared_lock lock(*gate_);
+    for (std::size_t index = 0; index < keys.size(); ++index)
+        if (const auto record = merged_.find(scope, keys[index]))
+            result[index] = record->version;
+    return result;
+}
+
+std::expected<Clock::Reading, Catalog::State::Error> Catalog::State::reading() {
+    ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.reading");
+    return Context<State>::reading(*this);
 }
 
 std::expected<Catalog::State::Projection*, Catalog::State::Error> Catalog::State::obtain(const Scope& scope) {
-
-    if (!scope.valid()) {
-        return std::unexpected(Error::input);
-    }
-    const auto found = scenes_.find(scope.sector); // 普通路径只查两级目录, 不复制文本.
-    if (found != scenes_.end()) {
-        const auto spectrum = found->second.find(scope.spectrum);
-        if (spectrum != found->second.end()) {
-            return &spectrum->second;
-        }
-    }
-    if (scopes_ == limits_.scopes) {
-        return std::unexpected(Error::capacity);
-    }
-    auto [sector, created] = scenes_.try_emplace(scope.sector); // 新范围失败时也移除空 Sector.
-    try {
-        auto [spectrum, inserted] = sector->second.try_emplace(scope.spectrum, gate_, static_cast<Projection::Measure>(&State::measure), limits_.projection);
-        scopes_ += inserted;
-        return &spectrum->second;
-    } catch (...) {
-        if (created) {
-            scenes_.erase(sector);
-        }
-        throw;
-    }
+    return Context<State>::obtain(*this, scope);
 }
 
 std::size_t Catalog::State::allowance(const Projection& scene) const {
-    return limits_.history - (history_ - scene.history()); // 本范围的旧历史允许在自己新历史的额度内替换.
+    return Context<State>::allowance(*this, scene);
 }
 
 void Catalog::State::publish(Projection& scene, std::size_t before, const Projection::Event& event) noexcept {
-
     ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.publish");
-    history_ = history_ - before + scene.history(); // Edit 已结束, 计费与来源状态同边界可见.
-    if (notify_) {
-        notify_(context_, *event.name->scope, event);
-    } // 只能有界合并/标记溢出, 不执行网络或应用回调.
+    Context<State>::publish(*this, scene, before, event);
 }
 
 std::expected<void, Catalog::State::Error> Catalog::State::publish(const Scope& scope, std::string_view key, Value value, std::uint64_t version, std::uint32_t ttl) {
 
     ASTRA_PROFILE_SCOPE("star.catalog_state.Catalog.State.publish");
     return change(scope, key, std::move(value), version, ttl, false);
+}
+
+std::expected<void, Catalog::State::Error> Catalog::State::publish(const Scope& scope, std::span<const Entry> entries, std::uint64_t version, std::uint32_t ttl, bool renewal) {
+
+    // 批次共同使用一个版本/TTL, 不允许同 Key 重复或空批次, 全部输入先校验.
+    std::array<std::string_view, 128> names; // 上限与协议一致, 在持状态锁之前一次性校验重复.
+    std::size_t bytes{};                     // 单个正文先限长, 再累加, 不允许 size_t 溢出绕过整批预算.
+    if (!scope.valid() || entries.empty() || entries.size() > 128 || !version || ttl < 1000 || ttl > 600000)
+        return std::unexpected(Error::input);
+    auto keys = std::span(names).first(entries.size());
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        const auto& entry = entries[index]; // 输入及所有借用文本持续到同步提交返回.
+        if (!Scope::text(entry.key, 1024) || (renewal ? static_cast<bool>(entry.value) : !entry.value))
+            return std::unexpected(Error::input);
+        if (entry.value && entry.value->size() > 1024 * 1024)
+            return std::unexpected(Error::capacity);
+        bytes += entry.key.size() + (entry.value ? entry.value->size() : 0);
+        if (bytes > 1024 * 1024)
+            return std::unexpected(Error::capacity);
+        keys[index] = entry.key;
+    }
+    std::ranges::sort(keys);
+    if (std::ranges::adjacent_find(keys) != keys.end())
+        return std::unexpected(Error::input);
+
+    // 旧来源/投影根和到期回收列表先于锁创建, 快照在完整提交边界捕获.
+    std::vector<Retired> expired;
+    std::optional<Source::Tree> old_source, old_merged;
+    std::unique_ptr<std::deque<Source::Event>> old_history; // 可能持有已离开当前根的最后一份旧正文, 必须锁外回收.
+    std::optional<Projection::Batch::Retired> old_scene;
+    const std::lock_guard lock(*gate_);
+    auto stamp = reading();
+    if (!stamp)
+        return std::unexpected(stamp.error());
+    advance(stamp->time, expired);
+    const std::unique_lock origin_lock(*export_);
+
+    struct Row {
+        std::optional<Record> old, known; // 原来源和最高水位, 最终复核仍使用这份旧事实.
+        Record candidate, combined;       // 私有准备, 最终采样统一修订期限.
+        Source::Tree::Key source, merged; // 稳定地址, 在调度中共享.
+    };
+
+    std::vector<Row> rows; // 与输入顺序一一对应, 不保存第二份正文.
+    rows.reserve(entries.size());
+    for (const auto& entry : entries) {
+        auto old = source_.find(scope, entry.key), known = merged_.find(scope, entry.key);
+        auto candidate = renewal ? Catalog::renew(old ? &*old : nullptr, known ? &*known : nullptr, version, ttl, *stamp) : Catalog::publish(old ? &*old : nullptr, known ? &*known : nullptr, entry.value, version, ttl, *stamp);
+        if (!candidate)
+            return std::unexpected(error(candidate.error()));
+        auto combined = Catalog::merge(known ? &*known : nullptr, *candidate, stamp->time);
+        if (!combined)
+            return std::unexpected(error(combined.error()));
+        rows.push_back({std::move(old), std::move(known), *candidate, combined->record, {}, {}});
+    }
+
+    // 每个新钩子独立登记回滚, 首个 Pending 还负责新 Scope. 责任对象早于各批候选析构.
+    std::vector<std::unique_ptr<Pending>> pending;
+    pending.reserve(entries.size());
+    for (std::size_t index = 0; index < entries.size(); ++index)
+        pending.push_back(std::make_unique<Pending>(*this, scope));
+    const auto count = scopes_;
+    const auto located = obtain(scope);
+    if (!located)
+        return std::unexpected(located.error());
+    pending.front()->created = scopes_ != count;
+    auto& scene = **located;
+    const auto before = scene.history();
+    auto projection = scene.prepare(allowance(scene));
+    auto origin = source_.batch(); // 每项连续编号, 一次交换完整来源和发送历史.
+    auto merged = merged_.prepare();
+    if (!agenda_) {
+        agenda_ = std::make_unique<Agenda>(stamp->time);
+        due_ = std::min(due_, agenda_->next());
+    }
+    if (!outlook_) {
+        outlook_ = std::make_unique<Agenda>(stamp->time);
+        due_ = std::min(due_, outlook_->next());
+    }
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        auto& row = rows[index]; // 本项候选与固定输入, 所有分配均在发布之前.
+        const auto& entry = entries[index];
+        auto source = origin.set(scope, entry.key, row.candidate, renewal ? Source::Form::renew : Source::Form::record);
+        if (!source)
+            return std::unexpected(error(source.error()));
+        row.source = *source;
+        auto target = merged.set(scope, entry.key, row.combined);
+        if (!target)
+            return std::unexpected(error(target.error()));
+        row.merged = *target;
+        if (Catalog::visible(row.known ? &*row.known : nullptr, row.combined)) {
+            if (auto prepared = projection.set(row.merged, Content{row.combined.version, row.combined.value}, std::chrono::steady_clock::now()); !prepared)
+                return std::unexpected(error(prepared.error()));
+        }
+        if (!timers_.contains(row.source.get())) {
+            timers_.emplace(row.source.get(), std::make_unique<Timer>(row.source));
+            pending[index]->timer = row.source.get();
+        }
+        if (!deadlines_.contains(row.merged.get())) {
+            deadlines_.emplace(row.merged.get(), std::make_unique<Timer>(row.merged));
+            pending[index]->deadline = row.merged.get();
+        }
+    }
+    const auto events = projection.seal(); // 先准备完整通知, 提交后不能再分配或发布部分键.
+    stamp = reading();
+    if (!stamp)
+        return std::unexpected(stamp.error());
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        auto& row = rows[index]; // 最终时钟统一用于所有键, 任一续租已经结束则整批拒绝.
+        auto candidate = renewal ? Catalog::renew(row.old ? &*row.old : nullptr, row.known ? &*row.known : nullptr, version, ttl, *stamp) : Catalog::publish(row.old ? &*row.old : nullptr, row.known ? &*row.known : nullptr, row.candidate.value, version, ttl, *stamp);
+        if (!candidate)
+            return std::unexpected(error(candidate.error()));
+        auto combined = Catalog::merge(row.known ? &*row.known : nullptr, *candidate, stamp->time);
+        if (!combined || !origin.revise(scope, entries[index].key, *candidate) || !merged.revise(scope, entries[index].key, combined->record))
+            throw std::logic_error("Catalog batch changed prepared payload");
+        row.candidate = *candidate;
+        row.combined = combined->record;
+    }
+
+    old_source.emplace(origin.commit(&old_history));
+    old_merged.emplace(merged.commit());
+    old_scene.emplace(projection.commit());
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        const auto& row = rows[index]; // 调度节点已全部分配, 以下仅更新标量/链表.
+        agenda_->set(*timers_.find(row.source.get())->second, *row.candidate.deadline);
+        outlook_->set(*deadlines_.find(row.merged.get())->second, *row.combined.deadline);
+        pending[index]->committed = true;
+    }
+    history_ = history_ - before + scene.history();
+    if (notify_ && !events->empty()) {
+        Projection::Event event; // 信封只借用准备好的完整事件, 下游持一个锁收集.
+        event.version = events->back().version;
+        event.batch = events;
+        notify_(context_, scope, event);
+    }
+    return {};
 }
 
 std::expected<void, Catalog::State::Error> Catalog::State::renew(const Scope& scope, std::string_view key, std::uint64_t version, std::uint32_t ttl) {

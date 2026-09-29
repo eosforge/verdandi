@@ -44,3 +44,52 @@ bool Observer::wait(std::chrono::milliseconds timeout) const {
     return !observing_ || observing_->wait(timeout);
 }
 } // namespace comet
+
+namespace comet {
+void Observer::stop() noexcept {
+    close();
+}
+
+Result<std::optional<Observer::Item>> Observer::choose(void* context, std::optional<Item> (*selector)(void*, const Pool&)) const {
+
+    const auto owner = observing_;
+    if (!owner) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    }
+    auto pool = owner->pool();
+    if (!pool) {
+        return std::unexpected(pool.error());
+    }
+    auto selected = selector(context, *pool); // 同步应用代码, 没有 SDK 锁, 抛异常直接由调用方处理.
+    if (owner->load().state() == State::closed) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    }
+    if (selected && selected->owner_.lock() != owner) {
+        return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
+    }
+    return selected;
+}
+
+Result<void> Observer::Item::update(std::vector<std::uint8_t> data) {
+    if (data.size() > 1024 * 1024) {
+        return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
+    }
+    return update(std::make_shared<const std::vector<std::uint8_t>>(std::move(data)));
+}
+
+Result<void> Observer::Item::update(Value data) {
+
+    if (!data || data->size() > 1024 * 1024) {
+        return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
+    }
+    const auto owner = owner_.lock();
+    if (!owner) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    }
+    auto result = owner->estimate(id_, authority_, record_.data, data);
+    if (result) {
+        record_.data = std::move(data);
+    }
+    return result;
+}
+} // namespace comet

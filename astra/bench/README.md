@@ -1,19 +1,19 @@
 # 当前实现的性能测量
 
-本目录新增的 `native.cpp`、`almanac.cpp`、`comet.cpp` 测量当前三域及原生 Comet C++. `store.cpp`、`push.cpp` 是旧 Store/独立传输探针, 不能代替当前系统结果. 实际数据及结论只维护在 [最新验证](../../testkit/validation.md#performance); 本文定义复现方法, 不复制结果.
+本目录新增的 `native.cpp`、`almanac.cpp`、`comet.cpp` 测量当前三域及原生 Comet C++. `store.cpp`、`push.cpp` 是旧 Store/独立传输探针, 不能代替当前系统结果. 实际数据及结论只维护在 [最新验证](../docs/validation.md#performance); 本文定义复现方法, 不复制结果.
 
 ## 构建与执行
 
 需要本轮明确测试授权. 仅消费项目已有工具和依赖, 缺失时失败, 不下载或安装. 使用 Release, 不将 Sanitizer 结果当作生产性能. 性能场景顺序运行, 不与编译、其他测试或另一份压测并行.
 
 ```bash
-bash astra/build.sh configure --profile release --benchmarks
-cmake --build build/astra/release --target star_native_bench star_almanac_bench comet_bench --parallel 1
-python3 -B astra/bench/run.py --binaries build/astra/release --native --cases astra/bench/native.json --output build/performance/native
-python3 -B astra/bench/run.py --binaries build/astra/release --almanac --cases astra/bench/native.json --output build/performance/almanac
-python3 -B astra/bench/run.py --binaries build/astra/release --cases astra/bench/network.json --output build/performance/network
-python3 -B astra/bench/run.py --binaries build/astra/release --cases astra/bench/auth.json --output build/performance/auth
-python3 -B astra/bench/run.py --binaries build/astra/release --cases astra/bench/concurrency.json --output build/performance/concurrency
+bash build.sh configure --profile release --benchmarks
+cmake --build build/cmake/release --target star_native_bench star_almanac_bench comet_bench --parallel 1
+python3 -B bench/run.py --binaries build/cmake/release --native --cases bench/native.json --output build/results/performance/native
+python3 -B bench/run.py --binaries build/cmake/release --almanac --cases bench/native.json --output build/results/performance/almanac
+python3 -B bench/run.py --binaries build/cmake/release --cases bench/network.json --output build/results/performance/network
+python3 -B bench/run.py --binaries build/cmake/release --cases bench/auth.json --output build/results/performance/auth
+python3 -B bench/run.py --binaries build/cmake/release --cases bench/concurrency.json --output build/results/performance/concurrency
 ```
 
 `star_restore_bench <每远端记录数> <Scope数量> <0或1>` 单独诊断六个本机写者与两个远端全量恢复的竞争, `0` 为无恢复对照, `1` 为并发恢复. 例如 `4096 1 1` 与 `4096 64 1` 保持总记录量相同, 仅改变恢复的 Scope 分布. 使用真实 Catalog/Origin/Scene, 业务时间固定, 不含网络、Pulsar 或 SDK, 不将此成绩冒充三 Star 系统吞吐. 普通 CTest 不自动运行性能探针.
@@ -48,4 +48,4 @@ PY
 
 `stable_memory=false` 表示本次范围内内存总量变化或系统换页计数增加, 原始结果保留, 不混入稳定样本中位数. 该标志不是“系统完全无干扰”的证明: 同宿主调度、其他工作负载、频率和冷缓存仍会造成波动. RSS 采样约 20 ms/200 ms, 不是逐次分配审计; 多进程 RSS 求和会重复计入共享页, 不等于物理常驻内存. 现有 swap 占用与本次新换页分开报告.
 
-在同一 VM 中运行客户端及多台 Star, 可以验证实际协议路径和相对扩展成本, 不能推导跨物理机网络、真实生产容量、长期内存稳定性或 p99.99 SLA. 未覆盖的验收矩阵分支继续见 [B01–B14](../../testkit/comet.md#性能与规模矩阵), 不因本套有限基准通过而一并关闭.
+在同一 VM 中运行客户端及多台 Star, 可以验证实际协议路径和相对扩展成本, 不能推导跨物理机网络、真实生产容量、长期内存稳定性或 p99.99 SLA. 未覆盖的验收矩阵分支继续见 [B01–B14](../docs/comet.md#性能与规模矩阵), 不因本套有限基准通过而一并关闭.

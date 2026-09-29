@@ -190,11 +190,46 @@ void atomicity(Operation operation) {
     }
     CHECK(completed && failures > 0); // 必须既命中过失败, 又到达完整成功, 不将未覆盖当作通过.
 }
+
+// 逐分配点检查多键提交的来源/投影/计费/调度回滚, 包含旧页被冻结的路径.
+void batch() {
+
+    bool completed{}; // 必须到达至少一次完整成功, 不以失败路径替代提交覆盖.
+    unsigned failures{};
+    for (std::ptrdiff_t point = 0; point < 256; ++point) {
+        State state([] { return std::optional(Clock::Reading{.time = Clock::Time(1s), .ready = true}); }, {});
+        const astra::Scope scope{"batch", "fault"};
+        const auto value = std::make_shared<const Catalog::Buffer>(12, 1);
+        CHECK(state.publish(scope, "old", value, 1, 1000));
+        const auto view = state.capture(scope);
+        const auto source = state.source();
+        const std::vector<State::Entry> entries{{"old", value}, {"new", value}};
+        try {
+            const Failure failure(point);
+            CHECK(state.publish(scope, entries, 2, 1000));
+            completed = true;
+        } catch (const std::bad_alloc&) {
+            CHECK(injected);
+            ++failures;
+            CHECK(state.source().position() == 1 && state.source().size() == 1);
+            CHECK(state.capture(scope)->version() == 1 && !state.find(scope, "new")->record);
+            CHECK(state.find(scope, "old")->record->version == 1 && state.events(0)->size() == 1);
+            CHECK(state.publish(scope, entries, 2, 1000)); // 失败没有残留编辑标志或幽灵钩子.
+        }
+        view->each([](const auto&, const auto& row) { CHECK(row.version == 1); });
+        CHECK(source.position() == 1 && source.size() == 1);
+        CHECK(state.source().position() == 3 && state.capture(scope)->size() == 2);
+        if (completed)
+            break;
+    }
+    CHECK(completed && failures != 0);
+}
 } // namespace
 
 // 独立进程只替换普通 new; 不声称覆盖系统随机源失败、对齐分配或网络解码 OOM.
 int main() {
     try {
+        batch();
         atomicity(Operation::create);
         atomicity(Operation::update);
         atomicity(Operation::renew);

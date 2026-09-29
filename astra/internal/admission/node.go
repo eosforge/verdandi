@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/astra"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/astra"
+	"github.com/eosforge/astra/internal/generated/orbit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"

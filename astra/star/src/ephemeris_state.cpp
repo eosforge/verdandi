@@ -1,6 +1,7 @@
 #include "ephemeris_state.hpp"
 #include <astra/profile.hpp>
 #include <cassert>
+#include <tuple>
 #include <utility>
 
 namespace astra {
@@ -33,7 +34,7 @@ Ephemeris::State::Pending::~Pending() {
 }
 
 std::size_t Ephemeris::State::measure(const Record& record) noexcept {
-    return record.attr->size() + record.data->size();
+    return record.attr->size() + record.data->size() + 2 * sizeof(Contribution) + 128;
 }
 
 std::size_t Ephemeris::State::measure(const Content& record) noexcept {
@@ -95,152 +96,162 @@ void Ephemeris::State::notify(Notify notify, void* context) {
 }
 
 std::expected<Clock::Reading, Ephemeris::State::Error> Ephemeris::State::reading() {
-
     ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.reading");
-
-    ASTRA_PROFILE_BEGIN(profile_lock_97, "star.ephemeris_state.Ephemeris.State.reading.wait.timing");
-    const std::lock_guard timing(timing_); // 共享读者仍按调用顺序验证注入时钟, 不并发修改 observed_.
-    ASTRA_PROFILE_END(profile_lock_97);
-    auto value = time_(); // 域锁内采样, 注入时钟也不能绕过非负/单调检查.
-    if (!value || !value->ready || value->time.time_since_epoch().count() < 0 || (observed_ && value->time < *observed_)) {
-        return std::unexpected(Error::clock);
-    }
-    observed_ = value->time;
-    return *value;
+    return Context<State>::reading(*this);
 }
 
 std::expected<Ephemeris::State::Projection*, Ephemeris::State::Error> Ephemeris::State::obtain(const Scope& scope) {
-
-    if (!scope.valid()) {
-        return std::unexpected(Error::input);
-    }
-    const auto found = scenes_.find(scope.sector); // 普通路径只查两级目录, 不复制文本.
-    if (found != scenes_.end()) {
-        const auto spectrum = found->second.find(scope.spectrum);
-        if (spectrum != found->second.end()) {
-            return &spectrum->second;
-        }
-    }
-    if (scopes_ == limits_.scopes) {
-        return std::unexpected(Error::capacity);
-    }
-    auto [sector, created] = scenes_.try_emplace(scope.sector); // 新范围失败时也移除空 Sector.
-    try {
-        auto [spectrum, inserted] = sector->second.try_emplace(scope.spectrum, gate_, static_cast<Projection::Measure>(&State::measure), limits_.projection);
-        scopes_ += inserted;
-        return &spectrum->second;
-    } catch (...) {
-        if (created) {
-            scenes_.erase(sector);
-        }
-        throw;
-    }
+    return Context<State>::obtain(*this, scope);
 }
 
 std::size_t Ephemeris::State::allowance(const Projection& scene) const {
-    return limits_.history - (history_ - scene.history()); // 本范围的旧历史允许在自己新历史的额度内替换.
+    return Context<State>::allowance(*this, scene);
 }
 
 void Ephemeris::State::publish(Projection& scene, std::size_t before, const Projection::Event& event) noexcept {
-
     ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.publish");
-    history_ = history_ - before + scene.history(); // Edit 已结束, 计费与来源状态同边界可见.
-    if (notify_) {
-        notify_(context_, *event.name->scope, event);
-    } // 只能有界合并/标记溢出, 不执行网络或应用回调.
+    Context<State>::publish(*this, scene, before, event);
 }
 
-std::expected<Ephemeris::State::Receipt, Ephemeris::State::Error> Ephemeris::State::create(const Scope& scope, Value attr, Value data, std::uint32_t ttl) {
+std::expected<Ephemeris::State::Receipt, Ephemeris::State::Error> Ephemeris::State::create(const Scope& scope, Value attr, Value data, std::uint32_t ttl, std::string uuid, std::uint64_t generation, std::uint64_t order, std::string_view capability) {
 
-    ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.create");
-
-    if (!scope.valid()) {
+    if (!scope.valid() || !Ephemeris::valid(attr) || !Ephemeris::valid(data) || ttl < 1000 || ttl > 600000 || (generation == 0 && (!uuid.empty() || !capability.empty() || order != 0))) {
         return std::unexpected(Error::input);
     }
-    std::vector<Retired> expired;  // 先于域锁构造, 批量到期的旧资源在解锁后释放.
-    Retired retired;               // 本次提交的通知与旧资源同样在锁外析构.
-    auto uuid = Ephemeris::uuid(); // 随机源/格式化仅在 Create 且位于域锁外执行.
-    ASTRA_PROFILE_BEGIN(profile_lock_153, "star.ephemeris_state.Ephemeris.State.create.wait.lock");
+    if (generation) {
+        if (!Ephemeris::valid(uuid) || capability.size() != 32 || uuid != Ephemeris::identity(scope, attr, ttl, capability)) {
+            return std::unexpected(Error::input);
+        }
+    } else {
+        uuid = Ephemeris::uuid();
+    }
+    Receipt receipt{uuid, {}, 0, generation, ttl}; // 分配回执文本先于提交.
+    std::vector<Retired> expired;
+    Retired retired;
     const std::lock_guard lock(*gate_);
-    ASTRA_PROFILE_END(profile_lock_153);
     auto stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    auto record = Ephemeris::create(attr, data, ttl, *stamp);
-    if (!record) {
-        return std::unexpected(error(record.error()));
-    }
     advance(stamp->time, expired);
-    ASTRA_PROFILE_BEGIN(profile_lock_163, "star.ephemeris_state.Ephemeris.State.create.wait.origin_lock");
-    const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
-    ASTRA_PROFILE_END(profile_lock_163);
-    if (source_.find(scope, uuid)) {
-        return std::unexpected(Error::conflict);
-    } // 碰撞明确拒绝, 不在锁内重复读取随机源.
-
-    Pending pending{*this, scope}; // 失败撤销新空范围与尚未挂轮钩子.
-    const auto scopes = scopes_;
+    const std::unique_lock origin_lock(*export_);
+    const auto old = source_.find(scope, uuid);
+    if (old && (!generation || old->generation > generation)) {
+        return std::unexpected(Error::obsolete);
+    }
+    if (old && old->generation == generation) {
+        if (*old->attr != *attr || old->ttl != ttl) {
+            return std::unexpected(Error::conflict);
+        }
+        receipt.data = old->data;
+        receipt.order = old->update;
+        return receipt; // 相同注册代次只确认原结果, 不重新发放 TTL.
+    }
+    auto lookup = std::make_shared<const Source::Name>(std::make_shared<const Scope>(scope), uuid);
+    if (const auto known = choices_.find(lookup); known != choices_.end()) {
+        for (const auto& row : known->second) {
+            if (row.record.deadline <= stamp->time) {
+                continue;
+            }
+            if (!generation || !row.record.generation || row.record.generation > generation || row.record.ttl != ttl || *row.record.attr != *attr) {
+                return std::unexpected(Error::conflict);
+            }
+            if (row.record.update > order) {
+                data = row.record.data;
+                order = row.record.update;
+            } else if (row.record.update == order && *row.record.data != *data) {
+                return std::unexpected(Error::conflict);
+            }
+        }
+    }
+    auto candidate = Ephemeris::create(attr, data, ttl, *stamp);
+    if (!candidate) {
+        return std::unexpected(error(candidate.error()));
+    }
+    candidate->update = order;
+    candidate->generation = generation;
+    const auto count = scopes_;
     const auto located = obtain(scope);
     if (!located) {
         return std::unexpected(located.error());
     }
-    pending.created = scopes_ != scopes;
     auto& scene = **located;
-    if (scene.find(uuid).record) {
-        return std::unexpected(Error::conflict); // UUID 同样不能覆盖已可见的其他 Star 注册.
-    }
-    const auto before = scene.history(); // Edit 活跃前保存旧历史占用.
-    const auto retention = allowance(scene);
+    Pending pending{*this, scope, nullptr, scopes_ != count, false};
+    const auto before = scene.history();
     const auto position = source_.next();
     if (!position) {
         return std::unexpected(error(position.error()));
     }
-    auto origin = source_.prepare(scope, uuid, *record, *position, std::chrono::steady_clock::now());
+    auto origin = source_.prepare(scope, uuid, *candidate, *position, std::chrono::steady_clock::now());
     if (!origin) {
         return std::unexpected(error(origin.error()));
     }
-    auto projection = scene.prepare(origin->name(), Content{attr, data}, std::chrono::steady_clock::now(), false, retention);
-    if (!projection) {
-        return std::unexpected(error(projection.error()));
+    auto choice = choose(origin->name(), *candidate, nullptr, stamp->time);
+    if (!choice) {
+        return std::unexpected(choice.error());
+    }
+    std::optional<Projection::Edit> projection;
+    if (choice->changed) {
+        auto prepared = scene.prepare(choice->name, choice->content(), std::chrono::steady_clock::now(), scene.find(uuid).record.has_value(), allowance(scene));
+        if (!prepared) {
+            return std::unexpected(error(prepared.error()));
+        }
+        projection.emplace(std::move(*prepared));
     }
     if (!agenda_) {
         agenda_ = std::make_unique<Agenda>(stamp->time);
-        due_ = std::min(due_, agenda_->next()); // 首次创建的轮立即纳入统一下次边界.
+        due_ = std::min(due_, agenda_->next());
     }
-    auto timer = std::make_unique<Timer>(origin->name()); // 稳定钩子准备完成后才允许发布.
-    auto* node = timer.get();
-    timers_.emplace(origin->name().get(), std::move(timer));
-    pending.timer = origin->name().get();
-
-    stamp = reading(); // 所有分配之后再次采样, TTL 从最终受理时间计算.
+    auto found = timers_.find(origin->name().get());
+    if (found == timers_.end()) {
+        auto timer = std::make_unique<Timer>(origin->name());
+        found = timers_.emplace(origin->name().get(), std::move(timer)).first;
+        pending.timer = origin->name().get();
+    }
+    stamp = reading();
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    record = Ephemeris::create(attr, data, ttl, *stamp);
-    if (!record) {
-        return std::unexpected(error(record.error()));
+    auto final = Ephemeris::create(attr, data, ttl, *stamp);
+    if (!final) {
+        return std::unexpected(error(final.error()));
     }
-    if (!origin->revise(*record)) {
-        throw std::logic_error("Ephemeris deadline changed prepared payload cost");
+    candidate->deadline = final->deadline;
+    if (choice->record && choice->name != origin->name() && choice->record->deadline <= stamp->time) {
+        return std::unexpected(Error::ended);
     }
+    for (auto& row : choice->rows) {
+        if (!row.owner) {
+            row.record = *candidate;
+        }
+    }
+    if (!origin->revise(*candidate)) {
+        throw std::logic_error("Ephemeris creation cost changed");
+    }
+    receipt.data = candidate->data;
+    receipt.order = candidate->update;
     retired.source = origin->commit();
-    retired.scene = projection->commit();
-    agenda_->set(*node, record->deadline);
+    if (projection) {
+        retired.scene = projection->commit();
+    }
+    choice->commit();
+    agenda_->set(*found->second, candidate->deadline);
     pending.committed = true;
-    publish(scene, before, retired.scene.event);
-    return Receipt{std::move(uuid), ttl};
+    if (projection) {
+        publish(scene, before, retired.scene.event);
+    }
+    return receipt;
 }
 
-std::expected<void, Ephemeris::State::Error> Ephemeris::State::update(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order) {
-    return change(scope, uuid, std::move(data), order, false);
+std::expected<void, Ephemeris::State::Error> Ephemeris::State::update(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, std::uint64_t generation, std::string_view capability) {
+    return change(scope, uuid, std::move(data), order, false, generation, capability);
 }
 
-std::expected<void, Ephemeris::State::Error> Ephemeris::State::renew(const Scope& scope, std::string_view uuid, std::uint64_t order) {
-    return change(scope, uuid, {}, order, true);
+std::expected<void, Ephemeris::State::Error> Ephemeris::State::renew(const Scope& scope, std::string_view uuid, std::uint64_t order, std::uint64_t generation, std::string_view capability) {
+    return change(scope, uuid, {}, order, true, generation, capability);
 }
 
-std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, bool renewal) {
+std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, bool renewal, std::uint64_t generation, std::string_view capability) {
 
     ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.change");
 
@@ -263,6 +274,9 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scop
     const auto old = source_.find(scope, uuid); // 只查询自有来源, 副本不能成为可续租本机注册.
     if (!old) {
         return std::unexpected(Error::ended);
+    }
+    if (old->generation != generation || (generation && uuid != Ephemeris::identity(scope, old->attr, old->ttl, capability))) {
+        return std::unexpected(Error::obsolete);
     }
     auto candidate = renewal ? Ephemeris::renew(*old, order, *stamp) : Ephemeris::update(*old, data, order, *stamp);
     if (!candidate) {
@@ -294,9 +308,13 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scop
     if (!origin) {
         return std::unexpected(error(origin.error()));
     }
-    std::optional<Projection::Edit> projection; // 续租/同字节新 order 不触碰下游页和历史.
-    if (candidate->visible) {
-        auto prepared = scene.prepare(origin->name(), Content{candidate->record.attr, candidate->record.data}, std::chrono::steady_clock::now(), true, retention);
+    auto choice = choose(origin->name(), candidate->record, nullptr, stamp->time);
+    if (!choice) {
+        return std::unexpected(choice.error());
+    }
+    std::optional<Projection::Edit> projection;
+    if (choice->changed) {
+        auto prepared = scene.prepare(choice->name, choice->content(), std::chrono::steady_clock::now(), scene.find(uuid).record.has_value(), retention);
         if (!prepared) {
             return std::unexpected(error(prepared.error()));
         }
@@ -311,14 +329,18 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scop
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    if (renewal) {
-        candidate = Ephemeris::renew(*old, order, *stamp); // 续租必须从最终受理时间重算期限.
-        if (!candidate) {
-            return std::unexpected(error(candidate.error()));
+    candidate = renewal ? Ephemeris::renew(*old, order, *stamp) : Ephemeris::update(*old, data, order, *stamp);
+    if (!candidate) {
+        return std::unexpected(error(candidate.error()));
+    }
+    if (choice->record && choice->name != origin->name() && choice->record->deadline <= stamp->time) {
+        return std::unexpected(Error::ended);
+    }
+    for (auto& row : choice->rows) {
+        if (!row.owner) {
+            row.record = candidate->record;
         }
-    } else if (const auto active = Ephemeris::active(*old, *stamp); !active) {
-        return std::unexpected(error(active.error()));
-    } // 同一域锁下正文和 order 未变, Update 只需重验旧租约, 不再扫描相同 Data.
+    }
     if (!origin->revise(candidate->record)) {
         throw std::logic_error("Ephemeris final check changed prepared payload cost");
     }
@@ -326,6 +348,7 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::change(const Scop
     if (projection) {
         retired.scene = projection->commit();
     }
+    choice->commit();
     agenda_->set(*timer->second, candidate->record.deadline);
     if (projection) {
         publish(scene, before, retired.scene.event);
@@ -354,9 +377,21 @@ std::expected<Ephemeris::State::Retired, Ephemeris::State::Error> Ephemeris::Sta
     if (!origin) {
         return std::unexpected(error(origin.error()));
     }
-    auto projection = scene.prepare(origin->name(), {}, now, false, retention);
-    if (!projection) {
-        return std::unexpected(error(projection.error()));
+    const auto stamp = reading();
+    if (!stamp) {
+        return std::unexpected(stamp.error());
+    }
+    auto choice = choose(origin->name(), {}, nullptr, stamp->time);
+    if (!choice) {
+        return std::unexpected(choice.error());
+    }
+    std::optional<Projection::Edit> projection;
+    if (choice->changed) {
+        auto prepared = scene.prepare(choice->name, choice->content(), now, scene.find(uuid).record.has_value() && choice->record.has_value(), retention);
+        if (!prepared) {
+            return std::unexpected(error(prepared.error()));
+        }
+        projection.emplace(std::move(*prepared));
     }
     const auto timer = timers_.find(origin->name().get());
     if (timer == timers_.end()) {
@@ -375,15 +410,20 @@ std::expected<Ephemeris::State::Retired, Ephemeris::State::Error> Ephemeris::Sta
 
     Retired retired; // 移到外层域锁之外释放, 不在这里析构非空载荷.
     retired.source = origin->commit();
-    retired.scene = projection->commit();
+    if (projection) {
+        retired.scene = projection->commit();
+    }
+    choice->commit();
     Agenda::erase(*timer->second); // 移到锁外前必须摘链, 析构不再访问活动轮.
     retired.timer = std::move(timer->second);
     timers_.erase(timer);
-    publish(scene, before, retired.scene.event);
+    if (projection) {
+        publish(scene, before, retired.scene.event);
+    }
     return retired;
 }
 
-std::expected<void, Ephemeris::State::Error> Ephemeris::State::remove(const Scope& scope, std::string_view uuid) {
+std::expected<void, Ephemeris::State::Error> Ephemeris::State::remove(const Scope& scope, std::string_view uuid, std::uint64_t generation, std::string_view capability) {
 
     ASTRA_PROFILE_SCOPE("star.ephemeris_state.Ephemeris.State.remove");
 
@@ -403,6 +443,13 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::remove(const Scop
     ASTRA_PROFILE_BEGIN(profile_lock_379, "star.ephemeris_state.Ephemeris.State.remove.wait.origin_lock");
     const std::unique_lock origin_lock(*export_); // 本机根/日志发布与导出同域, 远端范围安装无需持有此锁.
     ASTRA_PROFILE_END(profile_lock_379);
+    const auto old = source_.find(scope, uuid);
+    if (!old) {
+        return std::unexpected(Error::ended);
+    }
+    if (old->generation != generation || (generation && uuid != Ephemeris::identity(scope, old->attr, old->ttl, capability))) {
+        return std::unexpected(Error::obsolete);
+    }
     auto removed = erase(scope, uuid, std::chrono::steady_clock::now(), true);
     if (!removed) {
         return std::unexpected(removed.error());
@@ -578,4 +625,58 @@ std::expected<Ephemeris::State::Source::Delivery, Ephemeris::State::Error> Ephem
     return source_.deliver(since, count, bytes).transform_error([](Source::Error failure) { return failure == Source::Error::version ? Error::input : error(failure); });
 }
 
+} // namespace astra
+
+namespace astra {
+Ephemeris::State::Choice::Choice(State& owner, Choices::iterator position, std::vector<Contribution> rows, Source::Tree::Key name, std::optional<Record> record, bool changed, bool created) : owner(&owner), position(position), rows(std::move(rows)), name(std::move(name)), record(std::move(record)), changed(changed), created(created) {}
+
+Ephemeris::State::Choice::Choice(Choice&& other) noexcept : owner(std::exchange(other.owner, nullptr)), position(other.position), rows(std::move(other.rows)), name(std::move(other.name)), record(std::move(other.record)), changed(other.changed), created(other.created) {}
+
+Ephemeris::State::Choice::~Choice() {
+    if (owner && created) {
+        owner->choices_.erase(position);
+    }
+}
+
+void Ephemeris::State::Choice::commit() noexcept {
+    position->second.swap(rows);
+    if (position->second.empty()) {
+        owner->choices_.erase(position);
+    }
+    owner = nullptr;
+}
+
+std::expected<Ephemeris::State::Choice, Ephemeris::State::Error> Ephemeris::State::choose(const Source::Tree::Key& name, std::optional<Record> record, const Replica* owner, Clock::Time now) {
+
+    const auto found = choices_.find(name);
+    std::vector<Contribution> rows = found == choices_.end() ? std::vector<Contribution>{} : found->second;
+    std::erase_if(rows, [&](const Contribution& row) { return row.owner == owner; });
+    if (record) {
+        for (const auto& row : rows) {
+            if (row.record.deadline <= now) {
+                continue;
+            }
+            if (!record->generation || !row.record.generation || record->ttl != row.record.ttl || *record->attr != *row.record.attr || (record->update == row.record.update && *record->data != *row.record.data)) {
+                return std::unexpected(Error::conflict);
+            }
+        }
+        rows.push_back({name, *record, owner});
+    }
+    const Contribution* selected{};
+    for (const auto& row : rows) {
+        if (row.record.deadline <= now) {
+            continue;
+        }
+        if (!selected || std::tie(row.record.update, row.record.generation, row.record.deadline) > std::tie(selected->record.update, selected->record.generation, selected->record.deadline)) {
+            selected = &row;
+        }
+    }
+    auto key = selected ? selected->name : name;
+    auto winner = selected ? std::optional(selected->record) : std::nullopt;
+    auto* scene = locate(*name->scope);
+    const auto visible = scene ? scene->find(name->key) : Projection::Point{};
+    const bool changed = winner ? !visible.record || *visible.record->attr != *winner->attr || *visible.record->data != *winner->data : visible.record.has_value();
+    const auto position = found == choices_.end() ? choices_.emplace(name, std::vector<Contribution>{}).first : found;
+    return Choice(*this, position, std::move(rows), std::move(key), std::move(winner), changed, found == choices_.end());
+}
 } // namespace astra

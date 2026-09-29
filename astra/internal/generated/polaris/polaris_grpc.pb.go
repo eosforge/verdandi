@@ -10,7 +10,7 @@ package polaris
 
 import (
 	context "context"
-	comet "github.com/eosforge/verdandi/astra/internal/generated/comet"
+	comet "github.com/eosforge/astra/internal/generated/comet"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -23,6 +23,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	Authority_Commit_FullMethodName = "/proto.polaris.v1.Authority/Commit"
+	Authority_Batch_FullMethodName  = "/proto.polaris.v1.Authority/Batch"
 	Authority_List_FullMethodName   = "/proto.polaris.v1.Authority/List"
 	Authority_Load_FullMethodName   = "/proto.polaris.v1.Authority/Load"
 )
@@ -34,6 +35,7 @@ const (
 // Astrolabe 管理调用必须带有效基础设施准入 metadata, 不接受 Comet Session.
 type AuthorityClient interface {
 	Commit(ctx context.Context, in *CommitRequest, opts ...grpc.CallOption) (*Position, error)
+	Batch(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[BatchRequest, Position], error)
 	List(ctx context.Context, in *comet.Empty, opts ...grpc.CallOption) (*Inventory, error)
 	Load(ctx context.Context, in *comet.Scope, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Snapshot], error)
 }
@@ -56,6 +58,19 @@ func (c *authorityClient) Commit(ctx context.Context, in *CommitRequest, opts ..
 	return out, nil
 }
 
+func (c *authorityClient) Batch(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[BatchRequest, Position], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Authority_ServiceDesc.Streams[0], Authority_Batch_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[BatchRequest, Position]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Authority_BatchClient = grpc.ClientStreamingClient[BatchRequest, Position]
+
 func (c *authorityClient) List(ctx context.Context, in *comet.Empty, opts ...grpc.CallOption) (*Inventory, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Inventory)
@@ -68,7 +83,7 @@ func (c *authorityClient) List(ctx context.Context, in *comet.Empty, opts ...grp
 
 func (c *authorityClient) Load(ctx context.Context, in *comet.Scope, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Snapshot], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Authority_ServiceDesc.Streams[0], Authority_Load_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Authority_ServiceDesc.Streams[1], Authority_Load_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +107,7 @@ type Authority_LoadClient = grpc.ServerStreamingClient[Snapshot]
 // Astrolabe 管理调用必须带有效基础设施准入 metadata, 不接受 Comet Session.
 type AuthorityServer interface {
 	Commit(context.Context, *CommitRequest) (*Position, error)
+	Batch(grpc.ClientStreamingServer[BatchRequest, Position]) error
 	List(context.Context, *comet.Empty) (*Inventory, error)
 	Load(*comet.Scope, grpc.ServerStreamingServer[Snapshot]) error
 	mustEmbedUnimplementedAuthorityServer()
@@ -106,6 +122,9 @@ type UnimplementedAuthorityServer struct{}
 
 func (UnimplementedAuthorityServer) Commit(context.Context, *CommitRequest) (*Position, error) {
 	return nil, status.Error(codes.Unimplemented, "method Commit not implemented")
+}
+func (UnimplementedAuthorityServer) Batch(grpc.ClientStreamingServer[BatchRequest, Position]) error {
+	return status.Error(codes.Unimplemented, "method Batch not implemented")
 }
 func (UnimplementedAuthorityServer) List(context.Context, *comet.Empty) (*Inventory, error) {
 	return nil, status.Error(codes.Unimplemented, "method List not implemented")
@@ -151,6 +170,13 @@ func _Authority_Commit_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _Authority_Batch_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(AuthorityServer).Batch(&grpc.GenericServerStream[BatchRequest, Position]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Authority_BatchServer = grpc.ClientStreamingServer[BatchRequest, Position]
 
 func _Authority_List_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(comet.Empty)
@@ -198,6 +224,11 @@ var Authority_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Batch",
+			Handler:       _Authority_Batch_Handler,
+			ClientStreams: true,
+		},
 		{
 			StreamName:    "Load",
 			Handler:       _Authority_Load_Handler,

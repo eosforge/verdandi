@@ -1,4 +1,4 @@
-module github.com/eosforge/verdandi/astra
+module github.com/eosforge/astra
 
 go 1.27.0
 

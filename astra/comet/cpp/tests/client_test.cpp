@@ -496,57 +496,56 @@ void beacons() {
     fixture.password(42);
     Client client(fixture.options());
     auto observer = client.value.observer({"service", "main"});
-    auto beacon = client.value.beacon({"service", "main"}, {4, 5}, {}, 1s);
+    auto beacon = client.value.beacon({"service", "main"}, {4, 5}, {}, 1s, 250ms);
     CHECK(observer && beacon);
     eventually([&] { return beacon->state().phase == comet::Beacon::Phase::ready; });
     const auto old = *beacon->state().identity;
     eventually([&] { return observer->select().find(old.uuid).has_value(); });
-    auto result = beacon->update(std::vector<std::uint8_t>{7, 8});
-    CHECK(result.wait_for(5s) == std::future_status::ready);
-    const auto receipt = result.get();
+    const auto receipt = beacon->update(std::vector<std::uint8_t>{7, 8});
     CHECK(receipt && receipt->identity == old && receipt->order == 1);
     eventually([&] { const auto value = observer->select().find(old.uuid); return value && *value->data == std::vector<std::uint8_t>({7, 8}); });
     eventually([&] {
         bool renewed{};
         fixture.ephemeris.source().each([&](const astra::Scope&, std::string_view uuid, const astra::Ephemeris::Record& record) { if (uuid == old.uuid) { renewed = record.renewal > 0; } });
         return renewed;
-    }); // 观察真实原生 Renew order, 不能仅靠 SDK 自报 ready 证明自动续租.
-    CHECK(fixture.ephemeris.remove({"service", "main"}, old.uuid));
-    eventually([&] { const auto state = beacon->state(); return state.phase == comet::Beacon::Phase::ready && state.identity && state.identity->uuid != old.uuid; });
+    });                                   // 观察真实原生 Renew order, 不能仅靠 SDK 自报 ready 证明自动续租.
+    fixture.now.fetch_add(2'000'000'000); // 原 TTL 已过, 后续 Renew 明确 ended 后才允许同 ID 恢复.
+    fixture.ephemeris.tick();
+    eventually([&] {
+        bool restored{};
+        fixture.ephemeris.source().each([&](const astra::Scope&, std::string_view uuid, const astra::Ephemeris::Record& record) { if (uuid == old.uuid) { restored = record.generation > 1; } });
+        return restored && beacon->state().phase == comet::Beacon::Phase::ready;
+    });
     const auto current = *beacon->state().identity;
-    eventually([&] { const auto value = observer->select().find(current.uuid); return value && !observer->select().find(old.uuid) && *value->attr == std::vector<std::uint8_t>({4, 5}) && *value->data == std::vector<std::uint8_t>({7, 8}); });
+    CHECK(current.uuid == old.uuid);
+    eventually([&] { const auto value = observer->select().find(current.uuid); return value && observer->select().size() == 1 && *value->attr == std::vector<std::uint8_t>({4, 5}) && *value->data == std::vector<std::uint8_t>({7, 8}); });
     beacon->close();
     CHECK(beacon->wait(3s));
     eventually([&] { return observer->select().size() == 0; });
     CHECK(fixture.ephemeris.source().size() == 0);
     auto closed = beacon->update(std::vector<std::uint8_t>{1});
-    CHECK(closed.wait_for(0ms) == std::future_status::ready && !closed.get());
+    CHECK(!closed && closed.error().code == comet::Error::Code::closed);
 }
 
-// 未登录时合并/超时只结算单次 Update, 最新期望在之后新注册成功时仍必须生效.
+// 首次注册失败即返回, 修复凭据后必须显式重建, 不保留待发业务内容.
 void deferred() {
 
     Fixture fixture;
     fixture.password(43);
     Client client(fixture.options());
-    auto beacon = client.value.beacon({"service", "main"}, {}, {1}, 1s);
-    CHECK(beacon && !client.value.beacon({"service", "main"}, {}, {}, 999ms));
-    eventually([&] { return beacon->state().phase == comet::Beacon::Phase::failed; });
-    auto replaced = beacon->update(std::vector<std::uint8_t>{2}, 1s);
-    auto timed = beacon->update(std::vector<std::uint8_t>{3}, 30ms);
-    CHECK(replaced.wait_for(1s) == std::future_status::ready);
-    const auto obsolete = replaced.get();
-    CHECK(!obsolete && obsolete.error().code == comet::Error::Code::obsolete && obsolete.error().effect == comet::Error::Effect::unapplied);
-    CHECK(timed.wait_for(1s) == std::future_status::ready);
-    const auto timeout = timed.get();
-    CHECK(!timeout && timeout.error().code == comet::Error::Code::timeout && timeout.error().effect == comet::Error::Effect::unapplied);
+    auto denied = client.value.beacon({"service", "main"}, {}, {1}, 1s, 250ms);
+    CHECK(!denied && fixture.ephemeris.source().size() == 0);
+    CHECK(!client.value.beacon({"service", "main"}, {}, {}, 999ms, 250ms));
+    CHECK(!client.value.beacon({"service", "main"}, {}, {}, 1s, 1s));
     CHECK(client.value.secret({43}));
-    eventually([&] { return beacon->state().phase == comet::Beacon::Phase::ready; });
+    CHECK(fixture.ephemeris.source().size() == 0);
+    auto beacon = client.value.beacon({"service", "main"}, {}, {2}, 1s, 250ms);
+    CHECK(beacon && beacon->state().phase == comet::Beacon::Phase::ready);
     const auto identity = *beacon->state().identity;
     const auto installed = fixture.ephemeris.find({"service", "main"}, identity.uuid);
-    CHECK(installed && installed->record && *installed->record->data == std::vector<std::uint8_t>({3}));
-    auto invalid = beacon->update(comet::Value{});
-    CHECK(invalid.wait_for(0ms) == std::future_status::ready && !invalid.get());
+    CHECK(installed && installed->record && *installed->record->data == std::vector<std::uint8_t>({2}));
+    const auto invalid = beacon->update(comet::Value{});
+    CHECK(!invalid && invalid.error().code == comet::Error::Code::input);
 }
 
 // 关闭共享 Client 仍保留已确认 Session 供一次有限注销, 不把关闭门误用于内部清理.
@@ -555,7 +554,7 @@ void closing_beacon() {
     Fixture fixture;
     fixture.password(42);
     Client client(fixture.options());
-    auto beacon = client.value.beacon({"service", "main"}, {}, {}, 1s);
+    auto beacon = client.value.beacon({"service", "main"}, {}, {}, 1s, 250ms);
     CHECK(beacon);
     eventually([&] { return beacon->state().phase == comet::Beacon::Phase::ready; });
     CHECK(fixture.ephemeris.source().size() == 1);
@@ -564,7 +563,7 @@ void closing_beacon() {
     CHECK(beacon->state().phase == comet::Beacon::Phase::closed && fixture.ephemeris.source().size() == 0); // 测试业务时钟未经过 TTL, 消失只能来自真实注销.
 }
 
-// 切换 Star 必须使用新 UUID, 同一自动对象不携带旧身份向新 Star 强写.
+// 切换 Star 通过独立恢复能力保留逻辑 UUID, 不用 APIKEY 推断所有权.
 void beacon_relocation() {
 
     Fixture first("star-first", false);
@@ -572,197 +571,262 @@ void beacon_relocation() {
     auto options = first.options(false);
     options.endpoints.push_back(second.endpoint);
     Client client(std::move(options));
-    auto beacon = client.value.beacon({"service", "main"}, {9}, {8}, 1s);
+    auto beacon = client.value.beacon({"service", "main"}, {9}, {8}, 1s, 250ms);
     CHECK(beacon);
     eventually([&] { return beacon->state().phase == comet::Beacon::Phase::ready; });
     const auto old = *beacon->state().identity;
     first.stop();
     eventually([&] { const auto state = beacon->state(); return state.phase == comet::Beacon::Phase::ready && state.identity && state.identity->instance == "star-second"; });
     const auto current = *beacon->state().identity;
-    CHECK(current.uuid != old.uuid && second.ephemeris.source().size() == 1);
+    CHECK(current.uuid == old.uuid && second.ephemeris.source().size() == 1);
 }
 
-// 原生 Publisher/Subscriber 与 Reader/Observer 复用同一登录, 续租不制造内容变化.
+// 同步发布内部管理版本, 完整值包含合法空正文, 订阅旧视图始终稳定.
 void publications() {
 
     Fixture fixture;
     fixture.password(42);
     Client client(fixture.options());
-    auto publisher = client.value.publisher({"dynamic", "main"}, "key", 1s);
+    auto publisher = client.value.publisher({"dynamic", "main"});
     auto subscriber = client.value.subscriber({"dynamic", "main"});
     auto exact = client.value.subscriber({"dynamic", "main"}, "key");
     CHECK(publisher && subscriber && exact);
     eventually([&] { return subscriber->watch().state() == comet::Subscriber::State::ready; });
-    CHECK(subscriber->watch().size() == 0 && fixture.catalog.source().position() == 0); // 空 Publisher 不发布空记录.
-    auto initial = publisher->publish(10, std::vector<std::uint8_t>{7});
-    CHECK(initial.wait_for(3s) == std::future_status::ready);
-    const auto receipt = initial.get();
-    CHECK(receipt && receipt->version == 10 && receipt->instance == "star-test");
-    eventually([&] { const auto view = exact->watch(); return view.find("key") && view.find("key")->version == 10 && subscriber->watch().find("key").has_value(); });
-    const auto old = subscriber->watch();
-    eventually([&] { return fixture.catalog.source().position() >= 2; }); // 真正的自动 Renew 已到服务端.
-    CHECK(fixture.catalog.capture({"dynamic", "main"})->version() == 1);
-    auto conflict = publisher->publish(10, std::vector<std::uint8_t>{8});
-    auto lower = publisher->publish(9, std::vector<std::uint8_t>{7});
-    CHECK(conflict.wait_for(0ms) == std::future_status::ready && lower.wait_for(0ms) == std::future_status::ready);
-    CHECK(conflict.get().error().code == comet::Error::Code::conflict);
-    CHECK(lower.get().error().code == comet::Error::Code::version);
-    auto newer = publisher->publish(100, std::vector<std::uint8_t>{});
-    CHECK(newer.wait_for(3s) == std::future_status::ready && newer.get());
-    eventually([&] { const auto view = subscriber->watch(); return view.find("key") && view.find("key")->version == 100; });
+    CHECK(subscriber->watch().size() == 0 && fixture.catalog.source().position() == 0);
+    const auto receipt = publisher->update("key", {7}, 1s); // 同步返回的是 Star 提交确认.
+    CHECK(receipt && receipt->version == 1 && receipt->instance == "star-test");
+    eventually([&] { const auto view = exact->watch(); return view.find("key") && view.find("key")->version == 1 && subscriber->watch().find("key").has_value(); });
+    const auto old = subscriber->watch(); // 用户保留的不可变快照不能被后续 Data 修改.
+    const auto newer = publisher->update("key", {}, 2s);
+    CHECK(newer && newer->version == 2);
+    eventually([&] { const auto view = subscriber->watch(); return view.find("key") && view.find("key")->version == 2; });
     CHECK(subscriber->watch().find("key")->value->empty() && old.find("key")->value->at(0) == 7);
-    publisher->close();
-    CHECK(publisher->wait(3s));
-    CHECK(fixture.catalog.find({"dynamic", "main"}, "key")->record); // close 不伪造 Catalog Delete.
+
+    // 服务端业务时间到期后才删除, SDK 不按本地 TTL 删除或自动续租.
     fixture.now = 4'000'000'000;
     eventually([&] { return subscriber->watch().size() == 0 && exact->watch().size() == 0; });
-    CHECK(fixture.catalog.source().size() == 1); // 正文过期但防回退水位还在.
+    CHECK(fixture.catalog.source().size() == 1);
+    auto restarted = client.value.publisher({"dynamic", "main"}); // 新对象仍查询到过期水位, 不重新从一写起.
+    CHECK(restarted);
+    const auto restored = restarted->update("key", {9}, 1s);
+    CHECK(restored && restored->version == 3);
+    publisher->close();
+    CHECK(publisher->wait(3s));
 }
 
-// 局部 RPC 完成只推进所属对象, 其他空闲对象仍必须按自己的截止续租并响应 Watch/关闭.
+// 一个共享客户端的独立写者不相互强加 Scope 全局版本; 活跃写者不阻塞空闲订阅.
 void scheduling() {
 
-    Fixture fixture("scheduling", false, false); // 真实回环 RPC, 无全局登录事件替测试唤醒所有对象.
+    Fixture fixture("scheduling", false, false);
     Client client(fixture.options(false, false));
-    std::vector<comet::Publisher> publishers;   // 16 个独立期限, 验证完成事件与定时唤醒相互独立.
-    std::vector<comet::Subscriber> subscribers; // 空闲订阅不会因为其他 Key 活跃而漏掉自己的数据.
+    std::vector<comet::Publisher> publishers;   // 每个对象只绑定范围, 业务保证所写 Key 唯一.
+    std::vector<comet::Subscriber> subscribers; // 各 Key 独立的长期订阅.
     for (unsigned index = 0; index < 16; ++index) {
-        const auto key = std::to_string(index); // 固定 Scope 内独立 Key, 不增加服务端范围数量.
-        auto publisher = client.value.publisher({"dynamic", "schedule"}, key, 1s);
+        const auto key = std::to_string(index); // 相邻 Key 允许拥有相同版本一.
+        auto publisher = client.value.publisher({"dynamic", "schedule"});
         auto subscriber = client.value.subscriber({"dynamic", "schedule"}, key);
         CHECK(publisher && subscriber);
         publishers.push_back(std::move(*publisher));
         subscribers.push_back(std::move(*subscriber));
-        auto result = publishers.back().publish(1, {7}); // 每对象先获得真正受理, 后续保持空闲自动续租.
-        CHECK(result.wait_for(3s) == std::future_status::ready && result.get());
+        const auto result = publishers.back().update(key, {7}, 1s);
+        CHECK(result && result->version == 1);
     }
-
-    // 第一个对象持续更新, 同时等待其他对象独立的网络完成及下一次自动期限.
     for (std::uint64_t version = 2; version <= 64; ++version) {
-        auto result = publishers.front().publish(version, {8}); // 顺序单 Key, 不通过客户端批次偷换业务负载.
-        CHECK(result.wait_for(3s) == std::future_status::ready && result.get());
+        const auto result = publishers.front().update("0", {8}, 1s); // 同对象自动递增, 不向公共接口传 version.
+        CHECK(result && result->version == version);
     }
-    eventually([&] {
-        return std::ranges::all_of(subscribers, [](const auto& subscriber) { return subscriber.watch().state() == comet::Subscriber::State::ready && subscriber.watch().size() == 1; });
-    });
-    eventually([&] {
-        const auto events = fixture.catalog.events(0); // 捕获真实来源历史, 保活必须覆盖每个对象, 不能只检查累计次数.
-        if (!events) {
-            return false;
-        }
-        std::unordered_set<std::string_view> renewed; // 仅借用本次 events 拥有的名称, 返回前销毁; 最多 16 个独立 Key.
-        for (const auto& event : *events) {
-            if (event.form == astra::Catalog::State::Source::Form::renew) {
-                renewed.insert(event.name->key);
-            }
-        }
-        return renewed.size() == publishers.size();
-    });
-    CHECK(fixture.catalog.capture({"dynamic", "schedule"})->version() == 79); // 续租不变成下行内容事件.
+    eventually([&] { return std::ranges::all_of(subscribers, [](const auto& subscriber) { return subscriber.watch().state() == comet::Subscriber::State::ready && subscriber.watch().size() == 1; }); });
+    CHECK(fixture.catalog.capture({"dynamic", "schedule"})->version() == 79);
     client.value.close();
     CHECK(client.value.wait(3s));
-    for (const auto& subscriber : subscribers) {
-        CHECK(subscriber.wait(0ms)); // 非 ready 对象也要收到共享关闭, 不依靠新的网络流量.
-    }
+    for (const auto& subscriber : subscribers)
+        CHECK(subscriber.wait(0ms));
 }
 
-// Client 显式关闭立即覆盖全部对象的公开状态, 不等控制轮在用户回调返回后再次推进 Publisher.
+// 用户通知中关闭 Client 仍立即禁止新的写入, 不等待控制轮返回.
 void publications_closed() {
 
     Fixture fixture("star-test", false);
     fixture.fill();
     Client client(fixture.options(false));
-    auto publisher = client.value.publisher({"dynamic", "main"}, "key", 1s);
-    CHECK(publisher);
-    auto committed = publisher->publish(1, std::vector<std::uint8_t>{7}); // 先取得真实确认, 关闭前必须是 ready.
-    CHECK(committed.wait_for(3s) == std::future_status::ready && committed.get());
-    eventually([&] { return publisher->state().phase == comet::Publisher::Phase::ready; });
-
-    std::atomic_bool observed{}; // 回调记录即时状态, 主线程在全部清理完成后检查.
+    auto publisher = client.value.publisher({"dynamic", "main"});
+    CHECK(publisher && publisher->update("key", {7}, 1s));
+    std::atomic_bool observed{}; // 控制轮结束后由主线程读取.
     comet::Reader::Options options;
     options.changed = [&](comet::Reader::View view) {
         if (view.state() == comet::Reader::State::ready && view.version() == 2) {
             client.value.close();
-            observed.store(publisher->state().phase == comet::Publisher::Phase::closed);
+            const auto result = publisher->update("key", {8}, 1s); // 关闭优先于禁止回调阻塞的检查.
+            observed.store(!result && result.error().code == comet::Error::Code::closed);
         }
     };
     auto reader = client.value.reader({"routes", "main"}, {}, std::move(options));
     CHECK(reader);
     eventually([&] { return reader->load().version() == 1; });
     CHECK(fixture.library.apply({"routes", "main"}, 2, "key-0", astra::Almanac::Buffer{8}));
-    CHECK(client.value.wait(3s)); // 回调内关闭, 不靠 sleep 或主线程抢先读状态制造竞态.
+    CHECK(client.value.wait(3s));
     CHECK(observed.load() && publisher->wait(0ms));
 }
 
-// 同一对象换 Star 完整重发最新内容; Subscriber 接受新节点较低游标, 不拼接旧节点的记录.
+// 切换后不自动恢复旧 Catalog Data, 新的显式完整提交才创建目标缺少的 Key.
 void publications_relocation() {
 
-    Fixture first("star-first", false);
-    Fixture second("star-second", false);
+    Fixture first("star-first", false), second("star-second", false);
     auto options = first.options(false);
     options.endpoints.push_back(second.endpoint);
     Client client(std::move(options));
-    auto publisher = client.value.publisher({"dynamic", "main"}, "key", 1s);
+    auto publisher = client.value.publisher({"dynamic", "main"});
     auto subscriber = client.value.subscriber({"dynamic", "main"});
     CHECK(publisher && subscriber);
-    auto future = publisher->publish(8, std::vector<std::uint8_t>{1});
-    CHECK(future.wait_for(3s) == std::future_status::ready && future.get());
+    const auto initial = publisher->update("key", {1}, 1s);
+    CHECK(initial && initial->version == 1);
     eventually([&] { return subscriber->watch().find("key").has_value(); });
     first.stop();
-    eventually([&] { const auto state = publisher->state(); return state.phase == comet::Publisher::Phase::ready && state.confirmed && state.confirmed->instance == "star-second"; });
-    eventually([&] { const auto view = subscriber->watch(); return view.state() == comet::Subscriber::State::ready && view.instance() == "star-second" && view.find("key").has_value(); });
-    CHECK(second.catalog.find({"dynamic", "main"}, "key")->record->version == 8);
+    eventually([&] { const auto view = subscriber->watch(); return view.state() == comet::Subscriber::State::ready && view.instance() == "star-second"; });
+    CHECK(!subscriber->watch().find("key") && second.catalog.source().position() == 0);
+    const auto moved = publisher->update("key", {2}, 1s);
+    CHECK(moved && moved->instance == "star-second" && moved->version > initial->version);
+    eventually([&] { const auto row = subscriber->watch().find("key"); return row && row->version == moved->version; });
 }
 
-// 本地接纳保持版本单调, 尚未发送的调用只保留一个结果, 超时不撤销恢复期望.
+// 认证失败返回后不保留待发 Data; 修正凭据也不暗中提交上一次调用.
 void publications_pending() {
 
     Fixture fixture;
     fixture.password(43);
     Client client(fixture.options());
-    auto publisher = client.value.publisher({"dynamic", "main"}, "key", 1s);
+    auto publisher = client.value.publisher({"dynamic", "main"});
     CHECK(publisher);
-    auto first = publisher->publish(1, std::vector<std::uint8_t>{1});
-    auto latest = publisher->publish(9, std::vector<std::uint8_t>{9}, 30ms);
-    CHECK(first.wait_for(1s) == std::future_status::ready && first.get().error().code == comet::Error::Code::obsolete);
-    CHECK(latest.wait_for(1s) == std::future_status::ready);
-    const auto timeout = latest.get();
-    CHECK(!timeout && timeout.error().code == comet::Error::Code::timeout && timeout.error().effect == comet::Error::Effect::unapplied);
+    const auto rejected = publisher->update("key", {9}, 1s, 500ms);
+    CHECK(!rejected && rejected.error().effect == comet::Error::Effect::unapplied);
     CHECK(client.value.secret({43}));
-    eventually([&] { return publisher->state().phase == comet::Publisher::Phase::ready; });
-    CHECK(fixture.catalog.find({"dynamic", "main"}, "key")->record->version == 9);
+    auto subscriber = client.value.subscriber({"dynamic", "main"});
+    CHECK(subscriber);
+    eventually([&] { return subscriber->watch().state() == comet::Subscriber::State::ready; });
+    CHECK(subscriber->watch().size() == 0 && fixture.catalog.source().position() == 0);
+    const auto explicit_update = publisher->update("key", {8}, 1s);
+    CHECK(explicit_update && explicit_update->version == 1);
 }
 
-// Client 的显式结果总额度包含待认证调用; 满额度仍可替换自己一个未发送的期望.
-void pending_limit() {
+// 静态拒绝不触发 RPC, 不消耗版本; Key/TTL 在每次调用独立验证.
+void publication_inputs() {
 
-    Fixture fixture;
-    fixture.password(43); // 登录被明确拒绝, 全部调用保持未发送, 不依赖 RPC 调度竞态.
-    Client client(fixture.options());
-    std::vector<comet::Publisher> publishers;
-    std::vector<std::future<comet::Result<comet::Publisher::Receipt>>> futures;
-    publishers.reserve(257);
-    futures.reserve(256);
-    for (unsigned index = 0; index < 257; ++index) {
-        auto publisher = client.value.publisher({"capacity", "main"}, "key-" + std::to_string(index), 1s);
-        CHECK(publisher);
-        publishers.push_back(std::move(*publisher));
-        if (index < 256) {
-            futures.push_back(publishers.back().publish(1, std::vector<std::uint8_t>{1}, 60s));
+    Fixture fixture("inputs", false);
+    Client client(fixture.options(false));
+    auto publisher = client.value.publisher({"dynamic", "main"});
+    CHECK(publisher);
+    const auto data = std::make_shared<const std::vector<std::uint8_t>>(1, 7); // 两条条目故意引用同一不可变值.
+    CHECK(publisher->update({{"a", data}, {"a", data}}, 1s).error().code == comet::Error::Code::input);
+    CHECK(publisher->update({{"a", {}}}, 1s).error().code == comet::Error::Code::input);
+    CHECK(publisher->update("a", {7}, 0ms).error().code == comet::Error::Code::input);
+    CHECK(publisher->update("a", {7}, 1s, 0ms).error().code == comet::Error::Code::input);
+    CHECK(fixture.catalog.source().position() == 0);
+    const auto result = publisher->update("a", {7}, 1s);
+    CHECK(result && result->version == 1);
+}
+
+// 回调挂接晚于同步也收到基线, 多键原子批完整交付, 精确 Key 区分不存在与合法空值.
+void watching() {
+
+    Fixture fixture("star-watch", false);
+    std::atomic_uint maps{}, exacts{}, states{}, baselines{}; // Client 析构先等待所有捕获这些引用的通知结束.
+    std::atomic_bool valid{true};
+    Client client(fixture.options(false));
+    auto subscriber = client.value.subscriber({"dynamic", "callbacks"});
+    auto exact = client.value.subscriber({"dynamic", "callbacks"}, "a");
+    auto publisher = client.value.publisher({"dynamic", "callbacks"});
+    CHECK(subscriber && exact && publisher);
+    eventually([&] { return subscriber->state().state() == comet::Subscriber::State::ready && exact->state().state() == comet::Subscriber::State::ready; });
+    CHECK(subscriber->watch([&](comet::Subscriber::Map map) {
+        if (map.size() != 0 && map.size() != 2) {
+            valid = false;
         }
-    }
-    auto rejected = publishers.back().publish(1, std::vector<std::uint8_t>{1});
-    CHECK(rejected.wait_for(0ms) == std::future_status::ready && rejected.get().error().code == comet::Error::Code::busy);
-    auto replacement = publishers.front().publish(2, std::vector<std::uint8_t>{2}, 60s);
-    CHECK(futures.front().wait_for(0ms) == std::future_status::ready && futures.front().get().error().code == comet::Error::Code::obsolete);
-    CHECK(replacement.wait_for(0ms) != std::future_status::ready);
-    publishers.front().close(); // 完成未发调用, 额度立即归还, 不等待后台扫描.
-    CHECK(replacement.wait_for(0ms) == std::future_status::ready && replacement.get().error().code == comet::Error::Code::closed);
-    auto admitted = publishers.back().publish(1, std::vector<std::uint8_t>{1}, 60s);
-    CHECK(admitted.wait_for(0ms) != std::future_status::ready);
-    client.value.close();
-    CHECK(client.value.wait(5s));
-    CHECK(admitted.wait_for(0ms) == std::future_status::ready && admitted.get().error().code == comet::Error::Code::closed);
+        ++maps;
+    }));
+    CHECK(exact->watch([&](std::string key, std::optional<comet::Value> value) {
+        if (key != "a" || (value && !(*value)->empty())) {
+            valid = false;
+        }
+        ++exacts;
+    }));
+    CHECK(subscriber->changed([&](comet::Subscriber::View) { ++states; }));
+    eventually([&] { return maps.load() == 1 && exacts.load() == 1 && states.load() > 0; });
+    const auto empty = std::make_shared<const std::vector<std::uint8_t>>();
+    CHECK(publisher->update({{"a", empty}, {"b", empty}}, 1s));
+    eventually([&] { return maps.load() >= 2 && exacts.load() >= 2; });
+    const auto held = subscriber->state();
+    CHECK(held.size() == 2 && held.find("a")->value->empty() && valid.load());
+    subscriber->stop();
+    CHECK(subscriber->wait(3s));
+    CHECK(!subscriber->watch([](comet::Subscriber::Map) {}));
+    CHECK(held.size() == 2);
+
+    auto reader = client.value.reader({"routes", "callbacks"});
+    CHECK(reader);
+    CHECK(reader->watch([&](comet::Reader::Map map) { if (map.size() != 0) { valid = false; } ++baselines; }));
+    eventually([&] { return baselines.load() == 1; });
+    reader->stop();
+    CHECK(reader->wait(3s) && valid.load());
+}
+
+// selector 在短锁外运行, 本地估计影响后续选择, 新权威值和 stop 都拒绝旧视图写入.
+void choosing() {
+
+    Fixture fixture("star-pool", false);
+    Client client(fixture.options(false));
+    auto beacon = client.value.beacon({"service", "pool"}, {1}, {2}, 1s, 250ms);
+    auto observer = client.value.observer({"service", "pool"});
+    CHECK(beacon && observer);
+    const auto id = beacon->state().identity->uuid;
+    eventually([&] { return observer->select().state() == comet::Observer::State::ready && observer->select().find(id); });
+    const auto select = [&](const comet::Observer::Pool& pool) { CHECK(observer->select().find(id)); return pool.find(id); }; // selector 可以重入当前观察对象.
+    auto selected = observer->one(select);
+    CHECK(selected && *selected);
+    auto old = **selected; // 同一权威值下独立持有的旧估计凭证.
+    CHECK((*selected)->update(std::vector<std::uint8_t>{3}));
+    CHECK(!old.update(std::vector<std::uint8_t>{4}));
+    auto next = observer->one(select);
+    CHECK(next && *next && *(*next)->record().data == std::vector<std::uint8_t>{3});
+    CHECK(beacon->update(std::vector<std::uint8_t>{5}));
+    eventually([&] { return *observer->select().find(id)->data == std::vector<std::uint8_t>{5}; });
+    CHECK(!(*selected)->update(std::vector<std::uint8_t>{6}));
+    auto fresh = observer->one(select);
+    CHECK(fresh && *fresh && *(*fresh)->record().data == std::vector<std::uint8_t>{5});
+    observer->stop();
+    CHECK(!observer->one(select) && !(*fresh)->update(std::vector<std::uint8_t>{7}));
+    CHECK(*old.record().data == std::vector<std::uint8_t>{2});
+}
+
+// 回调解除自己后, 最后一份捕获析构可以重入读取状态, 不得持 Watching 的状态锁.
+void captures() {
+
+    Fixture fixture("star-captures", false);
+    std::atomic_uint released{}; // 在 Client 排空之前始终有效.
+    Client client(fixture.options(false));
+    auto opened = client.value.subscriber({"dynamic", "captures"});
+    CHECK(opened);
+    auto subscriber = std::make_shared<comet::Subscriber>(std::move(*opened));
+
+    struct Capture {
+        std::shared_ptr<comet::Subscriber> owner; // 保持可重入句柄到捕获释放后, 无栈借用.
+        std::atomic_uint& released;
+
+        ~Capture() {
+            static_cast<void>(owner->state());
+            ++released;
+        }
+    };
+
+    CHECK(subscriber->watch([capture = std::make_shared<Capture>(subscriber, released)](comet::Subscriber::Map) {
+        CHECK(capture->owner->watch(std::move_only_function<void(comet::Subscriber::Map)>{}));
+    }));
+    eventually([&] { return released.load() == 1; });
+    CHECK(subscriber->changed([capture = std::make_shared<Capture>(subscriber, released)](comet::Subscriber::View) {
+        CHECK(capture->owner->changed({}));
+    }));
+    eventually([&] { return released.load() == 2; });
+    subscriber->stop();
+    CHECK(subscriber->wait(3s) && client.value.exceptions() == 0);
 }
 
 } // namespace
@@ -770,6 +834,9 @@ void pending_limit() {
 // 仅注册为显式 CTest 项, 编写和格式化不运行网络用例.
 int main() {
     try {
+        captures();
+        watching();
+        choosing();
         inputs();
         cleanup();
         queued();
@@ -783,7 +850,7 @@ int main() {
         publications_closed();
         publications_relocation();
         publications_pending();
-        pending_limit();
+        publication_inputs();
         deferred();
         closing_beacon();
         beacon_relocation();

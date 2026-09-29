@@ -75,6 +75,7 @@ void Parcel::record(proto::astra::v1::EphemerisRecord& message, const Ephemeris:
     message.set_update(value.update);
     message.set_renewal(value.renewal);
     message.set_ttl_ms(value.ttl);
+    message.set_generation(value.generation);
 }
 
 std::optional<Ephemeris::Record> Parcel::record(const proto::astra::v1::EphemerisRecord& message) {
@@ -84,7 +85,7 @@ std::optional<Ephemeris::Record> Parcel::record(const proto::astra::v1::Ephemeri
     if (!valid(message)) {
         return std::nullopt;
     }
-    return Ephemeris::Record{value(message.attr()), value(message.data()), *time(message.deadline()), message.update(), message.renewal(), message.ttl_ms()};
+    return Ephemeris::Record{value(message.attr()), value(message.data()), *time(message.deadline()), message.update(), message.renewal(), message.ttl_ms(), message.generation()};
 }
 
 void Parcel::delta(proto::astra::v1::CatalogDelta& message, const Origin<Catalog::Record>::Event& event) {
@@ -131,6 +132,7 @@ void Parcel::delta(proto::astra::v1::EphemerisDelta& message, const Origin<Ephem
         }
         message.mutable_data()->set_data(event.record->data->data(), event.record->data->size());
         message.mutable_data()->set_order(event.record->update);
+        message.mutable_data()->set_deadline(static_cast<std::uint64_t>(event.record->deadline.time_since_epoch().count()));
         break;
     case Source::Form::renew:
         if (event.record->renewal == 0 || event.record->deadline.time_since_epoch().count() <= 0) {
@@ -173,7 +175,7 @@ bool Parcel::valid(const proto::astra::v1::EphemerisChanges& message) noexcept {
         if (!valid(entry.scope()) || !Ephemeris::valid(entry.uuid()) || entry.position() == 0 || entry.position() > message.head() || (previous && (previous == UINT64_MAX || entry.position() != previous + 1))) {
             return false;
         }
-        if (!((entry.has_record() && valid(entry.record())) || (entry.has_data() && entry.data().order() != 0 && entry.data().data().size() <= 1024 * 1024) || (entry.has_lease() && entry.lease().order() != 0 && time(entry.lease().deadline())) || entry.has_erase())) {
+        if (!((entry.has_record() && valid(entry.record())) || (entry.has_data() && entry.data().order() != 0 && entry.data().data().size() <= 1024 * 1024 && (!entry.data().deadline() || time(entry.data().deadline()))) || (entry.has_lease() && entry.lease().order() != 0 && time(entry.lease().deadline())) || entry.has_erase())) {
             return false;
         }
         previous = entry.position();

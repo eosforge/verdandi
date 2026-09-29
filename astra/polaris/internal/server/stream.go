@@ -9,11 +9,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/admission"
-	"github.com/eosforge/verdandi/astra/internal/generated/comet"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
-	"github.com/eosforge/verdandi/astra/internal/generated/polaris"
-	"github.com/eosforge/verdandi/astra/polaris/internal/storage"
+	"github.com/eosforge/astra/internal/admission"
+	"github.com/eosforge/astra/internal/generated/comet"
+	"github.com/eosforge/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/polaris"
+	"github.com/eosforge/astra/polaris/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -445,7 +445,12 @@ func (transfer *transfer) synchronize(position storage.Position) error {
 		}
 		// 历史断档才走快照路径, 其他错误直接返回.
 	}
-	// 无基线或断档: 从缓存钉住快照发送完整内容.
+	return transfer.restore(position)
+}
+
+// restore 发送不低于目标位置的完整冻结快照, 用于断档和超出单帧的大批次.
+// 只在完整结束页安装一次, 不将原子提交拆成可见的多个补丁版本.
+func (transfer *transfer) restore(position storage.Position) error {
 	pin, err := transfer.owner.authority.cache.acquire(transfer.ctx, position.Scope, position.Version)
 	if err != nil {
 		return failure(err)
@@ -461,12 +466,27 @@ func (transfer *transfer) update(scope storage.Scope, changes []storage.Change) 
 	size := proto.Size(page) + 16
 	// 逐条转补丁打包, 页满即发送并开新页, 每页后处理控制帧.
 	for _, change := range changes {
-		entry := &comet.AlmanacChange{Key: change.Key, Action: &comet.AlmanacChange_Value{Value: change.Value}}
-		if change.Erase {
-			entry.Action = &comet.AlmanacChange_Erase{Erase: &comet.Empty{}}
+		entries, err := change.Entries()
+		if err != nil {
+			return failure(storage.ErrCorrupt)
 		}
-		patch := &polaris.Patch{Version: uint64(change.Version), Change: entry}
+		patch := &polaris.Patch{Version: uint64(change.Version)}
+		for _, item := range entries {
+			entry := &comet.AlmanacChange{Key: item.Key, Action: &comet.AlmanacChange_Value{Value: item.Value}}
+			if item.Erase {
+				entry.Action = &comet.AlmanacChange_Erase{Erase: &comet.Empty{}}
+			}
+			if change.Key == "" {
+				patch.Changes = append(patch.Changes, entry)
+			} else {
+				patch.Change = entry
+			}
+		}
 		cost := proto.Size(patch) + 6
+		if proto.Size(page.Scope)+32+cost > transfer.maximum {
+			// 快照至少覆盖本次整个后缀, 因而无需发送暂存的前缀或重复剩余事件.
+			return transfer.restore(storage.Position{Scope: scope, Version: changes[len(changes)-1].Version})
+		}
 		if len(page.Patches) != 0 && size+cost > min(transfer.maximum, 256<<10) {
 			if err := transfer.updates(scope, page); err != nil {
 				return err

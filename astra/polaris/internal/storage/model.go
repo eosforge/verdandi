@@ -83,11 +83,11 @@ func (limits Limits) valid() bool {
 	return limits.Scopes > 0 && limits.Scopes <= 16384 && limits.Records > 0 && limits.Records <= 1<<20 && limits.Bytes > 0 && limits.Bytes <= 1<<30 && limits.Total >= limits.Bytes && limits.Total <= 4<<30 && limits.History >= 0 && limits.History <= 65536 && limits.Backlog >= 0 && limits.Backlog <= 64<<20 && limits.Timeout > 0 && limits.Timeout <= 30*time.Second && limits.WAL >= 1<<20 && limits.WAL <= 4<<30
 }
 
-// Change 是单个权威提交. Erase 与零字节 Set 严格区分, Buffer 由本次调用独占.
+// Change 是单个权威提交. 普通键区分 Erase 与零字节 Set; 空键只供内部完整批次编码, 由 Entries 还原.
 type Change struct {
 	Version Version // 期望版本, 必须恰好为当前+1 (重放除外).
-	Key     string  // 键, 1..1024 字节合法文本.
-	Value   []byte  // 载荷, 上限 1 MiB; 删除时必须为空.
+	Key     string  // 普通键为 1..1024 字节合法文本, 内部批次历史为空.
+	Value   []byte  // 单值上限 1 MiB; 批次为不设总量上限的完整编码, 删除时必须为空.
 	Erase   bool    // 是否删除, 与设值互斥.
 }
 

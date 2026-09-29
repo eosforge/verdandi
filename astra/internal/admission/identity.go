@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"unicode/utf8"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/orbit"
 	"google.golang.org/protobuf/proto"
 )
 

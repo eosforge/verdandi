@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/comet"
-	"github.com/eosforge/verdandi/astra/internal/generated/polaris"
+	"github.com/eosforge/astra/internal/generated/comet"
+	"github.com/eosforge/astra/internal/generated/polaris"
 )
 
 // Backend 的真实实现直接调用 Polaris, 测试可单独验证 HTTP 边界但不能替代跨进程持久验收.
@@ -248,20 +248,23 @@ func (server *Server) session(response http.ResponseWriter, request *http.Reques
 }
 
 // body 的 encoded 上限包括 Base64 和 JSON, 不允许未知嵌套、重复字段、多个文档或任意内容类型.
-// maximum 为正文上限; target 为解码目标; 返回错误时调用方直接报输入错误.
-func body(response http.ResponseWriter, request *http.Request, maximum int64, target any) error {
+// maximum 为正文上限, 0 表示不设整批正文上限 (Almanac); arrays 为允许的标量对象数组字段.
+// target 为解码目标; 返回错误时调用方直接报输入错误.
+func body(response http.ResponseWriter, request *http.Request, maximum int64, target any, arrays ...string) error {
 	// 内容类型必须为 JSON, 其他类型直接拒绝.
 	media, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" {
 		return errInput
 	}
-	// 限长读取, 超限由 MaxBytesReader 截断并报错.
-	request.Body = http.MaxBytesReader(response, request.Body, maximum)
+	// 其他管理输入保持限长; Almanac 批次不因 JSON/Base64 膨胀产生隐含的总大小限制.
+	if maximum > 0 {
+		request.Body = http.MaxBytesReader(response, request.Body, maximum)
+	}
 	data, err := io.ReadAll(request.Body)
 	if err != nil {
 		return errInput
 	}
-	return object(data, target)
+	return object(data, target, arrays...)
 }
 
 // respond 不在错误里回显用户输入、后端原文或 SQL; 写出失败不会重新执行管理操作.

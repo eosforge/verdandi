@@ -97,8 +97,8 @@ grpc::Status Ephemeris::Service::error(grpc::CallbackServerContext& context, Sta
         reason = proto::comet::v1::REASON_OBSOLETE;
         break;
     case State::Error::conflict:
-        code = Code::INVALID_ARGUMENT;
-        reason = proto::comet::v1::REASON_INPUT;
+        code = Code::FAILED_PRECONDITION;
+        reason = proto::comet::v1::REASON_CONFLICT;
         break;
     case State::Error::exhausted:
         code = Code::OUT_OF_RANGE;
@@ -142,6 +142,9 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Create(grpc::CallbackServerContext
         if (request->ttl_ms() < 1000 || request->ttl_ms() > 600000) {
             return ttl(*context);
         }
+        if ((request->generation() == 0 && (!request->uuid().empty() || !request->capability().empty() || request->order())) || (request->generation() && ((request->uuid().empty() && (request->generation() != 1 || !request->capability().empty() || request->order())) || (!request->uuid().empty() && (!Ephemeris::valid(request->uuid()) || request->capability().size() != 32))))) {
+            return error(*context, State::Error::input);
+        }
         auto attr = copy(request->attr());
         auto data = copy(request->data());
         reply->set_instance(gateway_.instance());
@@ -152,12 +155,24 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Create(grpc::CallbackServerContext
             return permit.error();
         }
 
-        auto result = state_.create(scope, std::move(attr), std::move(data), request->ttl_ms());
+        auto capability = request->capability();
+        auto identity = request->uuid();
+        if (request->generation() && identity.empty()) {
+            capability = Ephemeris::capability();
+            identity = Ephemeris::identity(scope, attr, request->ttl_ms(), capability);
+        }
+        reply->set_capability(capability);
+        auto* restored = reply->mutable_data();
+        restored->reserve(1024 * 1024); // 目标可能掌握更高 Data order, 提交前为最大合法回执准备空间.
+        auto result = state_.create(scope, std::move(attr), std::move(data), request->ttl_ms(), std::move(identity), request->generation(), request->order(), capability);
         if (!result) {
             return error(*context, result.error());
         }
         uuid->swap(result->uuid);
         reply->set_ttl_ms(result->ttl);
+        reply->set_generation(result->generation);
+        reply->set_order(result->order);
+        restored->assign(reinterpret_cast<const char*>(result->data->data()), result->data->size());
         return grpc::Status::OK;
     });
 }
@@ -182,7 +197,7 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Update(grpc::CallbackServerContext
             return permit.error();
         }
 
-        auto result = state_.update(scope, request->uuid(), std::move(data), request->order());
+        auto result = state_.update(scope, request->uuid(), std::move(data), request->order(), request->generation(), request->capability());
         if (!result) {
             return error(*context, result.error());
         }
@@ -206,7 +221,7 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Renew(grpc::CallbackServerContext*
         if (!permit) {
             return permit.error();
         }
-        auto result = state_.renew(scope, request->uuid(), request->order());
+        auto result = state_.renew(scope, request->uuid(), request->order(), request->generation(), request->capability());
         if (!result) {
             return error(*context, result.error());
         }
@@ -230,7 +245,7 @@ grpc::ServerUnaryReactor* Ephemeris::Service::Remove(grpc::CallbackServerContext
         if (!permit) {
             return permit.error();
         }
-        const auto result = state_.remove(scope, request->uuid());
+        const auto result = state_.remove(scope, request->uuid(), request->generation(), request->capability());
         return result ? grpc::Status::OK : error(*context, result.error());
     });
 }

@@ -70,7 +70,7 @@ public:
     };
 
     // capacity 为历史批次容量, retention 使用本地单调时间, interval 为正纳秒精度.
-    // capacity 默认 1000 批, 零表示不保留历史; retention 默认 10 min, 零表示不按年龄保留旧批次.
+    // capacity 默认 1000 批, 零表示不保留历史; retention 默认 10 min, 零同样表示不保留增量历史, 不是仅关闭年龄限制.
     // interval 默认 10 ms, 必须严格为正, 零值及负值抛 invalid_argument.
     // initial 可供恢复/测试指定非负 Unix 起点. 默认等待首次 tick, 不从 1970 年补拍.
     explicit Store(std::size_t capacity = 1000, Steady::duration retention = std::chrono::minutes(10), std::chrono::nanoseconds interval = std::chrono::milliseconds(10), std::optional<Clock::Time> initial = {}) : capacity_(capacity), retention_(retention), interval_(interval), clock_(initial) {

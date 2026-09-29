@@ -1,6 +1,6 @@
 # Verdandi Native Build Guide
 
-> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../README.md).
 
 Verdandi uses one standard-library Python implementation in this directory:
 
@@ -22,7 +22,7 @@ summaries are emitted in standard English so local and CI logs are consistent.
 
 ## Quick start
 
-Run commands from the repository root. The scripts resolve every source path
+Run commands from the sdk/ root. The scripts resolve every source path
 from their own location, so another working directory is also safe.
 Prepare OpenSSL externally first. Obtain approval for each specific dependency
 download before an online configure; use `-Offline`/`--offline` for local caches.
@@ -31,25 +31,25 @@ The same command works on Windows and Linux when an existing interpreter is
 available as `python` (use `python3` where appropriate):
 
 ```text
-python -B sdk/cpp/build.py all --profile dev --linkage shared --offline --jobs 1
+python -B cpp/build.py all --profile dev --linkage shared --offline --jobs 1
 ```
 
 Windows:
 
 ```powershell
-./sdk/cpp/build.ps1 doctor
-./sdk/cpp/build.ps1 all -Profile dev
-./sdk/cpp/build.ps1 all -Profile release -Linkage shared
-./sdk/cpp/build.ps1 doctor -Python 'C:\path to existing Python\python.exe'
+./cpp/build.ps1 doctor
+./cpp/build.ps1 all -Profile dev -Offline
+./cpp/build.ps1 all -Profile release -Linkage shared -Offline
+./cpp/build.ps1 doctor -Python 'C:\path to existing Python\python.exe'
 ```
 
 Linux:
 
 ```bash
-bash sdk/cpp/build.sh doctor
-bash sdk/cpp/build.sh all --profile dev
-bash sdk/cpp/build.sh all --profile release --linkage shared
-bash sdk/cpp/build.sh --python /path/to/existing/python3 doctor
+bash cpp/build.sh doctor
+bash cpp/build.sh all --profile dev --offline
+bash cpp/build.sh all --profile release --linkage shared --offline
+bash cpp/build.sh --python /path/to/existing/python3 doctor
 ```
 
 The Windows wrapper checks existing Python commands and the standard
@@ -70,7 +70,7 @@ Replace argument ABI, and detached argument ownership before restoring SDK
 dependencies:
 
 ```text
-cmake -S sdk/cpp/tests/offline -B build/catalog-offline -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
+cmake -S cpp/tests/offline -B build/catalog-offline -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=
 cmake --build build/catalog-offline --config Release
 ctest --test-dir build/catalog-offline -C Release --output-on-failure
 ```
@@ -164,8 +164,8 @@ checks exercise the real adapters with argument-reporting fixtures; CMake
 checks retain the early installation guards and package-boundary regressions.
 
 ```text
-python sdk/cpp/tests/dependency_policy_test.py --work-dir build/dependency-policy-tests --cmake cmake --powershell powershell
-python sdk/cpp/tests/dependency_policy_test.py --work-dir build/dependency-policy-tests --cmake cmake --bash bash
+python -B cpp/tests/dependency_policy_test.py --work-dir build/dependency-policy-tests --cmake cmake --powershell powershell
+python -B cpp/tests/dependency_policy_test.py --work-dir build/dependency-policy-tests --cmake cmake --bash bash
 ```
 
 Repeat `--powershell` to check both Windows PowerShell 5.1 and PowerShell 7.
@@ -334,7 +334,7 @@ processes. Commands are launched with argument arrays and inherit streaming
 output; probe logs stream to files instead of accumulating compilation output
 in memory. Failed commands stop the sequence and preserve their nonzero exit
 code. Interrupts return 130 and stop the active command's owned process tree.
-PowerShell reuses `sdk/run-tool.ps1` for lossless native argument forwarding,
+PowerShell reuses `run-tool.ps1` for lossless native argument forwarding,
 including Windows PowerShell 5.1. Its entry file retains a UTF-8 BOM for 5.1.
 
 ## Output and cache layout
@@ -371,10 +371,10 @@ and artifact publication remain separate release work.
 Use the repository's Black configuration for the three handwritten Python files:
 
 ```text
-python -m black --config testkit/pyproject.toml sdk/cpp/build.py sdk/cpp/build_support.py sdk/cpp/tests/dependency_policy_test.py
+python -B -m black --config testkit/pyproject.toml cpp/build.py cpp/build_support.py cpp/tests/dependency_policy_test.py
 ```
 
-The formatter is pinned in `sdk/cpp/requirements-dev.txt`.
+The formatter is pinned in `cpp/requirements-dev.txt`.
 The maintainer-approved local Black environment is `build/tools/python-build`;
 its download cache is `build/deps/pip` and formatter cache is
 `build/cache/black`. These paths are ignored by Git. Python package acquisition
@@ -387,6 +387,6 @@ For this local environment, replace `python` in the formatting command with
 ## Existing CMake presets
 
 The existing presets remain supported for focused qualification, sanitizer
-runs, and historical test harnesses. They continue to use `sdk/cpp/build/` and
+runs, and historical test harnesses. They continue to use `cpp/build/` and
 do not share a CMake cache with the unified scripts. The scripts are the normal
 developer entry point; presets remain the explicit specialist path.

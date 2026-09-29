@@ -4,125 +4,146 @@
 #include <comet/beacon.hpp>
 
 namespace comet::detail {
-// Beacon 的唯一期望/身份所有者, Create 与已注册操作互斥, Data/Renew 独立在途.
+// 同步 Data 与异步租约维护共享一个状态, 恢复仅使用确认缓存, 不保留待重放的业务请求.
 class Beaming final : public Activity, public std::enable_shared_from_this<Beaming> {
 public:
-    Beaming(std::shared_ptr<Core> core, Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, Beacon::Options options);         // 不发 RPC, 工厂接纳成功才调度.
-    ~Beaming() override;                                                                                                                      // 实际操作已结束, 归还本对象期望载荷额度.
-    Beacon::State state() const;                                                                                                              // 重新观察包含休眠的本地预算, 不延长租约.
-    std::future<Result<Beacon::Receipt>> update(Value data, std::chrono::milliseconds timeout);                                               // 一个最新待发值, 原在途尝试不改写.
-    void close() noexcept;                                                                                                                    // 异步注销意图与 Core 应用拥有计数只改变一次.
-    bool wait(std::chrono::milliseconds timeout) const;                                                                                       // 不允许 SDK 回调内阻塞.
-    bool closed() const noexcept override;                                                                                                    // Core 目录不反向取得本对象锁.
-    bool finished() const noexcept override;                                                                                                  // 包含取消后的真实回调和 Remove 清理.
-    Core::Time poll(Core::Time now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& error, bool closing) override; // Core 锁外的唯一推进.
+    Beaming(std::shared_ptr<Core> core, Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, std::chrono::milliseconds beat, Beacon::Options options); // 构造只预留缓存, accept 后才注册.
+    ~Beaming() override;                                                                                                                                              // 所有实际 RPC 和采样已结束, 归还固定缓存.
+    Result<void> initialize(Core::Time deadline);                                                                                                                     // 工厂唯一同步首次注册, 失败由工厂立即 close.
+    Result<Beacon::Receipt> update(Value data, std::chrono::milliseconds timeout, Core::Time started);                                                                // 一个同步调用, 不排队或后台重试.
+    Result<void> tick(std::chrono::milliseconds interval, std::move_only_function<Value()> callback);                                                                 // 替换采样器和代次, 空回调解除.
+    Result<void> changed(std::move_only_function<void(Beacon::State)> callback);                                                                                      // 替换状态回调并安排当前状态.
+    Beacon::State state() const;                                                                                                                                      // 每次重查包含 suspend 的租约预算.
+    void close() noexcept;                                                                                                                                            // 取消显式 RPC, 停止自动任务, 不等待用户回调.
+    bool wait(std::chrono::milliseconds timeout) const;                                                                                                               // 仅外部线程允许等待本地实际完成.
+
+    bool closed() const noexcept override {
+        return closed_.load(std::memory_order_acquire);
+    }
+
+    bool finished() const noexcept override {
+        return finished_.load(std::memory_order_acquire);
+    }
 
     bool streaming() const noexcept override {
         return false;
-    } // 与 Watch 分开预留应用及实际 RPC 额度.
+    } // 与 Watch 的物理额度分开.
 
+    Core::Time poll(Core::Time now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& error, bool closing) override; // 唯一控制轮, 不阻塞网络.
 private:
-    // 每个显式调用的 future 与持久期望分开, 请求发送后不能被 later update 改写.
-    struct Pending {
-        std::shared_ptr<Core> admission; // 显式调用总额度的拥有者, 结算后置空.
+    using Notice = std::move_only_function<void(Beacon::State)>; // 活跃通知拥有自己的回调包装.
+    using Sample = std::move_only_function<Value()>;             // 采样器仅返回完整拥有式 Data.
 
-        ~Pending() {
-            if (admission) {
-                admission->settled();
-            }
-        } // 未结算候选异常析构也精确归还.
+    struct Cancel {
+        grpc::ClientContext* context; // stop_callback 的寿命严格短于 context.
 
-        Value data;                                                  // 不可变期望内容, 即使本次 future 超时仍可用于后台恢复.
-        std::optional<std::promise<Result<Beacon::Receipt>>> result; // 有值时尚未结算, 移除后永久不再次完成.
-        Core::Time deadline{};                                       // 从接纳开始的单调期限, 不因建连/认证重置.
-        std::uint64_t order{};                                       // 实际首次发送才分配, 同身份重试保持原值.
+        void operator()() const noexcept {
+            context->TryCancel();
+        }
     };
 
-    // 具体生成类型只在私有实现实例化, 请求/回复/上下文均由本次尝试拥有.
+    struct Call {
+        grpc::ClientContext context;             // 应用线程中的同步 RPC, 取消不提前结束此存储.
+        std::stop_callback<Cancel> shutdown;     // 共享 Client 关闭直接取消, 不依赖控制轮.
+        std::stop_callback<Cancel> cancellation; // 本对象关闭或原目标变更直接取消.
+        explicit Call(Beaming& owner);           // 取得本次固定的停止令牌.
+    };
+
+    struct Operation {
+        Beaming& owner;      // active_ 的唯一清理责任.
+        bool admitted{};     // 同步调用额度是否取得.
+        bool claimed{};      // 实际 unary 槽是否取得.
+        std::size_t bytes{}; // 在途请求/回复/输入所有权预算.
+
+        explicit Operation(Beaming& owner) : owner(owner) {} // 不发请求.
+
+        ~Operation(); // 真实同步 RPC 返回后归还, 唤醒维护与 wait.
+    };
+
     template <class Request, class Reply>
     struct Attempt {
-        std::shared_ptr<Beaming> owner;                    // 至最终回调返回保活, 不延长应用的自动注册意图.
-        std::shared_ptr<const Binding> binding;            // 固定实际地址/Session, 不随 Core 切换修改.
-        std::optional<Beacon::Identity> identity;          // 非 Create 操作的完整固定身份.
-        std::shared_ptr<Pending> pending;                  // Create/Data 实际捕获的期望, 不借用后来的最新值.
-        Request request;                                   // 整个 RPC 期间不可修改.
-        Reply reply;                                       // gRPC 只写这一份, done 的发布后才能读取.
-        grpc::ClientContext context;                       // 有限期限, 不在此调用等待网络.
-        Lifetime::Time sent{};                             // Create/新 Renew 的首次发送本地起点, 重试不更新.
-        std::atomic_bool done{};                           // release/acquire 发布最终回复与 trailing metadata.
-        grpc::StatusCode code = grpc::StatusCode::UNKNOWN; // 不保存任意远端错误正文.
-        std::size_t bytes{};                               // 此次 Protobuf/额外期望引用的保守计费.
-        bool claimed{};                                    // 实际在途额度是否接纳, 析构只归还一次.
-        bool automatic{};                                  // 实际发送时固定, 不随 pending 的 future 完成而改变.
-        bool priority{};                                   // Renew/Remove 使用独立保留槽, 不被普通请求占满.
+        std::shared_ptr<Beaming> owner;                    // 最终 callback 前保活, 不增加应用拥有计数.
+        std::shared_ptr<const Binding> binding;            // 实际请求目标不可改投.
+        Request request;                                   // 发出后不再修改.
+        Reply reply;                                       // done 的 release/acquire 发布完整回复.
+        grpc::ClientContext context;                       // 固定有限截止.
+        Lifetime::Time sent{};                             // 首次实际发送的含 suspend 时间.
+        std::atomic_bool done{};                           // 网络最终完成, 非取消请求.
+        grpc::StatusCode code = grpc::StatusCode::UNKNOWN; // 只保存有界错误编号.
+        std::size_t bytes{};                               // 实际拥有预算.
+        bool claimed{};                                    // 实际自动 RPC 槽位.
+        bool priority{};                                   // 续租/注销用保留槽.
 
-        ~Attempt() { // 最后 callback/控制引用释放后才归还实际内存和槽位.
+        ~Attempt() {
             if (claimed) {
-                owner->core_->returning(priority, automatic);
+                owner->core_->returning(priority, true);
             }
             static_cast<void>(owner->core_->resize(bytes, 0));
         }
     };
 
-    using Creating = Attempt<proto::comet::v1::CreateRequest, proto::comet::v1::CreateReply>; // UUID 确认之前唯一请求.
-    using Updating = Attempt<proto::comet::v1::UpdateRequest, proto::comet::v1::UpdateReply>; // 每 UUID 正常一个 Data 请求.
-    using Renewing = Attempt<proto::comet::v1::RenewRequest, proto::comet::v1::RenewReply>;   // 独立续租, 不排在 Data 后面.
-    using Removing = Attempt<proto::comet::v1::RemoveRequest, proto::comet::v1::Empty>;       // 关闭时最多一个有界注销.
-
-    template <class Call>
-    std::shared_ptr<Call> prepare(const std::shared_ptr<const Binding>& binding, Core::Time deadline, bool priority); // 只准备, 无槽/内存时返回空且不发请求.
-    template <class Call>
-    bool admit(const std::shared_ptr<Call>& call); // 消息已构造后计费并取得在途槽.
-    template <class Call>
-    static void complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept; // 最终 callback 只发布 I/O, 不调用应用.
-    template <class Call>
-    static Error failure(const std::shared_ptr<Call>& call);                                                                              // OnDone 后读取当前尝试的生成错误细节.
-    static void settle(const std::shared_ptr<Pending>& pending, Result<Beacon::Receipt> result);                                          // 精确结算一次 future, 不改写最新期望.
-    static Error error(Error::Code code, Error::Effect effect = Error::Effect::unapplied);                                                // 构造不带敏感正文的本地原因.
-    bool same(const std::optional<Beacon::Identity>& identity) const;                                                                     // 防止旧 UUID 的成功改变新注册.
-    bool target(const Binding& binding) const;                                                                                            // 匿名绑定未获实例时仍按固定实际端点判断.
-    void forget();                                                                                                                        // 新身份开始前取消旧 Data/Renew, 保留最新期望, 不延长旧租约.
-    void failed(const std::shared_ptr<const Binding>& binding, Error error, bool creation, const std::shared_ptr<Pending>& pending = {}); // 原因归属/共享重连与永久拒绝分开.
-    void consume(const std::shared_ptr<const Binding>& binding, Core::Time now);                                                          // 消费实际结束的四类请求, 不提前回收取消中的对象.
-    void create(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time);                                      // 固定本次 Attr/Data/TTL, 不查询旧创建结果.
-    void renew(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time);                                       // 相同 order 重试保留首次发送起点.
-    void send(const std::shared_ptr<const Binding>& binding, Core::Time now);                                                             // 一个当前 Data 尝试, 后来值仅替换待发期望.
-    void remove(const std::shared_ptr<const Binding>& binding);                                                                           // 关闭时只处理当前已确认身份, 不补发旧未知注册.
-    void publish(Beacon::Phase phase, std::optional<Error> error = {});                                                                   // 只标记通知, 持锁不调用应用.
-    void notify(std::unique_lock<std::mutex>& lock);                                                                                      // 取稳定状态后解锁调用, close 可重入.
-
-    const std::shared_ptr<Core> core_;                     // 所有业务对象共享同一个控制循环/连接.
-    const Scope scope_;                                    // 固定外部范围, 构造后不变.
-    Value attr_;                                           // 固定属性, 不被 Data update 改写.
-    const std::chrono::milliseconds ttl_;                  // 固定 1s..10m, 改 TTL 需要新 Beacon.
-    mutable std::mutex mutex_;                             // 期望/身份/通知的短锁, 不跨网络或用户代码.
-    mutable std::condition_variable condition_;            // 本地清理等待点, 不触发网络动作.
-    std::shared_ptr<Pending> wanted_;                      // 当前唯一期望, 不创建发布 FIFO.
-    bool applied_{};                                       // 最新期望已在当前 UUID 明确确认, 后台成功不重写旧 future.
-    bool rejected_{};                                      // 当前 Data 永久拒绝, 新合法 update 可解除, 不停止原 UUID 续租.
-    bool permanent_{};                                     // TTL/创建输入或协议永久错误, 不反复请求新 UUID.
-    std::size_t bytes_{};                                  // 固定 Attr 与当前期望的受控拥有量.
-    std::shared_ptr<const Binding> identity_;              // 当前已确认 UUID 所属端点, 用于同 Star 恢复和关闭.
-    Lifetime lifetime_;                                    // 最近确认的保守本地预算, 使用包含系统挂起的单调时钟.
-    Beacon::State state_;                                  // 最后状态包装, 对外读取时重新核对预算.
-    std::move_only_function<void(Beacon::State)> changed_; // 创建时固定, 不在通知执行时销毁.
-    bool dirty_{};                                         // 合并状态通知, 不建立回调队列.
-    bool notifying_{};                                     // 当前应用回调已开始, wait 必须等待它完成.
-    std::atomic_bool closed_{};                            // 应用关闭门, 单向变化.
-    std::atomic_bool finished_{};                          // 所有实际 RPC/本地清理结束后发布.
-    std::shared_ptr<Beaming> retained_;                    // 应用析构后仅为有界清理保活, 完成即解除自持有.
-    std::shared_ptr<Creating> creating_;                   // 取消至 done 之前也占用唯一 Create 位置.
-    std::shared_ptr<Updating> updating_;                   // 不可修改旧请求的内容/顺序.
-    std::shared_ptr<Renewing> renewing_;                   // 与 Data 独立的保活请求.
-    std::shared_ptr<Removing> removing_;                   // 关闭时唯一尽力请求.
-    std::uint64_t update_{};                               // 当前 UUID 已分配的最高 Data order, 耗尽时明确停止该值.
-    std::uint64_t renewal_{};                              // 当前 UUID 已分配的最高 Renew order.
-    std::optional<Lifetime::Time> renewal_sent_;           // 当前未确认续租 order 的首次发送起点.
-    Core::Time create_at_{};                               // 下一次允许创建, 0 表示立即可试.
-    Core::Time data_at_{};                                 // Data 单独退避, 不延迟保活.
-    Core::Time renew_at_{};                                // 续租单独退避, 不被 Data 永久拒绝暂停.
-    Core::Time close_at_{};                                // 关闭开始即固定期限, 不因重认证重置.
-    bool removed_{};                                       // 尽力 Remove 只发送一次, 不无限重试清理.
-    unsigned failures_{};                                  // 有界重试退避, 成功完整确认后再归零.
+    using Creating = Attempt<proto::comet::v1::CreateRequest, proto::comet::v1::CreateReply>;
+    using Renewing = Attempt<proto::comet::v1::RenewRequest, proto::comet::v1::RenewReply>;
+    using Removing = Attempt<proto::comet::v1::RemoveRequest, proto::comet::v1::Empty>;
+    template <class T>
+    std::shared_ptr<T> prepare(const std::shared_ptr<const Binding>& binding, Core::Time deadline, bool priority); // 准备拥有式上下文, 不发请求.
+    template <class T>
+    bool admit(const std::shared_ptr<T>& call); // 编码完成才计费和取得实际槽.
+    template <class T>
+    static void complete(const std::shared_ptr<T>& call, const grpc::Status& status) noexcept;                                                                                             // 网络回调只发布最终结果.
+    Result<void> begin(Operation& operation, Core::Time deadline, std::size_t bytes, std::shared_ptr<const Binding>& binding);                                                             // 原截止内等待共享认证并冻结目标.
+    Result<void> context(grpc::ClientContext& context, const std::shared_ptr<const Binding>& binding, Core::Time deadline);                                                                // 请求前最后确认生命周期和目标.
+    Result<Beacon::Receipt> submit(Value data, Core::Time deadline, std::optional<std::uint64_t> sample);                                                                                  // sample 有值时拒绝过时代次.
+    void sample() noexcept;                                                                                                                                                                // 有界工作线程执行, 捕获业务异常, 总是归还 sampling_.
+    Result<void> install(const proto::comet::v1::CreateReply& reply, const std::shared_ptr<const Binding>& binding, std::uint64_t generation, Lifetime::Time sent, std::size_t& reserved); // 校验成功回复后安装确认缓存.
+    void consume(const std::shared_ptr<const Binding>& binding);                                                                                                                           // 控制轮消费自动调用, 不结算应用同步结果.
+    void restore(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time);                                                                                      // 同逻辑 ID 和确认 Data, 每次消耗新注册代次.
+    void renew(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time);                                                                                        // 新独立 order, 不重算旧回复的租约.
+    void remove(const std::shared_ptr<const Binding>& binding);                                                                                                                            // 关闭预算内最多一次尽力注销.
+    void failure(const std::shared_ptr<const Binding>& binding, Error error);                                                                                                              // 持锁更新局部状态与共享连接故障.
+    void publish(Beacon::Phase phase, std::optional<Error> error = {});                                                                                                                    // 标记通知, 不调用用户.
+    bool target(const Binding& binding) const;                                                                                                                                             // 对比已注册 Star 和实际端点, 重认证允许复用.
+    static Error error(Error::Code code, Error::Effect effect = Error::Effect::unapplied);                                                                                                 // 有界本地错误.
+    const std::shared_ptr<Core> core_;                                                                                                                                                     // 所有对象共享连接和调度.
+    const Scope scope_;                                                                                                                                                                    // 固定注册范围.
+    const Value attr_;                                                                                                                                                                     // 固定属性, 工厂后永不更改.
+    Value data_;                                                                                                                                                                           // 仅最后成功确认的 Data, 初次注册前保存初值.
+    const std::chrono::milliseconds ttl_;                                                                                                                                                  // 固定 1 s..10 min.
+    const std::chrono::milliseconds beat_;                                                                                                                                                 // 0 < beat < ttl, 实际发送后重新计时.
+    mutable std::mutex mutex_;                                                                                                                                                             // 不跨用户代码和同步 RPC.
+    mutable std::condition_variable condition_;                                                                                                                                            // 本地清理通知.
+    std::size_t bytes_{};                                                                                                                                                                  // 固定 Attr/确认 Data/元数据预算.
+    Beacon::State state_;                                                                                                                                                                  // 身份在恢复间保持逻辑 UUID, instance 更新为最近确认目标.
+    std::string capability_;                                                                                                                                                               // 首次成功注册签发, 不输出或进入公开状态.
+    std::shared_ptr<const Binding> binding_;                                                                                                                                               // 当前已注册的实际目标, 失效时清空.
+    std::shared_ptr<const Binding> active_binding_;                                                                                                                                        // 显式同步调用固定目标.
+    std::stop_source cancellation_{std::nostopstate};                                                                                                                                      // active_ 期间唯一停止源.
+    bool active_{};                                                                                                                                                                        // 同对象只接纳一个同步调用.
+    bool initialized_{};                                                                                                                                                                   // 首次注册已成功, 只有此后才允许后台恢复.
+    bool permanent_{};                                                                                                                                                                     // 永久错误停止自动恢复, 不通过新 ID 绕过.
+    Lifetime lifetime_;                                                                                                                                                                    // 以首次发送起点确认保守租约.
+    std::optional<Lifetime::Time> sent_;                                                                                                                                                   // 最近真正发送新 Update/Renew/Create 的时间, 非输入尝试.
+    std::uint64_t issued_{};                                                                                                                                                               // 已消耗 Data order, 未知结果也不能复用.
+    std::uint64_t confirmed_{};                                                                                                                                                            // 恢复缓存对应的 Data order, 不冒充 issued_.
+    std::uint64_t generation_ = 1;                                                                                                                                                         // 首次注册为 1, 每次恢复递增, 耗尽不绕回.
+    std::uint64_t renewal_{};                                                                                                                                                              // 当前注册的独立续租序列.
+    Core::Time retry_{};                                                                                                                                                                   // 自动维护退避, 初始可以立即执行.
+    unsigned failures_{};                                                                                                                                                                  // 有界退避指数.
+    std::shared_ptr<Notice> changed_;                                                                                                                                                      // 替换时旧回调仍由正在执行的通知持有.
+    bool dirty_{};                                                                                                                                                                         // 合并状态通知, 不积累队列.
+    bool notifying_{};                                                                                                                                                                     // 已开始的状态回调可完成, wait 等其结束.
+    std::shared_ptr<Sample> sampler_;                                                                                                                                                      // 当前可选采样器.
+    std::chrono::milliseconds interval_{};                                                                                                                                                 // 采样周期, 未启用为零.
+    Core::Time tick_{};                                                                                                                                                                    // 下一次采样, 不补发错过的周期.
+    std::uint64_t sampling_generation_{};                                                                                                                                                  // 采样器替换和显式更新使旧采样失效.
+    bool sampling_{};                                                                                                                                                                      // 从排入工作槽到采样/提交结束一直为真.
+    std::atomic_bool closed_{};                                                                                                                                                            // 立即关闭门.
+    std::atomic_bool finished_{};                                                                                                                                                          // 所有实际 RPC、采样和通知结束.
+    std::shared_ptr<Beaming> retained_;                                                                                                                                                    // 关闭期间有界清理保活, 完成释放.
+    Core::Time close_at_{};                                                                                                                                                                // 首次 close 固定截止.
+    bool removed_{};                                                                                                                                                                       // 最多一次 Remove.
+    std::shared_ptr<Creating> creating_;                                                                                                                                                   // 取消后仍等 done, 不另开第二次恢复.
+    std::shared_ptr<Renewing> renewing_;                                                                                                                                                   // 与显式 Update 独立, 自动保留槽.
+    std::shared_ptr<Removing> removing_;                                                                                                                                                   // 有限清理.
 };
 } // namespace comet::detail

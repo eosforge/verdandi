@@ -1,0 +1,92 @@
+// Orbit v1 控制面. Member 和 Role 是准入凭证及成员名单的唯一协议定义.
+syntax = "proto3";
+package proto.orbit.v1;
+option go_package = "github.com/eosforge/astra/internal/generated/orbit;orbit";
+
+// Pulsar 登录, 幂等登记与成员快照. 不增加独立连接或第二次准入.
+service Admission {
+    rpc Register(RegistrationRequest) returns (RegistrationResponse);
+    // 仅查询已提交目录. 初始 metadata 携带当前 admission/signature, 不重新登录或分配代次.
+    rpc List(DirectoryRequest) returns (DirectoryResponse);
+}
+
+// 请求无业务字段; 身份来自受 TLS 保护的 astra-admission-bin / astra-signature-bin.
+message DirectoryRequest {}
+
+// 已提交目录是登记事实, 不是在线探测结果; 不包含密码、启动幂等键或签名私钥.
+message DirectoryResponse {
+    // 按 id 排序. Star/Polaris 仅返回 Star 和 Polaris; Astrolabe 可读取全部角色.
+    repeated Member members = 1;
+}
+
+// 内部 Almanac[__auth][comet] 的值, Key 是 APIKEY. 仅用于 Comet 登录, 不包含权限或所有者.
+message Credential {
+    // 非空不透明字节, 工程初值上限 4096 字节, 不发送给公共业务 Watch.
+    bytes secret = 1;
+}
+
+// 账号通过 TLS 提交, Pulsar 从已验证账号和规范端点构建指纹.
+message RegistrationRequest {
+    string galaxy = 1;
+    // 身份与代次由服务端分配, 以下编号不用于当前请求字段.
+    reserved 2, 5, 11, 12;
+    reserved "id", "expected_epoch", "ticket", "ticket_signature";
+    // 规范的具体 IP:PORT. 节点启动和其他节点拨号均验证服务端 IP SAN.
+    string advertise = 3;
+    reserved 4;
+    reserved "public_key";
+    // 必须属于账号允许的角色, UNSPECIFIED 非法.
+    Role role = 6;
+    // 连接偏好组, 如实际地域. 不改变 Galaxy 的数据或权限范围.
+    string group = 7;
+    // 仅 Planet 使用, 候选耗尽后递增以轮换小名单. 不影响进程准入代次或写入版本.
+    uint32 candidate_round = 8;
+    // 仅向 Pulsar 发送, 不复制到成员名单, 日志或节点间 Hello.
+    string username = 9;
+    string password = 10;
+    // 本次启动生成一次的 32 字节随机幂等键, 所有重试和候选刷新复用, 不作为实例身份或授权凭据.
+    // Pulsar 持久记住已提交请求; 被替换的旧请求不能再次登记.
+    bytes request_id = 13;
+}
+
+// 登记持久提交后返回有界名单. 控制角色不成为 Star 的对等连接目标.
+message RegistrationResponse {
+    // Star/Polaris 得到 Star 与 Polaris; Astrolabe 得到全部角色, 均按 id 排序.
+    // Planet 仍为本组优先的最多 8 个 Star 候选, 不含自身.
+    repeated Member members = 1;
+    // 本次登记的 Member 原始编码及其签名, 与完整名单放在同一个应答中.
+    bytes admission = 2;
+    bytes signature = 3;
+    // Pulsar 独立对时监听的 HOST:PORT. 空表示当前控制面未提供 Pulse, 不能假装对时已就绪.
+    // 客户端仍校验该端点的 TLS 证书, 此字段不改变节点之间的拓扑端点.
+    string pulse_endpoint = 4;
+}
+
+message Member {
+    string galaxy = 1;
+    // Pulsar 签发的不透明字节标识, 当前内容为 p_ 前缀十六进制文本, 长度 1..128 字节; 不规定 UUID 版本或字符格式.
+    bytes id = 2;
+    // SHA-256(username + NUL + galaxy + NUL + advertise) 原始 32 字节, 不再传输小写十六进制文本, 不替代本次启动的 id.
+    bytes principal = 3;
+    string advertise = 4;
+    // 每部署身份的重启代次, 不用于 Catalog/Registry 的业务版本排序.
+    uint64 epoch = 5;
+    reserved 6;
+    reserved "public_key";
+    Role role = 7;
+    string group = 8;
+}
+
+// 角色是准入权限的一部分, 不从端口、地址或存储模式推断.
+enum Role {
+    // 未指定角色, 准入请求拒绝此值.
+    ROLE_UNSPECIFIED = 0;
+    // 维护互联拓扑并接纳 Planet 上游连接的 Star.
+    ROLE_STAR = 1;
+    // 从授权候选中维持单个 Star 上游的 Planet.
+    ROLE_PLANET = 2;
+    // Almanac 的单点持久发布权威, 不进入 Star 对等网格.
+    ROLE_POLARIS = 3;
+    // 管理入口和目录观察者, 不进入 Star 对等网格.
+    ROLE_ASTROLABE = 4;
+}

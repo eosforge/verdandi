@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <stdexcept>
 #include <unordered_set>
 
 namespace {
@@ -240,6 +241,15 @@ void pages(auto&& write) {
     CHECK(view && view->size() == 600);
     Batch batch(Edition(std::move(*view)), std::nullopt, "");
     CHECK(batch.matches(std::nullopt, 600, "") && !batch.matches(0, 600, "") && !batch.matches(std::nullopt, 599, "") && !batch.matches(std::nullopt, 600, "other"));
+    auto rejected = batch.begin(); // 首次准备失败会留下空弱槽, 后续成功不能误计为释放后重建.
+    bool invalid{};                // 空服务实例由真实领域分页拒绝, 初始未捕获错误.
+    try {
+        static_cast<void>(batch.next(rejected, 0, ""));
+    } catch (const std::invalid_argument&) {
+        invalid = true;
+    }
+    CHECK(invalid && !rejected.complete() && batch.misses() == 0 && batch.rebuilds() == 0);
+
     auto first = batch.begin(), second = batch.begin(), slow = batch.begin(); // 三个独立位置, 数据来源共享.
     auto one = batch.next(first, 0, "star");
     auto same = batch.next(second, 0, "star");
@@ -254,18 +264,27 @@ void pages(auto&& write) {
     CHECK(batch.next(second, 1, "star") == middle && !second.complete());
     auto second_end = batch.next(second, 2, "star");
     CHECK(second.complete() && second_end == end);
+    CHECK(batch.misses() == 3 && batch.rebuilds() == 0);   // 首次准备和交错命中均不属于重建.
     const auto encoded = end->message.SerializeAsString(); // 仅测试保留正文副本, 不持有缓存页.
     std::weak_ptr<const typename Batch::Page> released = second_end;
     second_end.reset();
     end.reset();
     CHECK(released.expired()); // 弱缓存不独占持有整个编码页, 取消/完成的消息可以立即释放.
     CHECK(batch.next(slow, 1, "star") == middle);
-    const auto rebuilt = batch.next(slow, 2, "star"); // 页槽还在但正文已释放, 从该流自己的位置重新构造.
+    auto rebuilt = batch.next(slow, 2, "star"); // 页槽还在但正文已释放, 从该流自己的位置重新构造.
     CHECK(rebuilt->message.SerializeAsString() == encoded && slow.complete());
     auto retry = batch.begin(); // 已经发送结束不改变固定起点, 新消费者仍能读取原基线.
     auto replay = batch.next(retry, 0, "star");
     CHECK(replay == one && !retry.complete());
-    CHECK(batch.misses() == 4 && batch.hits() == 6); // 三页首次构造加一次释放后重建, 其余六次均为弱缓存命中.
+    CHECK(batch.misses() == 4 && batch.hits() == 6 && batch.rebuilds() == 1); // 三页首次构造加一次释放后重建, 其余六次均为弱缓存命中.
+
+    released = rebuilt; // 复用非拥有观察者, 重建页仍应在最后一个消费者释放后销毁.
+    rebuilt.reset();
+    CHECK(released.expired());
+    CHECK(batch.next(retry, 1, "star") == middle);
+    const auto repeated = batch.next(retry, 2, "star"); // 再次迟到的消费者仍从同一冻结来源恢复完整尾页.
+    CHECK(repeated->message.SerializeAsString() == encoded && retry.complete());
+    CHECK(batch.misses() == 5 && batch.hits() == 7 && batch.rebuilds() == 2);
 }
 
 // 2 KiB 二进制正文按字节预算分页, 缓存命中不能截断零字节、漏项或串用其他页内容.
@@ -357,6 +376,12 @@ void collapse() {
     CHECK(value.changes(0).key() == "key" && value.changes(0).version() == 20 && value.changes(0).value() == "new");
     const auto empty = unrelated.next("star");
     CHECK(empty.complete() && empty.version() == 3 && empty.changes().empty());
+
+    Catalog::Edition combined(3, *changes); // 不过滤交错键, 排序与同键压缩后仍保留所有最终内容.
+    const auto ordered = combined.next("star");
+    CHECK(ordered.complete() && ordered.version() == 3 && ordered.changes_size() == 2);
+    CHECK(ordered.changes(0).key() == "key" && ordered.changes(0).value() == "new" && ordered.changes(0).version() == 20);
+    CHECK(ordered.changes(1).key() == "other" && ordered.changes(1).value() == "separate" && ordered.changes(1).version() == 3);
 
     Ephemeris::State ephemeris([] { return std::optional(Clock::Reading{.time = Clock::Time(1s), .ready = true}); }, {});
     const auto record = ephemeris.create(scope, bytes("fixed"), bytes("old"), 1000);

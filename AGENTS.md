@@ -40,8 +40,8 @@
 
 ## 文档维护
 
-- 当前文档入口为 [docs/README.md](docs/README.md). 只维护最新有效规范、设计与验证, 不创建工作区历史归档或新的日期化报告.
-- 历史证据使用 Git 查询; 最新测试记录维护在 testkit/validation.md, 保留实际日期、源码身份与验证边界, 不把未运行的改动记为通过.
+- 当前文档入口为 [docs/README.md](astra/docs/README.md). 只维护最新有效规范、设计与验证, 不创建工作区历史归档或新的日期化报告.
+- 历史证据使用 Git 查询; 最新测试记录维护在 astra/docs/validation.md, 保留实际日期、源码身份与验证边界, 不把未运行的改动记为通过.
 - codex.md 和 GEMINI.md 仅链接统一约定, 不另行复制规则或累计会话日志.
 
 ## Git 与发布

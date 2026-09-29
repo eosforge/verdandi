@@ -31,6 +31,8 @@ PROTOBUF_CONSTINIT ::google::protobuf::internal::ReflectionData
     file_reflection_data[] = {
         // ::proto::polaris::v1::CommitRequest
         {&::_pbi::kDescriptorMethods, &::descriptor_table_polaris_2eproto, /* tracker*/ nullptr,},
+        // ::proto::polaris::v1::BatchRequest
+        {&::_pbi::kDescriptorMethods, &::descriptor_table_polaris_2eproto, /* tracker*/ nullptr,},
         // ::proto::polaris::v1::Position
         {&::_pbi::kDescriptorMethods, &::descriptor_table_polaris_2eproto, /* tracker*/ nullptr,},
         // ::proto::polaris::v1::Inventory
@@ -151,7 +153,7 @@ constexpr auto Position::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[1],
+      &file_reflection_data[2],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_polaris_2eproto,
@@ -327,7 +329,7 @@ constexpr auto Snapshot::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[3],
+      &file_reflection_data[4],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_polaris_2eproto,
@@ -390,12 +392,12 @@ constexpr Patch::ParseTableT_ Patch::InternalGenerateParseTable_(const ::_pbi::C
     {
       PROTOBUF_FIELD_OFFSET(Patch, _impl_._has_bits_),
       0, // no _extensions_
-      2, 8,  // max_field_number, fast_idx_mask
+      3, 24,  // max_field_number, fast_idx_mask
       offsetof(ParseTableT_, field_lookup_table),
-      4294967292,  // skipmap
+      4294967288,  // skipmap
       offsetof(ParseTableT_, field_entries),
-      2,  // num_field_entries
-      1,  // num_aux_entries
+      3,  // num_field_entries
+      2,  // num_aux_entries
       offsetof(ParseTableT_, aux_entries),
       class_data,
       nullptr,  // post_loop_handler
@@ -404,23 +406,35 @@ constexpr Patch::ParseTableT_ Patch::InternalGenerateParseTable_(const ::_pbi::C
       ::_pbi::TcParser::GetTable<::proto::polaris::v1::Patch>(),  // to_prefetch
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
+      {::_pbi::TcParser::MiniParse, {}},
+      // uint64 version = 1;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(Patch, _impl_.version_), 2>(),
+       {8, 2, 0,
+        PROTOBUF_FIELD_OFFSET(Patch, _impl_.version_)}},
       // .proto.comet.v1.AlmanacChange change = 2;
       {::_pbi::TcParser::FastMtS1,
-       {18, 0, 0,
+       {18, 1, 0,
         PROTOBUF_FIELD_OFFSET(Patch, _impl_.change_)}},
-      // uint64 version = 1;
-      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(Patch, _impl_.version_), 1>(),
-       {8, 1, 0,
-        PROTOBUF_FIELD_OFFSET(Patch, _impl_.version_)}},
+      // repeated .proto.comet.v1.AlmanacChange changes = 3;
+      {::_pbi::TcParser::FastMtR1,
+       {26, 0, 1,
+        PROTOBUF_FIELD_OFFSET(Patch, _impl_.changes_)}},
     }}, {{
       65535, 65535
     }}, {{
       // uint64 version = 1;
-      {PROTOBUF_FIELD_OFFSET(Patch, _impl_.version_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+      {PROTOBUF_FIELD_OFFSET(Patch, _impl_.version_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
       // .proto.comet.v1.AlmanacChange change = 2;
-      {PROTOBUF_FIELD_OFFSET(Patch, _impl_.change_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+      {PROTOBUF_FIELD_OFFSET(Patch, _impl_.change_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+      // repeated .proto.comet.v1.AlmanacChange changes = 3;
+      {PROTOBUF_FIELD_OFFSET(Patch, _impl_.changes_), _Internal::kHasBitsOffset + 0, 1, (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
     }},
     {{
+        #ifndef PROTOBUF_MESSAGE_GLOBALS
+        {::_pbi::TcParser::GetTable<::proto::comet::v1::AlmanacChange>()},
+        #else
+        {::_pbi::FieldAuxMessageGlobals(), &::proto::comet::v1::AlmanacChange_globals_},
+        #endif
         #ifndef PROTOBUF_MESSAGE_GLOBALS
         {::_pbi::TcParser::GetTable<::proto::comet::v1::AlmanacChange>()},
         #else
@@ -436,7 +450,12 @@ constexpr Patch::ParseTableT_ Patch::InternalGenerateParseTable_(const ::_pbi::C
 inline constexpr Patch::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     ::_pbi::ConstantInitialized) noexcept
-      : change_{nullptr},
+      : changes_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::polaris::v1::Patch,
+            PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Patch, _impl_.changes_)>()
+         }
+        ,
+        change_{nullptr},
         version_{::uint64_t{0u}} {}
 
 template <typename>
@@ -455,7 +474,7 @@ inline void* PROTOBUF_NONNULL Patch::PlacementNew_(
   return ::new (mem) Patch(arena);
 }
 constexpr auto Patch::InternalNewImpl_() {
-  return ::google::protobuf::internal::MessageCreator::ZeroInit(sizeof(Patch), alignof(Patch));
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(Patch), alignof(Patch));
 }
 constexpr auto Patch::InternalGenerateClassData_(
     const MessageLite& prototype,
@@ -480,7 +499,7 @@ constexpr auto Patch::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[4],
+      &file_reflection_data[5],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_polaris_2eproto,
@@ -637,7 +656,7 @@ constexpr auto Inventory::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[2],
+      &file_reflection_data[3],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_polaris_2eproto,
@@ -700,12 +719,12 @@ constexpr CommitRequest::ParseTableT_ CommitRequest::InternalGenerateParseTable_
     {
       PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_._has_bits_),
       0, // no _extensions_
-      3, 24,  // max_field_number, fast_idx_mask
+      4, 24,  // max_field_number, fast_idx_mask
       offsetof(ParseTableT_, field_lookup_table),
-      4294967288,  // skipmap
+      4294967280,  // skipmap
       offsetof(ParseTableT_, field_entries),
-      3,  // num_field_entries
-      2,  // num_aux_entries
+      4,  // num_field_entries
+      3,  // num_aux_entries
       offsetof(ParseTableT_, aux_entries),
       class_data,
       nullptr,  // post_loop_handler
@@ -714,34 +733,44 @@ constexpr CommitRequest::ParseTableT_ CommitRequest::InternalGenerateParseTable_
       ::_pbi::TcParser::GetTable<::proto::polaris::v1::CommitRequest>(),  // to_prefetch
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
-      {::_pbi::TcParser::MiniParse, {}},
+      // repeated .proto.comet.v1.AlmanacChange changes = 4;
+      {::_pbi::TcParser::FastMtR1,
+       {34, 0, 2,
+        PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.changes_)}},
       // .proto.comet.v1.Scope scope = 1;
       {::_pbi::TcParser::FastMtS1,
-       {10, 0, 0,
+       {10, 1, 0,
         PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.scope_)}},
       // uint64 version = 2;
-      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(CommitRequest, _impl_.version_), 2>(),
-       {16, 2, 0,
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(CommitRequest, _impl_.version_), 3>(),
+       {16, 3, 0,
         PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.version_)}},
       // .proto.comet.v1.AlmanacChange change = 3;
       {::_pbi::TcParser::FastMtS1,
-       {26, 1, 1,
+       {26, 2, 1,
         PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.change_)}},
     }}, {{
       65535, 65535
     }}, {{
       // .proto.comet.v1.Scope scope = 1;
-      {PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.scope_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+      {PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.scope_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
       // uint64 version = 2;
-      {PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.version_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+      {PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.version_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
       // .proto.comet.v1.AlmanacChange change = 3;
-      {PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.change_), _Internal::kHasBitsOffset + 1, 1, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+      {PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.change_), _Internal::kHasBitsOffset + 2, 1, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+      // repeated .proto.comet.v1.AlmanacChange changes = 4;
+      {PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.changes_), _Internal::kHasBitsOffset + 0, 2, (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
     }},
     {{
         #ifndef PROTOBUF_MESSAGE_GLOBALS
         {::_pbi::TcParser::GetTable<::proto::comet::v1::Scope>()},
         #else
         {::_pbi::FieldAuxMessageGlobals(), &::proto::comet::v1::Scope_globals_},
+        #endif
+        #ifndef PROTOBUF_MESSAGE_GLOBALS
+        {::_pbi::TcParser::GetTable<::proto::comet::v1::AlmanacChange>()},
+        #else
+        {::_pbi::FieldAuxMessageGlobals(), &::proto::comet::v1::AlmanacChange_globals_},
         #endif
         #ifndef PROTOBUF_MESSAGE_GLOBALS
         {::_pbi::TcParser::GetTable<::proto::comet::v1::AlmanacChange>()},
@@ -758,7 +787,12 @@ constexpr CommitRequest::ParseTableT_ CommitRequest::InternalGenerateParseTable_
 inline constexpr CommitRequest::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     ::_pbi::ConstantInitialized) noexcept
-      : scope_{nullptr},
+      : changes_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::polaris::v1::CommitRequest,
+            PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_.changes_)>()
+         }
+        ,
+        scope_{nullptr},
         change_{nullptr},
         version_{::uint64_t{0u}} {}
 
@@ -778,7 +812,7 @@ inline void* PROTOBUF_NONNULL CommitRequest::PlacementNew_(
   return ::new (mem) CommitRequest(arena);
 }
 constexpr auto CommitRequest::InternalNewImpl_() {
-  return ::google::protobuf::internal::MessageCreator::ZeroInit(sizeof(CommitRequest), alignof(CommitRequest));
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(CommitRequest), alignof(CommitRequest));
 }
 constexpr auto CommitRequest::InternalGenerateClassData_(
     const MessageLite& prototype,
@@ -850,6 +884,182 @@ const ::_pbi::ClassData* CommitRequest_get_class_data() {
   return CommitRequest_globals_.GetClassData();
 #else
   return CommitRequest_class_data_.base();
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+}
+}  // namespace
+#endif  // PROTOBUF_CUSTOM_VTABLE
+class BatchRequest::_Internal {
+ public:
+  using HasBits = decltype(::std::declval<BatchRequest>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_._has_bits_);
+};
+
+constexpr BatchRequest::ParseTableT_ BatchRequest::InternalGenerateParseTable_(const ::_pbi::ClassData* class_data) {
+  return ParseTableT_{
+    {
+      PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_._has_bits_),
+      0, // no _extensions_
+      4, 24,  // max_field_number, fast_idx_mask
+      offsetof(ParseTableT_, field_lookup_table),
+      4294967280,  // skipmap
+      offsetof(ParseTableT_, field_entries),
+      4,  // num_field_entries
+      2,  // num_aux_entries
+      offsetof(ParseTableT_, aux_entries),
+      class_data,
+      nullptr,  // post_loop_handler
+      ::_pbi::TcParser::MpUnknownFields,  // fallback
+      #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+      ::_pbi::TcParser::GetTable<::proto::polaris::v1::BatchRequest>(),  // to_prefetch
+      #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+    }, {{
+      // bool complete = 4;
+      {::_pbi::TcParser::SingularVarintNoZag1<bool, offsetof(BatchRequest, _impl_.complete_), 3>(),
+       {32, 3, 0,
+        PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.complete_)}},
+      // .proto.comet.v1.Scope scope = 1;
+      {::_pbi::TcParser::FastMtS1,
+       {10, 1, 0,
+        PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.scope_)}},
+      // uint64 version = 2;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(BatchRequest, _impl_.version_), 2>(),
+       {16, 2, 0,
+        PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.version_)}},
+      // repeated .proto.comet.v1.AlmanacChange changes = 3;
+      {::_pbi::TcParser::FastMtR1,
+       {26, 0, 1,
+        PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.changes_)}},
+    }}, {{
+      65535, 65535
+    }}, {{
+      // .proto.comet.v1.Scope scope = 1;
+      {PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.scope_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kMessage | ::_fl::kTvTable)},
+      // uint64 version = 2;
+      {PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.version_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+      // repeated .proto.comet.v1.AlmanacChange changes = 3;
+      {PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.changes_), _Internal::kHasBitsOffset + 0, 1, (0 | ::_fl::kFcRepeated | ::_fl::kMessage | ::_fl::kTvTable)},
+      // bool complete = 4;
+      {PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.complete_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kBool)},
+    }},
+    {{
+        #ifndef PROTOBUF_MESSAGE_GLOBALS
+        {::_pbi::TcParser::GetTable<::proto::comet::v1::Scope>()},
+        #else
+        {::_pbi::FieldAuxMessageGlobals(), &::proto::comet::v1::Scope_globals_},
+        #endif
+        #ifndef PROTOBUF_MESSAGE_GLOBALS
+        {::_pbi::TcParser::GetTable<::proto::comet::v1::AlmanacChange>()},
+        #else
+        {::_pbi::FieldAuxMessageGlobals(), &::proto::comet::v1::AlmanacChange_globals_},
+        #endif
+    }},
+    {{
+    }},
+  };
+}
+
+
+inline constexpr BatchRequest::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    ::_pbi::ConstantInitialized) noexcept
+      : changes_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::polaris::v1::BatchRequest,
+            PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_.changes_)>()
+         }
+        ,
+        scope_{nullptr},
+        version_{::uint64_t{0u}},
+        complete_{false} {}
+
+template <typename>
+constexpr BatchRequest::BatchRequest(::_pbi::ConstantInitialized,
+                       const ::_pbi::ClassData* PROTOBUF_NONNULL class_data)
+    : Super_(
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          class_data
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          ),
+      _impl_(internal_visibility(), ::_pbi::ConstantInitialized()) {
+}
+inline void* PROTOBUF_NONNULL BatchRequest::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) BatchRequest(arena);
+}
+constexpr auto BatchRequest::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::CopyInit(sizeof(BatchRequest), alignof(BatchRequest));
+}
+constexpr auto BatchRequest::InternalGenerateClassData_(
+    const MessageLite& prototype,
+    const ::google::protobuf::internal::TcParseTableBase* tc_table) {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &prototype,
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+          &_table_.header,
+#else
+          tc_table,
+#endif
+          nullptr,  // IsInitialized
+          &BatchRequest::MergeImpl,
+          Super_::GetNewImpl<BatchRequest>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &BatchRequest::SharedDtor,
+          Super_::GetClearImpl<BatchRequest>(), &BatchRequest::ByteSizeLong,
+              &BatchRequest::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_._cached_size_),
+          false,
+      },
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+      &file_reflection_data[1],
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+      &::_pbi::kDescriptorMethods,
+      &descriptor_table_polaris_2eproto,
+      nullptr,  // tracker
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  };
+}
+struct BatchRequestGlobalsTypeInternal : ::_pbi::MessageGlobalsBase {
+  constexpr BatchRequestGlobalsTypeInternal()
+      :
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+        _default(::_pbi::ConstantInitialized{},
+                 BatchRequest_class_data_.base())
+#else   // !PROTOBUF_MESSAGE_GLOBALS
+        MessageGlobalsBase(BatchRequest::InternalGenerateClassData_(
+            _default, &BatchRequest_globals_._table.header)),
+        _default(::_pbi::ConstantInitialized{}, GetClassData()),
+        _table(::_pbi::PrivateAccess::GenerateParseTable<BatchRequest>(
+            GetClassData()))
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+  {
+  }
+  ~BatchRequestGlobalsTypeInternal() {}
+  union {
+    alignas(::_pbi::kMaxMessageAlignment) BatchRequest _default;
+  };
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  decltype(::_pbi::PrivateAccess::GenerateParseTable<BatchRequest>(
+      ::std::declval<const ::_pbi::ClassData*>())) _table;
+#endif
+};
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+static_assert(PROTOBUF_FIELD_OFFSET(BatchRequestGlobalsTypeInternal, _default) ==
+              ::_pbi::MessageGlobalsBase::OffsetToDefault());
+#endif  // PROTOBUF_MESSAGE_GLOBALS
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 PROTOBUF_MESSAGE_GLOBALS_CONST BatchRequestGlobalsTypeInternal BatchRequest_globals_
+        PROTOBUF_MESSAGE_GLOBALS_SECTION(.data.rel.ro);
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+namespace {
+const ::_pbi::ClassData* BatchRequest_get_class_data() {
+#ifdef PROTOBUF_MESSAGE_GLOBALS
+  return BatchRequest_globals_.GetClassData();
+#else
+  return BatchRequest_class_data_.base();
 #endif  // PROTOBUF_MESSAGE_GLOBALS
 }
 }  // namespace
@@ -965,7 +1175,7 @@ constexpr auto Updates::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[5],
+      &file_reflection_data[6],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_polaris_2eproto,
@@ -1163,7 +1373,7 @@ constexpr auto Packet::InternalGenerateClassData_(
           false,
       },
 #ifdef PROTOBUF_MESSAGE_GLOBALS
-      &file_reflection_data[6],
+      &file_reflection_data[7],
 #else   // !PROTOBUF_MESSAGE_GLOBALS
       &::_pbi::kDescriptorMethods,
       &descriptor_table_polaris_2eproto,
@@ -1226,13 +1436,26 @@ const ::uint32_t
         protodesc_cold) = {
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_._has_bits_),
-        6, // hasbit index offset
+        7, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_.scope_),
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_.version_),
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_.change_),
-        0,
-        2,
+        PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_.changes_),
         1,
+        3,
+        2,
+        0,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_._has_bits_),
+        7, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_.scope_),
+        PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_.version_),
+        PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_.changes_),
+        PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_.complete_),
+        1,
+        2,
+        0,
+        3,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Position, _impl_._has_bits_),
         5, // hasbit index offset
@@ -1260,9 +1483,11 @@ const ::uint32_t
         2,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Patch, _impl_._has_bits_),
-        5, // hasbit index offset
+        6, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Patch, _impl_.version_),
         PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Patch, _impl_.change_),
+        PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Patch, _impl_.changes_),
+        2,
         1,
         0,
         0x081, // bitmap
@@ -1288,16 +1513,18 @@ const ::uint32_t
 static const ::_pbi::MigrationSchema
     schemas[] ABSL_ATTRIBUTE_SECTION_VARIABLE(protodesc_cold) = {
         {0, sizeof(::proto::polaris::v1::CommitRequest)},
-        {9, sizeof(::proto::polaris::v1::Position)},
-        {16, sizeof(::proto::polaris::v1::Inventory)},
-        {23, sizeof(::proto::polaris::v1::Snapshot)},
-        {34, sizeof(::proto::polaris::v1::Patch)},
-        {41, sizeof(::proto::polaris::v1::Updates)},
-        {48, sizeof(::proto::polaris::v1::Packet)},
+        {11, sizeof(::proto::polaris::v1::BatchRequest)},
+        {22, sizeof(::proto::polaris::v1::Position)},
+        {29, sizeof(::proto::polaris::v1::Inventory)},
+        {36, sizeof(::proto::polaris::v1::Snapshot)},
+        {47, sizeof(::proto::polaris::v1::Patch)},
+        {56, sizeof(::proto::polaris::v1::Updates)},
+        {63, sizeof(::proto::polaris::v1::Packet)},
 };
 static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
     file_message_globals[] = {
         &::proto::polaris::v1::CommitRequest_globals_,
+        &::proto::polaris::v1::BatchRequest_globals_,
         &::proto::polaris::v1::Position_globals_,
         &::proto::polaris::v1::Inventory_globals_,
         &::proto::polaris::v1::Snapshot_globals_,
@@ -1308,40 +1535,47 @@ static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
 const char descriptor_table_protodef_polaris_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
     "\n\rpolaris.proto\022\020proto.polaris.v1\032\013astra"
-    ".proto\032\013comet.proto\"u\n\rCommitRequest\022$\n\005"
-    "scope\030\001 \001(\0132\025.proto.comet.v1.Scope\022\017\n\007ve"
-    "rsion\030\002 \001(\004\022-\n\006change\030\003 \001(\0132\035.proto.come"
-    "t.v1.AlmanacChange\"A\n\010Position\022$\n\005scope\030"
-    "\001 \001(\0132\025.proto.comet.v1.Scope\022\017\n\007version\030"
-    "\002 \001(\004\"L\n\tInventory\022-\n\tpositions\030\001 \003(\0132\032."
-    "proto.polaris.v1.Position\022\020\n\010complete\030\002 "
-    "\001(\010\"\224\001\n\010Snapshot\022$\n\005scope\030\001 \001(\0132\025.proto."
-    "comet.v1.Scope\022.\n\007entries\030\002 \003(\0132\035.proto."
-    "comet.v1.AlmanacChange\022\020\n\010complete\030\003 \001(\010"
-    "\022\024\n\007version\030\004 \001(\004H\000\210\001\001B\n\n\010_version\"G\n\005Pa"
-    "tch\022\017\n\007version\030\001 \001(\004\022-\n\006change\030\002 \001(\0132\035.p"
-    "roto.comet.v1.AlmanacChange\"Y\n\007Updates\022$"
-    "\n\005scope\030\001 \001(\0132\025.proto.comet.v1.Scope\022(\n\007"
-    "patches\030\002 \003(\0132\027.proto.polaris.v1.Patch\"\371"
-    "\002\n\006Packet\022&\n\005hello\030\001 \001(\0132\025.proto.astra.v"
-    "1.HelloH\000\0220\n\tinventory\030\002 \001(\0132\033.proto.pol"
-    "aris.v1.InventoryH\000\022+\n\004plan\030\003 \001(\0132\033.prot"
-    "o.polaris.v1.InventoryH\000\022.\n\010snapshot\030\004 \001"
-    "(\0132\032.proto.polaris.v1.SnapshotH\000\022,\n\007upda"
-    "tes\030\005 \001(\0132\031.proto.polaris.v1.UpdatesH\000\0222"
-    "\n\014acknowledged\030\006 \001(\0132\032.proto.polaris.v1."
-    "PositionH\000\022&\n\005probe\030\007 \001(\0132\025.proto.comet."
-    "v1.EmptyH\000\022&\n\005ready\030\010 \001(\0132\025.proto.comet."
-    "v1.EmptyH\000B\006\n\004body2\313\001\n\tAuthority\022E\n\006Comm"
-    "it\022\037.proto.polaris.v1.CommitRequest\032\032.pr"
-    "oto.polaris.v1.Position\022:\n\004List\022\025.proto."
-    "comet.v1.Empty\032\033.proto.polaris.v1.Invent"
-    "ory\022;\n\004Load\022\025.proto.comet.v1.Scope\032\032.pro"
-    "to.polaris.v1.Snapshot0\0012I\n\007Almanac\022>\n\004O"
-    "pen\022\030.proto.polaris.v1.Packet\032\030.proto.po"
-    "laris.v1.Packet(\0010\001BGZEgithub.com/eosfor"
-    "ge/verdandi/astra/internal/generated/pol"
-    "aris;polarisb\006proto3"
+    ".proto\032\013comet.proto\"\245\001\n\rCommitRequest\022$\n"
+    "\005scope\030\001 \001(\0132\025.proto.comet.v1.Scope\022\017\n\007v"
+    "ersion\030\002 \001(\004\022-\n\006change\030\003 \001(\0132\035.proto.com"
+    "et.v1.AlmanacChange\022.\n\007changes\030\004 \003(\0132\035.p"
+    "roto.comet.v1.AlmanacChange\"\207\001\n\014BatchReq"
+    "uest\022$\n\005scope\030\001 \001(\0132\025.proto.comet.v1.Sco"
+    "pe\022\017\n\007version\030\002 \001(\004\022.\n\007changes\030\003 \003(\0132\035.p"
+    "roto.comet.v1.AlmanacChange\022\020\n\010complete\030"
+    "\004 \001(\010\"A\n\010Position\022$\n\005scope\030\001 \001(\0132\025.proto"
+    ".comet.v1.Scope\022\017\n\007version\030\002 \001(\004\"L\n\tInve"
+    "ntory\022-\n\tpositions\030\001 \003(\0132\032.proto.polaris"
+    ".v1.Position\022\020\n\010complete\030\002 \001(\010\"\224\001\n\010Snaps"
+    "hot\022$\n\005scope\030\001 \001(\0132\025.proto.comet.v1.Scop"
+    "e\022.\n\007entries\030\002 \003(\0132\035.proto.comet.v1.Alma"
+    "nacChange\022\020\n\010complete\030\003 \001(\010\022\024\n\007version\030\004"
+    " \001(\004H\000\210\001\001B\n\n\010_version\"w\n\005Patch\022\017\n\007versio"
+    "n\030\001 \001(\004\022-\n\006change\030\002 \001(\0132\035.proto.comet.v1"
+    ".AlmanacChange\022.\n\007changes\030\003 \003(\0132\035.proto."
+    "comet.v1.AlmanacChange\"Y\n\007Updates\022$\n\005sco"
+    "pe\030\001 \001(\0132\025.proto.comet.v1.Scope\022(\n\007patch"
+    "es\030\002 \003(\0132\027.proto.polaris.v1.Patch\"\371\002\n\006Pa"
+    "cket\022&\n\005hello\030\001 \001(\0132\025.proto.astra.v1.Hel"
+    "loH\000\0220\n\tinventory\030\002 \001(\0132\033.proto.polaris."
+    "v1.InventoryH\000\022+\n\004plan\030\003 \001(\0132\033.proto.pol"
+    "aris.v1.InventoryH\000\022.\n\010snapshot\030\004 \001(\0132\032."
+    "proto.polaris.v1.SnapshotH\000\022,\n\007updates\030\005"
+    " \001(\0132\031.proto.polaris.v1.UpdatesH\000\0222\n\014ack"
+    "nowledged\030\006 \001(\0132\032.proto.polaris.v1.Posit"
+    "ionH\000\022&\n\005probe\030\007 \001(\0132\025.proto.comet.v1.Em"
+    "ptyH\000\022&\n\005ready\030\010 \001(\0132\025.proto.comet.v1.Em"
+    "ptyH\000B\006\n\004body2\222\002\n\tAuthority\022E\n\006Commit\022\037."
+    "proto.polaris.v1.CommitRequest\032\032.proto.p"
+    "olaris.v1.Position\022E\n\005Batch\022\036.proto.pola"
+    "ris.v1.BatchRequest\032\032.proto.polaris.v1.P"
+    "osition(\001\022:\n\004List\022\025.proto.comet.v1.Empty"
+    "\032\033.proto.polaris.v1.Inventory\022;\n\004Load\022\025."
+    "proto.comet.v1.Scope\032\032.proto.polaris.v1."
+    "Snapshot0\0012I\n\007Almanac\022>\n\004Open\022\030.proto.po"
+    "laris.v1.Packet\032\030.proto.polaris.v1.Packe"
+    "t(\0010\001B>Z<github.com/eosforge/astra/inter"
+    "nal/generated/polaris;polarisb\006proto3"
 };
 static const ::_pbi::DescriptorTable* PROTOBUF_NONNULL const
     descriptor_table_polaris_2eproto_deps[2] = {
@@ -1352,13 +1586,13 @@ static ::absl::once_flag descriptor_table_polaris_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_polaris_2eproto = {
     false,
     false,
-    1380,
+    1677,
     descriptor_table_protodef_polaris_2eproto,
     "polaris.proto",
     &descriptor_table_polaris_2eproto_once,
     descriptor_table_polaris_2eproto_deps,
     2,
-    7,
+    8,
     schemas,
     file_message_globals,
     TableStruct_polaris_2eproto::offsets,
@@ -1373,12 +1607,17 @@ namespace v1 {
 void CommitRequest::clear_scope() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   if (_impl_.scope_ != nullptr) _impl_.scope_->Clear();
-  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
 }
 void CommitRequest::clear_change() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   if (_impl_.change_ != nullptr) _impl_.change_->Clear();
-  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+}
+void CommitRequest::clear_changes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.changes_.Clear();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
 }
 CommitRequest::CommitRequest(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
 #if defined(PROTOBUF_CUSTOM_VTABLE)
@@ -1393,7 +1632,14 @@ PROTOBUF_NDEBUG_INLINE CommitRequest::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
     [[maybe_unused]] const ::proto::polaris::v1::CommitRequest& from_msg)
-      : _has_bits_{from._has_bits_} {}
+      : _has_bits_{from._has_bits_},
+        changes_ {
+          visibility, ::_pbi::InternalMetadataOffset::Build<
+              ::proto::polaris::v1::CommitRequest,
+              PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_.changes_)>()
+          , arena, from.changes_
+        }
+     {}
 
 CommitRequest::CommitRequest(
     ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
@@ -1410,10 +1656,10 @@ CommitRequest::CommitRequest(
       from._internal_metadata_);
   new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
   ::uint32_t cached_has_bits = _impl_._has_bits_[0];
-  _impl_.scope_ = (CheckHasBit(cached_has_bits, 0x00000001U))
+  _impl_.scope_ = (CheckHasBit(cached_has_bits, 0x00000002U))
                  ? Super_::CopyConstruct(arena, *from._impl_.scope_)
                  : nullptr;
-  _impl_.change_ = (CheckHasBit(cached_has_bits, 0x00000002U))
+  _impl_.change_ = (CheckHasBit(cached_has_bits, 0x00000004U))
                  ? Super_::CopyConstruct(arena, *from._impl_.change_)
                  : nullptr;
   _impl_.version_ = from._impl_.version_;
@@ -1423,6 +1669,10 @@ CommitRequest::CommitRequest(
 PROTOBUF_NDEBUG_INLINE CommitRequest::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : changes_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::polaris::v1::CommitRequest,
+            PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::CommitRequest, _impl_.changes_)>()
+         }
      {}
 
 inline void CommitRequest::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
@@ -1483,12 +1733,15 @@ PROTOBUF_NOINLINE void CommitRequest::Clear() {
   ::uint32_t cached_has_bits [[maybe_unused]] = 0;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      _impl_.changes_.Clear();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       ABSL_DCHECK(this_._impl_.scope_ != nullptr);
       this_._impl_.scope_->Clear();
     }
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       ABSL_DCHECK(this_._impl_.change_ != nullptr);
       this_._impl_.change_->Clear();
     }
@@ -1518,14 +1771,14 @@ PROTOBUF_NOINLINE void CommitRequest::Clear() {
 
   cached_has_bits = this_._impl_._has_bits_[0];
   // .proto.comet.v1.Scope scope = 1;
-  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
         1, *this_._impl_.scope_, this_._impl_.scope_->GetCachedSize(), target,
         stream);
   }
 
   // uint64 version = 2;
-  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
     if (this_._internal_version() != 0) {
       target = stream->EnsureSpace(target);
       target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
@@ -1534,10 +1787,22 @@ PROTOBUF_NOINLINE void CommitRequest::Clear() {
   }
 
   // .proto.comet.v1.AlmanacChange change = 3;
-  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
     target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
         3, *this_._impl_.change_, this_._impl_.change_->GetCachedSize(), target,
         stream);
+  }
+
+  // repeated .proto.comet.v1.AlmanacChange changes = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    for (unsigned i = 0, n = static_cast<unsigned>(
+                             this_._internal_changes_size());
+         i < n; i++) {
+      const auto& repfield = this_._internal_changes().Get(i);
+      target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+          4, repfield, repfield.GetCachedSize(), target,
+          stream);
+    }
   }
 
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
@@ -1563,19 +1828,26 @@ PROTOBUF_NOINLINE void CommitRequest::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
-    // .proto.comet.v1.Scope scope = 1;
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
+    // repeated .proto.comet.v1.AlmanacChange changes = 4;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      total_size += 1UL * this_._internal_changes_size();
+      for (const auto& msg : this_._internal_changes()) {
+        total_size += ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
+      }
+    }
+    // .proto.comet.v1.Scope scope = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       total_size += 1 +
                     ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.scope_);
     }
     // .proto.comet.v1.AlmanacChange change = 3;
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       total_size += 1 +
                     ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.change_);
     }
     // uint64 version = 2;
-    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
       if (this_._internal_version() != 0) {
         total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
             this_._internal_version());
@@ -1600,8 +1872,13 @@ void CommitRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
   (void)cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      _this->_internal_mutable_changes()->InternalMergeFromWithArena(
+          ::google::protobuf::MessageLite::internal_visibility(), arena,
+          from._internal_changes());
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       ABSL_DCHECK(from._impl_.scope_ != nullptr);
       if (_this->_impl_.scope_ == nullptr) {
         _this->_impl_.scope_ = Super_::CopyConstruct(arena, *from._impl_.scope_);
@@ -1609,7 +1886,7 @@ void CommitRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
         _this->_impl_.scope_->MergeFrom(*from._impl_.scope_);
       }
     }
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       ABSL_DCHECK(from._impl_.change_ != nullptr);
       if (_this->_impl_.change_ == nullptr) {
         _this->_impl_.change_ = Super_::CopyConstruct(arena, *from._impl_.change_);
@@ -1617,7 +1894,7 @@ void CommitRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
         _this->_impl_.change_->MergeFrom(*from._impl_.change_);
       }
     }
-    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
       if (from._internal_version() != 0) {
         _this->_impl_.version_ = from._impl_.version_;
       }
@@ -1640,6 +1917,7 @@ void CommitRequest::InternalSwap(CommitRequest* PROTOBUF_RESTRICT PROTOBUF_NONNU
   using ::std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  _impl_.changes_.InternalSwap(&other->_impl_.changes_);
   ::google::protobuf::internal::memswap<
       PROTOBUF_FIELD_OFFSET(CommitRequest, _impl_.version_)
       + sizeof(CommitRequest::_impl_.version_)
@@ -1649,6 +1927,332 @@ void CommitRequest::InternalSwap(CommitRequest* PROTOBUF_RESTRICT PROTOBUF_NONNU
 }
 
 ::google::protobuf::Metadata CommitRequest::GetMetadata() const {
+  return Super_::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+void BatchRequest::clear_scope() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (_impl_.scope_ != nullptr) _impl_.scope_->Clear();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+}
+void BatchRequest::clear_changes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.changes_.Clear();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+}
+BatchRequest::BatchRequest(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, BatchRequest_get_class_data()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:proto.polaris.v1.BatchRequest)
+}
+PROTOBUF_NDEBUG_INLINE BatchRequest::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+    [[maybe_unused]] const ::proto::polaris::v1::BatchRequest& from_msg)
+      : _has_bits_{from._has_bits_},
+        changes_ {
+          visibility, ::_pbi::InternalMetadataOffset::Build<
+              ::proto::polaris::v1::BatchRequest,
+              PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_.changes_)>()
+          , arena, from.changes_
+        }
+     {}
+
+BatchRequest::BatchRequest(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
+    const BatchRequest& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : Super_(arena, BatchRequest_get_class_data()) {
+
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : Super_(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  BatchRequest* const _this = this;
+  (void)_this;
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+  new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
+  ::uint32_t cached_has_bits = _impl_._has_bits_[0];
+  _impl_.scope_ = (CheckHasBit(cached_has_bits, 0x00000002U))
+                 ? Super_::CopyConstruct(arena, *from._impl_.scope_)
+                 : nullptr;
+  ::memcpy(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, version_),
+           reinterpret_cast<const char*>(&from._impl_) +
+               offsetof(Impl_, version_),
+           offsetof(Impl_, complete_) -
+               offsetof(Impl_, version_) +
+               sizeof(Impl_::complete_));
+
+  // @@protoc_insertion_point(copy_constructor:proto.polaris.v1.BatchRequest)
+}
+PROTOBUF_NDEBUG_INLINE BatchRequest::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : changes_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::polaris::v1::BatchRequest,
+            PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::BatchRequest, _impl_.changes_)>()
+         }
+     {}
+
+inline void BatchRequest::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, scope_),
+           0,
+           offsetof(Impl_, complete_) -
+               offsetof(Impl_, scope_) +
+               sizeof(Impl_::complete_));
+}
+BatchRequest::~BatchRequest() {
+  // @@protoc_insertion_point(destructor:proto.polaris.v1.BatchRequest)
+  SharedDtor(*this);
+}
+inline void BatchRequest::SharedDtor(MessageLite& self) {
+  BatchRequest& this_ = static_cast<BatchRequest&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  delete this_._impl_.scope_;
+  this_._impl_.~Impl_();
+}
+
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull BatchRequest_class_data_ =
+        BatchRequest::InternalGenerateClassData_(BatchRequest_globals_._default);
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+BatchRequest::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&BatchRequest_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(BatchRequest_class_data_.tc_table);
+  return BatchRequest_class_data_.base();
+}
+#else
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+BatchRequest::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&BatchRequest_globals_);
+  ::google::protobuf::internal::PrefetchToLocalCache(
+      ::google::protobuf::internal::MessageGlobalsBase::ToParseTableBase(&BatchRequest_globals_));
+  return BatchRequest_globals_.GetClassData();
+}
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_CONSTINIT
+PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const BatchRequest::ParseTableT_
+    BatchRequest::_table_ =
+        BatchRequest::InternalGenerateParseTable_(BatchRequest_class_data_.base());
+#endif  // !PROTOBUF_MESSAGE_GLOBALS
+PROTOBUF_NOINLINE void BatchRequest::Clear() {
+  auto& this_ [[maybe_unused]] = *this;
+  // @@protoc_insertion_point(message_clear_start:proto.polaris.v1.BatchRequest)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      _impl_.changes_.Clear();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      ABSL_DCHECK(this_._impl_.scope_ != nullptr);
+      this_._impl_.scope_->Clear();
+    }
+  }
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000cU)) {
+    ::memset(&this_._impl_.version_, 0,
+             static_cast<::size_t>(
+                 reinterpret_cast<char*>(&this_._impl_.complete_) -
+                 reinterpret_cast<char*>(&this_._impl_.version_)) +
+                 sizeof(_impl_.complete_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL BatchRequest::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const BatchRequest& this_ = static_cast<const BatchRequest&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL BatchRequest::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const BatchRequest& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:proto.polaris.v1.BatchRequest)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // .proto.comet.v1.Scope scope = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+        1, *this_._impl_.scope_, this_._impl_.scope_->GetCachedSize(), target,
+        stream);
+  }
+
+  // uint64 version = 2;
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (this_._internal_version() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          2, this_._internal_version(), target);
+    }
+  }
+
+  // repeated .proto.comet.v1.AlmanacChange changes = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    for (unsigned i = 0, n = static_cast<unsigned>(
+                             this_._internal_changes_size());
+         i < n; i++) {
+      const auto& repfield = this_._internal_changes().Get(i);
+      target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+          3, repfield, repfield.GetCachedSize(), target,
+          stream);
+    }
+  }
+
+  // bool complete = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+    if (this_._internal_complete() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteBoolToArray(
+          4, this_._internal_complete(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:proto.polaris.v1.BatchRequest)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t BatchRequest::ByteSizeLong(const MessageLite& base) {
+  const BatchRequest& this_ = static_cast<const BatchRequest&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t BatchRequest::ByteSizeLong() const {
+  const BatchRequest& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:proto.polaris.v1.BatchRequest)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits [[maybe_unused]] = 0;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
+    // repeated .proto.comet.v1.AlmanacChange changes = 3;
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      total_size += 1UL * this_._internal_changes_size();
+      for (const auto& msg : this_._internal_changes()) {
+        total_size += ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
+      }
+    }
+    // .proto.comet.v1.Scope scope = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      total_size += 1 +
+                    ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.scope_);
+    }
+    // uint64 version = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (this_._internal_version() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_version());
+      }
+    }
+    // bool complete = 4;
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (this_._internal_complete() != 0) {
+        total_size += 2;
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void BatchRequest::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                      const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this = static_cast<BatchRequest*>(&to_msg);
+  auto& from = static_cast<const BatchRequest&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  ::google::protobuf::Arena* arena = _this->GetArena();
+  // @@protoc_insertion_point(class_specific_merge_from_start:proto.polaris.v1.BatchRequest)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000000fU)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      _this->_internal_mutable_changes()->InternalMergeFromWithArena(
+          ::google::protobuf::MessageLite::internal_visibility(), arena,
+          from._internal_changes());
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      ABSL_DCHECK(from._impl_.scope_ != nullptr);
+      if (_this->_impl_.scope_ == nullptr) {
+        _this->_impl_.scope_ = Super_::CopyConstruct(arena, *from._impl_.scope_);
+      } else {
+        _this->_impl_.scope_->MergeFrom(*from._impl_.scope_);
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (from._internal_version() != 0) {
+        _this->_impl_.version_ = from._impl_.version_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (from._internal_complete() != 0) {
+        _this->_impl_.complete_ = from._impl_.complete_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void BatchRequest::CopyFrom(const BatchRequest& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:proto.polaris.v1.BatchRequest)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void BatchRequest::InternalSwap(BatchRequest* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  _impl_.changes_.InternalSwap(&other->_impl_.changes_);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.complete_)
+      + sizeof(BatchRequest::_impl_.complete_)
+      - PROTOBUF_FIELD_OFFSET(BatchRequest, _impl_.scope_)>(
+          reinterpret_cast<char*>(&_impl_.scope_),
+          reinterpret_cast<char*>(&other->_impl_.scope_));
+}
+
+::google::protobuf::Metadata BatchRequest::GetMetadata() const {
   return Super_::GetMetadataImpl(GetClassData()->full());
 }
 // ===================================================================
@@ -2466,6 +3070,11 @@ void Snapshot::InternalSwap(Snapshot* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) 
 void Patch::clear_change() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   if (_impl_.change_ != nullptr) _impl_.change_->Clear();
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+}
+void Patch::clear_changes() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.changes_.Clear();
   ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
 }
 Patch::Patch(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
@@ -2481,7 +3090,14 @@ PROTOBUF_NDEBUG_INLINE Patch::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
     [[maybe_unused]] const ::proto::polaris::v1::Patch& from_msg)
-      : _has_bits_{from._has_bits_} {}
+      : _has_bits_{from._has_bits_},
+        changes_ {
+          visibility, ::_pbi::InternalMetadataOffset::Build<
+              ::proto::polaris::v1::Patch,
+              PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Patch, _impl_.changes_)>()
+          , arena, from.changes_
+        }
+     {}
 
 Patch::Patch(
     ::google::protobuf::Arena* PROTOBUF_NULLABLE arena,
@@ -2498,7 +3114,7 @@ Patch::Patch(
       from._internal_metadata_);
   new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
   ::uint32_t cached_has_bits = _impl_._has_bits_[0];
-  _impl_.change_ = (CheckHasBit(cached_has_bits, 0x00000001U))
+  _impl_.change_ = (CheckHasBit(cached_has_bits, 0x00000002U))
                  ? Super_::CopyConstruct(arena, *from._impl_.change_)
                  : nullptr;
   _impl_.version_ = from._impl_.version_;
@@ -2508,6 +3124,10 @@ Patch::Patch(
 PROTOBUF_NDEBUG_INLINE Patch::Impl_::Impl_(
     [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
     [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : changes_ { visibility, ::_pbi::InternalMetadataOffset::Build<
+            ::proto::polaris::v1::Patch,
+            PROTOBUF_FIELD_OFFSET(::proto::polaris::v1::Patch, _impl_.changes_)>()
+         }
      {}
 
 inline void Patch::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
@@ -2567,9 +3187,14 @@ PROTOBUF_NOINLINE void Patch::Clear() {
   ::uint32_t cached_has_bits [[maybe_unused]] = 0;
 
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
-    ABSL_DCHECK(this_._impl_.change_ != nullptr);
-    this_._impl_.change_->Clear();
+  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      _impl_.changes_.Clear();
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      ABSL_DCHECK(this_._impl_.change_ != nullptr);
+      this_._impl_.change_->Clear();
+    }
   }
   this_._impl_.version_ = ::uint64_t{0u};
   _impl_._has_bits_.Clear();
@@ -2596,7 +3221,7 @@ PROTOBUF_NOINLINE void Patch::Clear() {
 
   cached_has_bits = this_._impl_._has_bits_[0];
   // uint64 version = 1;
-  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
     if (this_._internal_version() != 0) {
       target = stream->EnsureSpace(target);
       target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
@@ -2605,10 +3230,22 @@ PROTOBUF_NOINLINE void Patch::Clear() {
   }
 
   // .proto.comet.v1.AlmanacChange change = 2;
-  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
     target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
         2, *this_._impl_.change_, this_._impl_.change_->GetCachedSize(), target,
         stream);
+  }
+
+  // repeated .proto.comet.v1.AlmanacChange changes = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    for (unsigned i = 0, n = static_cast<unsigned>(
+                             this_._internal_changes_size());
+         i < n; i++) {
+      const auto& repfield = this_._internal_changes().Get(i);
+      target = ::google::protobuf::internal::WireFormatLite::InternalWriteMessage(
+          3, repfield, repfield.GetCachedSize(), target,
+          stream);
+    }
   }
 
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
@@ -2634,14 +3271,21 @@ PROTOBUF_NOINLINE void Patch::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
-    // .proto.comet.v1.AlmanacChange change = 2;
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+    // repeated .proto.comet.v1.AlmanacChange changes = 3;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      total_size += 1UL * this_._internal_changes_size();
+      for (const auto& msg : this_._internal_changes()) {
+        total_size += ::google::protobuf::internal::WireFormatLite::MessageSize(msg);
+      }
+    }
+    // .proto.comet.v1.AlmanacChange change = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       total_size += 1 +
                     ::google::protobuf::internal::WireFormatLite::MessageSize(*this_._impl_.change_);
     }
     // uint64 version = 1;
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       if (this_._internal_version() != 0) {
         total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
             this_._internal_version());
@@ -2666,8 +3310,13 @@ void Patch::MergeImpl(::google::protobuf::MessageLite& to_msg,
   (void)cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      _this->_internal_mutable_changes()->InternalMergeFromWithArena(
+          ::google::protobuf::MessageLite::internal_visibility(), arena,
+          from._internal_changes());
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       ABSL_DCHECK(from._impl_.change_ != nullptr);
       if (_this->_impl_.change_ == nullptr) {
         _this->_impl_.change_ = Super_::CopyConstruct(arena, *from._impl_.change_);
@@ -2675,7 +3324,7 @@ void Patch::MergeImpl(::google::protobuf::MessageLite& to_msg,
         _this->_impl_.change_->MergeFrom(*from._impl_.change_);
       }
     }
-    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
       if (from._internal_version() != 0) {
         _this->_impl_.version_ = from._impl_.version_;
       }
@@ -2698,6 +3347,7 @@ void Patch::InternalSwap(Patch* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
   using ::std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  _impl_.changes_.InternalSwap(&other->_impl_.changes_);
   ::google::protobuf::internal::memswap<
       PROTOBUF_FIELD_OFFSET(Patch, _impl_.version_)
       + sizeof(Patch::_impl_.version_)

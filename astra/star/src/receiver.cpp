@@ -137,14 +137,35 @@ Result<void> Receiver::updates(const proto::polaris::v1::Updates& page) {
     // previous 只验证包内连续性, 对本地已安装前缀的幂等跳过由原生 Almanac 负责.
     std::uint64_t previous{};
     for (const auto& patch : page.patches()) {
-        if (!patch.has_change() || patch.version() == 0 || (previous != 0 && (previous == std::numeric_limits<std::uint64_t>::max() || patch.version() != previous + 1)) || !valid(scope, patch.change(), false)) {
+        if ((patch.has_change() == !patch.changes().empty()) || patch.version() == 0 || (previous != 0 && (previous == std::numeric_limits<std::uint64_t>::max() || patch.version() != previous + 1)) || (patch.has_change() && !valid(scope, patch.change(), false))) {
             return Status::protocol("Invalid or noncontiguous Almanac patches");
+        }
+        if (!patch.changes().empty()) {
+            if (scope.sector.starts_with("__"))
+                return Status::protocol("Internal Almanac batch is forbidden");
+            for (const auto& entry : patch.changes())
+                if (!valid(scope, entry, false))
+                    return Status::protocol("Invalid Almanac batch entry");
         }
         previous = patch.version();
     }
 
     // 每个成功前缀已经完整可见, 后续失败保留其版本, 重连清单会报告真实受理位置.
     for (const auto& patch : page.patches()) {
+        if (!patch.changes().empty()) {
+            std::vector<Almanac::Change> changes; // 全批正文在提交前固定, 接收层不逐项发布.
+            changes.reserve(static_cast<std::size_t>(patch.changes_size()));
+            for (const auto& entry : patch.changes()) {
+                Almanac::Value value; // 空指针是删除, 空 Buffer 是有效值.
+                if (entry.action_case() == proto::comet::v1::AlmanacChange::kValue)
+                    value = std::make_shared<const Almanac::Buffer>(entry.value().begin(), entry.value().end());
+                changes.push_back({std::make_shared<const std::string>(entry.key()), std::move(value), patch.version()});
+            }
+            if (auto applied = output_.apply(scope, patch.version(), std::move(changes)); !applied)
+                return failure(applied.error());
+            acknowledge(scope, *output_.find(scope)->usage().version);
+            continue;
+        }
         std::optional<Almanac::Buffer> value; // 空表示 Delete, 非空零长度表示合法 Set.
         if (patch.change().action_case() == proto::comet::v1::AlmanacChange::kValue) {
             value.emplace(patch.change().value().begin(), patch.change().value().end());

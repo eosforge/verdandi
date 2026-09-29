@@ -62,6 +62,16 @@ void lifecycle() {
     std::size_t count{}; // 退出安装器后应用视图仍可遍历.
     held.each([&](std::string_view key, const Subscriber::Record& record) { CHECK(!key.empty() && record.version > 0 && record.value); ++count; });
     CHECK(count == 2 && held.find("left")->version == 100);
+
+    // 不保留第二份 View, 回调重置原句柄仍须完成本次两条记录的遍历.
+    count = 0;
+    held.each([&](std::string_view key, const Subscriber::Record& record) {
+        held = {};
+        CHECK((key == "left" && record.version == 100) || (key == "right" && record.version == 7));
+        CHECK(record.value);
+        ++count;
+    });
+    CHECK(count == 2 && !held.version());
 }
 
 // 无版本正文、有版本删除、跨页重复及未完整页失败都不能发布半批或覆盖旧根.

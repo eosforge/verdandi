@@ -124,12 +124,10 @@ void ordering() {
     bad.data = bytes("next");
     bad.update = 7;
     bad.deadline = Clock::Time(20s);
-    CHECK(!state.apply("a", 2, scope, uuid, bad, State::Source::Form::data)); // Data 不得隐式延期.
-    bad.deadline = first.deadline;
     CHECK(state.apply("a", 2, scope, uuid, bad, State::Source::Form::data));
     const auto content = state.capture(scope);
     bad.renewal = 10;
-    bad.deadline = Clock::Time(20s);
+    bad.deadline = Clock::Time(25s);
     CHECK(state.apply("a", 3, scope, uuid, bad, State::Source::Form::renew));
     CHECK(state.capture(scope)->version() == content->version()); // 纯期限更新不重复推送正文.
     auto invalid = bad;                                           // 完整事实和精确回补同样不能绕过续租序号偷改截止.
@@ -273,12 +271,56 @@ void interrupted() {
     CHECK(state.find(two, second)->record);
 }
 
+// 同逻辑 ID 的弱恢复: 较新 Data 优先, 多来源只公开一条, 旧代次和伪造能力均拒绝.
+void recovery() {
+
+    auto a = 1000ms, b = 1500ms, c = 1500ms; // 独立可控时间, 让旧来源先过期以核验回退选择.
+    State first([&] { return std::optional(Clock::Reading{.time = Clock::Time(a), .ready = true}); }, {});
+    State second([&] { return std::optional(Clock::Reading{.time = Clock::Time(b), .ready = true}); }, {});
+    State observer([&] { return std::optional(Clock::Reading{.time = Clock::Time(c), .ready = true}); }, {});
+    const Scope scope{"stable", "identity"};
+    const auto attr = bytes("fixed");
+    const auto capability = Ephemeris::capability();
+    const auto id = Ephemeris::identity(scope, attr, 1000, capability);
+    CHECK(first.create(scope, attr, bytes("confirmed"), 1000, id, 1, 0, capability));
+    a = 1200ms;
+    CHECK(first.update(scope, id, bytes("unknown"), 1, 1, capability)); // 模拟客户端没有拿到本次回执.
+    CHECK(second.admit("a") && observer.admit("a") && observer.admit("b"));
+    copy(first, second, "a");
+    const auto restored = second.create(scope, attr, bytes("confirmed"), 1000, id, 2, 0, capability);
+    CHECK(restored && restored->uuid == id && restored->order == 1 && *restored->data == *bytes("unknown"));
+    CHECK(native(second, id).generation == 2 && native(second, id).deadline == Clock::Time(2500ms));
+    b = 1600ms;
+    CHECK(second.create(scope, attr, bytes("confirmed"), 1000, id, 2, 0, capability));
+    CHECK(native(second, id).deadline == Clock::Time(2500ms)); // 重复注册代次只确认, 不续满 TTL.
+    CHECK(!second.update(scope, id, bytes("old"), 2, 1, capability));
+    CHECK(!second.renew(scope, id, 1, 1, capability));
+    CHECK(!second.remove(scope, id, 1, capability));
+    CHECK(!second.create(scope, attr, bytes("forged"), 1000, id, 3, 2, Ephemeris::capability()));
+    copy(first, observer, "a");
+    copy(second, observer, "b");
+    CHECK(observer.capture(scope)->size() == 1 && *observer.find(scope, id)->record->data == *bytes("unknown"));
+    CHECK(first.update(scope, id, bytes("latest"), 2, 1, capability));
+    copy(first, observer, "a");
+    CHECK(observer.capture(scope)->size() == 1 && *observer.find(scope, id)->record->data == *bytes("latest"));
+    c = 2300ms;
+    observer.tick();
+    CHECK(observer.capture(scope)->size() == 1 && *observer.find(scope, id)->record->data == *bytes("unknown")); // 高版本来源到期, 有效低版本来源仍可见.
+    c = 2600ms;
+    observer.tick();
+    CHECK(observer.capture(scope)->size() == 0);
+    b = 2600ms;
+    CHECK(second.create(scope, attr, bytes("unknown"), 1000, id, 3, 1, capability)); // 过期后仍能同 ID 恢复, 不伪造 Data order.
+    CHECK(native(second, id).update == 1 && native(second, id).generation == 3);
+}
+
 } // namespace
 
 // 原生两端/多来源用例与独立的真实网络复制验收互补, 不相互替代.
 int main() {
 
     try {
+        recovery();
         lifetime();
         expiry();
         ordering();

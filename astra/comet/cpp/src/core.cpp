@@ -4,6 +4,7 @@
 #include "publishing.hpp"
 #include "reading.hpp"
 #include "roots.hpp"
+#include "sampling.hpp"
 #include "subscribing.hpp"
 #include <algorithm>
 #include <astra/config.hpp>
@@ -160,13 +161,16 @@ Result<std::shared_ptr<Core>> Core::prepare(Client::Options options) {
     return std::shared_ptr<Core>(new Core(std::move(options), std::move(credentials), std::move(secret)));
 }
 
-// Core::connect 返回当前已确认绑定的共享引用, 无绑定返回空.
+// Core::connect 先冻结选中端点, 再在 Core 锁外构造两类传输, 不跨建连过程持锁.
 std::shared_ptr<Binding> Core::connect() const {
 
     ASTRA_PROFILE_SCOPE("comet.cpp.core.Core.connect");
 
     auto binding = std::make_shared<Binding>(); // 只有这一个当前端点的两种传输, 不按 Watch 数扩大连接池.
-    binding->endpoint = options_.endpoints[endpoint_];
+    {
+        const std::lock_guard lock(mutex_);
+        binding->endpoint = options_.endpoints[endpoint_];
+    }
     grpc::ChannelArguments arguments;
     arguments.SetInt("grpc.use_local_subchannel_pool", 1);
     arguments.SetInt("grpc.enable_retries", 0);
@@ -202,7 +206,8 @@ void Core::schedule(Time time) {
 // Core::start 启动控制循环, 幂等, 重复调用无副作用.
 void Core::start() {
     const std::lock_guard lock(mutex_);
-    schedule(std::chrono::steady_clock::now());
+    if (!scheduled_ && !running_ && !closing_)
+        schedule(std::chrono::steady_clock::now()); // 重复启动不对同一个 Alarm 再次 Set.
 }
 
 // Core::wake 标记对象就绪并唤醒控制轮, 空指针只唤醒不标记.
@@ -223,6 +228,7 @@ void Core::wake(Activity* activity) noexcept {
         refresh_ = true;
     }
 
+    condition_.notify_all(); // 关闭/取消也唤醒同步调用的认证等待.
     awakened_ = true;
     if (scheduled_) {
         alarm_.Cancel();
@@ -231,28 +237,43 @@ void Core::wake(Activity* activity) noexcept {
 
 // Core::release 释放一次持有引用, 归零即允许关闭完成.
 void Core::release() noexcept {
-    const std::lock_guard lock(mutex_);
-    if (owners_ != 0 && --owners_ == 0) {
-        closing_ = true;
-        refresh_ = true;
-        stopped_.store(true, std::memory_order_release);
+
+    bool closing; // 停止回调只在 Core 锁外运行, 防止关闭反向进入库内部锁.
+    {
+        const std::lock_guard lock(mutex_);
+        if (owners_ != 0 && --owners_ == 0) {
+            closing_ = true;
+            if (sampling_)
+                sampling_->close();
+            refresh_ = true;
+            stopped_.store(true, std::memory_order_release);
+        }
+        closing = closing_;
+        condition_.notify_all();
+        awakened_ = true;
+        if (scheduled_)
+            alarm_.Cancel();
     }
-    awakened_ = true;
-    if (scheduled_) {
-        alarm_.Cancel();
-    }
+    if (closing)
+        shutdown_.request_stop();
 }
 
 // Core::close 停止接纳并开始有序关闭, 幂等.
 void Core::close() noexcept {
-    const std::lock_guard lock(mutex_);
-    stopped_.store(true, std::memory_order_release);
-    closing_ = true;
-    refresh_ = true;
-    awakened_ = true;
-    if (scheduled_) {
-        alarm_.Cancel();
+
+    {
+        const std::lock_guard lock(mutex_);
+        stopped_.store(true, std::memory_order_release);
+        closing_ = true;
+        if (sampling_)
+            sampling_->close();
+        condition_.notify_all(); // 同步写入等待认证时也必须立即观察关闭, 不等用户回调返回.
+        refresh_ = true;
+        awakened_ = true;
+        if (scheduled_)
+            alarm_.Cancel();
     }
+    shutdown_.request_stop(); // 在途同步 RPC 立即取消, 不依赖 Core 控制轮消费关闭事件.
 }
 
 // Core::wait 等待关闭完成, 超时返回 false.
@@ -261,7 +282,28 @@ bool Core::wait(std::chrono::milliseconds timeout) const {
         throw std::logic_error("Cannot wait inside a Comet callback");
     }
     std::unique_lock lock(mutex_);
-    return condition_.wait_for(lock, timeout, [this] { return complete_; });
+    if (!condition_.wait_until(lock, deadline(timeout), [this] { return complete_; })) {
+        return false;
+    }
+    const auto sampling = sampling_; // 完成后不再接纳采样, 在 Core 锁外回收真实线程.
+    lock.unlock();
+    if (sampling) {
+        sampling->wait();
+    }
+    return true;
+}
+
+Core::Time Core::deadline(std::chrono::milliseconds timeout) noexcept {
+
+    const auto now = std::chrono::steady_clock::now(); // 捕获一次, 不从墙钟换算关闭等待.
+    if (timeout <= std::chrono::milliseconds::zero())
+        return now;
+    constexpr auto maximum = std::chrono::duration_cast<std::chrono::milliseconds>(Time::duration::max()); // 先限长再转换, 避免毫秒转纳秒有符号溢出.
+    if (timeout >= maximum)
+        return Time::max();
+
+    const auto duration = std::chrono::duration_cast<Time::duration>(timeout); // 正且可表示, 此后减法不会向下溢出.
+    return now > Time::max() - duration ? Time::max() : now + duration;
 }
 
 // Core::notifying 返回是否在用户回调中, 回调内禁止等待.
@@ -496,6 +538,7 @@ void Core::tick() {
             next = now + std::chrono::seconds(1);              // 每轮重算, 不沿用上一轮已消费的过期期限.
             next = std::min(next, session(now));
             next = std::min(next, dial(now));
+            condition_.notify_all(); // 绑定已在共享锁内发布, 先唤醒调用线程再处理用户通知.
             {
                 ASTRA_PROFILE_BEGIN(profile_lock_476, "comet.cpp.core.Core.tick.wait.lock");
                 const std::lock_guard lock(mutex_);
@@ -565,7 +608,7 @@ void Core::tick() {
                 // 回调期间工厂可能接纳了本轮快照之外的新对象. 必须检查实际目录, 否则 close
                 // 可能在这些对象尚未清理时错误地完成, 使它们的 wait 永久等不到通知.
                 const bool cleaned = closing_ && std::ranges::all_of(readers_, [](const auto& weak) { const auto reader = weak.lock(); return !reader || reader->finished(); });
-                finished = closing_ && !login_ && calls_.load(std::memory_order_relaxed) == 0 && unary_.load(std::memory_order_relaxed) == 0 && maintenance_.load(std::memory_order_relaxed) == 0 && recovery_.load(std::memory_order_relaxed) == 0 && admitted_.load(std::memory_order_relaxed) == 0 && cleaned;
+                finished = closing_ && !login_ && calls_.load(std::memory_order_relaxed) == 0 && unary_.load(std::memory_order_relaxed) == 0 && maintenance_.load(std::memory_order_relaxed) == 0 && recovery_.load(std::memory_order_relaxed) == 0 && admitted_.load(std::memory_order_relaxed) == 0 && cleaned && (!sampling_ || sampling_->finished());
                 if (finished) {
                     connecting_.reset();
                     binding_.reset();
@@ -600,7 +643,7 @@ void Core::tick() {
 // Core::delay 按失败次数退避, 上限封顶, 不抛异常.
 std::chrono::milliseconds Core::delay(unsigned failures) const noexcept {
     const auto base = std::min<std::uint64_t>(5000, std::uint64_t{100} << std::min(failures, 6U));
-    const auto jitter = std::hash<std::string>{}(options_.endpoints[endpoint_]) % (base / 4 + 1);
+    const auto jitter = std::hash<std::string>{}(options_.endpoints.front()) % (base / 4 + 1); // 只读固定配置, 不与同步 RPC 触发的端点切换争用 endpoint_.
     return std::chrono::milliseconds(std::min<std::uint64_t>(5000, base + jitter));
 }
 
@@ -637,31 +680,66 @@ Result<std::shared_ptr<Observing>> Core::observer(Scope scope, std::string targe
     return accept(reading).transform([&reading] { return std::move(reading); });                                             // 同步消费 expected, 不创建回调队列或增加引用副本.
 }
 
-Result<std::shared_ptr<Beaming>> Core::beacon(Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, Beacon::Options options) {
+Result<std::shared_ptr<Beaming>> Core::beacon(Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, std::chrono::milliseconds beat, Beacon::Options options, Time deadline) {
 
     const astra::Scope address{scope.sector, scope.spectrum};
-    if (!address.valid() || address.internal() || !attr || !data || attr->size() > 1024 * 1024 || data->size() > 1024 * 1024 || ttl < std::chrono::seconds(1) || ttl > std::chrono::minutes(10)) {
+    if (!address.valid() || address.internal() || !attr || !data || attr->size() > 1024 * 1024 || data->size() > 1024 * 1024 || ttl < std::chrono::seconds(1) || ttl > std::chrono::minutes(10) || beat.count() <= 0 || beat >= ttl || options.timeout.count() <= 0 || options.timeout > std::chrono::minutes(1)) {
         return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
+    }
+    if (notifying()) {
+        return std::unexpected(Error{Error::Code::busy, Error::Effect::unapplied, {}, {}, {}});
     }
     std::shared_ptr<Beaming> object; // 构造时的共享预算不足按接纳失败处理, 不修改其他对象.
     try {
-        object = std::make_shared<Beaming>(shared_from_this(), std::move(scope), std::move(attr), std::move(data), ttl, std::move(options));
+        object = std::make_shared<Beaming>(shared_from_this(), std::move(scope), std::move(attr), std::move(data), ttl, beat, std::move(options));
     } catch (const std::length_error&) {
         return std::unexpected(Error{Error::Code::busy, Error::Effect::unapplied, {}, {}, {}});
     }
 
-    return accept(object).transform([&object] { return std::move(object); }); // 失败仍在本作用域归还构造时预留的共享预算.
+    if (auto accepted = accept(object); !accepted) {
+        return std::unexpected(accepted.error());
+    }
+    try {
+        auto initialized = object->initialize(deadline);
+        if (!initialized) {
+            object->close();
+            return std::unexpected(initialized.error());
+        }
+    } catch (...) {
+        object->close();
+        throw;
+    }
+    return object;
 }
 
-Result<std::shared_ptr<Publishing>> Core::publisher(Scope scope, std::string key, std::chrono::milliseconds ttl, Publisher::Options options) {
+Result<std::shared_ptr<Publishing>> Core::publisher(Scope scope) {
 
-    const astra::Scope address{scope.sector, scope.spectrum};
-    if (!address.valid() || address.internal() || !astra::Scope::text(key, 1024) || ttl < std::chrono::seconds(1) || ttl > std::chrono::minutes(10)) {
+    const astra::Scope address{scope.sector, scope.spectrum}; // 工厂只检查固定范围, TTL 在各次 update 检查.
+    if (!address.valid() || address.internal())
         return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
-    }
-
-    auto object = std::make_shared<Publishing>(shared_from_this(), std::move(scope), std::move(key), ttl, std::move(options)); // 仅成功接纳后移交发布责任.
+    auto object = std::make_shared<Publishing>(shared_from_this(), std::move(scope)); // 接纳成功才增加业务拥有数.
     return accept(object).transform([&object] { return std::move(object); });
+}
+
+Result<std::shared_ptr<const Binding>> Core::acquire(Time deadline, const std::atomic_bool& cancelled) const {
+
+    std::unique_lock lock(mutex_);                                                                                    // 与认证确认和关闭共用条件变量, 不用轮询创建额外线程.
+    const auto ready = [&] { return closing_ || cancelled.load(std::memory_order_acquire) || binding_ || blocked_; }; // 只引用在等待期间有效的调用停止门.
+    if (!condition_.wait_until(lock, deadline, ready))
+        return std::unexpected(Error{Error::Code::timeout, Error::Effect::unapplied, {}, {}, {}});
+    if (closing_ || cancelled.load(std::memory_order_acquire))
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    if (blocked_) {
+        auto failure = *blocked_; // 等待认证期间尚未提交业务, 不继承其他 RPC 的不确定效果.
+        failure.effect = Error::Effect::unapplied;
+        return std::unexpected(std::move(failure));
+    }
+    return binding_;
+}
+
+bool Core::current(const std::shared_ptr<const Binding>& binding) const {
+    const std::lock_guard lock(mutex_);
+    return !closing_ && binding && binding_ == binding;
 }
 
 // Core::outgoing 占用外发名额, 满时返回 false.
@@ -694,7 +772,7 @@ void Core::returning(bool priority, bool automatic) noexcept {
         wake(); // 只有从满额变为可用才广播给等待者, 普通完成由所属 Activity 独立唤醒.
 }
 
-// Core::admitting 返回是否仍接纳新对象, 关闭后拒绝.
+// Core::admitting 接纳尚未完成的显式操作, 生命周期停止门由调用方独立检查.
 bool Core::admitting() noexcept {
     auto count = admitted_.load(std::memory_order_relaxed);
     while (count < 256) {
@@ -705,7 +783,7 @@ bool Core::admitting() noexcept {
     return false;
 }
 
-// Core::settled 标记目录已稳定, 唤醒等待者.
+// Core::settled 归还一个显式操作额度; 实际完成由所属对象另外唤醒控制轮.
 void Core::settled() noexcept {
     admitted_.fetch_sub(1, std::memory_order_relaxed);
 }
@@ -867,6 +945,9 @@ Error Core::failure(const grpc::Status& status, const grpc::ClientContext& conte
     case grpc::StatusCode::DEADLINE_EXCEEDED:
         error.code = Error::Code::timeout;
         break;
+    case grpc::StatusCode::UNIMPLEMENTED:
+        error.code = Error::Code::protocol; // 旧服务未实现该 RPC, 重连同一协议不能修复, 不引发全 Client 切换.
+        break;
     default:
         error.code = Error::Code::transport;
         break;
@@ -896,6 +977,9 @@ Error Core::failure(const grpc::Status& status, const grpc::ClientContext& conte
         break;
     case proto::comet::v1::REASON_OBSOLETE:
         error.code = Error::Code::obsolete;
+        break;
+    case proto::comet::v1::REASON_CONFLICT:
+        error.code = Error::Code::conflict;
         break;
     case proto::comet::v1::REASON_HISTORY:
         error.code = Error::Code::history;
@@ -992,26 +1076,23 @@ Result<Observer> Client::observer(Scope scope, std::string target, Observer::Opt
     return Observer(std::move(*reading));
 }
 
-Result<Beacon> Client::beacon(Scope scope, std::vector<std::uint8_t> attr, std::vector<std::uint8_t> data, std::chrono::milliseconds ttl, Beacon::Options options) {
+Result<Beacon> Client::beacon(Scope scope, std::vector<std::uint8_t> attr, std::vector<std::uint8_t> data, std::chrono::milliseconds ttl, std::chrono::milliseconds beat, Beacon::Options options) {
     if (!owner_) {
         return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
     }
-    auto created = owner_->core->beacon(std::move(scope), std::make_shared<const std::vector<std::uint8_t>>(std::move(attr)), std::make_shared<const std::vector<std::uint8_t>>(std::move(data)), ttl, std::move(options));
+    const auto deadline = detail::Core::deadline(options.timeout); // 从取得拥有副本之前固定首次注册总期限.
+    auto created = owner_->core->beacon(std::move(scope), std::make_shared<const std::vector<std::uint8_t>>(std::move(attr)), std::make_shared<const std::vector<std::uint8_t>>(std::move(data)), ttl, beat, std::move(options), deadline);
     if (!created) {
         return std::unexpected(created.error());
     }
     return Beacon(std::move(*created));
 }
 
-Result<Publisher> Client::publisher(Scope scope, std::string key, std::chrono::milliseconds ttl, Publisher::Options options) {
-    if (!owner_) {
+Result<Publisher> Client::publisher(Scope scope) {
+    if (!owner_)
         return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
-    }
-    auto object = owner_->core->publisher(std::move(scope), std::move(key), ttl, std::move(options));
-    if (!object) {
-        return std::unexpected(object.error());
-    }
-    return Publisher(std::move(*object));
+    auto object = owner_->core->publisher(std::move(scope)); // 不在本地工厂发业务 RPC.
+    return object.transform([](auto&& value) { return Publisher(std::move(value)); });
 }
 
 void Client::close() noexcept {
@@ -1028,3 +1109,16 @@ std::uint64_t Client::exceptions() const noexcept {
     return owner_ ? owner_->core->exceptions() : 0;
 }
 } // namespace comet
+
+namespace comet::detail {
+bool Core::sample(std::move_only_function<void()> work) {
+    const std::lock_guard lock(mutex_);
+    if (closing_) {
+        return false;
+    }
+    if (!sampling_) {
+        sampling_ = Sampling::open();
+    }
+    return sampling_->submit(std::move(work));
+}
+} // namespace comet::detail

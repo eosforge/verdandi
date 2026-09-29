@@ -1,5 +1,6 @@
 #include "catalog_service.hpp"
 #include "catalog_feed.hpp"
+#include <array>
 #include <astra/profile.hpp>
 #include <cstring>
 
@@ -39,6 +40,34 @@ Catalog::Value Catalog::Service::copy(const std::string& value) {
         std::memcpy(buffer->data(), value.data(), value.size());
     }
     return buffer;
+}
+
+grpc::ServerUnaryReactor* Catalog::Service::Query(grpc::CallbackServerContext* context, const proto::comet::v1::CatalogQueryRequest* request, proto::comet::v1::CatalogQueryReply* reply) {
+
+    return execute(*context, [&] {
+        // 认证及固定实例检查与写入相同, 不允许查询内部范围或无限 Key 列表.
+        auto permit = enter(*context, request->instance(), request->scope(), true);
+        if (!permit)
+            return permit.error();
+        if (request->keys_size() < 1 || request->keys_size() > 128)
+            return error(*context, State::Error::input);
+        std::array<std::string_view, 128> names; // 借用当前 RPC 持有的 Key, 不重复分配和复制名称.
+        auto keys = std::span(names).first(static_cast<std::size_t>(request->keys_size()));
+        for (std::size_t index = 0; index < keys.size(); ++index)
+            keys[index] = request->keys(static_cast<int>(index));
+
+        // 查询捕获最高水位而非当前活跃正文, 响应每个 Key 均明确占一项.
+        const auto versions = state_.versions({request->scope().sector(), request->scope().spectrum()}, keys);
+        if (!versions)
+            return error(*context, versions.error());
+        reply->set_instance(gateway_.instance());
+        for (std::size_t index = 0; index < keys.size(); ++index) {
+            auto* entry = reply->add_entries(); // 返回顺序与输入相同, SDK 仍检查 Key 对应关系.
+            entry->set_key(keys[index].data(), keys[index].size());
+            entry->set_version((*versions)[index]);
+        }
+        return grpc::Status::OK;
+    });
 }
 
 std::expected<std::optional<Access::Permit>, grpc::Status> Catalog::Service::enter(grpc::CallbackServerContext& context, std::string_view instance, const proto::comet::v1::Scope& scope, bool initial) const {
@@ -93,8 +122,8 @@ grpc::Status Catalog::Service::error(grpc::CallbackServerContext& context, State
         reason = proto::comet::v1::REASON_VERSION;
         break;
     case State::Error::conflict:
-        code = Code::INVALID_ARGUMENT;
-        reason = proto::comet::v1::REASON_INPUT;
+        code = Code::FAILED_PRECONDITION;
+        reason = proto::comet::v1::REASON_VERSION; // 同版本异正文也是可查询纠正的整批未提交版本冲突.
         break;
     case State::Error::exhausted:
         code = Code::OUT_OF_RANGE;
@@ -129,8 +158,34 @@ grpc::ServerUnaryReactor* Catalog::Service::Publish(grpc::CallbackServerContext*
     ASTRA_PROFILE_SCOPE("star.catalog_service.Catalog.Service.Publish");
     return execute(*context, [&] {
         // 不复制超限字段, 通过静态契约后才准备唯一不可变载荷和小响应.
-        if (auto checked = address(*context, request->scope()); !checked.ok()) {
-            return checked;
+        auto permit = enter(*context, request->instance(), request->scope(), true); // 认证先于业务正文复制.
+        if (!permit)
+            return permit.error();
+        if (!request->entries().empty()) {
+            if (!request->key().empty() || !request->value().empty() || request->entries_size() > 128 || request->version() == 0 || request->ByteSizeLong() > 2 * 1024 * 1024)
+                return error(*context, State::Error::input);
+            if (request->ttl_ms() < 1000 || request->ttl_ms() > 600000)
+                return ttl(*context);
+            std::size_t bytes{}; // 单项和整批在复制前限长, 无效数据不额外分配正文.
+            for (const auto& entry : request->entries()) {
+                if (!Scope::text(entry.key(), 1024))
+                    return error(*context, State::Error::input);
+                if (entry.value().size() > 1024 * 1024)
+                    return error(*context, State::Error::capacity);
+                bytes += entry.key().size() + entry.value().size();
+                if (bytes > 1024 * 1024)
+                    return error(*context, State::Error::capacity);
+            }
+            std::vector<State::Entry> entries; // 完整请求先转为不可变值, 不逐键提交.
+            entries.reserve(static_cast<std::size_t>(request->entries_size()));
+            for (const auto& entry : request->entries())
+                entries.push_back({entry.key(), copy(entry.value())});
+            reply->set_instance(gateway_.instance());
+            const Scope scope{request->scope().sector(), request->scope().spectrum()};
+            if (auto result = state_.publish(scope, entries, request->version(), request->ttl_ms()); !result)
+                return error(*context, result.error());
+            reply->set_version(request->version());
+            return grpc::Status::OK;
         }
         if (!Scope::text(request->key(), 1024) || request->version() == 0) {
             return error(*context, State::Error::input);
@@ -144,10 +199,6 @@ grpc::ServerUnaryReactor* Catalog::Service::Publish(grpc::CallbackServerContext*
         auto value = copy(request->value());
         reply->set_instance(gateway_.instance());
         const Scope scope{request->scope().sector(), request->scope().spectrum()};
-        auto permit = enter(*context, request->instance(), request->scope(), true);
-        if (!permit) {
-            return permit.error();
-        }
 
         const auto result = state_.publish(scope, request->key(), std::move(value), request->version(), request->ttl_ms());
         if (!result) {
@@ -162,8 +213,24 @@ grpc::ServerUnaryReactor* Catalog::Service::Renew(grpc::CallbackServerContext* c
 
     ASTRA_PROFILE_SCOPE("star.catalog_service.Catalog.Service.Renew");
     return execute(*context, [&] {
-        if (auto checked = address(*context, request->scope()); !checked.ok()) {
-            return checked;
+        auto permit = enter(*context, request->instance(), request->scope(), false); // 续租校验也不绕过认证.
+        if (!permit)
+            return permit.error();
+        if (!request->keys().empty()) {
+            if (!request->key().empty() || request->keys_size() > 128 || request->version() == 0 || request->ByteSizeLong() > 2 * 1024 * 1024)
+                return error(*context, State::Error::input);
+            if (request->ttl_ms() < 1000 || request->ttl_ms() > 600000)
+                return ttl(*context);
+            std::vector<State::Entry> entries; // 续租也使用同一个原子边界, 缺失任一键不延长其余键.
+            entries.reserve(static_cast<std::size_t>(request->keys_size()));
+            for (const auto& key : request->keys()) {
+                if (!Scope::text(key, 1024))
+                    return error(*context, State::Error::input);
+                entries.push_back({key, {}});
+            }
+            const Scope scope{request->scope().sector(), request->scope().spectrum()};
+            const auto result = state_.publish(scope, entries, request->version(), request->ttl_ms(), true);
+            return result ? grpc::Status::OK : error(*context, result.error());
         }
         if (!Scope::text(request->key(), 1024) || request->version() == 0) {
             return error(*context, State::Error::input);
@@ -172,10 +239,6 @@ grpc::ServerUnaryReactor* Catalog::Service::Renew(grpc::CallbackServerContext* c
             return ttl(*context);
         }
         const Scope scope{request->scope().sector(), request->scope().spectrum()};
-        auto permit = enter(*context, request->instance(), request->scope(), false);
-        if (!permit) {
-            return permit.error();
-        }
         const auto result = state_.renew(scope, request->key(), request->version(), request->ttl_ms());
         return result ? grpc::Status::OK : error(*context, result.error());
     });

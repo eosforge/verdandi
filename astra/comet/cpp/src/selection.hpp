@@ -23,6 +23,21 @@ struct Registrations {
     std::uint64_t version{};  // 此 Star 的 Ephemeris 合并视图游标, 零允许合法空底稿.
 };
 
+// 本地估计与权威数据分别存储, 网络提交只淘汰实际变化的 Key.
+struct Estimate {
+    static constexpr std::size_t overhead = sizeof(std::vector<std::uint8_t>) + 32;
+    Value authority; // 权威不可变对象同时充当代次, 不解释正文.
+    Value data;      // 本地选择使用的完整估计值.
+
+    std::size_t bytes() const noexcept {
+        return authority->size() + data->size();
+    } // 同时保守计入两份所有权.
+};
+
+struct Estimates {
+    Table<Estimate> data; // COW 保证 selector 所持旧池不被并发调整改写.
+};
+
 // Ephemeris 下行安装策略. 单个网络任务顺序调用, 当前根只在 complete 全部校验通过后替换.
 class Selection {
 public:
@@ -45,24 +60,27 @@ public:
     Observer::View view(Observer::State state, std::optional<Error> error = {}) const;
     // 放弃未完成页面, 不取消网络或改变旧视图; 分配失败/断流时同样调用.
     void discard() noexcept;
+    Observer::Pool pool(std::weak_ptr<Observing> owner) const;                                             // Watching 短锁内固定两个根, 不调用用户代码.
+    Result<void> estimate(std::string_view id, const Value& authority, const Value& previous, Value data); // 权威代次和估计 CAS, 有界本地提交.
 
 private:
     // 统一失败路径使本流失效, 不把损坏页面当作可忽略的心跳.
     Result<std::optional<Observer::View>> fail(Error::Code code);
-    const Scope scope_;                               // 终身固定, 对象换范围需要重新创建.
-    const std::string target_;                        // 空为全分组, 非空只接受同名 Key.
-    const std::size_t bytes_;                         // Key/值逻辑容量, 不与 gRPC 消息大小混用.
-    const std::size_t records_;                       // 可安装的最多记录数, 初值来自 Observer::Options.
-    Reserve reserve_;                                 // 只作共享预算调整, 不回调用户或取得 Reading 的锁.
-    std::shared_ptr<const Registrations> current_;    // 最后完整发布, 无网络寿命依赖.
-    std::optional<Table<Registration>::Draft> draft_; // 当前批次的私有写页, 未完成不对外读取.
-    std::unordered_set<std::string> seen_;            // 本批跨页去重, 完成/失败立即清空实际桶与键.
-    std::size_t seen_bytes_{};                        // 去重 Key 正文字节, 与本批元数据一起计费.
-    std::string expected_;                            // 当前流确认的实际 Star, 首批完成后固定.
-    proto::comet::v1::Mode mode_{};                   // 当前批次模式, 未开始时为 unspecified.
-    bool first_ = true;                               // reset 只允许作为一条新流的第一批.
-    bool repaired_{};                                 // 本对象已经消耗唯一缺 Attr 回退, 新基线成功不重置次数.
-    bool fresh_{};                                    // 下一条流必须取得完整 reset, 不继续从损坏增量位置恢复.
-    bool valid_{};                                    // begin 后为 true, 协议/容量失败后必须重新 begin.
+    const Scope scope_;                                                          // 终身固定, 对象换范围需要重新创建.
+    const std::string target_;                                                   // 空为全分组, 非空只接受同名 Key.
+    const std::size_t bytes_;                                                    // Key/值逻辑容量, 不与 gRPC 消息大小混用.
+    const std::size_t records_;                                                  // 可安装的最多记录数, 初值来自 Observer::Options.
+    Reserve reserve_;                                                            // 只作共享预算调整, 不回调用户或取得 Reading 的锁.
+    std::shared_ptr<const Estimates> estimates_ = std::make_shared<Estimates>(); // 当前估计根, 只在 Watching 锁内更换.
+    std::shared_ptr<const Registrations> current_;                               // 最后完整发布, 无网络寿命依赖.
+    std::optional<Table<Registration>::Draft> draft_;                            // 当前批次的私有写页, 未完成不对外读取.
+    std::unordered_set<std::string> seen_;                                       // 本批跨页去重, 完成/失败立即清空实际桶与键.
+    std::size_t seen_bytes_{};                                                   // 去重 Key 正文字节, 与本批元数据一起计费.
+    std::string expected_;                                                       // 当前流确认的实际 Star, 首批完成后固定.
+    proto::comet::v1::Mode mode_{};                                              // 当前批次模式, 未开始时为 unspecified.
+    bool first_ = true;                                                          // reset 只允许作为一条新流的第一批.
+    bool repaired_{};                                                            // 本对象已经消耗唯一缺 Attr 回退, 新基线成功不重置次数.
+    bool fresh_{};                                                               // 下一条流必须取得完整 reset, 不继续从损坏增量位置恢复.
+    bool valid_{};                                                               // begin 后为 true, 协议/容量失败后必须重新 begin.
 };
 } // namespace comet::detail

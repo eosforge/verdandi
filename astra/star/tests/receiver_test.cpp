@@ -108,11 +108,64 @@ void invalid() {
     CHECK(ack && ack->has_acknowledged() && ack->acknowledged().version() == 0);
     CHECK(library.find({"a", "s"})->usage().version == 0);
 }
+
+// 大批次走快照分片时, 活动范围在最后一页之前保持旧根, 不能按到达页逐步可见.
+void large_snapshot() {
+
+    astra::Library library; // 该例只拥有一个范围及一个接收器.
+    astra::Access access;
+    astra::Receiver receiver(library, access);
+    CHECK(receiver.next());
+    CHECK(receiver.receive(plan(1)));
+    CHECK(receiver.receive(snapshot(1, true, "old")));
+    CHECK(receiver.next()->acknowledged().version() == 1);
+    const auto book = library.find({"a", "s"});
+    const auto old = book->view(); // 钉住原始完整快照, 新根发布后也不能变化.
+
+    for (unsigned index = 0; index < 257; ++index) {                  // 所有页共计超过 8 MiB, 只有末页标记完整.
+        auto page = snapshot(2, index == 256, std::to_string(index)); // page 只携带一个大值, 版本在整批中固定为 2.
+        page.mutable_snapshot()->mutable_entries(0)->set_value(std::string(40 * 1024, 'v'));
+        CHECK(receiver.receive(page));
+        if (index != 256) {
+            CHECK(book->view()->version() == 1 && book->view()->size() == 1);
+            CHECK(book->find("old")->value && !receiver.next());
+        }
+    }
+    CHECK(book->view()->version() == 2 && book->view()->size() == 257);
+    CHECK(!book->find("old")->value && old->version() == 1 && old->size() == 1);
+    CHECK(receiver.next()->acknowledged().version() == 2);
+}
 } // namespace
 
 // 独立协议状态测试, 不通过实际联网或睡眠来碰概率边界.
 int main() {
+    {
+        astra::Library library; // 一个协议补丁包含 257 个键且超过 2 MiB, 仅完整安装后确认唯一权威版本.
+        astra::Access access;
+        astra::Receiver receiver(library, access);
+        CHECK(receiver.next());
+        CHECK(receiver.receive(plan(0)));
+        CHECK(receiver.receive(snapshot(0, true, "")));
+        CHECK(receiver.next());
+        auto packet = update(1);
+        auto* patch = packet.mutable_updates()->mutable_patches(0);
+        patch->clear_change();
+        for (unsigned index = 0; index < 257; ++index) { // index 唯一命名每个键, 覆盖旧 128 项上限.
+            auto* entry = patch->add_changes();
+            entry->set_key(std::to_string(index));
+            entry->set_value(std::string(8192, 'v'));
+        }
+        CHECK(receiver.receive(packet));
+        const auto book = library.find({"a", "s"});
+        CHECK(book->view()->size() == 257 && book->view()->version() == 1);
+        CHECK(receiver.next()->acknowledged().version() == 1);
+        patch->set_version(2);
+        patch->mutable_changes(1)->set_key("0"); // 重复键不能使第一项先提交.
+        CHECK(!receiver.receive(packet));
+        CHECK(book->view()->version() == 1 && book->replay(0)->changes.size() == 257);
+    }
     snapshots();
+    large_snapshot();
     invalid();
     {
         // 最小协商预算下遍历完整位置清单, 每页有进度, 无缺项和超限编码.

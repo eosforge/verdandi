@@ -16,12 +16,37 @@ class Watching : public Activity, public std::enable_shared_from_this<Watching<P
 public:
     // Core 已完成工厂参数/额度接纳后创建, 构造自身不发 RPC 或调用用户观察者.
     Watching(std::shared_ptr<Core> core, Scope scope, std::string target, Options options);
-    ~Watching();                                        // 原生投影归还受控计费, 所有 RPC/观察者须在最后引用释放前已经完成.
-    View load() const;                                  // 加短锁取得当前状态, 不等待网络.
-    void close() noexcept;                              // 只在第一次关闭时归还应用拥有数, 在途仍等待 OnDone.
-    bool wait(std::chrono::milliseconds timeout) const; // 禁止在 SDK 观察者里阻塞.
-    bool closed() const noexcept override;              // Core 工厂计数使用原子标志, 不反向取得 Watching 锁.
-    bool finished() const noexcept override;            // 已关闭且完全清理后可以从 Core 弱目录移除, 用户仍可保存最后 View.
+    ~Watching();                                                                  // 原生投影归还受控计费, 所有 RPC/观察者须在最后引用释放前已经完成.
+    View load() const;                                                            // 加短锁取得当前状态, 不等待网络.
+    Result<void> changed(std::move_only_function<void(View)> callback);           // 替换状态回调, 首次交付当前状态, 空回调解除.
+    Result<void> watch(std::move_only_function<void(View)> callback, bool exact); // 只交付完整数据, 安装后才附加也不会遗漏基线.
+    void close() noexcept;                                                        // 只在第一次关闭时归还应用拥有数, 在途仍等待 OnDone.
+    bool wait(std::chrono::milliseconds timeout) const;                           // 禁止在 SDK 观察者里阻塞.
+    bool closed() const noexcept override;                                        // Core 工厂计数使用原子标志, 不反向取得 Watching 锁.
+    bool finished() const noexcept override;                                      // 已关闭且完全清理后可以从 Core 弱目录移除, 用户仍可保存最后 View.
+
+    Result<Observer::Pool> pool()
+        requires std::same_as<Policy, Selection>
+    {
+        const std::lock_guard lock(mutex_);
+        if (closed() || core_->stopped()) {
+            return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+        }
+        if (view_.state() != State::ready) {
+            return std::unexpected(view_.error().value_or(Error{Error::Code::busy, Error::Effect::unapplied, {}, {}, {}}));
+        }
+        return projection_->pool(this->shared_from_this());
+    } // 只固定池根, selector 在调用方线程的锁外执行.
+
+    Result<void> estimate(std::string_view id, const Value& authority, const Value& previous, Value data)
+        requires std::same_as<Policy, Selection>
+    {
+        const std::lock_guard lock(mutex_);
+        if (closed() || core_->stopped()) {
+            return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+        }
+        return projection_->estimate(id, authority, previous, std::move(data));
+    } // CAS 与网络完整提交共用短锁, 不跨用户代码.
 
     bool streaming() const noexcept override {
         return true;
@@ -37,25 +62,28 @@ private:
     bool publish(State state, std::optional<Error> error = {});
     // 每次新流冻结请求范围及恢复位置, 旧 Stream 未 OnDone 时不能创建下一条.
     void start(const std::shared_ptr<const Binding>& binding);
-    bool reserve(std::size_t requested) noexcept; // 持 Watching 锁调整共享核心计费, 失败保留原额度.
-    const std::shared_ptr<Core> core_;            // 活跃业务应用拥有共享核心, 不通过 View 保留这个引用.
-    const Scope scope_;                           // 固定外部地址, 网络 request 使用自己的字符串所有权.
-    const std::string target_;                    // 空为全分组, 非空精确 Key.
-    mutable std::mutex mutex_;                    // 保护投影、句柄状态与通知开始, 不跨用户回调或网络等待.
-    mutable std::condition_variable condition_;   // 本地清理 wait 的唯一等待点.
-    std::size_t bytes_{};                         // reserve 回调在此 Watching 锁下调用, Core 用原子总额计费.
-    std::optional<Policy> projection_;            // close 可以释放网络受控存储, 当前 View 转为应用持有旧内容.
-    View view_;                                   // 最后完整安装与最新本地状态, 不引用未收齐候选.
-    std::move_only_function<void(View)> changed_; // 创建时固定, close 不在执行中销毁回调对象.
-    std::shared_ptr<Stream> stream_;              // 唯一实际 RPC, 取消不提前清除此引用或归还物理额度.
-    std::shared_ptr<const Binding> binding_;      // 本次实际请求目标, 与当前 Core 绑定用指针身份比较.
-    std::atomic_bool closed_{};                   // 单向应用停止标志, 只归还一次 Core 拥有数.
-    std::atomic_bool finished_{};                 // 由控制轮最后发布, 工厂可无锁移除已不需调度的对象.
-    bool failed_{};                               // 永久本地/协议失败, 保留旧视图而不无限重拉相同损坏内容.
-    bool notifying_{};                            // 用户回调已开始, close 允许它结束, wait 必须等其归还.
-    bool dirty_{};                                // 尚需通知的完整状态, 中间状态允许合并, 不建立通知 FIFO.
-    unsigned failures_{};                         // 有界恢复退避, 不能因 TCP 成功就清零不停断流的失败.
-    Core::Time retry_{};                          // 下一次重连时刻, 没有逐毫秒轮询或每对象 Alarm.
+    bool reserve(std::size_t requested) noexcept;         // 持 Watching 锁调整共享核心计费, 失败保留原额度.
+    const std::shared_ptr<Core> core_;                    // 活跃业务应用拥有共享核心, 不通过 View 保留这个引用.
+    const Scope scope_;                                   // 固定外部地址, 网络 request 使用自己的字符串所有权.
+    const std::string target_;                            // 空为全分组, 非空精确 Key.
+    mutable std::mutex mutex_;                            // 保护投影、句柄状态与通知开始, 不跨用户回调或网络等待.
+    mutable std::condition_variable condition_;           // 本地清理 wait 的唯一等待点.
+    std::size_t bytes_{};                                 // reserve 回调在此 Watching 锁下调用, Core 用原子总额计费.
+    std::optional<Policy> projection_;                    // close 可以释放网络受控存储, 当前 View 转为应用持有旧内容.
+    View view_;                                           // 最后完整安装与最新本地状态, 不引用未收齐候选.
+    using Callback = std::move_only_function<void(View)>; // 共享包装保证回调内替换不会析构正在执行的函数.
+    std::shared_ptr<Callback> changed_;                   // 状态通知, 不承担数据基线的交付标志.
+    std::shared_ptr<Callback> watched_;                   // 最近设置的数据观察者, 每对象串行调用.
+    bool updated_{};                                      // 有完整内容等待交付, 状态变化不制造空数据通知.
+    std::shared_ptr<Stream> stream_;                      // 唯一实际 RPC, 取消不提前清除此引用或归还物理额度.
+    std::shared_ptr<const Binding> binding_;              // 本次实际请求目标, 与当前 Core 绑定用指针身份比较.
+    std::atomic_bool closed_{};                           // 单向应用停止标志, 只归还一次 Core 拥有数.
+    std::atomic_bool finished_{};                         // 由控制轮最后发布, 工厂可无锁移除已不需调度的对象.
+    bool failed_{};                                       // 永久本地/协议失败, 保留旧视图而不无限重拉相同损坏内容.
+    bool notifying_{};                                    // 用户回调已开始, close 允许它结束, wait 必须等其归还.
+    bool dirty_{};                                        // 尚需通知的完整状态, 中间状态允许合并, 不建立通知 FIFO.
+    unsigned failures_{};                                 // 有界恢复退避, 不能因 TCP 成功就清零不停断流的失败.
+    Core::Time retry_{};                                  // 下一次重连时刻, 没有逐毫秒轮询或每对象 Alarm.
 };
 
 template <class Policy>
@@ -170,7 +198,7 @@ private:
 };
 
 template <class Policy>
-Watching<Policy>::Watching(std::shared_ptr<Core> core, Scope scope, std::string target, Options options) : core_(std::move(core)), scope_(std::move(scope)), target_(std::move(target)), projection_(std::in_place, scope_, target_, options.bytes, options.records, [this](std::size_t requested) noexcept { return reserve(requested); }), changed_(std::move(options.changed)) {
+Watching<Policy>::Watching(std::shared_ptr<Core> core, Scope scope, std::string target, Options options) : core_(std::move(core)), scope_(std::move(scope)), target_(std::move(target)), projection_(std::in_place, scope_, target_, options.bytes, options.records, [this](std::size_t requested) noexcept { return reserve(requested); }), changed_(options.changed ? std::make_shared<Callback>(std::move(options.changed)) : nullptr) {
     view_ = projection_->view(State::waiting);
 }
 
@@ -198,6 +226,41 @@ typename Watching<Policy>::View Watching<Policy>::load() const {
         view.state_ = State::closed;
     }
     return view;
+}
+
+template <class Policy>
+Result<void> Watching<Policy>::changed(std::move_only_function<void(View)> callback) {
+
+    auto next = callback ? std::make_shared<Callback>(std::move(callback)) : nullptr;
+    {
+        const std::lock_guard lock(mutex_);
+        if (closed() || core_->stopped()) {
+            return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+        }
+        changed_.swap(next);
+        dirty_ = true;
+    }
+    core_->wake(this);
+    return {};
+}
+
+template <class Policy>
+Result<void> Watching<Policy>::watch(std::move_only_function<void(View)> callback, bool exact) {
+
+    if (exact != !target_.empty()) {
+        return std::unexpected(Error{Error::Code::input, Error::Effect::unapplied, {}, {}, {}});
+    }
+    auto next = callback ? std::make_shared<Callback>(std::move(callback)) : nullptr;
+    {
+        const std::lock_guard lock(mutex_);
+        if (closed() || core_->stopped()) {
+            return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+        }
+        watched_.swap(next);
+        updated_ = view_.version().has_value();
+    }
+    core_->wake(this);
+    return {};
 }
 
 template <class Policy>
@@ -229,7 +292,7 @@ bool Watching<Policy>::wait(std::chrono::milliseconds timeout) const {
         throw std::logic_error("Cannot wait inside a Comet callback");
     }
     std::unique_lock lock(mutex_);
-    return condition_.wait_for(lock, timeout, [this] { return cleaned_ && !stream_ && !notifying_; });
+    return condition_.wait_until(lock, Core::deadline(timeout), [this] { return cleaned_ && !stream_ && !notifying_; });
 }
 
 template <class Policy>
@@ -293,6 +356,12 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
         if (stream_) {
             stream_->cancel();
         }
+        auto notice = std::move(changed_); // 释放业务捕获不能持对象锁, 也不能留下关闭后的引用环.
+        auto watched = std::move(watched_);
+        lock.unlock();
+        notice.reset();
+        watched.reset();
+        lock.lock();
         cleaned_ = true;
     }
     if (stream_ && !stopped && binding_ != binding) {
@@ -357,7 +426,8 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
                 if (!accepted) {
                     if (projection_->repair(accepted.error().code)) {
                         stream->repair_ = true;
-                        retry_ = now + core_->delay(++failures_);
+                        failures_ = std::min(failures_ + 1, 32U);
+                        retry_ = now + core_->delay(failures_);
                         publish(view_.version() ? State::stale : State::waiting, accepted.error());
                     } else {
                         failed_ = true;
@@ -372,6 +442,7 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
                     stream->deadline_ = Core::Time::max(); // 就绪后无更新是合法状态, 不以数据静默判掉线.
                     view_ = std::move(**accepted);
                     dirty_ = true;
+                    updated_ = true;
                     failures_ = 0; // 只有完整应用一批才结束连续失败, 不是 TCP 建连成功即清零.
                     if (!stream->recovered_) {
                         stream->recovered_ = true;
@@ -397,6 +468,7 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
     }
 
     if (dirty_ && !stopped && changed_ && core_->notification()) {
+        auto callback = changed_;
         auto notification = view_; // 开始回调前固定本次状态, 用户可以非阻塞关闭或发起其他异步操作.
         notifying_ = true;
         dirty_ = false;
@@ -404,10 +476,11 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
         const bool previous = Core::notifying();
         Core::notify(true);
         try {
-            changed_(std::move(notification));
+            (*callback)(std::move(notification));
         } catch (...) {
             core_->exception(); // 不回滚已安装数据或重放通知, 只提供有界诊断计数.
         }
+        callback.reset(); // 回调可以替换自己, 捕获析构同样允许重入当前对象.
         Core::notify(previous);
         lock.lock();
         notifying_ = false;
@@ -415,6 +488,25 @@ Core::Time Watching<Policy>::poll(Core::Time now, const std::shared_ptr<const Bi
     if (!changed_) {
         dirty_ = false;
     }
+    if (updated_ && !closed() && watched_ && core_->notification()) {
+        auto callback = watched_;
+        auto notification = view_;
+        updated_ = false;
+        notifying_ = true;
+        lock.unlock();
+        const bool previous = Core::notifying();
+        Core::notify(true);
+        try {
+            (*callback)(std::move(notification));
+        } catch (...) {
+            core_->exception();
+        }
+        callback.reset(); // 保持通知上下文且不持对象锁, 防止捕获析构自等或死锁.
+        Core::notify(previous);
+        lock.lock();
+        notifying_ = false;
+    }
+
     if (stream_ && !closed() && !failed_ && binding_ == binding && !core_->stopped()) {
         ASTRA_PROFILE_BEGIN(profile_lock_388, "comet.cpp.watching.Watching_Policy.poll.wait.io");
         const std::lock_guard io(stream_->mutex_);

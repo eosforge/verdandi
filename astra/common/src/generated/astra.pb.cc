@@ -981,11 +981,11 @@ constexpr EphemerisRecord::ParseTableT_ EphemerisRecord::InternalGenerateParseTa
     {
       PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_._has_bits_),
       0, // no _extensions_
-      6, 56,  // max_field_number, fast_idx_mask
+      7, 56,  // max_field_number, fast_idx_mask
       offsetof(ParseTableT_, field_lookup_table),
-      4294967232,  // skipmap
+      4294967168,  // skipmap
       offsetof(ParseTableT_, field_entries),
-      6,  // num_field_entries
+      7,  // num_field_entries
       0,  // num_aux_entries
       offsetof(ParseTableT_, field_names),  // no aux_entries
       class_data,
@@ -1017,10 +1017,13 @@ constexpr EphemerisRecord::ParseTableT_ EphemerisRecord::InternalGenerateParseTa
        {40, 4, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_.renewal_)}},
       // uint32 ttl_ms = 6;
-      {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(EphemerisRecord, _impl_.ttl_ms_), 5>(),
-       {48, 5, 0,
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(EphemerisRecord, _impl_.ttl_ms_), 6>(),
+       {48, 6, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_.ttl_ms_)}},
-      {::_pbi::TcParser::MiniParse, {}},
+      // uint64 generation = 7;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(EphemerisRecord, _impl_.generation_), 5>(),
+       {56, 5, 0,
+        PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_.generation_)}},
     }}, {{
       65535, 65535
     }}, {{
@@ -1035,7 +1038,9 @@ constexpr EphemerisRecord::ParseTableT_ EphemerisRecord::InternalGenerateParseTa
       // uint64 renewal = 5;
       {PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_.renewal_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
       // uint32 ttl_ms = 6;
-      {PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_.ttl_ms_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt32)},
+      {PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_.ttl_ms_), _Internal::kHasBitsOffset + 6, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt32)},
+      // uint64 generation = 7;
+      {PROTOBUF_FIELD_OFFSET(EphemerisRecord, _impl_.generation_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
     }},
     // no aux_entries
     {{
@@ -1056,6 +1061,7 @@ inline constexpr EphemerisRecord::Impl_::Impl_(
         deadline_{::uint64_t{0u}},
         update_{::uint64_t{0u}},
         renewal_{::uint64_t{0u}},
+        generation_{::uint64_t{0u}},
         ttl_ms_{0u} {}
 
 template <typename>
@@ -1309,11 +1315,11 @@ constexpr EphemerisData::ParseTableT_ EphemerisData::InternalGenerateParseTable_
     {
       PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_._has_bits_),
       0, // no _extensions_
-      2, 8,  // max_field_number, fast_idx_mask
+      3, 24,  // max_field_number, fast_idx_mask
       offsetof(ParseTableT_, field_lookup_table),
-      4294967292,  // skipmap
+      4294967288,  // skipmap
       offsetof(ParseTableT_, field_entries),
-      2,  // num_field_entries
+      3,  // num_field_entries
       0,  // num_aux_entries
       offsetof(ParseTableT_, field_names),  // no aux_entries
       class_data,
@@ -1323,14 +1329,19 @@ constexpr EphemerisData::ParseTableT_ EphemerisData::InternalGenerateParseTable_
       ::_pbi::TcParser::GetTable<::proto::astra::v1::EphemerisData>(),  // to_prefetch
       #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
     }, {{
-      // uint64 order = 2;
-      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(EphemerisData, _impl_.order_), 1>(),
-       {16, 1, 0,
-        PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.order_)}},
+      {::_pbi::TcParser::MiniParse, {}},
       // bytes data = 1;
       {::_pbi::TcParser::FastBS1,
        {10, 0, 0,
         PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.data_)}},
+      // uint64 order = 2;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(EphemerisData, _impl_.order_), 1>(),
+       {16, 1, 0,
+        PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.order_)}},
+      // uint64 deadline = 3;
+      {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(EphemerisData, _impl_.deadline_), 2>(),
+       {24, 2, 0,
+        PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.deadline_)}},
     }}, {{
       65535, 65535
     }}, {{
@@ -1338,6 +1349,8 @@ constexpr EphemerisData::ParseTableT_ EphemerisData::InternalGenerateParseTable_
       {PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.data_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kBytes | ::_fl::kRepAString)},
       // uint64 order = 2;
       {PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.order_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+      // uint64 deadline = 3;
+      {PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.deadline_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
     }},
     // no aux_entries
     {{
@@ -1352,7 +1365,8 @@ inline constexpr EphemerisData::Impl_::Impl_(
       : data_(
             &::google::protobuf::internal::fixed_address_empty_string,
             ::_pbi::ConstantInitialized()),
-        order_{::uint64_t{0u}} {}
+        order_{::uint64_t{0u}},
+        deadline_{::uint64_t{0u}} {}
 
 template <typename>
 constexpr EphemerisData::EphemerisData(::_pbi::ConstantInitialized,
@@ -4115,18 +4129,20 @@ const ::uint32_t
         1,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_._has_bits_),
-        9, // hasbit index offset
+        10, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_.attr_),
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_.data_),
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_.deadline_),
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_.update_),
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_.renewal_),
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_.ttl_ms_),
+        PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisRecord, _impl_.generation_),
         0,
         1,
         2,
         3,
         4,
+        6,
         5,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisEntry, _impl_._has_bits_),
@@ -4148,11 +4164,13 @@ const ::uint32_t
         2,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisData, _impl_._has_bits_),
-        5, // hasbit index offset
+        6, // hasbit index offset
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisData, _impl_.data_),
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisData, _impl_.order_),
+        PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisData, _impl_.deadline_),
         0,
         1,
+        2,
         0x081, // bitmap
         PROTOBUF_FIELD_OFFSET(::proto::astra::v1::EphemerisLease, _impl_._has_bits_),
         5, // hasbit index offset
@@ -4234,14 +4252,14 @@ static const ::_pbi::MigrationSchema
         {101, sizeof(::proto::astra::v1::CatalogDelta)},
         {116, sizeof(::proto::astra::v1::CatalogChanges)},
         {123, sizeof(::proto::astra::v1::EphemerisRecord)},
-        {138, sizeof(::proto::astra::v1::EphemerisEntry)},
-        {147, sizeof(::proto::astra::v1::EphemerisSnapshot)},
-        {156, sizeof(::proto::astra::v1::EphemerisData)},
-        {163, sizeof(::proto::astra::v1::EphemerisLease)},
-        {170, sizeof(::proto::astra::v1::EphemerisDelta)},
-        {189, sizeof(::proto::astra::v1::EphemerisChanges)},
-        {196, sizeof(::proto::astra::v1::Repair)},
-        {209, sizeof(::proto::astra::v1::Repaired)},
+        {140, sizeof(::proto::astra::v1::EphemerisEntry)},
+        {149, sizeof(::proto::astra::v1::EphemerisSnapshot)},
+        {158, sizeof(::proto::astra::v1::EphemerisData)},
+        {167, sizeof(::proto::astra::v1::EphemerisLease)},
+        {174, sizeof(::proto::astra::v1::EphemerisDelta)},
+        {193, sizeof(::proto::astra::v1::EphemerisChanges)},
+        {200, sizeof(::proto::astra::v1::Repair)},
+        {213, sizeof(::proto::astra::v1::Repaired)},
 };
 static const ::_pbi::MessageGlobalsBase* PROTOBUF_NONNULL const
     file_message_globals[] = {
@@ -4317,60 +4335,61 @@ const char descriptor_table_protodef_astra_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "\022-\n\005lease\030\005 \001(\0132\034.proto.astra.v1.Catalog"
     "LeaseH\000B\010\n\006action\"M\n\016CatalogChanges\022-\n\007e"
     "ntries\030\001 \003(\0132\034.proto.astra.v1.CatalogDel"
-    "ta\022\014\n\004head\030\002 \001(\004\"p\n\017EphemerisRecord\022\014\n\004a"
-    "ttr\030\001 \001(\014\022\014\n\004data\030\002 \001(\014\022\020\n\010deadline\030\003 \001("
-    "\004\022\016\n\006update\030\004 \001(\004\022\017\n\007renewal\030\005 \001(\004\022\016\n\006tt"
-    "l_ms\030\006 \001(\r\"u\n\016EphemerisEntry\022$\n\005scope\030\001 "
-    "\001(\0132\025.proto.astra.v1.Scope\022\014\n\004uuid\030\002 \001(\014"
-    "\022/\n\006record\030\003 \001(\0132\037.proto.astra.v1.Epheme"
-    "risRecord\"h\n\021EphemerisSnapshot\022\020\n\010positi"
-    "on\030\001 \001(\004\022/\n\007entries\030\002 \003(\0132\036.proto.astra."
-    "v1.EphemerisEntry\022\020\n\010complete\030\003 \001(\010\",\n\rE"
-    "phemerisData\022\014\n\004data\030\001 \001(\014\022\r\n\005order\030\002 \001("
-    "\004\"1\n\016EphemerisLease\022\020\n\010deadline\030\001 \001(\004\022\r\n"
-    "\005order\030\002 \001(\004\"\233\002\n\016EphemerisDelta\022\020\n\010posit"
-    "ion\030\001 \001(\004\022$\n\005scope\030\002 \001(\0132\025.proto.astra.v"
-    "1.Scope\022\014\n\004uuid\030\003 \001(\014\0221\n\006record\030\004 \001(\0132\037."
-    "proto.astra.v1.EphemerisRecordH\000\022-\n\004data"
-    "\030\005 \001(\0132\035.proto.astra.v1.EphemerisDataH\000\022"
-    "/\n\005lease\030\006 \001(\0132\036.proto.astra.v1.Ephemeri"
-    "sLeaseH\000\022&\n\005erase\030\007 \001(\0132\025.proto.astra.v1"
-    ".EmptyH\000B\010\n\006action\"Q\n\020EphemerisChanges\022/"
-    "\n\007entries\030\001 \003(\0132\036.proto.astra.v1.Ephemer"
-    "isDelta\022\014\n\004head\030\002 \001(\004\"\205\001\n\006Repair\022&\n\006doma"
-    "in\030\001 \001(\0162\026.proto.astra.v1.Domain\022$\n\005scop"
-    "e\030\002 \001(\0132\025.proto.astra.v1.Scope\022\013\n\003key\030\003 "
-    "\001(\014\022\017\n\007trigger\030\004 \001(\004\022\017\n\007version\030\005 \001(\004\"\341\001"
-    "\n\010Repaired\022\'\n\007request\030\001 \001(\0132\026.proto.astr"
-    "a.v1.Repair\022\020\n\010position\030\002 \001(\004\0220\n\007catalog"
-    "\030\003 \001(\0132\035.proto.astra.v1.CatalogRecordH\000\022"
-    "4\n\tephemeris\030\004 \001(\0132\037.proto.astra.v1.Ephe"
-    "merisRecordH\000\022(\n\007unknown\030\005 \001(\0132\025.proto.a"
-    "stra.v1.EmptyH\000B\010\n\006result*\321\003\n\021ProtocolEr"
-    "rorCode\022#\n\037PROTOCOL_ERROR_CODE_UNSPECIFI"
-    "ED\020\000\022)\n%PROTOCOL_ERROR_CODE_PROTOCOL_MIS"
-    "MATCH\020\001\022(\n$PROTOCOL_ERROR_CODE_CLUSTER_M"
-    "ISMATCH\020\002\022%\n!PROTOCOL_ERROR_CODE_INVALID"
-    "_HELLO\020\003\022\'\n#PROTOCOL_ERROR_CODE_SELF_CON"
-    "NECTION\020\004\022&\n\"PROTOCOL_ERROR_CODE_RESOURC"
-    "E_LIMIT\020\005\022*\n&PROTOCOL_ERROR_CODE_UNEXPEC"
-    "TED_MESSAGE\020\006\022)\n%PROTOCOL_ERROR_CODE_HAN"
-    "DSHAKE_TIMEOUT\020\007\022$\n PROTOCOL_ERROR_CODE_"
-    "UNAUTHORIZED\020\010\022 \n\034PROTOCOL_ERROR_CODE_CO"
-    "NFLICT\020\t\022+\n\'PROTOCOL_ERROR_CODE_STORAGE_"
-    "UNAVAILABLE\020\n*J\n\006Domain\022\026\n\022DOMAIN_UNSPEC"
-    "IFIED\020\000\022\022\n\016DOMAIN_CATALOG\020\001\022\024\n\020DOMAIN_EP"
-    "HEMERIS\020\0022`\n\rStarTransport\022O\n\013OpenSessio"
-    "n\022\035.proto.astra.v1.SessionPacket\032\035.proto"
-    ".astra.v1.SessionPacket(\0010\001BCZAgithub.co"
-    "m/eosforge/verdandi/astra/internal/gener"
-    "ated/astra;astrab\006proto3"
+    "ta\022\014\n\004head\030\002 \001(\004\"\204\001\n\017EphemerisRecord\022\014\n\004"
+    "attr\030\001 \001(\014\022\014\n\004data\030\002 \001(\014\022\020\n\010deadline\030\003 \001"
+    "(\004\022\016\n\006update\030\004 \001(\004\022\017\n\007renewal\030\005 \001(\004\022\016\n\006t"
+    "tl_ms\030\006 \001(\r\022\022\n\ngeneration\030\007 \001(\004\"u\n\016Ephem"
+    "erisEntry\022$\n\005scope\030\001 \001(\0132\025.proto.astra.v"
+    "1.Scope\022\014\n\004uuid\030\002 \001(\014\022/\n\006record\030\003 \001(\0132\037."
+    "proto.astra.v1.EphemerisRecord\"h\n\021Epheme"
+    "risSnapshot\022\020\n\010position\030\001 \001(\004\022/\n\007entries"
+    "\030\002 \003(\0132\036.proto.astra.v1.EphemerisEntry\022\020"
+    "\n\010complete\030\003 \001(\010\">\n\rEphemerisData\022\014\n\004dat"
+    "a\030\001 \001(\014\022\r\n\005order\030\002 \001(\004\022\020\n\010deadline\030\003 \001(\004"
+    "\"1\n\016EphemerisLease\022\020\n\010deadline\030\001 \001(\004\022\r\n\005"
+    "order\030\002 \001(\004\"\233\002\n\016EphemerisDelta\022\020\n\010positi"
+    "on\030\001 \001(\004\022$\n\005scope\030\002 \001(\0132\025.proto.astra.v1"
+    ".Scope\022\014\n\004uuid\030\003 \001(\014\0221\n\006record\030\004 \001(\0132\037.p"
+    "roto.astra.v1.EphemerisRecordH\000\022-\n\004data\030"
+    "\005 \001(\0132\035.proto.astra.v1.EphemerisDataH\000\022/"
+    "\n\005lease\030\006 \001(\0132\036.proto.astra.v1.Ephemeris"
+    "LeaseH\000\022&\n\005erase\030\007 \001(\0132\025.proto.astra.v1."
+    "EmptyH\000B\010\n\006action\"Q\n\020EphemerisChanges\022/\n"
+    "\007entries\030\001 \003(\0132\036.proto.astra.v1.Ephemeri"
+    "sDelta\022\014\n\004head\030\002 \001(\004\"\205\001\n\006Repair\022&\n\006domai"
+    "n\030\001 \001(\0162\026.proto.astra.v1.Domain\022$\n\005scope"
+    "\030\002 \001(\0132\025.proto.astra.v1.Scope\022\013\n\003key\030\003 \001"
+    "(\014\022\017\n\007trigger\030\004 \001(\004\022\017\n\007version\030\005 \001(\004\"\341\001\n"
+    "\010Repaired\022\'\n\007request\030\001 \001(\0132\026.proto.astra"
+    ".v1.Repair\022\020\n\010position\030\002 \001(\004\0220\n\007catalog\030"
+    "\003 \001(\0132\035.proto.astra.v1.CatalogRecordH\000\0224"
+    "\n\tephemeris\030\004 \001(\0132\037.proto.astra.v1.Ephem"
+    "erisRecordH\000\022(\n\007unknown\030\005 \001(\0132\025.proto.as"
+    "tra.v1.EmptyH\000B\010\n\006result*\321\003\n\021ProtocolErr"
+    "orCode\022#\n\037PROTOCOL_ERROR_CODE_UNSPECIFIE"
+    "D\020\000\022)\n%PROTOCOL_ERROR_CODE_PROTOCOL_MISM"
+    "ATCH\020\001\022(\n$PROTOCOL_ERROR_CODE_CLUSTER_MI"
+    "SMATCH\020\002\022%\n!PROTOCOL_ERROR_CODE_INVALID_"
+    "HELLO\020\003\022\'\n#PROTOCOL_ERROR_CODE_SELF_CONN"
+    "ECTION\020\004\022&\n\"PROTOCOL_ERROR_CODE_RESOURCE"
+    "_LIMIT\020\005\022*\n&PROTOCOL_ERROR_CODE_UNEXPECT"
+    "ED_MESSAGE\020\006\022)\n%PROTOCOL_ERROR_CODE_HAND"
+    "SHAKE_TIMEOUT\020\007\022$\n PROTOCOL_ERROR_CODE_U"
+    "NAUTHORIZED\020\010\022 \n\034PROTOCOL_ERROR_CODE_CON"
+    "FLICT\020\t\022+\n\'PROTOCOL_ERROR_CODE_STORAGE_U"
+    "NAVAILABLE\020\n*J\n\006Domain\022\026\n\022DOMAIN_UNSPECI"
+    "FIED\020\000\022\022\n\016DOMAIN_CATALOG\020\001\022\024\n\020DOMAIN_EPH"
+    "EMERIS\020\0022`\n\rStarTransport\022O\n\013OpenSession"
+    "\022\035.proto.astra.v1.SessionPacket\032\035.proto."
+    "astra.v1.SessionPacket(\0010\001B:Z8github.com"
+    "/eosforge/astra/internal/generated/astra"
+    ";astrab\006proto3"
 };
 static ::absl::once_flag descriptor_table_astra_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_astra_2eproto = {
     false,
     false,
-    3704,
+    3734,
     descriptor_table_protodef_astra_2eproto,
     "astra.proto",
     &descriptor_table_astra_2eproto_once,
@@ -8712,7 +8731,7 @@ PROTOBUF_NOINLINE void EphemerisRecord::Clear() {
       this_._impl_.data_.ClearNonDefaultToEmpty();
     }
   }
-  if (BatchCheckHasBit(cached_has_bits, 0x0000003cU)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007cU)) {
     ::memset(&this_._impl_.deadline_, 0,
              static_cast<::size_t>(
                  reinterpret_cast<char*>(&this_._impl_.ttl_ms_) -
@@ -8786,11 +8805,20 @@ PROTOBUF_NOINLINE void EphemerisRecord::Clear() {
   }
 
   // uint32 ttl_ms = 6;
-  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+  if (CheckHasBit(cached_has_bits, 0x00000040U)) {
     if (this_._internal_ttl_ms() != 0) {
       target = stream->EnsureSpace(target);
       target = ::_pbi::WireFormatLite::WriteUInt32ToArray(
           6, this_._internal_ttl_ms(), target);
+    }
+  }
+
+  // uint64 generation = 7;
+  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+    if (this_._internal_generation() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          7, this_._internal_generation(), target);
     }
   }
 
@@ -8817,7 +8845,7 @@ PROTOBUF_NOINLINE void EphemerisRecord::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
     // bytes attr = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_attr().empty()) {
@@ -8853,8 +8881,15 @@ PROTOBUF_NOINLINE void EphemerisRecord::Clear() {
             this_._internal_renewal());
       }
     }
-    // uint32 ttl_ms = 6;
+    // uint64 generation = 7;
     if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (this_._internal_generation() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_generation());
+      }
+    }
+    // uint32 ttl_ms = 6;
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
       if (this_._internal_ttl_ms() != 0) {
         total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(
             this_._internal_ttl_ms());
@@ -8878,7 +8913,7 @@ void EphemerisRecord::MergeImpl(::google::protobuf::MessageLite& to_msg,
   (void)cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x0000003fU)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!from._internal_attr().empty()) {
         _this->_internal_set_attr(from._internal_attr());
@@ -8913,6 +8948,11 @@ void EphemerisRecord::MergeImpl(::google::protobuf::MessageLite& to_msg,
       }
     }
     if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (from._internal_generation() != 0) {
+        _this->_impl_.generation_ = from._impl_.generation_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
       if (from._internal_ttl_ms() != 0) {
         _this->_impl_.ttl_ms_ = from._impl_.ttl_ms_;
       }
@@ -9549,7 +9589,13 @@ EphemerisData::EphemerisData(
   _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
       from._internal_metadata_);
   new (&_impl_) Impl_(internal_visibility(), arena, from._impl_, from);
-  _impl_.order_ = from._impl_.order_;
+  ::memcpy(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, order_),
+           reinterpret_cast<const char*>(&from._impl_) +
+               offsetof(Impl_, order_),
+           offsetof(Impl_, deadline_) -
+               offsetof(Impl_, order_) +
+               sizeof(Impl_::deadline_));
 
   // @@protoc_insertion_point(copy_constructor:proto.astra.v1.EphemerisData)
 }
@@ -9560,7 +9606,12 @@ PROTOBUF_NDEBUG_INLINE EphemerisData::Impl_::Impl_(
 
 inline void EphemerisData::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
   new (&_impl_) Impl_(internal_visibility(), arena);
-  _impl_.order_ = {};
+  ::memset(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, order_),
+           0,
+           offsetof(Impl_, deadline_) -
+               offsetof(Impl_, order_) +
+               sizeof(Impl_::deadline_));
 }
 EphemerisData::~EphemerisData() {
   // @@protoc_insertion_point(destructor:proto.astra.v1.EphemerisData)
@@ -9613,7 +9664,13 @@ PROTOBUF_NOINLINE void EphemerisData::Clear() {
   if (CheckHasBit(cached_has_bits, 0x00000001U)) {
     this_._impl_.data_.ClearNonDefaultToEmpty();
   }
-  this_._impl_.order_ = ::uint64_t{0u};
+  if (BatchCheckHasBit(cached_has_bits, 0x00000006U)) {
+    ::memset(&this_._impl_.order_, 0,
+             static_cast<::size_t>(
+                 reinterpret_cast<char*>(&this_._impl_.deadline_) -
+                 reinterpret_cast<char*>(&this_._impl_.order_)) +
+                 sizeof(_impl_.deadline_));
+  }
   _impl_._has_bits_.Clear();
   _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
 }
@@ -9654,6 +9711,15 @@ PROTOBUF_NOINLINE void EphemerisData::Clear() {
     }
   }
 
+  // uint64 deadline = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (this_._internal_deadline() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          3, this_._internal_deadline(), target);
+    }
+  }
+
   if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
     target =
         ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
@@ -9677,7 +9743,7 @@ PROTOBUF_NOINLINE void EphemerisData::Clear() {
 
   ::_pbi::Prefetch5LinesFrom7Lines(&this_);
   cached_has_bits = this_._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
     // bytes data = 1;
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!this_._internal_data().empty()) {
@@ -9690,6 +9756,13 @@ PROTOBUF_NOINLINE void EphemerisData::Clear() {
       if (this_._internal_order() != 0) {
         total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
             this_._internal_order());
+      }
+    }
+    // uint64 deadline = 3;
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (this_._internal_deadline() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_deadline());
       }
     }
   }
@@ -9710,7 +9783,7 @@ void EphemerisData::MergeImpl(::google::protobuf::MessageLite& to_msg,
   (void)cached_has_bits;
 
   cached_has_bits = from._impl_._has_bits_[0];
-  if (BatchCheckHasBit(cached_has_bits, 0x00000003U)) {
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
     if (CheckHasBit(cached_has_bits, 0x00000001U)) {
       if (!from._internal_data().empty()) {
         _this->_internal_set_data(from._internal_data());
@@ -9723,6 +9796,11 @@ void EphemerisData::MergeImpl(::google::protobuf::MessageLite& to_msg,
     if (CheckHasBit(cached_has_bits, 0x00000002U)) {
       if (from._internal_order() != 0) {
         _this->_impl_.order_ = from._impl_.order_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (from._internal_deadline() != 0) {
+        _this->_impl_.deadline_ = from._impl_.deadline_;
       }
     }
   }
@@ -9746,7 +9824,12 @@ void EphemerisData::InternalSwap(EphemerisData* PROTOBUF_RESTRICT PROTOBUF_NONNU
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
   ::_pbi::ArenaStringPtr::InternalSwap(&_impl_.data_, &other->_impl_.data_, arena);
-  swap(_impl_.order_, other->_impl_.order_);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.deadline_)
+      + sizeof(EphemerisData::_impl_.deadline_)
+      - PROTOBUF_FIELD_OFFSET(EphemerisData, _impl_.order_)>(
+          reinterpret_cast<char*>(&_impl_.order_),
+          reinterpret_cast<char*>(&other->_impl_.order_));
 }
 
 ::google::protobuf::Metadata EphemerisData::GetMetadata() const {

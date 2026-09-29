@@ -15,7 +15,8 @@ namespace astra {
 template <typename Edition>
 class Broadcast {
 public:
-    // gRPC 只读借用 message; after 保存编码此页后的私有游标, 复制只共享不可变批次.
+    // gRPC 只读借用 message; 共享的是消息对象, 不保证不同流复用最终序列化字节.
+    // after 保存构造此页后的私有游标, 复制只共享不可变批次.
     struct Page {
         typename Edition::Reply message; // 成功构造后不修改, 保持到所有对应 OnWriteDone.
         Edition after;                   // 接收该页的每条流独立采纳此位置, 不采纳别人的网络完成进度.
@@ -55,6 +56,11 @@ public:
         return misses_;
     }
 
+    // 未命中中真正的释放后重建次数; 首次构造或构造失败不计, 读取沿用 hits 的线程约束.
+    std::uint64_t rebuilds() const noexcept {
+        return rebuilds_;
+    }
+
     // 每个页号独立缓存, 快慢订阅交错不覆盖彼此; 仅保存弱引用, 无流使用时立即释放正文.
     std::shared_ptr<const Page> next(Edition& cursor, std::size_t offset, std::string_view instance) {
 
@@ -73,13 +79,21 @@ public:
             return cached;
         }
 
-        auto message = cursor.next(instance); // 异常只终止当前流, 其他流的游标和已发布消息不变.
+        // 空弱槽也可能来自首次构造失败. 用所有权区别空槽与已释放页面, 不增加逐页标志或堆分配.
+        const std::weak_ptr<const Page> empty;                                                            // 无控制块的比较基准, expired 本身不能区分上述两种情况.
+        const bool rebuilding = pages_[offset].owner_before(empty) || empty.owner_before(pages_[offset]); // 过期弱引用仍保留旧控制块的身份.
+        auto message = cursor.next(instance);                                                             // 异常只终止当前流, 其他流的游标和已发布消息不变.
         const auto bytes = message.ByteSizeLong();
-        ASTRA_PROFILE_COUNT("star.broadcast.miss", 1);
-        ASTRA_PROFILE_COUNT("star.broadcast.encoded_bytes", bytes);
         auto page = std::make_shared<const Page>(std::move(message), cursor, bytes);
         pages_[offset] = page;
         ++misses_;
+        ASTRA_PROFILE_COUNT("star.broadcast.miss", 1);
+        ASTRA_PROFILE_COUNT("star.broadcast.encoded_bytes", bytes);
+        if (rebuilding) {
+            ++rebuilds_;
+            ASTRA_PROFILE_COUNT("star.broadcast.rebuild", 1);
+            ASTRA_PROFILE_COUNT("star.broadcast.rebuilt_bytes", bytes); // 重建消息的线长, 不等于新增堆内存或网络重复发送量.
+        }
         return page;
     }
 
@@ -90,5 +104,6 @@ private:
     std::vector<std::weak_ptr<const Page>> pages_; // 页号索引, 元数据随冻结批次页数增长并随批次释放; 不强持有已完成页正文.
     std::uint64_t hits_{};                         // 弱缓存命中次数, 初始零.
     std::uint64_t misses_{};                       // 首次构造与释放后重建次数, 初始零.
+    std::uint64_t rebuilds_{};                     // 已成功发布后释放, 再次成功构造的次数, 初始零.
 };
 } // namespace astra

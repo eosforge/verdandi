@@ -37,7 +37,7 @@ struct RawConfigurationCase {
 
 #[test]
 fn shared_configuration_corpus_has_identical_results() {
-    let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../testkit/conformance/v1/configuration.json"));
+    let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../testkit/conformance/v1/configuration.json"));
     let corpus: ConfigurationCorpus = serde_json::from_str(source).unwrap_or_else(|error| panic!("invalid conformance corpus: {error}"));
     for case in corpus.cases {
         let document = serde_json::to_vec(&case.document).unwrap_or_else(|error| panic!("{} encoding failed: {error}", case.name));
@@ -78,7 +78,7 @@ fn decode_hex(source: &str) -> Option<Vec<u8>> {
 
 #[test]
 fn loads_shared_example() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("configuration.example.json");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("configuration.example.json");
     let config = Config::load_json(path).unwrap_or_else(|error| panic!("{error}"));
     let redis = config.redis_config().unwrap_or_else(|error| panic!("{error}"));
     assert!(redis.endpoint.starts_with("redis://127.0.0.1:6379"));

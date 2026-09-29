@@ -13,8 +13,16 @@ import (
 // 已保留的同版本同内容请求返回原版本, 历史已丢失则明确返回 ErrUncertain.
 // scope/change 为目标范围与变更; 返回确认版本, 失败返回对应存储错误.
 func (store *Store) Commit(ctx context.Context, scope Scope, change Change) (Version, error) {
-	// 参数形状校验: 范围合法、键有界、版本非零、载荷有界、删除不带载荷.
-	if !scope.Valid() || !text(change.Key, 1024) || change.Version == 0 || len(change.Value) > 1<<20 || change.Erase && len(change.Value) != 0 {
+	if !validChange(change) {
+		return 0, ErrInput
+	}
+	return store.commit(ctx, scope, change)
+}
+
+// commit 的事务覆盖完整批次、唯一版本和历史, 失败不发布部分键.
+func (store *Store) commit(ctx context.Context, scope Scope, change Change) (Version, error) {
+	entries, err := change.Entries()
+	if !scope.Valid() || change.Version == 0 || err != nil {
 		return 0, ErrInput
 	}
 	// 读锁防关闭中提交, 关闭后直接拒绝.
@@ -42,7 +50,7 @@ func (store *Store) Commit(ctx context.Context, scope Scope, change Change) (Ver
 	event := &Event{Scope: scope, Change: change}
 	event.Value = bytes.Clone(change.Value)
 	applied := false
-	err := store.transaction(ctx, func(tx *gorm.DB) error {
+	err = store.transaction(ctx, func(tx *gorm.DB) error {
 		// 读取范围当前状态, 不存在即零版本新范围.
 		state, exists, err := current(tx, scope)
 		if err != nil {
@@ -64,21 +72,22 @@ func (store *Store) Commit(ctx context.Context, scope Scope, change Change) (Ver
 		if !exists && meta.Scopes >= store.limits.Scopes {
 			return ErrCapacity
 		}
-		// 只取旧载荷长度, 高频覆盖无需从 SQLite 读回并复制旧 Buffer.
-		var old struct{ Size int64 }
-		row := tx.Table("records").Select("length(value) AS size").Where("sector=? AND spectrum=? AND key=?", scope.Sector, scope.Spectrum, change.Key).Scan(&old)
-		if row.Error != nil {
-			return ErrUnavailable
-		}
-		// 按覆盖/新增/删除调整计数, 计数为负即库损坏.
+		// 全批先计算最终计费, 缩减与增长可以抵消, 不按请求顺序误拒绝.
 		previous := state.Bytes
-		if row.RowsAffected != 0 {
-			state.Records--
-			state.Bytes -= int64(len(change.Key)) + old.Size
-		}
-		if !change.Erase {
-			state.Records++
-			state.Bytes += int64(len(change.Key) + len(change.Value))
+		for _, entry := range entries {
+			var old struct{ Size int64 }
+			row := tx.Table("records").Select("length(value) AS size").Where("sector=? AND spectrum=? AND key=?", scope.Sector, scope.Spectrum, entry.Key).Scan(&old)
+			if row.Error != nil {
+				return ErrUnavailable
+			}
+			if row.RowsAffected != 0 {
+				state.Records--
+				state.Bytes -= int64(len(entry.Key)) + old.Size
+			}
+			if !entry.Erase {
+				state.Records++
+				state.Bytes += int64(len(entry.Key) + len(entry.Value))
+			}
 		}
 		if state.Records < 0 || state.Bytes < 0 {
 			return ErrCorrupt
@@ -94,19 +103,24 @@ func (store *Store) Commit(ctx context.Context, scope Scope, change Change) (Ver
 			}
 			meta.Scopes++
 		}
-		// 显式非 nil 空 BLOB 保留零字节 Set, 不借 ORM 的零值省略或 SQL NULL 表达 Delete.
+		// 任一 SQL 失败均由当前事务回滚, 不通知已经写入的前缀.
+		for _, entry := range entries {
+			value := entry.Value
+			if value == nil {
+				value = []byte{}
+			}
+			if entry.Erase {
+				err = tx.Exec("DELETE FROM records WHERE sector=? AND spectrum=? AND key=?", scope.Sector, scope.Spectrum, entry.Key).Error
+			} else {
+				err = tx.Exec("INSERT INTO records(sector,spectrum,key,value) VALUES(?,?,?,?) ON CONFLICT(sector,spectrum,key) DO UPDATE SET value=excluded.value", scope.Sector, scope.Spectrum, entry.Key, value).Error
+			}
+			if err != nil {
+				return ErrUnavailable
+			}
+		}
 		value := change.Value
 		if value == nil {
 			value = []byte{}
-		}
-		// 写记录行: 删除或 upsert.
-		if change.Erase {
-			err = tx.Exec("DELETE FROM records WHERE sector=? AND spectrum=? AND key=?", scope.Sector, scope.Spectrum, change.Key).Error
-		} else {
-			err = tx.Exec("INSERT INTO records(sector,spectrum,key,value) VALUES(?,?,?,?) ON CONFLICT(sector,spectrum,key) DO UPDATE SET value=excluded.value", scope.Sector, scope.Spectrum, change.Key, value).Error
-		}
-		if err != nil {
-			return ErrUnavailable
 		}
 		// 同事务保留历史并裁剪前缀.
 		if err = store.retain(tx, scope, change, value, &state); err != nil {

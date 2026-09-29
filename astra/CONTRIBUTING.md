@@ -1,13 +1,13 @@
 # 维护 Astra 核心服务
 
-开始 C++ 工作前先阅读 [C++ 编码规范](../cpp-coding.md), 命名、作用域、性能取舍、注释和排版以该文为准.
+开始 C++ 工作前先阅读 [C++ 编码规范](cpp-coding.md), 命名、作用域、性能取舍、注释和排版以该文为准.
 
-从仓库根目录操作. 项目约定见 [coding.md](../coding.md), 协议与范围见
-[当前架构](../docs/architecture.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
+从仓库根目录操作. 项目约定见 [coding.md](coding.md), 协议与范围见
+[当前架构](docs/architecture.md). 此目录生产目标为 Linux x64 / GCC 16.2.0,
 Pulsar 使用 C++ 提供独立登记与对时, Polaris/Astrolabe 使用 Go. 各服务数据库不互换, 已删除的 Go Supervisor 只从 Git 历史查阅.
-旧 Rust Star 已废弃; 当前准入见[协议契约](../proto/README.md#admission),
+旧 Rust Star 已废弃; 当前准入见[协议契约](proto/README.md#admission),
 当前实现与部署边界见 [Pulsar](pulsar/README.md).
-时间模型与单一期限规则见 [Store](common/README.md), 最新执行结果见 [验证记录](../testkit/validation.md).
+时间模型与单一期限规则见 [Store](common/README.md), 最新执行结果见 [验证记录](docs/validation.md).
 物理时间质量由宿主对时服务提供, 程序只读校验, 不自动安装/配置服务.
 
 ## 代码归属
@@ -36,7 +36,7 @@ Pulsar 使用 C++ 提供独立登记与对时, Polaris/Astrolabe 使用 Go. 各�
 | `star/src`, `planet/src` | 两个具体角色策略和各自入口 | 只维护内存索引, 不直接联网或在锁中取消 RPC |
 | `common/tests` | 单元与真实 RPC 夹具 | `check.hpp` 的断言在 Release 也生效, `fixture.hpp` 只读取公开测试身份 |
 | `bench` | 隔离的推流对照与存储微基准 | 不链接进服务, 不用实验消息扩充生产协议 |
-| `build.py`, `test_*.py` | 离线构建及分层验证 | shell 仅选择已有 Python, 共享进程清理由 `testkit` 持有 |
+| `tools/build.py`, `tests/test_*.py` | 离线构建及分层验证 | shell 仅选择已有 Python, 共享进程清理由 `tests` 持有 |
 
 保持角色与服务的目录边界. Moon/Planet 保持冻结, 不因共用库编译恢复其业务推进.
 通用代码只因两个真实使用者共享行为而抽取, 不为未来数据层预建类层次.
@@ -68,7 +68,7 @@ flowchart TD
 
 ## 注释与排版
 
-仅引用根目录 [C++ 编码规范](../cpp-coding.md), 不在本指南复制命名、枚举、变量和代码块规则. 文件职责、线程交接与生命周期的具体约束见下文及所属源码.
+仅引用根目录 [C++ 编码规范](cpp-coding.md), 不在本指南复制命名、枚举、变量和代码块规则. 文件职责、线程交接与生命周期的具体约束见下文及所属源码.
 
 ## 生命周期审查
 
@@ -96,15 +96,15 @@ flowchart TD
 
 ## 修改后的验证
 
-先完成整理与格式化, 再按实际改动选择验证. 下列构建/测试命令须先取得本轮明确授权,
-遵循根目录 [AGENTS.md](../AGENTS.md). 不以删除注释、错误分支或测试来减少行数.
+先完成整理与格式化, 再按实际改动选择验证. 格式化可直接执行; 下列构建/测试命令须先取得本轮明确授权,
+遵循根目录 [AGENTS.md](AGENTS.md). 不以删除注释、错误分支或测试来减少行数.
 
 ```bash
 # 已安装工具, 不下载依赖.
-clang-format -i astra/common/src/runtime.cpp
-python3 -m black --config testkit/pyproject.toml astra
-bash astra/build.sh test --core-only
-bash astra/build.sh regression --profile debug
+clang-format -i common/src/runtime.cpp
+python3 -B -m black --config pyproject.toml tools/build.py
+bash build.sh test --core-only
+bash build.sh regression --profile debug
 ```
 
 格式化时选择实际修改的文件. 格式化器暂不理解的反射语法
@@ -113,14 +113,14 @@ bash astra/build.sh regression --profile debug
 | 改动 | 必要的针对性检查 |
 | --- | --- |
 | 仅注释与格式 | clang-format 检查, 对照修改前工作副本核对非注释 token 与枚举顺序, 检查配置/枚举注释覆盖 |
-| 构建入口或环境选择 | `python3 -B astra/test_build.py`, 相关配置实际执行 |
+| 构建入口或环境选择 | `python3 -B tests/test_build.py`, 相关配置实际执行 |
 | 配置描述、成员和策略 | `test --core-only`, 涉及联网语义再执行进程回归 |
 | 生命周期、并发、TLS/RPC | Debug/Release 回归, ASan/UBSan, 完整 TSan; 退出变化增加短故障循环 |
 | 生产 `.proto` 或生成工具约束 | `generate`, `check-generated`, 当前 Go/C++ 互通回归 |
 | `bench` 调度或采样 | 历史实验当前缺少可用比较接收器, 恢复前不以它作为生产性能门槛 |
 | 准备或发布二进制 | 核对锁定来源、许可证、实际动态运行库和安装树, 在目标环境运行 |
 
-`test` 与 `regression` 先构建 C++/Go 再执行 Go 和 CTest. 旧 `soak`/`scale` 当前明确拒绝; 新链路使用 [三 Star 长测](../testkit/soak.md) 的独立有界入口. 入口重新启用
+`test` 与 `regression` 先构建 C++/Go 再执行 Go 和 CTest. 旧 `soak`/`scale` 当前明确拒绝; 新链路使用 [三 Star 长测](docs/soak.md) 的独立有界入口. 入口重新启用
 `BUILD_TESTING` 并拒绝零测试成功. 直接用 CMake 时仍可设置 `BUILD_TESTING=OFF` 构建纯服务,
 但这种产物不能作为通过回归的证据. 不兼容的 core-only、分配测量和 sanitizer 组合直接失败.
 

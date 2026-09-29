@@ -1,5 +1,6 @@
 #pragma once
 #include <astra/clock.hpp>
+#include <astra/scope.hpp>
 #include <cstdint>
 #include <expected>
 #include <memory>
@@ -55,6 +56,7 @@ public:
         std::uint64_t renewal{};
         // Create 固定的毫秒 TTL, 范围 1000..600000, 后续 Renew 不接受修改.
         std::uint32_t ttl{};
+        std::uint64_t generation{}; // 注册代次独立于 Data order, 零只用于旧式随机注册.
     };
 
     // 原生候选与可见变化分开, 新 order 的同值更新仍是来源事实, 不改变 Observer 内容游标.
@@ -69,11 +71,13 @@ public:
 
     // 验证 16 字节原始 UUIDv4 二进制的版本/变体位, 无格式化/分配; 不接受文本别名, 不将非法 UUID 当作全范围.
     static bool valid(std::string_view uuid) noexcept;
-    // 仅 Create 调用可靠系统随机源并固定版本/变体位一次; 失败抛 system_error, 不降级伪随机.
-    static std::string uuid();
+    static bool follows(const Record& previous, const Record& incoming) noexcept;                                       // 同一来源的完整事实必须保持固定属性与独立单调序列.
+    static std::string capability();                                                                                    // 系统随机 32 字节恢复能力, 仅首次回复与 SDK 持有, 不复制或下行.
+    static std::string identity(const Scope& scope, const Value& attr, std::uint32_t ttl, std::string_view capability); // 能力绑定固定范围/属性/TTL, 不能认领其他逻辑 ID.
+    static std::string uuid();                                                                                          // 旧式注册使用可靠随机源固定版本/变体位, 失败不降级伪随机.
     // 验证并准备新的完整注册. attr/data 移交共享引用, reading 必须在最终提交保护内读取.
     static std::expected<Record, Error> create(Value attr, Value data, std::uint32_t ttl, const Clock::Reading& reading) noexcept;
-    // 新 order 替换整个 Data, 不延期、不修改 Attr. 同 order 同内容确认, 低 order 或同号异值拒绝.
+    // 新 order 替换整个 Data 并按固定 TTL 延期, 不修改 Attr. 同 order 同内容仅确认, 低 order 或同号异值拒绝.
     static std::expected<Change, Error> update(const Record& current, Value data, std::uint64_t order, const Clock::Reading& reading) noexcept;
     // 新 order 才按固定 TTL 延期, 同 order 保留旧截止; 两个顺序相互独立, 过期判断优先于幂等确认.
     static std::expected<Change, Error> renew(const Record& current, std::uint64_t order, const Clock::Reading& reading) noexcept;

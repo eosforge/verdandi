@@ -74,6 +74,16 @@ void lifecycle() {
     std::size_t count{}; // 脱离网络与投影对象后仍能完整遍历.
     held.each([&](std::string_view uuid, const Observer::Record& value) { CHECK(Selection::valid(uuid) && value.attr && value.data); ++count; });
     CHECK(count == 2);
+
+    // 回调替换原 View 不能释放当前 UUID/Attr/Data, 也不能跳过后续记录.
+    count = 0;
+    held.each([&](std::string_view uuid, const Observer::Record& value) {
+        held = {};
+        CHECK((uuid == first && value.data->size() == 3) || (uuid == second && value.data->empty()));
+        CHECK(value.attr);
+        ++count;
+    });
+    CHECK(count == 2 && !held.version());
 }
 
 // 缺 Attr 不发布半记录, 本对象最多一次无版本新快照, 成功后再次缺失也不得无限恢复.
@@ -177,10 +187,79 @@ void malformed() {
         CHECK(!empty.accept(missing)); // reset 禁止 data; 首批 apply 没有完整基线.
     }
 }
+
+// 未完成网络批次不能覆盖其他 Key 新产生的估计, 旧代次/旧估计迟到写入明确拒绝.
+void estimates() {
+
+    std::size_t charged{}; // 验证失败回滚及析构释放, 不把申请成功误认为发布成功.
+    {
+        Selection selection({"service", "main"}, {}, 65536, 10, [&](std::size_t bytes) noexcept { charged = bytes; return true; });
+        selection.begin("star-a");
+        auto initial = page(proto::comet::v1::MODE_RESET);
+        record(initial, first, "attr", "one");
+        record(initial, second, "attr", "two");
+        CHECK(selection.accept(initial));
+        const auto pool = selection.pool({});
+        const auto one = pool.find(first)->record().data;
+        const auto two = pool.find(second)->record().data;
+        const auto local = std::make_shared<const std::vector<std::uint8_t>>(3, 7);
+        CHECK(selection.estimate(first, one, one, local));
+        CHECK(selection.estimate(first, one, one, local).error().code == comet::Error::Code::conflict);
+        auto head = page(proto::comet::v1::MODE_APPLY, false);
+        data(head, first, "new");
+        CHECK(selection.accept(head));
+        CHECK(selection.estimate(second, two, two, local)); // 在途期间另一 Key 的独立本地更新.
+        CHECK(selection.accept(page(proto::comet::v1::MODE_APPLY, true, 2)));
+        CHECK(selection.pool({}).find(second)->record().data == local);
+        CHECK(selection.pool({}).find(first)->record().data != local);
+        CHECK(selection.estimate(first, one, local, local).error().code == comet::Error::Code::obsolete);
+        auto same = page(proto::comet::v1::MODE_APPLY, true, 3);
+        data(same, second, "two"); // 字节相同的新权威写入仍结束旧估计代次.
+        CHECK(selection.accept(same));
+        CHECK(selection.estimate(second, two, local, local).error().code == comet::Error::Code::obsolete);
+        CHECK(*selection.pool({}).find(second)->record().data == *two);
+        CHECK(pool.find(first)->record().data == one && charged > 0); // 旧池的所有权与内容不被后台修改.
+    }
+    CHECK(charged == 0);
+}
+
+// 本地候选申请共享预算失败时, 原估计、权威数据及现有计费都不改变.
+void capacity() {
+
+    bool reject{}; // 只拒绝新增预算, 所有归还仍然允许.
+    std::size_t charged{};
+    {
+        Selection selection({"service", "main"}, {}, 65536, 10, [&](std::size_t bytes) noexcept {
+            if (reject && bytes > charged) {
+                return false;
+            }
+            charged = bytes;
+            return true;
+        });
+        selection.begin("star-a");
+        auto initial = page(proto::comet::v1::MODE_RESET);
+        record(initial, first, "attr", "one");
+        CHECK(selection.accept(initial));
+        const auto authority = selection.pool({}).find(first)->record().data;
+        const auto before = charged;
+        const auto local = std::make_shared<const std::vector<std::uint8_t>>(32, 7);
+        reject = true;
+        const auto result = selection.estimate(first, authority, authority, local);
+        CHECK(!result && result.error().code == comet::Error::Code::limit && charged == before);
+        CHECK(selection.pool({}).find(first)->record().data == authority);
+        reject = false;
+        CHECK(selection.estimate(first, authority, authority, local));
+        CHECK(selection.pool({}).find(first)->record().data == local);
+    }
+    CHECK(charged == 0);
+}
+
 } // namespace
 
 int main() {
     try {
+        capacity();
+        estimates();
         lifecycle();
         repair();
         identity();

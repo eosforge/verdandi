@@ -62,6 +62,15 @@ void lifecycle() {
     std::size_t records{}; // 回调在 SDK 对象全部销毁后仍可遍历内容.
     held.each([&](std::string_view key, const comet::Value& value) { CHECK(!key.empty() && value); ++records; });
     CHECK(records == 2);
+
+    // 遍历拥有旧根到回调全部结束; 回调重置原 View 后, 当前 Key/Value 和后续项仍然有效.
+    records = 0;
+    held.each([&](std::string_view key, const comet::Value& value) {
+        held = {};
+        CHECK((key == "first" && std::string(value->begin(), value->end()) == "before") || (key == "empty" && value->empty()));
+        ++records;
+    });
+    CHECK(records == 2 && !held.version());
 }
 
 // 跨页重复、非法字段及 mode/instance 变化必须废弃整批, 完整版本不受失败污染.
@@ -104,7 +113,7 @@ void malformed() {
             break;
         }
         const auto rejected = projection.accept(bad);
-        CHECK(!rejected && rejected.error().code == comet::Error::Code::protocol);
+        CHECK(!rejected && rejected.error().code == (scenario == 6 ? comet::Error::Code::version : comet::Error::Code::protocol));
         CHECK(projection.view(comet::Reader::State::stale).version() == 1 && projection.view(comet::Reader::State::stale).size() == 0);
         CHECK(!projection.accept(empty)); // 错误后不能在同一流继续拼接新页面.
     }
@@ -119,7 +128,9 @@ void versions() {
     projection.begin("first");
     CHECK(projection.accept(page(proto::comet::v1::MODE_RESET, true, 5, "first")));
     projection.begin("second");
-    CHECK(!projection.accept(page(proto::comet::v1::MODE_RESET, true, 4, "second")));
+    const auto behind = projection.accept(page(proto::comet::v1::MODE_RESET, true, 4, "second"));
+    CHECK(!behind && behind.error().code == comet::Error::Code::version && projection.repair(behind.error().code));
+    CHECK(projection.view(comet::Reader::State::stale).version() == 5 && projection.resume());
     projection.begin("second");
     CHECK(projection.accept(page(proto::comet::v1::MODE_RESET, true, 5, "second")));
     projection.begin("second");

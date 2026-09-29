@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/admission"
+	"github.com/eosforge/astra/internal/admission"
 )
 
 // Targets 只读部署映射: Star 内部数值端点 -> 独立 /metrics URL, 不单独限制节点数量.

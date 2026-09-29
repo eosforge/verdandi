@@ -49,6 +49,14 @@ extern const ::google::protobuf::internal::DescriptorTable descriptor_table_pola
 namespace proto {
 namespace polaris {
 namespace v1 {
+class BatchRequest;
+struct BatchRequestGlobalsTypeInternal;
+#ifndef PROTOBUF_MESSAGE_GLOBALS
+extern BatchRequestGlobalsTypeInternal BatchRequest_globals_;
+extern const ::google::protobuf::internal::ClassDataFull BatchRequest_class_data_;
+#else
+extern const BatchRequestGlobalsTypeInternal BatchRequest_globals_;
+#endif  // PROTOBUF_MESSAGE_GLOBALS
 class CommitRequest;
 struct CommitRequestGlobalsTypeInternal;
 #ifndef PROTOBUF_MESSAGE_GLOBALS
@@ -180,7 +188,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Position final : public ::google::p
   [[nodiscard]] static const Position& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<Position>(&Position_globals_);
   }
-  static constexpr int kIndexInFileMessages = 1;
+  static constexpr int kIndexInFileMessages = 2;
   friend void swap(Position& a, Position& b) { a.Swap(&b); }
   inline void Swap(Position* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -398,7 +406,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Snapshot final : public ::google::p
   [[nodiscard]] static const Snapshot& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<Snapshot>(&Snapshot_globals_);
   }
-  static constexpr int kIndexInFileMessages = 3;
+  static constexpr int kIndexInFileMessages = 4;
   friend void swap(Snapshot& a, Snapshot& b) { a.Swap(&b); }
   inline void Swap(Snapshot* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -651,7 +659,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Patch final : public ::google::prot
   [[nodiscard]] static const Patch& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<Patch>(&Patch_globals_);
   }
-  static constexpr int kIndexInFileMessages = 4;
+  static constexpr int kIndexInFileMessages = 5;
   friend void swap(Patch& a, Patch& b) { a.Swap(&b); }
   inline void Swap(Patch* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -741,9 +749,30 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Patch final : public ::google::prot
 
   // accessors -------------------------------------------------------
   enum : int {
+    kChangesFieldNumber = 3,
     kChangeFieldNumber = 2,
     kVersionFieldNumber = 1,
   };
+  // repeated .proto.comet.v1.AlmanacChange changes = 3;
+  [[nodiscard]] int changes_size() const;
+  private:
+  int _internal_changes_size() const;
+
+  public:
+  void clear_changes() ;
+  [[nodiscard]] const ::proto::comet::v1::AlmanacChange& changes(int index) const;
+  [[nodiscard]] ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL mutable_changes(int index);
+  ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL add_changes();
+  [[nodiscard]] const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>&
+  changes() const;
+  [[nodiscard]] ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+  mutable_changes();
+
+  private:
+  const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>& _internal_changes() const;
+  ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL _internal_mutable_changes();
+
+  public:
   // .proto.comet.v1.AlmanacChange change = 2;
   [[nodiscard]] bool has_change() const;
   void clear_change() ;
@@ -773,8 +802,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Patch final : public ::google::prot
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<1, 2,
-                          1, 0,
+      ::google::protobuf::internal::TcParseTable<2, 3,
+                          2, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -802,6 +831,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Patch final : public ::google::prot
         const Patch& from_msg);
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::RepeatedPtrField< ::proto::comet::v1::AlmanacChange > changes_;
     ::proto::comet::v1::AlmanacChange* PROTOBUF_NULLABLE change_;
     ::uint64_t version_;
     PROTOBUF_TSAN_DECLARE_MEMBER
@@ -869,7 +899,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Inventory final : public ::google::
   [[nodiscard]] static const Inventory& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<Inventory>(&Inventory_globals_);
   }
-  static constexpr int kIndexInFileMessages = 2;
+  static constexpr int kIndexInFileMessages = 3;
   friend void swap(Inventory& a, Inventory& b) { a.Swap(&b); }
   inline void Swap(Inventory* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1182,10 +1212,31 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CommitRequest final : public ::goog
 
   // accessors -------------------------------------------------------
   enum : int {
+    kChangesFieldNumber = 4,
     kScopeFieldNumber = 1,
     kChangeFieldNumber = 3,
     kVersionFieldNumber = 2,
   };
+  // repeated .proto.comet.v1.AlmanacChange changes = 4;
+  [[nodiscard]] int changes_size() const;
+  private:
+  int _internal_changes_size() const;
+
+  public:
+  void clear_changes() ;
+  [[nodiscard]] const ::proto::comet::v1::AlmanacChange& changes(int index) const;
+  [[nodiscard]] ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL mutable_changes(int index);
+  ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL add_changes();
+  [[nodiscard]] const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>&
+  changes() const;
+  [[nodiscard]] ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+  mutable_changes();
+
+  private:
+  const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>& _internal_changes() const;
+  ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL _internal_mutable_changes();
+
+  public:
   // .proto.comet.v1.Scope scope = 1;
   [[nodiscard]] bool has_scope() const;
   void clear_scope() ;
@@ -1230,8 +1281,8 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CommitRequest final : public ::goog
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<2, 3,
-                          2, 0,
+      ::google::protobuf::internal::TcParseTable<2, 4,
+                          3, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
       const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
@@ -1259,9 +1310,262 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED CommitRequest final : public ::goog
         const CommitRequest& from_msg);
     ::google::protobuf::internal::HasBits<1> _has_bits_;
     ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::RepeatedPtrField< ::proto::comet::v1::AlmanacChange > changes_;
     ::proto::comet::v1::Scope* PROTOBUF_NULLABLE scope_;
     ::proto::comet::v1::AlmanacChange* PROTOBUF_NULLABLE change_;
     ::uint64_t version_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_polaris_2eproto;
+};
+// -------------------------------------------------------------------
+
+class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED BatchRequest final : public ::google::protobuf::Message
+/* @@protoc_insertion_point(class_definition:proto.polaris.v1.BatchRequest) */ {
+  using Super_ = ::google::protobuf::Message;
+
+ public:
+  inline BatchRequest() : BatchRequest(nullptr) {}
+  ~BatchRequest() PROTOBUF_FINAL;
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+  void operator delete(BatchRequest* PROTOBUF_NONNULL msg, ::std::destroying_delete_t) {
+    SharedDtor(*msg);
+    ::google::protobuf::internal::SizedDelete(msg, sizeof(BatchRequest));
+  }
+#endif
+
+  template <typename = void>
+  explicit constexpr BatchRequest(::google::protobuf::internal::ConstantInitialized,
+                           const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+                               class_data);
+
+  inline BatchRequest(const BatchRequest& from) : BatchRequest(nullptr, from) {}
+  inline BatchRequest(BatchRequest&& from) noexcept : BatchRequest(nullptr, ::std::move(from)) {}
+  inline BatchRequest& operator=(const BatchRequest& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline BatchRequest& operator=(BatchRequest&& from) noexcept {
+    if (this == &from) return *this;
+    if (::google::protobuf::internal::CanMoveWithInternalSwap(GetArena(), from.GetArena())) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  [[nodiscard]] inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  [[nodiscard]] inline ::google::protobuf::UnknownFieldSet* PROTOBUF_NONNULL
+  mutable_unknown_fields() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  [[nodiscard]] static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL descriptor() {
+    return GetDescriptor();
+  }
+  [[nodiscard]] static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL
+  GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  [[nodiscard]] static const ::google::protobuf::Reflection* PROTOBUF_NONNULL GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  [[nodiscard]] static const BatchRequest& default_instance() {
+    return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<BatchRequest>(&BatchRequest_globals_);
+  }
+  static constexpr int kIndexInFileMessages = 1;
+  friend void swap(BatchRequest& a, BatchRequest& b) { a.Swap(&b); }
+  inline void Swap(BatchRequest* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    if (::google::protobuf::internal::CanUseInternalSwap(GetArena(), other->GetArena())) {
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(BatchRequest* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  [[nodiscard]] BatchRequest* PROTOBUF_NONNULL
+  New(::google::protobuf::Arena* PROTOBUF_NULLABLE arena = nullptr) const {
+    return Super_::DefaultConstruct<BatchRequest>(arena);
+  }
+  using Super_::CopyFrom;
+  void CopyFrom(const BatchRequest& from);
+  using Super_::MergeFrom;
+  void MergeFrom(const BatchRequest& from) { BatchRequest::MergeImpl(*this, from); }
+
+  private:
+  static void MergeImpl(::google::protobuf::MessageLite& to_msg,
+                        const ::google::protobuf::MessageLite& from_msg);
+
+  public:
+  [[nodiscard]] bool IsInitialized() const {
+    return true;
+  }
+  ABSL_ATTRIBUTE_REINITIALIZES void Clear() PROTOBUF_FINAL;
+  #if defined(PROTOBUF_CUSTOM_VTABLE)
+  private:
+  [[nodiscard]] static ::size_t ByteSizeLong(const ::google::protobuf::MessageLite& msg);
+  [[nodiscard]] static ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      const ::google::protobuf::MessageLite& msg, ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream);
+
+  public:
+  [[nodiscard]] ::size_t ByteSizeLong() const { return ByteSizeLong(*this); }
+  [[nodiscard]] ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+    return _InternalSerialize(*this, target, stream);
+  }
+  #else   // PROTOBUF_CUSTOM_VTABLE
+  [[nodiscard]] ::size_t ByteSizeLong() const final;
+  [[nodiscard]] ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const final;
+  #endif  // PROTOBUF_CUSTOM_VTABLE
+  [[nodiscard]] int GetCachedSize() const {
+    return _impl_._cached_size_.Get();
+  }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static void SharedDtor(MessageLite& self);
+  void InternalSwap(BatchRequest* PROTOBUF_NONNULL other);
+ private:
+  static ::absl::string_view FullMessageName() { return "proto.polaris.v1.BatchRequest"; }
+
+  explicit BatchRequest(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  BatchRequest(::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const BatchRequest& from);
+  BatchRequest(
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, BatchRequest&& from) noexcept
+      : BatchRequest(arena) {
+    *this = ::std::move(from);
+  }
+  const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL GetClassData() const PROTOBUF_FINAL;
+  static void* PROTOBUF_NONNULL PlacementNew_(
+      const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static constexpr auto InternalNewImpl_();
+
+ public:
+  static constexpr auto InternalGenerateClassData_(
+      const MessageLite& prototype,
+      const ::google::protobuf::internal::TcParseTableBase* PROTOBUF_NULLABLE tc_table = nullptr);
+
+  [[nodiscard]] ::google::protobuf::Metadata GetMetadata() const;
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+  enum : int {
+    kChangesFieldNumber = 3,
+    kScopeFieldNumber = 1,
+    kVersionFieldNumber = 2,
+    kCompleteFieldNumber = 4,
+  };
+  // repeated .proto.comet.v1.AlmanacChange changes = 3;
+  [[nodiscard]] int changes_size() const;
+  private:
+  int _internal_changes_size() const;
+
+  public:
+  void clear_changes() ;
+  [[nodiscard]] const ::proto::comet::v1::AlmanacChange& changes(int index) const;
+  [[nodiscard]] ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL mutable_changes(int index);
+  ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL add_changes();
+  [[nodiscard]] const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>&
+  changes() const;
+  [[nodiscard]] ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+  mutable_changes();
+
+  private:
+  const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>& _internal_changes() const;
+  ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL _internal_mutable_changes();
+
+  public:
+  // .proto.comet.v1.Scope scope = 1;
+  [[nodiscard]] bool has_scope() const;
+  void clear_scope() ;
+  [[nodiscard]] const ::proto::comet::v1::Scope& scope() const;
+  [[nodiscard]] ::proto::comet::v1::Scope* PROTOBUF_NULLABLE release_scope();
+  ::proto::comet::v1::Scope* PROTOBUF_NONNULL mutable_scope();
+  void set_allocated_scope(::proto::comet::v1::Scope* PROTOBUF_NULLABLE value);
+  void unsafe_arena_set_allocated_scope(::proto::comet::v1::Scope* PROTOBUF_NULLABLE value);
+  ::proto::comet::v1::Scope* PROTOBUF_NULLABLE unsafe_arena_release_scope();
+
+  private:
+  const ::proto::comet::v1::Scope& _internal_scope() const;
+  ::proto::comet::v1::Scope* PROTOBUF_NONNULL _internal_mutable_scope();
+
+  public:
+  // uint64 version = 2;
+  void clear_version() ;
+  [[nodiscard]] ::uint64_t version() const;
+  void set_version(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_version() const;
+  void _internal_set_version(::uint64_t value);
+
+  public:
+  // bool complete = 4;
+  void clear_complete() ;
+  [[nodiscard]] bool complete() const;
+  void set_complete(bool value);
+
+  private:
+  bool _internal_complete() const;
+  void _internal_set_complete(bool value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:proto.polaris.v1.BatchRequest)
+ private:
+  class _Internal;
+  using ParseTableT_ =
+      ::google::protobuf::internal::TcParseTable<2, 4,
+                          2, 0,
+                          2>;
+  static constexpr ParseTableT_ InternalGenerateParseTable_(
+      const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL class_data);
+  friend class ::google::protobuf::internal::TcParser;
+  #ifndef PROTOBUF_MESSAGE_GLOBALS
+  static const ParseTableT_ _table_;
+  #endif
+
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  friend ::google::protobuf::internal::PrivateAccess;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+    inline explicit constexpr Impl_(::google::protobuf::internal::InternalVisibility visibility,
+                                    ::google::protobuf::internal::ConstantInitialized) noexcept;
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+        const BatchRequest& from_msg);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    ::google::protobuf::internal::CachedSize _cached_size_;
+    ::google::protobuf::RepeatedPtrField< ::proto::comet::v1::AlmanacChange > changes_;
+    ::proto::comet::v1::Scope* PROTOBUF_NULLABLE scope_;
+    ::uint64_t version_;
+    bool complete_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -1327,7 +1631,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Updates final : public ::google::pr
   [[nodiscard]] static const Updates& default_instance() {
     return *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<Updates>(&Updates_globals_);
   }
-  static constexpr int kIndexInFileMessages = 5;
+  static constexpr int kIndexInFileMessages = 6;
   friend void swap(Updates& a, Updates& b) { a.Swap(&b); }
   inline void Swap(Updates* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1566,7 +1870,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Packet final : public ::google::pro
     kReady = 8,
     BODY_NOT_SET = 0,
   };
-  static constexpr int kIndexInFileMessages = 6;
+  static constexpr int kIndexInFileMessages = 7;
   friend void swap(Packet& a, Packet& b) { a.Swap(&b); }
   inline void Swap(Packet* PROTOBUF_NONNULL other) {
     if (other == this) return;
@@ -1898,7 +2202,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED Packet final : public ::google::pro
 
 // .proto.comet.v1.Scope scope = 1;
 inline bool CommitRequest::has_scope() const {
-  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000001U);
+  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000002U);
   PROTOBUF_ASSUME(!value || _impl_.scope_ != nullptr);
   return value;
 }
@@ -1919,16 +2223,16 @@ inline void CommitRequest::unsafe_arena_set_allocated_scope(
   }
   _impl_.scope_ = reinterpret_cast<::proto::comet::v1::Scope*>(value);
   if (value != nullptr) {
-    SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
   } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   }
   // @@protoc_insertion_point(field_unsafe_arena_set_allocated:proto.polaris.v1.CommitRequest.scope)
 }
 inline ::proto::comet::v1::Scope* PROTOBUF_NULLABLE CommitRequest::release_scope() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
 
-  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   ::proto::comet::v1::Scope* released = _impl_.scope_;
   _impl_.scope_ = nullptr;
   if (::google::protobuf::internal::DebugHardenForceCopyInRelease()) {
@@ -1948,7 +2252,7 @@ inline ::proto::comet::v1::Scope* PROTOBUF_NULLABLE CommitRequest::unsafe_arena_
   ::google::protobuf::internal::TSanWrite(&_impl_);
   // @@protoc_insertion_point(field_release:proto.polaris.v1.CommitRequest.scope)
 
-  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   ::proto::comet::v1::Scope* temp = _impl_.scope_;
   _impl_.scope_ = nullptr;
   return temp;
@@ -1963,7 +2267,7 @@ inline ::proto::comet::v1::Scope* PROTOBUF_NONNULL CommitRequest::_internal_muta
 }
 inline ::proto::comet::v1::Scope* PROTOBUF_NONNULL CommitRequest::mutable_scope()
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
   ::proto::comet::v1::Scope* _msg = _internal_mutable_scope();
   // @@protoc_insertion_point(field_mutable:proto.polaris.v1.CommitRequest.scope)
   return _msg;
@@ -1980,9 +2284,9 @@ inline void CommitRequest::set_allocated_scope(::proto::comet::v1::Scope* PROTOB
     if (message_arena != submessage_arena) {
       value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
     }
-    SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
   } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   }
 
   _impl_.scope_ = reinterpret_cast<::proto::comet::v1::Scope*>(value);
@@ -1993,7 +2297,7 @@ inline void CommitRequest::set_allocated_scope(::proto::comet::v1::Scope* PROTOB
 inline void CommitRequest::clear_version() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.version_ = ::uint64_t{0u};
-  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
 }
 inline ::uint64_t CommitRequest::version() const {
   // @@protoc_insertion_point(field_get:proto.polaris.v1.CommitRequest.version)
@@ -2001,7 +2305,7 @@ inline ::uint64_t CommitRequest::version() const {
 }
 inline void CommitRequest::set_version(::uint64_t value) {
   _internal_set_version(value);
-  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
   // @@protoc_insertion_point(field_set:proto.polaris.v1.CommitRequest.version)
 }
 inline ::uint64_t CommitRequest::_internal_version() const {
@@ -2015,7 +2319,7 @@ inline void CommitRequest::_internal_set_version(::uint64_t value) {
 
 // .proto.comet.v1.AlmanacChange change = 3;
 inline bool CommitRequest::has_change() const {
-  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000002U);
+  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000004U);
   PROTOBUF_ASSUME(!value || _impl_.change_ != nullptr);
   return value;
 }
@@ -2036,16 +2340,16 @@ inline void CommitRequest::unsafe_arena_set_allocated_change(
   }
   _impl_.change_ = reinterpret_cast<::proto::comet::v1::AlmanacChange*>(value);
   if (value != nullptr) {
-    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+    SetHasBit(_impl_._has_bits_[0], 0x00000004U);
   } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+    ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
   }
   // @@protoc_insertion_point(field_unsafe_arena_set_allocated:proto.polaris.v1.CommitRequest.change)
 }
 inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NULLABLE CommitRequest::release_change() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
 
-  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
   ::proto::comet::v1::AlmanacChange* released = _impl_.change_;
   _impl_.change_ = nullptr;
   if (::google::protobuf::internal::DebugHardenForceCopyInRelease()) {
@@ -2065,7 +2369,7 @@ inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NULLABLE CommitRequest::unsaf
   ::google::protobuf::internal::TSanWrite(&_impl_);
   // @@protoc_insertion_point(field_release:proto.polaris.v1.CommitRequest.change)
 
-  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
   ::proto::comet::v1::AlmanacChange* temp = _impl_.change_;
   _impl_.change_ = nullptr;
   return temp;
@@ -2080,7 +2384,7 @@ inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL CommitRequest::_inter
 }
 inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL CommitRequest::mutable_change()
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
   ::proto::comet::v1::AlmanacChange* _msg = _internal_mutable_change();
   // @@protoc_insertion_point(field_mutable:proto.polaris.v1.CommitRequest.change)
   return _msg;
@@ -2097,13 +2401,258 @@ inline void CommitRequest::set_allocated_change(::proto::comet::v1::AlmanacChang
     if (message_arena != submessage_arena) {
       value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
     }
+    SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+  }
+
+  _impl_.change_ = reinterpret_cast<::proto::comet::v1::AlmanacChange*>(value);
+  // @@protoc_insertion_point(field_set_allocated:proto.polaris.v1.CommitRequest.change)
+}
+
+// repeated .proto.comet.v1.AlmanacChange changes = 4;
+inline int CommitRequest::_internal_changes_size() const {
+  return _internal_changes().size();
+}
+inline int CommitRequest::changes_size() const {
+  return _internal_changes_size();
+}
+inline const ::proto::comet::v1::AlmanacChange& CommitRequest::changes(int index) const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:proto.polaris.v1.CommitRequest.changes)
+  return _internal_changes().Get(index);
+}
+inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL CommitRequest::mutable_changes(int index)
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable:proto.polaris.v1.CommitRequest.changes)
+  return _internal_mutable_changes()->Mutable(index);
+}
+inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL CommitRequest::add_changes()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::proto::comet::v1::AlmanacChange* _add =
+      _internal_mutable_changes()->InternalAddWithArena(
+          ::google::protobuf::MessageLite::internal_visibility(), GetArena());
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_add:proto.polaris.v1.CommitRequest.changes)
+  return _add;
+}
+inline const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>& CommitRequest::changes() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:proto.polaris.v1.CommitRequest.changes)
+  return _internal_changes();
+}
+inline ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+CommitRequest::mutable_changes() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_mutable_list:proto.polaris.v1.CommitRequest.changes)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _internal_mutable_changes();
+}
+inline const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>&
+CommitRequest::_internal_changes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.changes_;
+}
+inline ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+CommitRequest::_internal_mutable_changes() {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return &_impl_.changes_;
+}
+
+// -------------------------------------------------------------------
+
+// BatchRequest
+
+// .proto.comet.v1.Scope scope = 1;
+inline bool BatchRequest::has_scope() const {
+  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000002U);
+  PROTOBUF_ASSUME(!value || _impl_.scope_ != nullptr);
+  return value;
+}
+inline const ::proto::comet::v1::Scope& BatchRequest::_internal_scope() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  const ::proto::comet::v1::Scope* p = _impl_.scope_;
+  return p != nullptr ? *p : *::google::protobuf::internal::MessageGlobalsBase::ToDefaultInstance<::proto::comet::v1::Scope>(&::proto::comet::v1::Scope_globals_);
+}
+inline const ::proto::comet::v1::Scope& BatchRequest::scope() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:proto.polaris.v1.BatchRequest.scope)
+  return _internal_scope();
+}
+inline void BatchRequest::unsafe_arena_set_allocated_scope(
+    ::proto::comet::v1::Scope* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (GetArena() == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.scope_);
+  }
+  _impl_.scope_ = reinterpret_cast<::proto::comet::v1::Scope*>(value);
+  if (value != nullptr) {
+    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  } else {
+    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  }
+  // @@protoc_insertion_point(field_unsafe_arena_set_allocated:proto.polaris.v1.BatchRequest.scope)
+}
+inline ::proto::comet::v1::Scope* PROTOBUF_NULLABLE BatchRequest::release_scope() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ::proto::comet::v1::Scope* released = _impl_.scope_;
+  _impl_.scope_ = nullptr;
+  if (::google::protobuf::internal::DebugHardenForceCopyInRelease()) {
+    auto* old = reinterpret_cast<::google::protobuf::MessageLite*>(released);
+    released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+    if (GetArena() == nullptr) {
+      delete old;
+    }
+  } else {
+    if (GetArena() != nullptr) {
+      released = ::google::protobuf::internal::DuplicateIfNonNull(released);
+    }
+  }
+  return released;
+}
+inline ::proto::comet::v1::Scope* PROTOBUF_NULLABLE BatchRequest::unsafe_arena_release_scope() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  // @@protoc_insertion_point(field_release:proto.polaris.v1.BatchRequest.scope)
+
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ::proto::comet::v1::Scope* temp = _impl_.scope_;
+  _impl_.scope_ = nullptr;
+  return temp;
+}
+inline ::proto::comet::v1::Scope* PROTOBUF_NONNULL BatchRequest::_internal_mutable_scope() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (_impl_.scope_ == nullptr) {
+    auto* p = Super_::DefaultConstruct<::proto::comet::v1::Scope>(GetArena());
+    _impl_.scope_ = reinterpret_cast<::proto::comet::v1::Scope*>(p);
+  }
+  return _impl_.scope_;
+}
+inline ::proto::comet::v1::Scope* PROTOBUF_NONNULL BatchRequest::mutable_scope()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ::proto::comet::v1::Scope* _msg = _internal_mutable_scope();
+  // @@protoc_insertion_point(field_mutable:proto.polaris.v1.BatchRequest.scope)
+  return _msg;
+}
+inline void BatchRequest::set_allocated_scope(::proto::comet::v1::Scope* PROTOBUF_NULLABLE value) {
+  ::google::protobuf::Arena* message_arena = GetArena();
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  if (message_arena == nullptr) {
+    delete reinterpret_cast<::google::protobuf::MessageLite*>(_impl_.scope_);
+  }
+
+  if (value != nullptr) {
+    ::google::protobuf::Arena* submessage_arena = reinterpret_cast<::google::protobuf::Message*>(value)->GetArena();
+    if (message_arena != submessage_arena) {
+      value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
+    }
     SetHasBit(_impl_._has_bits_[0], 0x00000002U);
   } else {
     ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   }
 
-  _impl_.change_ = reinterpret_cast<::proto::comet::v1::AlmanacChange*>(value);
-  // @@protoc_insertion_point(field_set_allocated:proto.polaris.v1.CommitRequest.change)
+  _impl_.scope_ = reinterpret_cast<::proto::comet::v1::Scope*>(value);
+  // @@protoc_insertion_point(field_set_allocated:proto.polaris.v1.BatchRequest.scope)
+}
+
+// uint64 version = 2;
+inline void BatchRequest::clear_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.version_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+}
+inline ::uint64_t BatchRequest::version() const {
+  // @@protoc_insertion_point(field_get:proto.polaris.v1.BatchRequest.version)
+  return _internal_version();
+}
+inline void BatchRequest::set_version(::uint64_t value) {
+  _internal_set_version(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  // @@protoc_insertion_point(field_set:proto.polaris.v1.BatchRequest.version)
+}
+inline ::uint64_t BatchRequest::_internal_version() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.version_;
+}
+inline void BatchRequest::_internal_set_version(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.version_ = value;
+}
+
+// repeated .proto.comet.v1.AlmanacChange changes = 3;
+inline int BatchRequest::_internal_changes_size() const {
+  return _internal_changes().size();
+}
+inline int BatchRequest::changes_size() const {
+  return _internal_changes_size();
+}
+inline const ::proto::comet::v1::AlmanacChange& BatchRequest::changes(int index) const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:proto.polaris.v1.BatchRequest.changes)
+  return _internal_changes().Get(index);
+}
+inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL BatchRequest::mutable_changes(int index)
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable:proto.polaris.v1.BatchRequest.changes)
+  return _internal_mutable_changes()->Mutable(index);
+}
+inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL BatchRequest::add_changes()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::proto::comet::v1::AlmanacChange* _add =
+      _internal_mutable_changes()->InternalAddWithArena(
+          ::google::protobuf::MessageLite::internal_visibility(), GetArena());
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_add:proto.polaris.v1.BatchRequest.changes)
+  return _add;
+}
+inline const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>& BatchRequest::changes() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:proto.polaris.v1.BatchRequest.changes)
+  return _internal_changes();
+}
+inline ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+BatchRequest::mutable_changes() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_mutable_list:proto.polaris.v1.BatchRequest.changes)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _internal_mutable_changes();
+}
+inline const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>&
+BatchRequest::_internal_changes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.changes_;
+}
+inline ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+BatchRequest::_internal_mutable_changes() {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return &_impl_.changes_;
+}
+
+// bool complete = 4;
+inline void BatchRequest::clear_complete() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.complete_ = false;
+  ClearHasBit(_impl_._has_bits_[0], 0x00000008U);
+}
+inline bool BatchRequest::complete() const {
+  // @@protoc_insertion_point(field_get:proto.polaris.v1.BatchRequest.complete)
+  return _internal_complete();
+}
+inline void BatchRequest::set_complete(bool value) {
+  _internal_set_complete(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  // @@protoc_insertion_point(field_set:proto.polaris.v1.BatchRequest.complete)
+}
+inline bool BatchRequest::_internal_complete() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.complete_;
+}
+inline void BatchRequest::_internal_set_complete(bool value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.complete_ = value;
 }
 
 // -------------------------------------------------------------------
@@ -2517,7 +3066,7 @@ inline void Snapshot::_internal_set_version(::uint64_t value) {
 inline void Patch::clear_version() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.version_ = ::uint64_t{0u};
-  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
 }
 inline ::uint64_t Patch::version() const {
   // @@protoc_insertion_point(field_get:proto.polaris.v1.Patch.version)
@@ -2525,7 +3074,7 @@ inline ::uint64_t Patch::version() const {
 }
 inline void Patch::set_version(::uint64_t value) {
   _internal_set_version(value);
-  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
   // @@protoc_insertion_point(field_set:proto.polaris.v1.Patch.version)
 }
 inline ::uint64_t Patch::_internal_version() const {
@@ -2539,7 +3088,7 @@ inline void Patch::_internal_set_version(::uint64_t value) {
 
 // .proto.comet.v1.AlmanacChange change = 2;
 inline bool Patch::has_change() const {
-  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000001U);
+  bool value = CheckHasBit(_impl_._has_bits_[0], 0x00000002U);
   PROTOBUF_ASSUME(!value || _impl_.change_ != nullptr);
   return value;
 }
@@ -2560,16 +3109,16 @@ inline void Patch::unsafe_arena_set_allocated_change(
   }
   _impl_.change_ = reinterpret_cast<::proto::comet::v1::AlmanacChange*>(value);
   if (value != nullptr) {
-    SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
   } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   }
   // @@protoc_insertion_point(field_unsafe_arena_set_allocated:proto.polaris.v1.Patch.change)
 }
 inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NULLABLE Patch::release_change() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
 
-  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   ::proto::comet::v1::AlmanacChange* released = _impl_.change_;
   _impl_.change_ = nullptr;
   if (::google::protobuf::internal::DebugHardenForceCopyInRelease()) {
@@ -2589,7 +3138,7 @@ inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NULLABLE Patch::unsafe_arena_
   ::google::protobuf::internal::TSanWrite(&_impl_);
   // @@protoc_insertion_point(field_release:proto.polaris.v1.Patch.change)
 
-  ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   ::proto::comet::v1::AlmanacChange* temp = _impl_.change_;
   _impl_.change_ = nullptr;
   return temp;
@@ -2604,7 +3153,7 @@ inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL Patch::_internal_muta
 }
 inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL Patch::mutable_change()
     ABSL_ATTRIBUTE_LIFETIME_BOUND {
-  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
   ::proto::comet::v1::AlmanacChange* _msg = _internal_mutable_change();
   // @@protoc_insertion_point(field_mutable:proto.polaris.v1.Patch.change)
   return _msg;
@@ -2621,13 +3170,63 @@ inline void Patch::set_allocated_change(::proto::comet::v1::AlmanacChange* PROTO
     if (message_arena != submessage_arena) {
       value = ::google::protobuf::internal::GetOwnedMessage(message_arena, value, submessage_arena);
     }
-    SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+    SetHasBit(_impl_._has_bits_[0], 0x00000002U);
   } else {
-    ClearHasBit(_impl_._has_bits_[0], 0x00000001U);
+    ClearHasBit(_impl_._has_bits_[0], 0x00000002U);
   }
 
   _impl_.change_ = reinterpret_cast<::proto::comet::v1::AlmanacChange*>(value);
   // @@protoc_insertion_point(field_set_allocated:proto.polaris.v1.Patch.change)
+}
+
+// repeated .proto.comet.v1.AlmanacChange changes = 3;
+inline int Patch::_internal_changes_size() const {
+  return _internal_changes().size();
+}
+inline int Patch::changes_size() const {
+  return _internal_changes_size();
+}
+inline const ::proto::comet::v1::AlmanacChange& Patch::changes(int index) const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_get:proto.polaris.v1.Patch.changes)
+  return _internal_changes().Get(index);
+}
+inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL Patch::mutable_changes(int index)
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_mutable:proto.polaris.v1.Patch.changes)
+  return _internal_mutable_changes()->Mutable(index);
+}
+inline ::proto::comet::v1::AlmanacChange* PROTOBUF_NONNULL Patch::add_changes()
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::proto::comet::v1::AlmanacChange* _add =
+      _internal_mutable_changes()->InternalAddWithArena(
+          ::google::protobuf::MessageLite::internal_visibility(), GetArena());
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_add:proto.polaris.v1.Patch.changes)
+  return _add;
+}
+inline const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>& Patch::changes() const
+    ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  // @@protoc_insertion_point(field_list:proto.polaris.v1.Patch.changes)
+  return _internal_changes();
+}
+inline ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+Patch::mutable_changes() ABSL_ATTRIBUTE_LIFETIME_BOUND {
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_mutable_list:proto.polaris.v1.Patch.changes)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  return _internal_mutable_changes();
+}
+inline const ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>&
+Patch::_internal_changes() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.changes_;
+}
+inline ::google::protobuf::RepeatedPtrField<::proto::comet::v1::AlmanacChange>* PROTOBUF_NONNULL
+Patch::_internal_mutable_changes() {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return &_impl_.changes_;
 }
 
 // -------------------------------------------------------------------

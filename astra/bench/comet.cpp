@@ -35,9 +35,7 @@ struct Cleanup {
 };
 
 // 收到真实确认才能继续推进同一写者; 超时/拒绝返回非零, 不计入成功吞吐.
-void completed(auto future) {
-    Measure::require(future.wait_for(10s) == std::future_status::ready);
-    const auto result = future.get(); // 本次结果拥有必要身份, 不借用后台状态.
+void completed(auto result) { // 同步结果已经拥有确认身份, 不再等待 SDK future.
     if (!result) {
         throw std::runtime_error("SDK operation failed, code=" + std::to_string(static_cast<int>(result.error().code)));
     }
@@ -97,12 +95,12 @@ void run(const Options& options) {
     for (std::size_t index = 0; index < options.records; ++index) {
         if (options.catalog) {
             keys.push_back("key-" + std::to_string(index));
-            auto result = clients.front().publisher(scope, keys.back(), std::chrono::milliseconds(options.ttl));
+            auto result = clients.front().publisher(scope);
             Measure::require(result.has_value());
             publishers.push_back(std::move(*result));
-            completed(publishers.back().publish(1, content(options.bytes, 1)));
+            Measure::require(publishers.back().update(keys.back(), content(options.bytes, 1), std::chrono::milliseconds(options.ttl), std::chrono::milliseconds(options.ttl / 3)).has_value());
         } else {
-            auto result = clients.front().beacon(scope, std::vector<std::uint8_t>(options.attr, 17), content(options.bytes, 1), std::chrono::milliseconds(options.ttl));
+            auto result = clients.front().beacon(scope, std::vector<std::uint8_t>(options.attr, 17), content(options.bytes, 1), std::chrono::milliseconds(options.ttl), std::chrono::milliseconds(options.ttl / 3));
             Measure::require(result.has_value());
             beacons.push_back(std::move(*result));
         }
@@ -158,7 +156,7 @@ void run(const Options& options) {
                     const auto version = index + 2;                      // 初始一, 同一写者逐次增长且永不重用.
                     auto value = content(options.bytes, version);        // 应用构建载荷成本属于端到端窗口.
                     if (options.catalog) {
-                        completed(publishers[worker].publish(version, std::move(value)));
+                        Measure::require(publishers[worker].update(keys[worker], std::move(value), std::chrono::milliseconds(options.ttl)).has_value());
                     } else {
                         completed(beacons[worker].update(std::move(value)));
                     }
@@ -224,6 +222,7 @@ int main(int count, char** arguments) {
         options.ttl = static_cast<unsigned>(Measure::number(arguments[10], 1000, 600000));
         options.rate = static_cast<unsigned>(Measure::number(arguments[11], 0, 10000));
         Measure::require(options.writers <= options.records);
+        Measure::require(!options.catalog || options.ttl >= (options.seconds + 120) * 1000U); // 静态背景记录无自动续租, TTL 必须覆盖初始化、窗口及排空.
         run(options);
         return 0;
     } catch (const std::exception& failure) {

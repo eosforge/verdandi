@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/comet"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
-	"github.com/eosforge/verdandi/astra/internal/generated/polaris"
+	"github.com/eosforge/astra/internal/generated/comet"
+	"github.com/eosforge/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/polaris"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -33,7 +33,7 @@ func position(value *polaris.Position) map[string]string {
 	return map[string]string{"sector": string(value.Scope.Sector), "spectrum": string(value.Scope.Spectrum), "version": strconv.FormatUint(value.Version, 10)}
 }
 
-// almanac 的 GET 无副作用, POST 恰好提交一个完整 Set/Delete, 不保存发布工作流或自动重试.
+// almanac 的 GET 无副作用, POST 提交一个完整单键或原子批次, 不保存发布工作流或自动重试.
 // response/request 为当前 HTTP 交换; 按方法分发到提交、目录或快照加载.
 func (server *Server) almanac(response http.ResponseWriter, request *http.Request) {
 	switch request.Method {
@@ -62,9 +62,14 @@ func (server *Server) almanac(response http.ResponseWriter, request *http.Reques
 }
 
 // commit 只从 Polaris 的实际确认返回 committed; HTTP/RPC 超时不会被改写为未提交或重新发送.
-// response/request 为当前 HTTP 交换; 输入为单条 Set/Delete, 版本乐观并发由 Polaris 裁决.
+// response/request 为当前 HTTP 交换; 输入为单键或唯一键批次, 版本乐观并发由 Polaris 裁决.
 func (server *Server) commit(response http.ResponseWriter, request *http.Request) {
-	// 输入三选一: 设置值 (value) 或删除 (erase=true), 附加范围与期望版本.
+	// 单键旧输入与 changes 批次互斥, 值仍为严格 base64, 不改变凭据管理入口.
+	type item struct {
+		Key   string  `json:"key"`
+		Value *string `json:"value"`
+		Erase *bool   `json:"erase"`
+	}
 	var input struct {
 		Sector   string  `json:"sector"`
 		Spectrum string  `json:"spectrum"`
@@ -72,40 +77,71 @@ func (server *Server) commit(response http.ResponseWriter, request *http.Request
 		Key      string  `json:"key"`
 		Value    *string `json:"value"`
 		Erase    *bool   `json:"erase"`
+		Changes  []item  `json:"changes"`
 	}
-	if body(response, request, 2<<20, &input) != nil || !text(input.Sector, 128) || !text(input.Spectrum, 128) || !text(input.Key, 1024) || (input.Value == nil) == (input.Erase == nil) || input.Erase != nil && !*input.Erase {
+	if body(response, request, 0, &input, "changes") != nil || !text(input.Sector, 128) || !text(input.Spectrum, 128) {
 		problem(response, http.StatusBadRequest, "input", "unapplied")
 		return
 	}
+	batch := input.Changes != nil
+	if batch && (len(input.Changes) == 0 || input.Key != "" || input.Value != nil || input.Erase != nil || strings.HasPrefix(input.Sector, "__")) {
+		problem(response, http.StatusBadRequest, "input", "unapplied")
+		return
+	}
+	items := input.Changes
+	if !batch {
+		items = []item{{input.Key, input.Value, input.Erase}}
+	}
+	changes := make([]*comet.AlmanacChange, 0, len(items))
+	seen := make(map[string]bool, len(items))
+	for _, entry := range items {
+		if !text(entry.Key, 1024) || seen[entry.Key] || (entry.Value == nil) == (entry.Erase == nil) || entry.Erase != nil && !*entry.Erase {
+			problem(response, http.StatusBadRequest, "input", "unapplied")
+			return
+		}
+		seen[entry.Key] = true
+		change := &comet.AlmanacChange{Key: entry.Key}
+		if entry.Value != nil {
+			value, err := base64.StdEncoding.Strict().DecodeString(*entry.Value)
+			if err != nil || len(value) > 1<<20 {
+				problem(response, http.StatusBadRequest, "input", "unapplied")
+				return
+			}
+			change.Action = &comet.AlmanacChange_Value{Value: value}
+		} else {
+			change.Action = &comet.AlmanacChange_Erase{Erase: &comet.Empty{}}
+		}
+		changes = append(changes, change)
+	}
+
 	// 版本必须为规范十进制非零 uint64, 变体写法拒绝.
 	version, err := strconv.ParseUint(input.Version, 10, 64)
 	if err != nil || version == 0 || strconv.FormatUint(version, 10) != input.Version {
 		problem(response, http.StatusBadRequest, "version", "unapplied")
 		return
 	}
-	change := &comet.AlmanacChange{Key: input.Key}
-	if input.Value != nil {
-		// 值经标准 base64 严格解码, 上限 1 MiB.
-		value, err := base64.StdEncoding.Strict().DecodeString(*input.Value)
-		if err != nil || len(value) > 1<<20 {
-			problem(response, http.StatusBadRequest, "input", "unapplied")
-			return
-		}
-		change.Action = &comet.AlmanacChange_Value{Value: value}
+	commit := &polaris.CommitRequest{Scope: &comet.Scope{Sector: []byte(input.Sector), Spectrum: []byte(input.Spectrum)}, Version: version}
+	if batch {
+		commit.Changes = changes
 	} else {
-		// 删除分支构造擦除动作, 无载荷.
-		change.Action = &comet.AlmanacChange_Erase{Erase: &comet.Empty{}}
+		commit.Change = changes[0]
 	}
-	server.submit(response, request, &comet.Scope{Sector: []byte(input.Sector), Spectrum: []byte(input.Spectrum)}, change, version)
+	server.transaction(response, request, commit)
 }
 
 // submit 是普通内容与凭据管理唯一的实际写入点, 不重复提交不确定操作, 不返回任何载荷或秘密.
 // scope/change/version 为提交三元组; 成功返回 committed, 结果不匹配即报网关协议错误.
 func (server *Server) submit(response http.ResponseWriter, request *http.Request, scope *comet.Scope, change *comet.AlmanacChange, version uint64) {
+	server.transaction(response, request, &polaris.CommitRequest{Scope: scope, Version: version, Change: change})
+}
+
+// transaction 统一发送单键或完整批次, 返回只证明 Polaris 持久提交, 不自动重发不确定操作.
+func (server *Server) transaction(response http.ResponseWriter, request *http.Request, commit *polaris.CommitRequest) {
+	scope, version := commit.Scope, commit.Version
 	// 单次提交限五秒, 超时由 failure 映射为 unknown 效果, 调用方不得假设未提交.
 	ctx, cancel := context.WithTimeout(request.Context(), 5*time.Second)
 	defer cancel()
-	result, err := server.backend.Commit(ctx, &polaris.CommitRequest{Scope: scope, Version: version, Change: change})
+	result, err := server.backend.Commit(ctx, commit)
 	if err != nil {
 		code, reason, effect := failure(err, true)
 		problem(response, code, reason, effect)

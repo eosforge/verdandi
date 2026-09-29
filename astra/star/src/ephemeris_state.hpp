@@ -1,6 +1,7 @@
 #pragma once
 #include "agenda.hpp"
 #include "borrowing.hpp"
+#include "context.hpp"
 #include "ephemeris.hpp"
 #include "origin.hpp"
 #include "reading.hpp"
@@ -57,10 +58,13 @@ public:
         std::size_t replica_bytes = 128 * 1024 * 1024; // 本域所有远端原生来源合计逻辑预算.
     };
 
-    // 创建确认只含已提交 UUID 和固定 TTL, 不返回调度节点或公开原生 order 元数据.
+    // 创建确认携带身份、固定 TTL 与恢复采用的 Data 顺序, 不返回内部调度节点.
     struct Receipt {
-        std::string uuid;    // 本 Star 新分配的 16 字节 UUIDv4 二进制, 成功后由调用方持有.
-        std::uint32_t ttl{}; // 此注册固定毫秒 TTL, 1000..600000.
+        std::string uuid;           // 首次签发或已验证恢复的 16 字节逻辑 UUID, 成功后由调用方持有.
+        Value data;                 // 实际恢复的数据, 可以来自目标已知的较新版本.
+        std::uint64_t order{};      // 实际 Data order, 不随恢复伪造增量.
+        std::uint64_t generation{}; // 本次本机注册代次.
+        std::uint32_t ttl{};        // 此注册固定毫秒 TTL, 1000..600000.
     };
 
     // 生产构造复用 Star 公共纪元 Clock, 不创建独立时钟或线程; 初始状态为空且来源位置为零.
@@ -76,14 +80,14 @@ public:
 
     // 仅安装内部不可抛错的提交通知; context 由调用方保证寿命, 更换前须按外层生命周期停止旧使用.
     void notify(Notify notify, void* context);
-    // 创建新 UUID, 截止在最后一次可用时间读数上计算; 失败不泄漏记录/轮节点/来源位置.
-    std::expected<Receipt, Error> create(const Scope& scope, Value attr, Value data, std::uint32_t ttl);
-    // 只修改已有自有 UUID, 末次准备后重查其期限, 不隐式续租.
-    std::expected<void, Error> update(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order);
+    // 创建或恢复 UUID, 截止在最后一次可用时间读数上计算; 失败不泄漏记录/轮节点/来源位置.
+    std::expected<Receipt, Error> create(const Scope& scope, Value attr, Value data, std::uint32_t ttl, std::string uuid = {}, std::uint64_t generation = 0, std::uint64_t order = 0, std::string_view capability = {});
+    // 只修改已有自有 UUID, 末次准备后重查期限, 新 order 原子替换 Data 并延长固定 TTL.
+    std::expected<void, Error> update(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, std::uint64_t generation = 0, std::string_view capability = {});
     // 固定 TTL 的新 order 续租, 同 order 只确认且不增加来源位置/延长截止.
-    std::expected<void, Error> renew(const Scope& scope, std::string_view uuid, std::uint64_t order);
+    std::expected<void, Error> renew(const Scope& scope, std::string_view uuid, std::uint64_t order, std::uint64_t generation = 0, std::string_view capability = {});
     // 显式权威结束, 已结束返回 ended; 删除与来源历史/可见变化在同边界发布.
-    std::expected<void, Error> remove(const Scope& scope, std::string_view uuid);
+    std::expected<void, Error> remove(const Scope& scope, std::string_view uuid, std::uint64_t generation = 0, std::string_view capability = {});
     // 完整推进真实经过的拍数, 失败传播且不声称已经追平; 已完整提交的先前到期不会回滚.
     void tick();
     // 推进到期后捕获一个公开范围, 未出现范围返回游标零空根, 不创建目录或消耗 Scope 额度.
@@ -128,6 +132,7 @@ public:
     std::expected<void, Error> repair(std::string_view id, std::uint64_t position, const Scope& scope, std::string_view uuid, std::optional<Record> record);
 
 private:
+    friend class Context<State>; // 共用时钟/目录/记账机制, 所有资源仍由本 State 拥有.
     friend class Reading<State>; // 共用读取同步边界, 不公开私有锁或回收类型.
     friend class Restore<State>;
     // 同一范围的原生状态/可见投影/定时器原子安装, 不提前确认完整来源.
@@ -164,14 +169,41 @@ private:
     // 持有域锁查找, 等待来源锁时释放域锁, 返回后重新核对目录身份; 空 get 表示未知来源.
     Guard acquire(std::string_view id, std::unique_lock<std::shared_mutex>& domain) const;
 
-    // 远端提交准备的可见所有权索引, 失败只撤销本次新增项, 不删除已安装身份.
-    struct Ownership {
-        State& owner;                                              // 同一域锁覆盖准备/回滚.
-        std::vector<const Source::Name*> added;                    // 候选名称覆盖此借用寿命.
-        bool committed{};                                          // 来源/投影共同提交后才为真.
-        ~Ownership();                                              // 失败擦除新增项, 不分配.
-        void add(const Source::Tree::Key& name, Replica& replica); // 先记录撤销责任, 再 emplace.
+    // 每个逻辑 ID 的有限来源集合, 原生准备在域锁外时也能安全合并其他来源.
+    struct Contribution {
+        Source::Tree::Key name; // 与原生源共享名称与载荷, 不读取正在准备的来源树.
+        Record record;          // 该来源的完整事实与原始绝对截止.
+        const Replica* owner{}; // nullptr 表示本机, 远端目录在移除最后钩子后才释放.
     };
+
+    struct Compare {
+        bool operator()(const Source::Tree::Key& left, const Source::Tree::Key& right) const {
+            return *left->scope != *right->scope ? *left->scope < *right->scope : left->key < right->key;
+        }
+    }; // 同逻辑 Scope/UUID 共用一个候选集合, 不按名称指针分组.
+
+    using Choices = std::map<Source::Tree::Key, std::vector<Contribution>, Compare>;
+
+    struct Choice {
+        State* owner;                   // 准备回滚责任, 移动后原对象失去责任.
+        Choices::iterator position;     // map 插入不使其他候选失效.
+        std::vector<Contribution> rows; // 新集合, 提交后接管旧集合的回收.
+        Source::Tree::Key name;         // 新公开赢家或删除时的稳定名称.
+        std::optional<Record> record;   // 新公开赢家, 空表示没有活跃来源.
+        bool changed{};                 // 只有公开 Attr/Data 变化才增加游标.
+        bool created{};                 // 本次新建索引节点, 失败必须删除.
+        Choice(State& owner, Choices::iterator position, std::vector<Contribution> rows, Source::Tree::Key name, std::optional<Record> record, bool changed, bool created);
+        Choice(Choice&& other) noexcept; // 显式转移回滚责任.
+        Choice(const Choice&) = delete;
+        ~Choice();              // 未提交仅撤销新空节点.
+        void commit() noexcept; // 来源与投影完成准备后无分配地交换.
+
+        std::optional<Content> content() const {
+            return record ? std::optional(Content{record->attr, record->data}) : std::nullopt;
+        }
+    };
+
+    std::expected<Choice, Error> choose(const Source::Tree::Key& name, std::optional<Record> record, const Replica* owner, Clock::Time now); // 持域锁准备单逻辑 ID 的新集合, 不进入其他来源锁.
 
     // 提交后在域锁外释放旧内容/历史及已摘链钩子, 避免批量到期回收拖住锁.
     struct Retired {
@@ -220,7 +252,7 @@ private:
     // 同时准备来源与投影的删除, 所有可失败步骤完成后才摘链/发布/归还旧资源.
     std::expected<Retired, Error> erase(const Scope& scope, std::string_view uuid, std::chrono::steady_clock::time_point now, bool active = false);
     // Update/Renew 共用两阶段提交, renew 为 true 时不接受 data, 两种业务 order 仍独立.
-    std::expected<void, Error> change(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, bool renewal);
+    std::expected<void, Error> change(const Scope& scope, std::string_view uuid, Value data, std::uint64_t order, bool renewal, std::uint64_t generation, std::string_view capability);
 
     const std::shared_ptr<std::shared_mutex> gate_ = std::make_shared<std::shared_mutex>();     // 写入/合并提交独占, 没有到期维护责任的公开读取共享.
     const std::shared_ptr<std::shared_mutex> export_ = std::make_shared<std::shared_mutex>();   // 本机原生根/日志独立同步域; 只按 gate_ -> export_ 获取, 来源导出不取得 gate_.
@@ -230,7 +262,7 @@ private:
     const Limits limits_;                                                                       // 固定的来源/范围/下游容量约束.
     Source source_;                                                                             // 本 Star 自有 Ephemeris, 一个位置覆盖所有 Scope.
     std::map<std::string, std::shared_ptr<Replica>, std::less<>> replicas_;                     // 受数量/总字节约束的远端组.
-    std::unordered_map<const Source::Name*, Replica*> owners_;                                  // 仅索引可见远端条目, 本机条目不在此表.
+    Choices choices_;                                                                           // 同一逻辑 ID 的本机/远端贡献, 合并选择与到期回退都由此索引准备.
     std::size_t replica_bytes_{};                                                               // 所有远端当前行/目录计费, 无第三方发送历史.
     std::unique_ptr<Agenda> agenda_;                                                            // 首个有限期限前不分配来源轮, 地址不移动.
     std::unordered_map<const Source::Name*, std::unique_ptr<Timer>> timers_;                    // 稳定共享名称指针查钩子, 无 UUID 再格式化.

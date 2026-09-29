@@ -4,6 +4,7 @@
 #include <atomic>
 #include <comet/client.hpp>
 #include <condition_variable>
+#include <future>
 #include <grpcpp/server_builder.h>
 #include <iostream>
 #include <thread>
@@ -16,6 +17,8 @@ using astra::Ephemeris;
 class Faults final : public proto::comet::v1::Ephemeris::CallbackService {
 public:
     std::atomic_bool lose_create{};  // 恰好下一次 Create 在提交后返回不确定超时.
+    std::atomic_bool hold_create{};  // 首次注册实际提交后暂缓回执, 覆盖工厂总期限及取消.
+    std::atomic_uint creates{};      // 真实 Create 数量, 关闭后不能隐式重试首次注册.
     std::atomic_bool lose_update{};  // 恰好下一次 Data 提交后返回不确定超时.
     std::atomic_bool lose_renew{};   // 恰好下一次 Renew 提交后返回不确定超时.
     std::atomic_bool hold_update{};  // 只延迟响应, 不让处理线程等待网络或测试条件.
@@ -23,7 +26,6 @@ public:
     std::atomic_uint renewals{};     // 实际到达的 Renew 次数, 不以 SDK ready 代替成功证据.
     std::atomic_bool valid{true};    // 原生提交/身份若意外失败, 留给测试主线程明确断言.
     std::atomic_bool held{};         // Data 请求已经实际占用一个在途 RPC.
-    std::atomic_bool duplicate{};    // 相同 Renew order 已观察到原截止未改变.
     Ephemeris::State& state;         // 真实来源/投影/轮.
     astra::Gateway& gateway;         // 与实际公共服务相同的登录/Ready 入口.
     std::atomic<std::int64_t>& time; // 只注入测试业务时间, 不改变 SDK 的本地租约时钟.
@@ -40,15 +42,41 @@ public:
     }
 
     grpc::ServerUnaryReactor* Create(grpc::CallbackServerContext* context, const proto::comet::v1::CreateRequest* request, proto::comet::v1::CreateReply* reply) override {
-        if (!lose_create.exchange(false)) {
+
+        ++creates;
+        const bool lost = lose_create.exchange(false);
+        const bool delayed = hold_create.exchange(false);
+        if (!lost && !delayed) {
             return service.Create(context, request, reply);
         }
         auto permit = gateway.enter(*context);
-        auto result = state.create({request->scope().sector(), request->scope().spectrum()}, bytes(request->attr()), bytes(request->data()), request->ttl_ms());
-        if (!permit || !result) {
+        const astra::Scope scope{request->scope().sector(), request->scope().spectrum()};
+        auto attr = bytes(request->attr());
+        const auto capability = Ephemeris::capability(); // 故障夹具也提交新版能力和代次, 不回落为旧注册.
+        const auto id = Ephemeris::identity(scope, attr, request->ttl_ms(), capability);
+        if (!permit || request->generation() != 1 || !request->uuid().empty()) {
             valid.store(false);
+            return finish(context, grpc::Status(grpc::StatusCode::INTERNAL, "Unexpected Create injection"));
         }
-        return finish(context, grpc::Status(grpc::StatusCode::DEADLINE_EXCEEDED, "Injected loss after Create commit")); // 不附 unapplied 细节.
+        auto result = state.create(scope, std::move(attr), bytes(request->data()), request->ttl_ms(), id, 1, 0, capability);
+        if (!result) {
+            valid.store(false);
+            return finish(context, grpc::Status(grpc::StatusCode::INTERNAL, "Create injection failed"));
+        }
+        if (lost) {
+            return finish(context, grpc::Status(grpc::StatusCode::DEADLINE_EXCEEDED, "Injected loss after Create commit")); // 不附 unapplied 细节.
+        }
+        reply->set_instance(gateway.instance());
+        reply->set_uuid(result->uuid);
+        reply->set_capability(capability);
+        reply->set_generation(result->generation);
+        reply->set_order(result->order);
+        reply->set_ttl_ms(result->ttl);
+        reply->set_data(result->data->data(), result->data->size());
+        const std::lock_guard lock(mutex_);
+        pending_ = context->DefaultReactor();
+        held = true;
+        return pending_;
     }
 
     grpc::ServerUnaryReactor* Update(grpc::CallbackServerContext* context, const proto::comet::v1::UpdateRequest* request, proto::comet::v1::UpdateReply* reply) override {
@@ -59,7 +87,7 @@ public:
             return service.Update(context, request, reply);
         }
         auto permit = gateway.enter(*context);
-        auto result = state.update({request->scope().sector(), request->scope().spectrum()}, request->uuid(), bytes(request->data()), request->order());
+        auto result = state.update({request->scope().sector(), request->scope().spectrum()}, request->uuid(), bytes(request->data()), request->order(), request->generation(), request->capability());
         if (!permit || !result) {
             valid.store(false);
         }
@@ -76,24 +104,11 @@ public:
     grpc::ServerUnaryReactor* Renew(grpc::CallbackServerContext* context, const proto::comet::v1::RenewRequest* request, proto::comet::v1::RenewReply* reply) override {
         ++renewals;
         auto permit = gateway.enter(*context);
-        auto result = state.renew({request->scope().sector(), request->scope().spectrum()}, request->uuid(), request->order());
+        auto result = state.renew({request->scope().sector(), request->scope().spectrum()}, request->uuid(), request->order(), request->generation(), request->capability());
         if (!permit || !result) {
             valid.store(false);
         }
         const bool lost = lose_renew.exchange(false);
-        {
-            const std::lock_guard lock(mutex_);
-            state.source().each([&](const astra::Scope&, std::string_view uuid, const Ephemeris::Record& record) {
-                if (uuid == request->uuid()) {
-                    if (lost) {
-                        order_ = request->order();
-                        deadline_ = record.deadline;
-                    } else if (order_ == request->order()) {
-                        duplicate.store(record.deadline == deadline_); // 后一次业务时间已变化, 重复确认仍不能续命.
-                    }
-                }
-            });
-        }
         if (lost) {
             time.fetch_add(100'000'000); // 有限推进 100 ms, 当前注册仍有效.
             return finish(context, grpc::Status(grpc::StatusCode::DEADLINE_EXCEEDED, "Injected loss after Renew commit"));
@@ -123,8 +138,6 @@ private:
 
     std::mutex mutex_;                    // 只保护故障注入记录和暂缓的完成指针.
     grpc::ServerUnaryReactor* pending_{}; // 唯一被延迟的响应, release 后置空, 不重复 Finish.
-    std::uint64_t order_{};               // 丢失过确认的 Renew order, 零为没有记录.
-    astra::Clock::Time deadline_{};       // 对应第一次真实提交的截止, 用于检查幂等性.
 };
 
 class Fixture {
@@ -135,7 +148,6 @@ public:
     Ephemeris::State state{[this] { return std::optional(astra::Clock::Reading{.time = astra::Clock::Time(std::chrono::nanoseconds(time.load())), .ready = true}); }, {}};
     Faults faults{state, gateway, time}; // 组合真实状态和生产处理器.
     comet::Client client;                // 最后关闭后等待实际清理再销毁服务端.
-    std::string endpoint;                // 本例独占的回环监听.
 
     Fixture() {
         auto credentials = astra::Identity::external(std::filesystem::path(ASTRA_FIXTURES) / "star-a");
@@ -212,33 +224,44 @@ void lost() {
 
     Fixture fixture;
     fixture.faults.lose_create.store(true);
-    auto beacon = fixture.client.beacon({"service", "main"}, {1}, {2}, 1s);
-    CHECK(beacon);
-    eventually([&] { return beacon->state().phase == comet::Beacon::Phase::ready; });
-    CHECK(fixture.state.source().size() == 2); // 不确定创建生成新 UUID, 原孤儿由 TTL 清理, 不冒充恰好一次.
+    auto rejected = fixture.client.beacon({"service", "main"}, {1}, {2}, 1s, 100ms);
+    CHECK(!rejected && rejected.error().effect == comet::Error::Effect::unknown);
+    CHECK(fixture.state.source().size() == 1); // 丢失首次回执的孤儿只靠 TTL, SDK 不重试初次 Create.
+    auto beacon = fixture.client.beacon({"service", "main"}, {1}, {2}, 1s, 100ms);
+    CHECK(beacon && fixture.state.source().size() == 2);
     fixture.faults.lose_update.store(true);
-    auto update = beacon->update(std::vector<std::uint8_t>{3});
-    CHECK(update.wait_for(5s) == std::future_status::ready);
-    const auto result = update.get();
+    const auto result = beacon->update(std::vector<std::uint8_t>{3});
     CHECK(!result && result.error().code == comet::Error::Code::timeout && result.error().effect == comet::Error::Effect::unknown);
-    eventually([&] { return fixture.faults.updates.load() >= 2; });
-    std::uint64_t order{}; // 后台重试仍使用同一正 order, 不改变原 future 的不确定结论.
+    const auto before = fixture.faults.renewals.load();
+    eventually([&] { return fixture.faults.renewals.load() >= before + 2; });
+    CHECK(fixture.faults.updates.load() == 1); // 后续维护已经推进, 仍未补发失败 Data.
+    std::uint64_t order{};
     const auto identity = *beacon->state().identity;
     fixture.state.source().each([&](const astra::Scope&, std::string_view uuid, const Ephemeris::Record& record) { if (uuid == identity.uuid) { order = record.update; CHECK(*record.data == Ephemeris::Buffer{3}); } });
     CHECK(order == 1);
     fixture.faults.lose_renew.store(true);
-    eventually([&] { return fixture.faults.duplicate.load(); });
+    const auto previous = fixture.faults.renewals.load();
+    eventually([&] { return fixture.faults.renewals.load() >= previous + 2; });
     CHECK(fixture.faults.valid.load());
 }
 
 void independent() {
 
     Fixture fixture;
-    auto beacon = fixture.client.beacon({"service", "main"}, {}, {}, 1s);
+    auto beacon = fixture.client.beacon({"service", "main"}, {}, {}, 1s, 100ms);
     CHECK(beacon);
     eventually([&] { return beacon->state().phase == comet::Beacon::Phase::ready; });
     fixture.faults.hold_update.store(true);
-    auto update = beacon->update(std::vector<std::uint8_t>{4});
+    auto update = std::async(std::launch::async, [&] { return beacon->update(std::vector<std::uint8_t>{4}); });
+
+    struct Release {
+        Faults& faults; // 断言失败也先归还 reactor, 然后才析构等待 future.
+
+        ~Release() {
+            faults.release();
+        }
+    } release{fixture.faults};
+
     eventually([&] { return fixture.faults.held.load(); });
     const auto before = fixture.faults.renewals.load();
     eventually([&] { return fixture.faults.renewals.load() > before; });
@@ -247,10 +270,197 @@ void independent() {
     CHECK(update.wait_for(3s) == std::future_status::ready && update.get());
     CHECK(fixture.faults.valid.load());
 }
+
+// 暂缓业务采样, 验证手动更新使迟到结果失效, 采样不会阻塞真实 Renew.
+void sampling() {
+
+    struct Gate {
+        std::promise<void> exit; // 显式释放首个正在执行的采样.
+        std::shared_future<void> ready = exit.get_future().share();
+        std::atomic_bool entered{}; // 工作线程已经进入用户代码.
+        std::atomic_bool left{};    // 用户代码已经读到释放信号.
+        std::atomic_uint calls{};   // 只阻塞第一次, 后续采样抛错但不提交内容.
+    };
+
+    auto gate = std::make_shared<Gate>(); // 回调自己保活, 断言失败也没有裸栈引用.
+    Fixture fixture;
+    auto beacon = fixture.client.beacon({"service", "main"}, {}, {1}, 1s, 100ms);
+    CHECK(beacon);
+
+    struct Release {
+        std::shared_ptr<Gate> gate; // 异常路径先解阻, 再等待 SDK 清理.
+
+        ~Release() {
+            if (gate) {
+                gate->exit.set_value();
+            }
+        }
+    } release{gate};
+
+    CHECK(beacon->tick(1ms, [gate]() -> comet::Value {
+        if (gate->calls.fetch_add(1) == 0) {
+            gate->entered = true;
+            gate->ready.wait();
+            gate->left = true;
+            return std::make_shared<const std::vector<std::uint8_t>>(1, 2);
+        }
+        throw std::runtime_error("Sampling failed");
+    }));
+    eventually([&] { return gate->entered.load(); });
+    const auto previous = fixture.faults.renewals.load();
+    CHECK(beacon->update(std::vector<std::uint8_t>{3}));
+    eventually([&] { return fixture.faults.renewals.load() > previous; });
+    gate->exit.set_value();
+    release.gate.reset();
+    eventually([&] { return gate->left.load() && gate->calls.load() >= 2 && fixture.client.exceptions() > 0; });
+    CHECK(beacon->tick(1s, {})); // 首次迟到值仅由手动更新作废, 至此才解除后续任务.
+    beacon->destroy();
+    CHECK(beacon->wait(3s) && fixture.faults.updates.load() == 1);
+    CHECK(!beacon->tick(1ms, [] { return comet::Value{}; }));
+}
+
+// 通知停在用户代码时, 同步 Update 仍可完成; SDK 不等待观察回调来兑现结果.
+void notification() {
+
+    auto gate = std::make_shared<std::promise<void>>();
+    auto ready = gate->get_future().share();
+    std::atomic_bool entered{}; // Fixture 先析构并排空, 此标志仍有效.
+    Fixture fixture;
+    auto beacon = fixture.client.beacon({"service", "main"}, {}, {}, 1s, 100ms);
+    CHECK(beacon);
+
+    struct Release {
+        std::shared_ptr<std::promise<void>> gate;
+
+        ~Release() {
+            gate->set_value();
+        } // 无论断言是否成功均解开已经开始的回调.
+    } release{gate};
+
+    CHECK(beacon->changed([ready, &entered](comet::Beacon::State) { entered = true; ready.wait(); }));
+    eventually([&] { return entered.load(); });
+    CHECK(beacon->update(std::vector<std::uint8_t>{7}, 500ms));
+    CHECK(beacon->changed({})); // 替换正在执行的回调不销毁它所用的存储.
+}
+
+// 已提交但未返回的调用分别到期/取消, SDK 不缓存或重试未知结果, 关闭等待真实回调排空.
+void cancellation() {
+
+    for (const bool cancel : {false, true}) { // 两次独立夹具, 不复用已关闭的对象或错误状态.
+        Fixture fixture;
+        auto beacon = fixture.client.beacon({"service", "cancel"}, {}, {1}, 1s, 100ms);
+        CHECK(beacon);
+        fixture.faults.hold_update = true;
+        auto update = std::async(std::launch::async, [&] { return beacon->update(std::vector<std::uint8_t>{2}, cancel ? 3s : 200ms); });
+
+        struct Release {
+            Faults& faults; // 失败路径同样在 future/Fixture 等待前结束暂缓回执.
+
+            ~Release() {
+                faults.release();
+            }
+        } release{fixture.faults};
+
+        eventually([&] { return fixture.faults.held.load(); });
+        if (cancel) {
+            beacon->destroy();
+        }
+        CHECK(update.wait_for(2s) == std::future_status::ready);
+        const auto result = update.get();
+        CHECK(!result && result.error().code == (cancel ? comet::Error::Code::closed : comet::Error::Code::timeout));
+        CHECK(result.error().effect == comet::Error::Effect::unknown);
+        fixture.faults.release();
+        beacon->destroy();
+        CHECK(beacon->wait(3s) && fixture.faults.updates.load() == 1);
+    }
+}
+
+// 通知解除自己, 捕获析构重入句柄; 清理不得把业务析构带回内部锁.
+void captures() {
+
+    std::atomic_uint released{}, forbidden{}; // 先于 Fixture 构造, 晚于所有回调销毁.
+    Fixture fixture;
+    auto opened = fixture.client.beacon({"service", "captures"}, {}, {}, 1s, 100ms);
+    CHECK(opened);
+    auto beacon = std::make_shared<comet::Beacon>(std::move(*opened));
+
+    struct Capture {
+        std::shared_ptr<comet::Beacon> owner; // 句柄由正在执行的回调保活.
+        std::atomic_uint& released;
+        std::atomic_uint& forbidden;
+
+        ~Capture() {
+            static_cast<void>(owner->state());
+            try {
+                static_cast<void>(owner->wait(0ms));
+            } catch (const std::logic_error&) {
+                ++forbidden;
+            }
+            ++released;
+        }
+    };
+
+    CHECK(beacon->changed([capture = std::make_shared<Capture>(beacon, released, forbidden)](comet::Beacon::State) {
+        CHECK(capture->owner->changed({}));
+    }));
+    eventually([&] { return released.load() == 1; });
+    for (const bool fails : {false, true}) {
+        CHECK(beacon->tick(1ms, [capture = std::make_shared<Capture>(beacon, released, forbidden), fails]() -> comet::Value {
+            CHECK(capture->owner->tick(1s, {})); // 在正常返回或抛错前解除自己.
+            if (fails) {
+                throw std::runtime_error("Sampling failure");
+            }
+            return {}; // 已被替换的采样不发送正文.
+        }));
+        eventually([&] { return released.load() == (fails ? 3U : 2U); });
+    }
+    beacon->destroy();
+    CHECK(beacon->wait(3s) && forbidden.load() == 3 && fixture.client.exceptions() == 1);
+}
+
+// 工厂总期限覆盖首次提交的回执等待, Client 关闭也能直接取消, 不依赖控制轮消费回复.
+void initial() {
+
+    for (const bool cancel : {false, true}) {
+        Fixture fixture;
+        fixture.faults.hold_create = true;
+        auto create = std::async(std::launch::async, [&] {
+            comet::Beacon::Options options;
+            options.timeout = cancel ? 3s : 200ms;
+            return fixture.client.beacon({"service", "initial"}, {}, {1}, 1s, 100ms, std::move(options));
+        });
+
+        struct Release {
+            Faults& faults; // reactor 在等待 future 前结束, 异常路径不遗漏.
+
+            ~Release() {
+                faults.release();
+            }
+        } release{fixture.faults};
+
+        eventually([&] { return fixture.faults.held.load(); });
+        if (cancel) {
+            fixture.client.close();
+        }
+        CHECK(create.wait_for(2s) == std::future_status::ready);
+        const auto result = create.get();
+        CHECK(!result && result.error().code == (cancel ? comet::Error::Code::closed : comet::Error::Code::timeout));
+        CHECK(result.error().effect == comet::Error::Effect::unknown);
+        fixture.faults.release();
+        fixture.client.close();
+        CHECK(fixture.client.wait(3s) && fixture.faults.creates.load() == 1 && fixture.faults.valid.load());
+    }
+}
+
 } // namespace
 
 int main() {
     try {
+        initial();
+        captures();
+        cancellation();
+        sampling();
+        notification();
         lost();
         independent();
         std::cout << "Beacon RPC fault cases passed\n";

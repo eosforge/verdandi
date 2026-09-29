@@ -77,6 +77,8 @@ public:
     std::expected<bool, Almanac::Error> reset(Draft&& draft);
     // 修改已存在完整 Scope 的单 Key, 不按不存在的 Scope 偷建零版本基线.
     std::expected<bool, Almanac::Error> apply(const Scope& scope, std::uint64_t version, std::string key, std::optional<Almanac::Buffer> value);
+    // 与单键相同的范围计费和通知边界, 一个信封携带整个批次.
+    std::expected<bool, Almanac::Error> apply(const Scope& scope, std::uint64_t version, std::vector<Almanac::Change> changes);
     // 获取全部完整位置的稳定清单, 与安装串行; 不复制内容, 不借用路由节点.
     std::vector<Position> positions() const;
 

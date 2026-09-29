@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/orbit"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"

@@ -1251,6 +1251,7 @@ type EphemerisRecord struct {
 	Update        uint64                 `protobuf:"varint,4,opt,name=update,proto3" json:"update,omitempty"`
 	Renewal       uint64                 `protobuf:"varint,5,opt,name=renewal,proto3" json:"renewal,omitempty"`
 	TtlMs         uint32                 `protobuf:"varint,6,opt,name=ttl_ms,json=ttlMs,proto3" json:"ttl_ms,omitempty"`
+	Generation    uint64                 `protobuf:"varint,7,opt,name=generation,proto3" json:"generation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1323,6 +1324,13 @@ func (x *EphemerisRecord) GetRenewal() uint64 {
 func (x *EphemerisRecord) GetTtlMs() uint32 {
 	if x != nil {
 		return x.TtlMs
+	}
+	return 0
+}
+
+func (x *EphemerisRecord) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
 	}
 	return 0
 }
@@ -1449,11 +1457,12 @@ func (x *EphemerisSnapshot) GetComplete() bool {
 	return false
 }
 
-// Data-only 不隐式延期, 未掌握 Attr 或完整记录时请求精确回补.
+// Data-only 携带原始提交计算的绝对截止, 接收端不重新授予 TTL; 缺少完整记录时精确回补.
 type EphemerisData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	Order         uint64                 `protobuf:"varint,2,opt,name=order,proto3" json:"order,omitempty"`
+	Deadline      uint64                 `protobuf:"varint,3,opt,name=deadline,proto3" json:"deadline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1498,6 +1507,13 @@ func (x *EphemerisData) GetData() []byte {
 func (x *EphemerisData) GetOrder() uint64 {
 	if x != nil {
 		return x.Order
+	}
+	return 0
+}
+
+func (x *EphemerisData) GetDeadline() uint64 {
+	if x != nil {
+		return x.Deadline
 	}
 	return 0
 }
@@ -2012,14 +2028,17 @@ const file_astra_proto_rawDesc = "" +
 	"\x06action\"\\\n" +
 	"\x0eCatalogChanges\x126\n" +
 	"\aentries\x18\x01 \x03(\v2\x1c.proto.astra.v1.CatalogDeltaR\aentries\x12\x12\n" +
-	"\x04head\x18\x02 \x01(\x04R\x04head\"\x9e\x01\n" +
+	"\x04head\x18\x02 \x01(\x04R\x04head\"\xbe\x01\n" +
 	"\x0fEphemerisRecord\x12\x12\n" +
 	"\x04attr\x18\x01 \x01(\fR\x04attr\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12\x1a\n" +
 	"\bdeadline\x18\x03 \x01(\x04R\bdeadline\x12\x16\n" +
 	"\x06update\x18\x04 \x01(\x04R\x06update\x12\x18\n" +
 	"\arenewal\x18\x05 \x01(\x04R\arenewal\x12\x15\n" +
-	"\x06ttl_ms\x18\x06 \x01(\rR\x05ttlMs\"\x8a\x01\n" +
+	"\x06ttl_ms\x18\x06 \x01(\rR\x05ttlMs\x12\x1e\n" +
+	"\n" +
+	"generation\x18\a \x01(\x04R\n" +
+	"generation\"\x8a\x01\n" +
 	"\x0eEphemerisEntry\x12+\n" +
 	"\x05scope\x18\x01 \x01(\v2\x15.proto.astra.v1.ScopeR\x05scope\x12\x12\n" +
 	"\x04uuid\x18\x02 \x01(\fR\x04uuid\x127\n" +
@@ -2027,10 +2046,11 @@ const file_astra_proto_rawDesc = "" +
 	"\x11EphemerisSnapshot\x12\x1a\n" +
 	"\bposition\x18\x01 \x01(\x04R\bposition\x128\n" +
 	"\aentries\x18\x02 \x03(\v2\x1e.proto.astra.v1.EphemerisEntryR\aentries\x12\x1a\n" +
-	"\bcomplete\x18\x03 \x01(\bR\bcomplete\"9\n" +
+	"\bcomplete\x18\x03 \x01(\bR\bcomplete\"U\n" +
 	"\rEphemerisData\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x14\n" +
-	"\x05order\x18\x02 \x01(\x04R\x05order\"B\n" +
+	"\x05order\x18\x02 \x01(\x04R\x05order\x12\x1a\n" +
+	"\bdeadline\x18\x03 \x01(\x04R\bdeadline\"B\n" +
 	"\x0eEphemerisLease\x12\x1a\n" +
 	"\bdeadline\x18\x01 \x01(\x04R\bdeadline\x12\x14\n" +
 	"\x05order\x18\x02 \x01(\x04R\x05order\"\xce\x02\n" +
@@ -2077,7 +2097,7 @@ const file_astra_proto_rawDesc = "" +
 	"\x0eDOMAIN_CATALOG\x10\x01\x12\x14\n" +
 	"\x10DOMAIN_EPHEMERIS\x10\x022`\n" +
 	"\rStarTransport\x12O\n" +
-	"\vOpenSession\x12\x1d.proto.astra.v1.SessionPacket\x1a\x1d.proto.astra.v1.SessionPacket(\x010\x01BCZAgithub.com/eosforge/verdandi/astra/internal/generated/astra;astrab\x06proto3"
+	"\vOpenSession\x12\x1d.proto.astra.v1.SessionPacket\x1a\x1d.proto.astra.v1.SessionPacket(\x010\x01B:Z8github.com/eosforge/astra/internal/generated/astra;astrab\x06proto3"
 
 var (
 	file_astra_proto_rawDescOnce sync.Once

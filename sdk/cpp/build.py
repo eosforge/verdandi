@@ -132,7 +132,7 @@ class Build:
     def __init__(self, options, native: Toolchain, env: dict, cpp: Path = CPP):
         self.options, self.native, self.env = options, native, dict(env)
         self.cpp = cpp
-        self.root = cpp.parents[1]
+        self.root = cpp.parent
         self.build_root = self.root / "build"
         self.jobs = options.jobs or max(1, os.cpu_count() or 1)
         self.linkage = "static" if options.linkage == "auto" else options.linkage

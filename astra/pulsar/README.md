@@ -1,15 +1,15 @@
 # Pulsar: 登记与连续纪元时间
 
-本文维护当前部署、四时间戳采样、连续时间与恢复边界. [SQLite 成员库](#sqlite) 及角色/目录扩展已接入实现与回归. 实际配置、源码身份和故障注入边界见 [验证记录](../../testkit/validation.md), 后续未验证改动不继承该结果; 首版不导入旧 journal.
+本文维护当前部署、四时间戳采样、连续时间与恢复边界. [SQLite 成员库](#sqlite) 及角色/目录扩展已接入实现与回归. 实际配置、源码身份和故障注入边界见 [验证记录](../docs/validation.md), 后续未验证改动不继承该结果; 首版不导入旧 journal.
 
 ## 职责与调用链
 
 Pulsar 是独立的 C++ 控制服务, 当前负责账号登录、成员凭证签发、持久登记和时间参考.
 Star 自己完成采样、过滤、时钟质量判断和动态数据期限换算. Pulsar 不处理 Almanac/Catalog/Ephemeris 业务数据.
 
-Pulsar 不向 Comet 开放任何接口. 已确认为 Polaris 与 Astrolabe 增加独立 Orbit 角色, 沿用内部准入签发, 完整边界见 [Astrolabe](../astrolabe/README.md#管理准入). 两种新角色的签发、校验和目录隔离已编写, 不将普通 SDK 加入基础设施角色. 不保留架构级 standalone 免准入分支, 单机部署与集群遵守同一 [初始化链路](../../docs/architecture.md#启动与运行).
+Pulsar 不向 Comet 开放任何接口. 已确认为 Polaris 与 Astrolabe 增加独立 Orbit 角色, 沿用内部准入签发, 完整边界见 [Astrolabe](../astrolabe/README.md#管理准入). 两种新角色的签发、校验和目录隔离已编写, 不将普通 SDK 加入基础设施角色. 不保留架构级 standalone 免准入分支, 单机部署与集群遵守同一 [初始化链路](../docs/architecture.md#启动与运行).
 
-目录已按角色区分: Star/Polaris 取得 Star 与 Polaris, Astrolabe 取得全部基础设施成员, 既有 Planet 候选保持冻结. 名单不作为进程健康或数据库就绪证明, 也不赋予 Polaris/Astrolabe 对等数据节点身份; 角色过滤与同步方向见 [Polaris 接入](../../proto/README.md#polaris-stream). 登记后采用 [只读名单查询](../../proto/README.md#directory), 不实现成员变更长流; Star 首次登记后改用 List 刷新, 不重复提交账号密码, 撤销凭证与控制面暂时失联分别处理.
+目录已按角色区分: Star/Polaris 取得 Star 与 Polaris, Astrolabe 取得全部基础设施成员, 既有 Planet 候选保持冻结. 名单不作为进程健康或数据库就绪证明, 也不赋予 Polaris/Astrolabe 对等数据节点身份; 角色过滤与同步方向见 [Polaris 接入](../proto/README.md#polaris-stream). 登记后采用 [只读名单查询](../proto/README.md#directory), 不实现成员变更长流; Star 首次登记后改用 List 刷新, 不重复提交账号密码, 撤销凭证与控制面暂时失联分别处理.
 
 ```mermaid
 flowchart LR
@@ -112,7 +112,7 @@ SQLITE_BUSY 的等待及重试有界, 不能阻塞 Pulse 或绕过 RPC 期限. C
 
 Schema 1 成员正文的 principal 固定为 64 字符小写十六进制, 必须与 members 主键一致. 线上 Member 使用 32 字节摘要, Ledger 在持久化/恢复边界转换, 不让线协议的 string/bytes 优化改变既有磁盘格式. 正常恢复不重写数据库、不重置成员代次, 也不接受正文与主键不匹配的记录.
 
-SQLite 不保存一个用于重启续接的物理时钟计数器. 重启时间仍按下文从受系统对时约束的 Unix 时间重新建立参考, 不能用最后落盘的时间推断停机时长. 实现固定 SQLite 3.53.4 与 Schema 1, CMake 仅消费已存在的官方 amalgamation, 核对压缩包及 C/头文件 SHA256; 不查找系统库或隐式下载. 独立 `.lock` 使用 flock 保持整个进程生命周期的服务独占. 恢复核对当前成员和从 1 到当前代次的全部启动绑定, 历史受已确认容量限制. 新增依赖仍需明确下载授权. 存储验收要求见 [管理与成员存储](../../testkit/comet.md#管理与成员存储), 实际结果见 [验证记录](../../testkit/validation.md).
+SQLite 不保存一个用于重启续接的物理时钟计数器. 重启时间仍按下文从受系统对时约束的 Unix 时间重新建立参考, 不能用最后落盘的时间推断停机时长. 实现固定 SQLite 3.53.4 与 Schema 1, CMake 仅消费已存在的官方 amalgamation, 核对压缩包及 C/头文件 SHA256; 不查找系统库或隐式下载. 独立 `.lock` 使用 flock 保持整个进程生命周期的服务独占. 恢复核对当前成员和从 1 到当前代次的全部启动绑定, 历史受已确认容量限制. 新增依赖仍需明确下载授权. 存储验收要求见 [管理与成员存储](../docs/comet.md#管理与成员存储), 实际结果见 [验证记录](../docs/validation.md).
 
 ## 对时算法与资源隔离
 
@@ -261,7 +261,7 @@ Star 的 Catalog/Ephemeris 仍为内存状态, 不从本地磁盘恢复租约; P
 
 Clock/Store 确定性、物理参考故障、成员持久化、TLS/Pulse、慢流取消、Pulsar 与两台 Star 真实进程恢复均有用例. 真实进程场景只读宿主时源质量, 不设置生产测试后门.
 SQLite 初始化/拒绝覆盖、身份恢复、角色与启动容量、并发幂等、忙锁下内存读取、事务回滚及 VFS 写入/同步故障用例已纳入回归.
-失联超过 5 s 后新建/续租、周级离线后的短期限、参考质量与本地计时独立、Pulse 不传播劣质新样本及恢复不续满旧期限也有用例. 最新执行证据统一见 [验证记录](../../testkit/validation.md), 时间推进模拟不冒充真实挂起设备测试.
+失联超过 5 s 后新建/续租、周级离线后的短期限、参考质量与本地计时独立、Pulse 不传播劣质新样本及恢复不续满旧期限也有用例. 最新执行证据统一见 [验证记录](../docs/validation.md), 时间推进模拟不冒充真实挂起设备测试.
 宿主未同步或误差超限时应明确失败; 不通过继续放宽门槛或跳过用例冒充通过. 当前质量门槛为已批准的 500 ms, 与 200 ms 的 RTT/处理边界不同.
 物理断电、真实 suspend、负载下 Pulse 尾延迟和长期精度尚无本轮专项结果. 不自动修改系统时间、安装时源服务或挂起 VM.
-测试与下载授权分别遵循 [AGENTS.md](../../AGENTS.md).
+测试与下载授权分别遵循 [AGENTS.md](../AGENTS.md).

@@ -39,8 +39,9 @@ std::optional<Observer::Record> Observer::View::find(std::string_view uuid) cons
 }
 
 void Observer::View::visit(void* context, void (*visitor)(void*, std::string_view, const Record&)) const {
-    if (contents_) {
-        contents_->data.each([&](std::string_view uuid, const detail::Registration& record) {
+    const auto contents = contents_; // 回调可重入并重新赋值原 View, 本次遍历仍固定拥有旧根.
+    if (contents) {
+        contents->data.each([&](std::string_view uuid, const detail::Registration& record) {
             const Record complete{record.attr, record.data}; // 只共享所有权, 不复制任意 Attr/Data 字节.
             visitor(context, uuid, complete);
         });
@@ -70,7 +71,7 @@ void Selection::discard() noexcept {
     seen_bytes_ = 0;
     mode_ = proto::comet::v1::MODE_UNSPECIFIED;
     if (reserve_) {
-        static_cast<void>(reserve_(current_ ? current_->data.footprint() : 0));
+        static_cast<void>(reserve_((current_ ? current_->data.footprint() : 0) + estimates_->data.footprint()));
     }
 }
 
@@ -127,8 +128,8 @@ Result<std::optional<Observer::View>> Selection::accept(const proto::comet::v1::
         return fail(Error::Code::protocol);
     }
 
-    // 一页一项的完整批次不可能重复, 无须为每次小更新分配去重节点和桶.
-    const bool track = !page.complete() || page.changes_size() != 1 || !seen_.empty(); // 之前已有页面时必须继续跨页去重.
+    // 保留整批变化集合, 尾页基于最新本地估计淘汰, 不覆盖批次在途时的其他本地写入.
+    const bool track = !page.complete() || page.changes_size() != 1 || !seen_.empty(); // 单页单项直接借该项淘汰估计, 保留免去重分配路径.
     for (const auto& change : page.changes()) {
         // seen 只跟踪本批, 上限包含当前及最终两份记录集合, 不跨重连累计历史 Key.
         if (!valid(change.uuid()) || (!target_.empty() && target_ != change.uuid())) {
@@ -190,7 +191,7 @@ Result<std::optional<Observer::View>> Selection::accept(const proto::comet::v1::
     // 准备阶段分别容纳原内容与候选, 去重桶/Key 也计入, 共享页按保守引用寿命计量.
     const auto metadata = seen_bytes_ + seen_.size() * (sizeof(std::string) + 32) + seen_.bucket_count() * sizeof(void*);
     const auto prepared = draft_->footprint() + metadata;
-    if (prepared > bytes_ * 2 || (reserve_ && !reserve_(prepared + (current_ ? current_->data.footprint() : 0)))) {
+    if (prepared > bytes_ * 2 || (reserve_ && !reserve_(prepared + (current_ ? current_->data.footprint() : 0) + estimates_->data.footprint()))) {
         return fail(Error::Code::limit);
     }
     if (!page.complete()) {
@@ -213,7 +214,20 @@ Result<std::optional<Observer::View>> Selection::accept(const proto::comet::v1::
     if (next->data.footprint() > bytes_) {
         return fail(Error::Code::limit);
     }
+    auto estimates = std::make_shared<Estimates>();
+    auto local = mode_ == proto::comet::v1::MODE_RESET ? Table<Estimate>::Draft(Table<Estimate>{}) : Table<Estimate>::Draft(estimates_->data); // 直接构造 Draft, 不先复制固定 256 页的 Table 根.
+    if (!track) {
+        local.erase(page.changes(0).uuid());
+    }
+    for (const auto& id : seen_) {
+        local.erase(id); // 只有本批权威变化的 Key 失效, 其他 Key 的最新估计继续存在.
+    }
+    if (next->data.footprint() + local.footprint() > bytes_ || (reserve_ && !reserve_(prepared + (current_ ? current_->data.footprint() : 0) + estimates_->data.footprint() + local.footprint()))) {
+        return fail(Error::Code::limit);
+    }
+    estimates->data = std::move(local).finish();
     result.contents_ = next;
+    estimates_ = std::move(estimates);
     current_ = std::move(next);
     expected_.swap(expected);
     first_ = false;
@@ -251,3 +265,74 @@ bool Selection::resume() const noexcept {
     return !fresh_;
 }
 } // namespace comet::detail
+
+namespace comet::detail {
+Observer::Pool Selection::pool(std::weak_ptr<Observing> owner) const {
+    Observer::Pool result;
+    result.contents_ = current_;
+    result.estimates_ = estimates_;
+    result.owner_ = std::move(owner);
+    return result;
+}
+
+Result<void> Selection::estimate(std::string_view id, const Value& authority, const Value& previous, Value data) {
+
+    const auto* row = current_ ? current_->data.find(id) : nullptr;
+    if (!row || row->data != authority) {
+        return std::unexpected(Error{Error::Code::obsolete, Error::Effect::unapplied, {}, {}, {}});
+    }
+    const auto* old = estimates_->data.find(id);
+    if ((old ? old->data : row->data) != previous) {
+        return std::unexpected(Error{Error::Code::conflict, Error::Effect::unapplied, {}, {}, {}});
+    }
+    auto next = std::make_shared<Estimates>();
+    Table<Estimate>::Draft draft(estimates_->data);
+    draft.set(id, Estimate{authority, std::move(data)});
+    const auto pending = draft_ ? draft_->footprint() + seen_bytes_ + seen_.size() * (sizeof(std::string) + 32) + seen_.bucket_count() * sizeof(void*) : 0; // 已接收网络候选也占共享预算.
+    const auto original = current_->data.footprint() + estimates_->data.footprint() + pending;
+    const auto retained = current_->data.footprint() + draft.footprint();
+    if (retained > bytes_ || (reserve_ && !reserve_(original + draft.footprint()))) {
+        return std::unexpected(Error{Error::Code::limit, Error::Effect::unapplied, {}, {}, {}});
+    }
+    try {
+        next->data = std::move(draft).finish();
+    } catch (...) {
+        if (reserve_) {
+            static_cast<void>(reserve_(original));
+        }
+        throw;
+    }
+    estimates_ = std::move(next);
+    if (reserve_) {
+        static_cast<void>(reserve_(current_->data.footprint() + estimates_->data.footprint() + pending));
+    }
+    return {};
+}
+} // namespace comet::detail
+
+namespace comet {
+std::size_t Observer::Pool::size() const noexcept {
+    return contents_ ? contents_->data.size() : 0;
+}
+
+std::optional<Observer::Item> Observer::Pool::find(std::string_view id) const {
+    const auto* row = contents_ ? contents_->data.find(id) : nullptr;
+    if (!row) {
+        return {};
+    }
+    const auto* local = estimates_ ? estimates_->data.find(id) : nullptr;
+    Item item;
+    item.id_ = id;
+    item.record_ = Record{row->attr, local && local->authority == row->data ? local->data : row->data};
+    item.authority_ = row->data;
+    item.owner_ = owner_;
+    return item;
+}
+
+void Observer::Pool::visit(void* context, void (*visitor)(void*, Item)) const {
+    const auto pool = *this; // 回调可以重入并释放原池, 本轮仍固定拥有两个根.
+    if (pool.contents_) {
+        pool.contents_->data.each([&](std::string_view id, const detail::Registration&) { visitor(context, *pool.find(id)); });
+    }
+}
+} // namespace comet

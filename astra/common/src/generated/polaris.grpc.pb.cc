@@ -26,6 +26,7 @@ namespace v1 {
 
 static const char* Authority_method_names[] = {
   "/proto.polaris.v1.Authority/Commit",
+  "/proto.polaris.v1.Authority/Batch",
   "/proto.polaris.v1.Authority/List",
   "/proto.polaris.v1.Authority/Load",
 };
@@ -38,8 +39,9 @@ std::unique_ptr< Authority::Stub> Authority::NewStub(const std::shared_ptr< ::gr
 
 Authority::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options)
   : channel_(channel), rpcmethod_Commit_(Authority_method_names[0], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_List_(Authority_method_names[1], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_Load_(Authority_method_names[2], options.suffix_for_stats(),::grpc::internal::RpcMethod::SERVER_STREAMING, channel)
+  , rpcmethod_Batch_(Authority_method_names[1], options.suffix_for_stats(),::grpc::internal::RpcMethod::CLIENT_STREAMING, channel)
+  , rpcmethod_List_(Authority_method_names[2], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_Load_(Authority_method_names[3], options.suffix_for_stats(),::grpc::internal::RpcMethod::SERVER_STREAMING, channel)
   {}
 
 ::grpc::Status Authority::Stub::Commit(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest& request, ::proto::polaris::v1::Position* response) {
@@ -63,6 +65,22 @@ void Authority::Stub::async::Commit(::grpc::ClientContext* context, const ::prot
     this->PrepareAsyncCommitRaw(context, request, cq);
   result->StartCall();
   return result;
+}
+
+::grpc::ClientWriter< ::proto::polaris::v1::BatchRequest>* Authority::Stub::BatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response) {
+  return ::grpc::internal::ClientWriterFactory< ::proto::polaris::v1::BatchRequest>::Create(channel_.get(), rpcmethod_Batch_, context, response);
+}
+
+void Authority::Stub::async::Batch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::ClientWriteReactor< ::proto::polaris::v1::BatchRequest>* reactor) {
+  ::grpc::internal::ClientCallbackWriterFactory< ::proto::polaris::v1::BatchRequest>::Create(stub_->channel_.get(), stub_->rpcmethod_Batch_, context, response, reactor);
+}
+
+::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>* Authority::Stub::AsyncBatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq, void* tag) {
+  return ::grpc::internal::ClientAsyncWriterFactory< ::proto::polaris::v1::BatchRequest>::Create(channel_.get(), cq, rpcmethod_Batch_, context, response, true, tag);
+}
+
+::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>* Authority::Stub::PrepareAsyncBatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncWriterFactory< ::proto::polaris::v1::BatchRequest>::Create(channel_.get(), cq, rpcmethod_Batch_, context, response, false, nullptr);
 }
 
 ::grpc::Status Authority::Stub::List(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::proto::polaris::v1::Inventory* response) {
@@ -117,6 +135,16 @@ Authority::Service::Service() {
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       Authority_method_names[1],
+      ::grpc::internal::RpcMethod::CLIENT_STREAMING,
+      new ::grpc::internal::ClientStreamingHandler< Authority::Service, ::proto::polaris::v1::BatchRequest, ::proto::polaris::v1::Position>(
+          [](Authority::Service* service,
+             ::grpc::ServerContext* ctx,
+             ::grpc::ServerReader<::proto::polaris::v1::BatchRequest>* reader,
+             ::proto::polaris::v1::Position* resp) {
+               return service->Batch(ctx, reader, resp);
+             }, this)));
+  AddMethod(new ::grpc::internal::RpcServiceMethod(
+      Authority_method_names[2],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< Authority::Service, ::proto::comet::v1::Empty, ::proto::polaris::v1::Inventory, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](Authority::Service* service,
@@ -126,7 +154,7 @@ Authority::Service::Service() {
                return service->List(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      Authority_method_names[2],
+      Authority_method_names[3],
       ::grpc::internal::RpcMethod::SERVER_STREAMING,
       new ::grpc::internal::ServerStreamingHandler< Authority::Service, ::proto::comet::v1::Scope, ::proto::polaris::v1::Snapshot>(
           [](Authority::Service* service,
@@ -143,6 +171,13 @@ Authority::Service::~Service() {
 ::grpc::Status Authority::Service::Commit(::grpc::ServerContext* context, const ::proto::polaris::v1::CommitRequest* request, ::proto::polaris::v1::Position* response) {
   (void) context;
   (void) request;
+  (void) response;
+  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+}
+
+::grpc::Status Authority::Service::Batch(::grpc::ServerContext* context, ::grpc::ServerReader< ::proto::polaris::v1::BatchRequest>* reader, ::proto::polaris::v1::Position* response) {
+  (void) context;
+  (void) reader;
   (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }

@@ -25,7 +25,7 @@ public:
         std::filesystem::path ca;
         // 订阅对象及实际 RPC 各自的上限, 默认 64, 包括取消尚未 OnDone 的旧流.
         std::size_t readers = 64;
-        std::size_t beacons = 1024; // 自动写对象总上限, Publisher/Beacon 共用, 与 Watch 额度分开.
+        std::size_t beacons = 1024; // 写对象总上限, Publisher/Beacon 共用, 与 Watch 额度分开.
         // Client 当前内容及准备的受控总预算, 默认 256 MiB, 不强制回收应用持有的旧 View.
         std::size_t bytes = 256 * 1024 * 1024;
         // Session 首次确认及连接尝试的本地超时, 默认 3 秒, 确认后不会用它结束长期 Session.
@@ -46,12 +46,13 @@ public:
     Result<Reader> reader(Scope scope, std::string target = {}, Reader::Options options = {});
     // 固定整个 Ephemeris 分组或规范 UUID, 与 Reader 共用 Client 接入和有界调度.
     Result<Observer> observer(Scope scope, std::string target = {}, Observer::Options options = {});
-    Result<Subscriber> subscriber(Scope scope, std::string target = {}, Subscriber::Options options = {});                                                           // 动态 Catalog, 每条记录有独立内容版本.
-    Result<Beacon> beacon(Scope scope, std::vector<std::uint8_t> attr, std::vector<std::uint8_t> data, std::chrono::milliseconds ttl, Beacon::Options options = {}); // 仅表示本地接纳, 实际身份由状态/通知确认.
-    Result<Publisher> publisher(Scope scope, std::string key, std::chrono::milliseconds ttl, Publisher::Options options = {});                                       // 不预发布空内容, 首次 publish 才建立期望.
-    void close() noexcept;                                                                                                                                           // 显式关闭所有所属业务对象, 非阻塞且幂等.
-    bool wait(std::chrono::milliseconds timeout) const;                                                                                                              // 等待本地网络和通知清理, 不隐式 close, SDK 回调内禁止等待.
-    std::uint64_t exceptions() const noexcept;                                                                                                                       // 观察者抛出的异常累计数, 不含敏感正文; 空 Client 返回 0.
+    Result<Subscriber> subscriber(Scope scope, std::string target = {}, Subscriber::Options options = {});                                                                                           // 动态 Catalog, 每条记录有独立内容版本.
+    Result<Beacon> beacon(Scope scope, std::vector<std::uint8_t> attr, std::vector<std::uint8_t> data, std::chrono::milliseconds ttl, std::chrono::milliseconds beat, Beacon::Options options = {}); // 同步等待首个注册确认, 要求 0 < beat < ttl.
+    // 只验证并绑定 Catalog Scope; update 同步提交, 自动版本和每次 TTL 由该次调用管理.
+    Result<Publisher> publisher(Scope scope);
+    void close() noexcept;                              // 显式关闭所有所属业务对象, 非阻塞且幂等.
+    bool wait(std::chrono::milliseconds timeout) const; // 等待本地网络和通知清理, 不隐式 close, SDK 回调内禁止等待.
+    std::uint64_t exceptions() const noexcept;          // 观察者抛出的异常累计数, 不含敏感正文; 空 Client 返回 0.
 
 private:
     struct Owner;                                  // 应用 Client 引用与内部 RPC 引用分开计数, 避免后台任务自我保活泄漏.

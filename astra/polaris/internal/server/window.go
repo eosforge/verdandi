@@ -3,8 +3,8 @@ package server
 import (
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/polaris"
-	"github.com/eosforge/verdandi/astra/polaris/internal/storage"
+	"github.com/eosforge/astra/internal/generated/polaris"
+	"github.com/eosforge/astra/polaris/internal/storage"
 	"google.golang.org/protobuf/proto"
 )
 

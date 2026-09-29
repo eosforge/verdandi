@@ -1171,15 +1171,15 @@ const char descriptor_table_protodef_orbit_2eproto[] ABSL_ATTRIBUTE_SECTION_VARI
     "to.orbit.v1.RegistrationRequest\032$.proto."
     "orbit.v1.RegistrationResponse\022K\n\004List\022 ."
     "proto.orbit.v1.DirectoryRequest\032!.proto."
-    "orbit.v1.DirectoryResponseBCZAgithub.com"
-    "/eosforge/verdandi/astra/internal/genera"
-    "ted/orbit;orbitb\006proto3"
+    "orbit.v1.DirectoryResponseB:Z8github.com"
+    "/eosforge/astra/internal/generated/orbit"
+    ";orbitb\006proto3"
 };
 static ::absl::once_flag descriptor_table_orbit_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_orbit_2eproto = {
     false,
     false,
-    1063,
+    1054,
     descriptor_table_protodef_orbit_2eproto,
     "orbit.proto",
     &descriptor_table_orbit_2eproto_once,

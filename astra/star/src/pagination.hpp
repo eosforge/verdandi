@@ -54,7 +54,30 @@ public:
         }
         const auto order = [](const auto& change) { return std::tie(change.name->key, change.version); }; // 引用排序键, 不复制名称或载荷.
         if (!std::ranges::is_sorted(changes, {}, order)) {
-            std::ranges::sort(changes, {}, order);
+            // 只排序紧凑位置, 再沿置换环移动事件, 不让排序内部反复移动可选正文/共享所有权.
+            // 直接排序 Event 曾触发当前 GCC Release 的 maybe-uninitialized 错误; 不以关闭告警换回较短写法.
+            // 已有序的常态后缀不分配; 乱序历史临时增加每项一个 size_t, 本块结束即释放.
+            std::vector<std::size_t> positions(changes.size());
+            for (std::size_t index = 0; index < positions.size(); ++index)
+                positions[index] = index;
+            std::ranges::sort(positions, {}, [&](std::size_t index) { return order(changes[index]); });
+
+            // positions[target] 是原输入下标; 已完成的环归为恒等映射, 每项只搬入最终位置一次.
+            for (std::size_t first = 0; first < positions.size(); ++first) {
+                if (positions[first] == first)
+                    continue;
+                Event saved{}; // 先建立明确空状态, 再保活本环第一项, 闭环时填回最后一个空位.
+                saved = std::move(changes[first]);
+                auto slot = first;
+                while (positions[slot] != first) {
+                    const auto source = positions[slot]; // 尚未覆盖的下一项, 映射始终来自同一排列.
+                    changes[slot] = std::move(changes[source]);
+                    positions[slot] = slot;
+                    slot = source;
+                }
+                changes[slot] = std::move(saved);
+                positions[slot] = slot;
+            }
         }
 
         // 原地合并相同名称, 最终 action 的领域语义由 Encoding 保留, 不用新 HashMap 收集.

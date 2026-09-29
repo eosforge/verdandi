@@ -1,6 +1,6 @@
 # Verdandi C# SDK
 
-> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../README.md).
 
 ## Status
 
@@ -71,14 +71,14 @@ completion/cancellation contract or an independently approved pure-C# backend.
 C# needs no dedicated PowerShell or Bash build orchestration. The managed
 assembly is compiled normally by a consuming `dotnet build`, project reference,
 or eventual NuGet package. Only the C++23 shared runtime must be built
-separately. From the repository root:
+separately. From the sdk/ root:
 
 ```powershell
-./sdk/cpp/build.ps1 all -Profile release -Linkage shared
+./cpp/build.ps1 all -Profile release -Linkage shared -Offline
 ```
 
 ```bash
-bash sdk/cpp/build.sh all --profile release --linkage shared
+bash cpp/build.sh all --profile release --linkage shared --offline
 ```
 
 The native scripts print the exact `verdandi_cpp.dll` or
@@ -363,24 +363,23 @@ Verdandi.Tests --redis <host:port>
 Verdandi.Tests --configuration-file <path>
 ```
 
-The complete C# regression is intentionally executable without running another
-language's SDK suite:
+The C# harness can run independently of the other SDK suites. From sdk/csharp/, after explicit build/test authorization and with existing dependencies:
 
 ```powershell
 $env:VERDANDI_TEST_SSH_PASSWORD = "<temporary test-host password>"
 python -B tests/standalone_test.py `
-  --host 192.168.0.90 --ssh-user ubuntu `
-  --result-file ../../testkit/results/csharp-standalone.json
+  --host 192.168.0.119 --ssh-user ubuntu `
+  --result-file ../build/results/csharp-standalone.json
 python -B tests/sentinel_test.py `
-  --host 192.168.0.90 --ssh-user ubuntu `
-  --result-file ../../testkit/results/csharp-sentinel.json
+  --host 192.168.0.119 --ssh-user ubuntu `
+  --result-file ../build/results/csharp-sentinel.json
 python -B tests/sentinel_test.py --tls --runtime linux-x64 `
-  --host 192.168.0.90 --ssh-user ubuntu `
-  --result-file ../../testkit/results/csharp-sentinel-tls-linux.json
+  --host 192.168.0.119 --ssh-user ubuntu `
+  --result-file ../build/results/csharp-sentinel-tls-linux.json
 python -B tests/sentinel_test.py --tls --runtime win-x64 `
   --vcpkg-root "D:\Program Files\vcpkg" `
-  --host 192.168.0.90 --ssh-user ubuntu `
-  --result-file ../../testkit/results/csharp-sentinel-tls-windows.json
+  --host 192.168.0.119 --ssh-user ubuntu `
+  --result-file ../build/results/csharp-sentinel-tls-windows.json
 ```
 
 The Standalone harness builds the shared Release core, restores and analyzes

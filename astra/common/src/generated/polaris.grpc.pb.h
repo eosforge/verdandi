@@ -48,6 +48,15 @@ class Authority final {
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Position>> PrepareAsyncCommit(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Position>>(PrepareAsyncCommitRaw(context, request, cq));
     }
+    std::unique_ptr< ::grpc::ClientWriterInterface< ::proto::polaris::v1::BatchRequest>> Batch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response) {
+      return std::unique_ptr< ::grpc::ClientWriterInterface< ::proto::polaris::v1::BatchRequest>>(BatchRaw(context, response));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncWriterInterface< ::proto::polaris::v1::BatchRequest>> AsyncBatch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncWriterInterface< ::proto::polaris::v1::BatchRequest>>(AsyncBatchRaw(context, response, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncWriterInterface< ::proto::polaris::v1::BatchRequest>> PrepareAsyncBatch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncWriterInterface< ::proto::polaris::v1::BatchRequest>>(PrepareAsyncBatchRaw(context, response, cq));
+    }
     virtual ::grpc::Status List(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::proto::polaris::v1::Inventory* response) = 0;
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Inventory>> AsyncList(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Inventory>>(AsyncListRaw(context, request, cq));
@@ -69,6 +78,7 @@ class Authority final {
       virtual ~async_interface() {}
       virtual void Commit(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest* request, ::proto::polaris::v1::Position* response, std::function<void(::grpc::Status)>) = 0;
       virtual void Commit(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest* request, ::proto::polaris::v1::Position* response, ::grpc::ClientUnaryReactor* reactor) = 0;
+      virtual void Batch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::ClientWriteReactor< ::proto::polaris::v1::BatchRequest>* reactor) = 0;
       virtual void List(::grpc::ClientContext* context, const ::proto::comet::v1::Empty* request, ::proto::polaris::v1::Inventory* response, std::function<void(::grpc::Status)>) = 0;
       virtual void List(::grpc::ClientContext* context, const ::proto::comet::v1::Empty* request, ::proto::polaris::v1::Inventory* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       virtual void Load(::grpc::ClientContext* context, const ::proto::comet::v1::Scope* request, ::grpc::ClientReadReactor< ::proto::polaris::v1::Snapshot>* reactor) = 0;
@@ -79,6 +89,9 @@ class Authority final {
    private:
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Position>* AsyncCommitRaw(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Position>* PrepareAsyncCommitRaw(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientWriterInterface< ::proto::polaris::v1::BatchRequest>* BatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response) = 0;
+    virtual ::grpc::ClientAsyncWriterInterface< ::proto::polaris::v1::BatchRequest>* AsyncBatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq, void* tag) = 0;
+    virtual ::grpc::ClientAsyncWriterInterface< ::proto::polaris::v1::BatchRequest>* PrepareAsyncBatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Inventory>* AsyncListRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::polaris::v1::Inventory>* PrepareAsyncListRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientReaderInterface< ::proto::polaris::v1::Snapshot>* LoadRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Scope& request) = 0;
@@ -94,6 +107,15 @@ class Authority final {
     }
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::polaris::v1::Position>> PrepareAsyncCommit(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::polaris::v1::Position>>(PrepareAsyncCommitRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientWriter< ::proto::polaris::v1::BatchRequest>> Batch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response) {
+      return std::unique_ptr< ::grpc::ClientWriter< ::proto::polaris::v1::BatchRequest>>(BatchRaw(context, response));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>> AsyncBatch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq, void* tag) {
+      return std::unique_ptr< ::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>>(AsyncBatchRaw(context, response, cq, tag));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>> PrepareAsyncBatch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>>(PrepareAsyncBatchRaw(context, response, cq));
     }
     ::grpc::Status List(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::proto::polaris::v1::Inventory* response) override;
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::polaris::v1::Inventory>> AsyncList(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::grpc::CompletionQueue* cq) {
@@ -116,6 +138,7 @@ class Authority final {
      public:
       void Commit(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest* request, ::proto::polaris::v1::Position* response, std::function<void(::grpc::Status)>) override;
       void Commit(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest* request, ::proto::polaris::v1::Position* response, ::grpc::ClientUnaryReactor* reactor) override;
+      void Batch(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::ClientWriteReactor< ::proto::polaris::v1::BatchRequest>* reactor) override;
       void List(::grpc::ClientContext* context, const ::proto::comet::v1::Empty* request, ::proto::polaris::v1::Inventory* response, std::function<void(::grpc::Status)>) override;
       void List(::grpc::ClientContext* context, const ::proto::comet::v1::Empty* request, ::proto::polaris::v1::Inventory* response, ::grpc::ClientUnaryReactor* reactor) override;
       void Load(::grpc::ClientContext* context, const ::proto::comet::v1::Scope* request, ::grpc::ClientReadReactor< ::proto::polaris::v1::Snapshot>* reactor) override;
@@ -132,12 +155,16 @@ class Authority final {
     class async async_stub_{this};
     ::grpc::ClientAsyncResponseReader< ::proto::polaris::v1::Position>* AsyncCommitRaw(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::proto::polaris::v1::Position>* PrepareAsyncCommitRaw(::grpc::ClientContext* context, const ::proto::polaris::v1::CommitRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientWriter< ::proto::polaris::v1::BatchRequest>* BatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response) override;
+    ::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>* AsyncBatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq, void* tag) override;
+    ::grpc::ClientAsyncWriter< ::proto::polaris::v1::BatchRequest>* PrepareAsyncBatchRaw(::grpc::ClientContext* context, ::proto::polaris::v1::Position* response, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::proto::polaris::v1::Inventory>* AsyncListRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::proto::polaris::v1::Inventory>* PrepareAsyncListRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Empty& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientReader< ::proto::polaris::v1::Snapshot>* LoadRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Scope& request) override;
     ::grpc::ClientAsyncReader< ::proto::polaris::v1::Snapshot>* AsyncLoadRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Scope& request, ::grpc::CompletionQueue* cq, void* tag) override;
     ::grpc::ClientAsyncReader< ::proto::polaris::v1::Snapshot>* PrepareAsyncLoadRaw(::grpc::ClientContext* context, const ::proto::comet::v1::Scope& request, ::grpc::CompletionQueue* cq) override;
     const ::grpc::internal::RpcMethod rpcmethod_Commit_;
+    const ::grpc::internal::RpcMethod rpcmethod_Batch_;
     const ::grpc::internal::RpcMethod rpcmethod_List_;
     const ::grpc::internal::RpcMethod rpcmethod_Load_;
   };
@@ -148,6 +175,7 @@ class Authority final {
     Service();
     virtual ~Service();
     virtual ::grpc::Status Commit(::grpc::ServerContext* context, const ::proto::polaris::v1::CommitRequest* request, ::proto::polaris::v1::Position* response);
+    virtual ::grpc::Status Batch(::grpc::ServerContext* context, ::grpc::ServerReader< ::proto::polaris::v1::BatchRequest>* reader, ::proto::polaris::v1::Position* response);
     virtual ::grpc::Status List(::grpc::ServerContext* context, const ::proto::comet::v1::Empty* request, ::proto::polaris::v1::Inventory* response);
     virtual ::grpc::Status Load(::grpc::ServerContext* context, const ::proto::comet::v1::Scope* request, ::grpc::ServerWriter< ::proto::polaris::v1::Snapshot>* writer);
   };
@@ -172,12 +200,32 @@ class Authority final {
     }
   };
   template <class BaseClass>
+  class WithAsyncMethod_Batch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Batch() {
+      ::grpc::Service::MarkMethodAsync(1);
+    }
+    ~WithAsyncMethod_Batch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Batch(::grpc::ServerContext* /*context*/, ::grpc::ServerReader< ::proto::polaris::v1::BatchRequest>* /*reader*/, ::proto::polaris::v1::Position* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestBatch(::grpc::ServerContext* context, ::grpc::ServerAsyncReader< ::proto::polaris::v1::Position, ::proto::polaris::v1::BatchRequest>* reader, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncClientStreaming(1, context, reader, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
   class WithAsyncMethod_List : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_List() {
-      ::grpc::Service::MarkMethodAsync(1);
+      ::grpc::Service::MarkMethodAsync(2);
     }
     ~WithAsyncMethod_List() override {
       BaseClassMustBeDerivedFromService(this);
@@ -188,7 +236,7 @@ class Authority final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestList(::grpc::ServerContext* context, ::proto::comet::v1::Empty* request, ::grpc::ServerAsyncResponseWriter< ::proto::polaris::v1::Inventory>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -197,7 +245,7 @@ class Authority final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_Load() {
-      ::grpc::Service::MarkMethodAsync(2);
+      ::grpc::Service::MarkMethodAsync(3);
     }
     ~WithAsyncMethod_Load() override {
       BaseClassMustBeDerivedFromService(this);
@@ -208,10 +256,10 @@ class Authority final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestLoad(::grpc::ServerContext* context, ::proto::comet::v1::Scope* request, ::grpc::ServerAsyncWriter< ::proto::polaris::v1::Snapshot>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncServerStreaming(2, context, request, writer, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncServerStreaming(3, context, request, writer, new_call_cq, notification_cq, tag);
     }
   };
-  typedef WithAsyncMethod_Commit<WithAsyncMethod_List<WithAsyncMethod_Load<Service > > > AsyncService;
+  typedef WithAsyncMethod_Commit<WithAsyncMethod_Batch<WithAsyncMethod_List<WithAsyncMethod_Load<Service > > > > AsyncService;
   template <class BaseClass>
   class WithCallbackMethod_Commit : public BaseClass {
    private:
@@ -240,18 +288,40 @@ class Authority final {
       ::grpc::CallbackServerContext* /*context*/, const ::proto::polaris::v1::CommitRequest* /*request*/, ::proto::polaris::v1::Position* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
+  class WithCallbackMethod_Batch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Batch() {
+      ::grpc::Service::MarkMethodCallback(1,
+          new ::grpc::internal::CallbackClientStreamingHandler< ::proto::polaris::v1::BatchRequest, ::proto::polaris::v1::Position>(
+            [this](
+                   ::grpc::CallbackServerContext* context, ::proto::polaris::v1::Position* response) { return this->Batch(context, response); }));
+    }
+    ~WithCallbackMethod_Batch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Batch(::grpc::ServerContext* /*context*/, ::grpc::ServerReader< ::proto::polaris::v1::BatchRequest>* /*reader*/, ::proto::polaris::v1::Position* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerReadReactor< ::proto::polaris::v1::BatchRequest>* Batch(
+      ::grpc::CallbackServerContext* /*context*/, ::proto::polaris::v1::Position* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
   class WithCallbackMethod_List : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_List() {
-      ::grpc::Service::MarkMethodCallback(1,
+      ::grpc::Service::MarkMethodCallback(2,
           new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::Empty, ::proto::polaris::v1::Inventory>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::proto::comet::v1::Empty* request, ::proto::polaris::v1::Inventory* response) { return this->List(context, request, response); }));}
     void SetMessageAllocatorFor_List(
         ::grpc::MessageAllocator< ::proto::comet::v1::Empty, ::proto::polaris::v1::Inventory>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(2);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::Empty, ::proto::polaris::v1::Inventory>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -272,7 +342,7 @@ class Authority final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_Load() {
-      ::grpc::Service::MarkMethodCallback(2,
+      ::grpc::Service::MarkMethodCallback(3,
           new ::grpc::internal::CallbackServerStreamingHandler< ::proto::comet::v1::Scope, ::proto::polaris::v1::Snapshot>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::proto::comet::v1::Scope* request) { return this->Load(context, request); }));
@@ -288,7 +358,7 @@ class Authority final {
     virtual ::grpc::ServerWriteReactor< ::proto::polaris::v1::Snapshot>* Load(
       ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::Scope* /*request*/)  { return nullptr; }
   };
-  typedef WithCallbackMethod_Commit<WithCallbackMethod_List<WithCallbackMethod_Load<Service > > > CallbackService;
+  typedef WithCallbackMethod_Commit<WithCallbackMethod_Batch<WithCallbackMethod_List<WithCallbackMethod_Load<Service > > > > CallbackService;
   typedef CallbackService ExperimentalCallbackService;
   template <class BaseClass>
   class WithGenericMethod_Commit : public BaseClass {
@@ -308,12 +378,29 @@ class Authority final {
     }
   };
   template <class BaseClass>
+  class WithGenericMethod_Batch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Batch() {
+      ::grpc::Service::MarkMethodGeneric(1);
+    }
+    ~WithGenericMethod_Batch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Batch(::grpc::ServerContext* /*context*/, ::grpc::ServerReader< ::proto::polaris::v1::BatchRequest>* /*reader*/, ::proto::polaris::v1::Position* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
   class WithGenericMethod_List : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_List() {
-      ::grpc::Service::MarkMethodGeneric(1);
+      ::grpc::Service::MarkMethodGeneric(2);
     }
     ~WithGenericMethod_List() override {
       BaseClassMustBeDerivedFromService(this);
@@ -330,7 +417,7 @@ class Authority final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_Load() {
-      ::grpc::Service::MarkMethodGeneric(2);
+      ::grpc::Service::MarkMethodGeneric(3);
     }
     ~WithGenericMethod_Load() override {
       BaseClassMustBeDerivedFromService(this);
@@ -362,12 +449,32 @@ class Authority final {
     }
   };
   template <class BaseClass>
+  class WithRawMethod_Batch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Batch() {
+      ::grpc::Service::MarkMethodRaw(1);
+    }
+    ~WithRawMethod_Batch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Batch(::grpc::ServerContext* /*context*/, ::grpc::ServerReader< ::proto::polaris::v1::BatchRequest>* /*reader*/, ::proto::polaris::v1::Position* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestBatch(::grpc::ServerContext* context, ::grpc::ServerAsyncReader< ::grpc::ByteBuffer, ::grpc::ByteBuffer>* reader, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncClientStreaming(1, context, reader, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
   class WithRawMethod_List : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_List() {
-      ::grpc::Service::MarkMethodRaw(1);
+      ::grpc::Service::MarkMethodRaw(2);
     }
     ~WithRawMethod_List() override {
       BaseClassMustBeDerivedFromService(this);
@@ -378,7 +485,7 @@ class Authority final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestList(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -387,7 +494,7 @@ class Authority final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_Load() {
-      ::grpc::Service::MarkMethodRaw(2);
+      ::grpc::Service::MarkMethodRaw(3);
     }
     ~WithRawMethod_Load() override {
       BaseClassMustBeDerivedFromService(this);
@@ -398,7 +505,7 @@ class Authority final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestLoad(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncServerStreaming(2, context, request, writer, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncServerStreaming(3, context, request, writer, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -424,12 +531,34 @@ class Authority final {
       ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
+  class WithRawCallbackMethod_Batch : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Batch() {
+      ::grpc::Service::MarkMethodRawCallback(1,
+          new ::grpc::internal::CallbackClientStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, ::grpc::ByteBuffer* response) { return this->Batch(context, response); }));
+    }
+    ~WithRawCallbackMethod_Batch() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Batch(::grpc::ServerContext* /*context*/, ::grpc::ServerReader< ::proto::polaris::v1::BatchRequest>* /*reader*/, ::proto::polaris::v1::Position* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerReadReactor< ::grpc::ByteBuffer>* Batch(
+      ::grpc::CallbackServerContext* /*context*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
   class WithRawCallbackMethod_List : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_List() {
-      ::grpc::Service::MarkMethodRawCallback(1,
+      ::grpc::Service::MarkMethodRawCallback(2,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->List(context, request, response); }));
@@ -451,7 +580,7 @@ class Authority final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_Load() {
-      ::grpc::Service::MarkMethodRawCallback(2,
+      ::grpc::Service::MarkMethodRawCallback(3,
           new ::grpc::internal::CallbackServerStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const::grpc::ByteBuffer* request) { return this->Load(context, request); }));
@@ -500,7 +629,7 @@ class Authority final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_List() {
-      ::grpc::Service::MarkMethodStreamed(1,
+      ::grpc::Service::MarkMethodStreamed(2,
         new ::grpc::internal::StreamedUnaryHandler<
           ::proto::comet::v1::Empty, ::proto::polaris::v1::Inventory>(
             [this](::grpc::ServerContext* context,
@@ -528,7 +657,7 @@ class Authority final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithSplitStreamingMethod_Load() {
-      ::grpc::Service::MarkMethodStreamed(2,
+      ::grpc::Service::MarkMethodStreamed(3,
         new ::grpc::internal::SplitServerStreamingHandler<
           ::proto::comet::v1::Scope, ::proto::polaris::v1::Snapshot>(
             [this](::grpc::ServerContext* context,

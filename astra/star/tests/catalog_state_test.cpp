@@ -1,9 +1,13 @@
 #include "catalog_state.hpp"
 #include "check.hpp"
 #include "exports.hpp"
+#include <array>
+#include <atomic>
 #include <iostream>
+#include <latch>
 #include <new>
 #include <string>
+#include <thread>
 
 namespace {
 using namespace std::chrono_literals;
@@ -15,6 +19,30 @@ using State = Catalog::State;
 // 不透明正文测试值, 空字符串仍有非空所有者.
 Catalog::Value bytes(std::string_view value) {
     return std::make_shared<const Catalog::Buffer>(value.begin(), value.end());
+}
+
+// 版本查询读取合并水位, 不创建不存在的范围, 不受正文过期或来源差异影响.
+void versions() {
+
+    auto now = 1s; // 确定性的可控业务时间, 不依赖测试机墙钟.
+    State state([&] { return std::optional(Clock::Reading{.time = Clock::Time(now), .ready = true}); }, {});
+    const Scope scope{"query", "main"};                                       // 只捕获这个范围的相关 Key.
+    const std::array<std::string_view, 3> keys{"local", "remote", "missing"}; // 同步查询只借用文本, 保留输入顺序.
+    CHECK(state.versions(scope, keys).value() == std::vector<std::uint64_t>({0, 0, 0}));
+    CHECK(state.source().size() == 0);
+    CHECK(state.publish(scope, "local", bytes("local"), 7, 1000));
+    CHECK(state.admit("remote"));
+    CHECK(state.apply("remote", 1, scope, "remote", Catalog::Record{19, bytes("remote"), Clock::Time(2s)}, State::Source::Form::record));
+    CHECK(state.versions(scope, keys).value() == std::vector<std::uint64_t>({7, 19, 0}));
+
+    // 即使所有正文都已清理, SDK 初始化仍能取到两种来源的最高已知版本.
+    now = 3s;
+    state.tick();
+    CHECK(state.capture(scope)->size() == 0);
+    CHECK(state.versions(scope, keys).value() == std::vector<std::uint64_t>({7, 19, 0}));
+    const std::array<std::string_view, 2> duplicates{"local", "local"}; // 重复 Key 不是合法有界查询.
+    CHECK(state.versions(scope, duplicates).error() == State::Error::input);
+    CHECK(state.versions(scope, {}).error() == State::Error::input);
 }
 
 // 内容版本、来源序列与下游游标各自有语义: 续租只推进来源, 本地过期只推进下游.
@@ -87,15 +115,19 @@ void boundary() {
 // 统一读取入口必须保留输入/时钟/游标错误, 取时抛错后锁和空范围额度仍可正常使用.
 void reads() {
 
-    bool ready{};         // 最初没有可用时钟, 各读取不得执行后续范围创建.
-    bool fail{};          // 仅一次取时抛出异常, 检验 execute 的锁展开.
-    State::Limits limits; // 只允许一个范围, 错误路径偷建目录会使正常发布失败.
+    std::chrono::nanoseconds now = 1s; // 可调整读数, 验证拒绝的采样不会污染后续单调检查.
+    bool available = true;             // false 表示采样器没有返回读数.
+    bool ready{};                      // 最初没有可用时钟, 各读取不得执行后续范围创建.
+    bool fail{};                       // 仅一次取时抛出异常, 检验 execute 的锁展开.
+    State::Limits limits;              // 只允许一个范围, 错误路径偷建目录会使正常发布失败.
     limits.scopes = 1;
     State state([&]() -> std::optional<Clock::Reading> {
         if (std::exchange(fail, false)) {
             throw std::bad_alloc{};
         }
-        return Clock::Reading{.time = Clock::Time(1s), .ready = ready};
+        if (!available)
+            return std::nullopt;
+        return Clock::Reading{.time = Clock::Time(now), .ready = ready};
     },
                 limits);
     const Scope pending{"pending", "main"}, active{"active", "main"}; // 错误路径与最终成功路径使用不同范围.
@@ -124,6 +156,21 @@ void reads() {
         CHECK(replay && replay->empty());
         CHECK(state.changes(unknown, 1) == std::unexpected(State::Error::input));
     }
+
+    // 回退读数不能降低已确认的 1 s 水位; 未就绪的未来读数同样不能将水位推高.
+    now = 500ms;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    now = 750ms;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    now = 10s;
+    ready = false;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    ready = true;
+    now = 1s;
+    available = false;
+    CHECK(state.capture(pending) == std::unexpected(State::Error::clock));
+    available = true;
+
     const auto empty = state.capture(active); // 未创建时的冻结根不能因后来首次写入而发生变化.
     CHECK(empty && state.publish(active, "key", bytes("body"), 1, 1000));
     CHECK(empty->page(0, 1, [](const auto&, const auto&) { CHECK(false); return true; }) == 0);
@@ -163,6 +210,35 @@ void reclaim() {
     CHECK(view && view->size() == 0 && released && unlocked);
 }
 
+// 批次裁剪发送历史时, 已离开当前根的最后一份旧载荷也必须在锁外释放.
+void batch_reclaim() {
+
+    bool released{}, unlocked{}; // 析构时反向取得域锁, 检查旧历史的实际释放边界.
+    State::Limits limits;
+    limits.history = 0; // 不让公开投影历史掩盖来源历史的最后引用.
+    limits.source.history = 2;
+    const auto state = std::make_shared<State>([] { return std::optional(Clock::Reading{.time = Clock::Time(1s), .ready = true}); }, limits);
+    const Scope scope{"batch", "reclaim"};
+    Catalog::Value previous(new Catalog::Buffer(16), [owner = std::weak_ptr<State>(state), &released, &unlocked](const Catalog::Buffer* payload) noexcept {
+        released = true;
+        try {
+            const auto live = owner.lock(); // State 析构时不能再反向访问状态.
+            unlocked = live && live->received("absent") == std::unexpected(State::Error::input);
+        } catch (...) {
+            unlocked = false;
+        }
+        delete payload;
+    });
+    CHECK(state->publish(scope, "a", previous, 1, 1000));
+    CHECK(state->publish(scope, "a", bytes("new"), 2, 1000));
+    previous.reset();
+    CHECK(!released); // 只剩来源历史保有版本 1, 当前根已经是版本 2.
+
+    const std::vector<State::Entry> entries{{"a", bytes("a")}, {"b", bytes("b")}};
+    CHECK(state->publish(scope, entries, 3, 1000));
+    CHECK(released && unlocked && state->events(2)->size() == 2);
+}
+
 // 失败准备不占空 Scope, 过期水位仍受原生容量保护, 不能通过无限短租约吃掉无限内存.
 void capacity() {
 
@@ -189,16 +265,66 @@ void capacity() {
     CHECK(state.source().position() == 1 && state.capture(accepted)->version() == 2);
     CHECK(state.publish(accepted, "a", bytes("new"), 2, 1000));
 }
+
+// 批次提交、续租、失败与历史游标都必须使用完整边界, 并发快照不能混合版本.
+void batches() {
+
+    auto now = 1s; // 固定时钟隔离到期语义, 只检查本次批提交边界.
+    State state([&] { return std::optional(Clock::Reading{.time = Clock::Time(now), .ready = true}); }, {});
+    const Scope scope{"batch", "scope"};
+    const std::vector<State::Entry> entries{{"a", bytes("a")}, {"b", bytes("b")}};
+    CHECK(state.publish(scope, entries, 1, 1000));
+    const auto frozen = state.capture(scope);
+    const auto source = state.source(); // 来源根与公开根均应冻结整批.
+    CHECK(frozen->size() == 2 && frozen->version() == 2 && source.position() == 2);
+    std::atomic_bool valid{true};
+    std::latch observed{1}; // 写入前至少完成一次读, 避免线程未调度导致空验收.
+    std::jthread reader([&](std::stop_token stop) {
+        bool first = true; // 只有读取线程递减 latch, 后续轮次保持无等待.
+        while (!stop.stop_requested()) {
+            const auto view = state.capture(scope);
+            std::optional<std::uint64_t> version; // 同份视图中每条业务版本都应相同.
+            view->each([&](const auto&, const auto& row) { if (version && *version != row.version) valid.store(false); version = row.version; });
+            if (view->size() != 2)
+                valid.store(false);
+            if (first) {
+                first = false;
+                observed.count_down();
+            }
+        }
+    });
+    observed.wait();
+    for (std::uint64_t version = 2; version <= 32; ++version)
+        CHECK(state.publish(scope, entries, version, 1000));
+    reader.request_stop();
+    reader.join();
+    CHECK(valid.load());
+    frozen->each([](const auto&, const auto& row) { CHECK(row.version == 1); });
+    CHECK(state.changes(scope, 1).error() == State::Error::history); // 半批游标不能作为已安装基线.
+    CHECK(state.changes(scope, 62)->size() == 2);
+    const std::vector<State::Entry> conflict{{"new", bytes("ok")}, {"b", bytes("conflict")}};
+    CHECK(state.publish(scope, conflict, 32, 1000).error() == State::Error::conflict);
+    CHECK(!state.find(scope, "new")->record && state.source().position() == 64);
+    const std::vector<State::Entry> renewal{{"a", {}}, {"missing", {}}};
+    CHECK(state.publish(scope, renewal, 32, 2000, true).error() == State::Error::ended);
+    CHECK(state.source().position() == 64);
+    const std::vector<State::Entry> complete{{"a", {}}, {"b", {}}};
+    CHECK(state.publish(scope, complete, 32, 2000, true));
+    CHECK(state.source().position() == 66 && state.capture(scope)->version() == 64);
+}
 } // namespace
 
 // 原生状态用例不创建网络/数据库, 所有时间边界由测试明确控制.
 int main() {
     try {
+        versions();
         exports<State>([](State& state, const Scope& scope) { CHECK(state.publish(scope, "key", bytes("value"), 1, 1000)); return std::string("key"); });
+        batches();
         lifecycle();
         boundary();
         reads();
         reclaim();
+        batch_reclaim();
         capacity();
         std::cout << "Catalog state tests passed\n";
         return 0;

@@ -1,8 +1,5 @@
 #pragma once
 #include "types.hpp"
-#include <functional>
-#include <future>
-#include <span>
 
 namespace comet {
 namespace detail {
@@ -10,49 +7,41 @@ class Publishing;
 }
 class Client;
 
-// 固定 Catalog Scope/Key/TTL, 只保存最新完整期望, 内容及版本的持久化由应用负责.
+// Catalog 同步发布器, 只绑定 Scope; 每次提交显式 TTL, 版本完全由 SDK 管理.
 class Publisher {
 public:
-    // 状态只描述本对象最近观察, 不保证其他 Star 已收到内容.
-    enum class Phase {
-        waiting,   // 未接纳内容或尚未建立首个确认.
-        ready,     // 当前期望在目标确认且本地保守租约仍有效.
-        uncertain, // 保留期望但没有当前有效确认, 自动有界恢复.
-        failed,    // 当前期望被永久拒绝, 等待合法新 publish 或关闭.
-        closed     // 停止发布/续租, 远端由原 TTL 自行清理.
-    };
-
     struct Receipt {
-        std::string instance;    // 本次实际确认的 Star, 不宣称全网提交.
-        std::uint64_t version{}; // 本次正业务内容版本, 从不由 SDK 自动加号.
+        std::string instance;    // 本次确认的接入 Star, 不表示复制已完成.
+        std::uint64_t version{}; // SDK 分配的正内容版本, 不作为全网事务 ID.
     };
 
-    struct State {
-        Phase phase = Phase::waiting;     // 初始尚无内容/确认.
-        std::optional<Receipt> confirmed; // 最后确认, ready 以外不能据此宣称当前有效.
-        std::optional<Error> error;       // 有界原因, 不含业务正文或凭据.
+    // 同批 1..128 个唯一 UTF-8 Key, 键与正文合计至多 1 MiB.
+    struct Entry {
+        std::string key; // 1..1024 字节, 同一个 Key 的唯一写入者由应用保证.
+        Value value;     // 共享不可变完整值, nullptr 拒绝, 空 vector 合法.
     };
 
-    struct Options {
-        std::move_only_function<void(State)> changed; // 锁外串行通知, 应快速返回, 允许非阻塞 close.
-    };
+    Publisher() = default;                           // 空句柄, 不创建网络或定时器.
+    Publisher(Publisher&&) noexcept;                 // 移交唯一公开业务句柄.
+    Publisher& operator=(Publisher&&) noexcept;      // 先关闭原对象, 再移交.
+    Publisher(const Publisher&) = delete;            // 不复制业务生命周期.
+    Publisher& operator=(const Publisher&) = delete; // 不复制业务生命周期.
+    ~Publisher();                                    // 非阻塞取消自己的调用, 不关闭共享 Client.
 
-    Publisher() = default;                      // 空句柄, 不接入网络.
-    Publisher(Publisher&&) noexcept;            // 移交唯一自动发布责任.
-    Publisher& operator=(Publisher&&) noexcept; // 先关闭旧对象, 再移交.
-    Publisher(const Publisher&) = delete;       // 不复制后台业务拥有权.
-    Publisher& operator=(const Publisher&) = delete;
-    ~Publisher();                                                                                                                                                  // 非阻塞停止, 不等待网络.
-    State state() const;                                                                                                                                           // 按包含系统休眠的本地预算重新判断可用性.
-    std::future<Result<Receipt>> publish(std::uint64_t version, std::vector<std::uint8_t> value, std::chrono::milliseconds timeout = std::chrono::seconds(3));     // 转移拥有正文.
-    std::future<Result<Receipt>> publish(std::uint64_t version, std::span<const std::uint8_t> value, std::chrono::milliseconds timeout = std::chrono::seconds(3)); // 复制借用正文.
-    std::future<Result<Receipt>> publish(std::uint64_t version, Value value, std::chrono::milliseconds timeout = std::chrono::seconds(3));                         // 共享不可变正文.
-    void close() noexcept;                                                                                                                                         // 停止后续恢复, 不发送不存在的 Catalog Delete.
-    bool wait(std::chrono::milliseconds timeout) const;                                                                                                            // 等待真实 RPC 清理, SDK 回调内禁止阻塞.
+    // 同步原子提交完整批次; ttl 为 1s..10min, timeout 为 (0, 1min].
+    // 同一目标和精确 Key 集合复用已确认版本基线, 其他情况先查询; 不保留 Data.
+    // 一个 deadline 覆盖连接、查询和最多一次明确版本冲突修复; 超时可能已提交.
+    // 同对象并发调用返回 busy, 不合并请求; SDK 通知回调内同步写入返回 busy.
+    // 返回后没有待重发内容和自动续租, 缓冲只保留到当前 RPC 真正完成.
+    Result<Receipt> update(std::vector<Entry> entries, std::chrono::milliseconds ttl, std::chrono::milliseconds timeout = std::chrono::seconds(3));
+    // 单键是批次的特例, vector 转移正文所有权, 不暴露 version 参数.
+    Result<Receipt> update(std::string key, std::vector<std::uint8_t> data, std::chrono::milliseconds ttl, std::chrono::milliseconds timeout = std::chrono::seconds(3));
+    void close() noexcept;                              // 幂等立即停止本地接纳, 取消当前 RPC.
+    bool wait(std::chrono::milliseconds timeout) const; // 仅等待实际调用排空, 不隐式 close.
 
 private:
     friend class Client;
-    explicit Publisher(std::shared_ptr<detail::Publishing> publishing); // 仅工厂完成本地接纳后构造.
-    std::shared_ptr<detail::Publishing> publishing_;                    // 旧 future/View 不拥有自动发布意图.
+    explicit Publisher(std::shared_ptr<detail::Publishing> publishing); // 仅工厂完成接纳后构造.
+    std::shared_ptr<detail::Publishing> publishing_;                    // 内部调用自行保持生命周期.
 };
 } // namespace comet

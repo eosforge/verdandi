@@ -42,10 +42,9 @@ public:
     // 无分配且不抛错; 调用者先推进到最终受理时间, 再提交原生 deadline 和此钩子.
     void set(Node& node, Clock::Time deadline) noexcept {
 
-        const auto boundary = time();                                                                                              // 回调期间 Wheel 可能已推进, 不能用上一拍锚点再次计算延期.
-        const auto remaining = deadline > boundary ? static_cast<std::uint64_t>((deadline - boundary).count()) : 0;                // 剩余纳秒, 非负.
-        constexpr auto width = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(interval).count()); // 每拍纳秒, 严格为正.
-        const auto delay = remaining / width + static_cast<std::uint64_t>(remaining % width != 0);                                 // 向上取整, 加法不先扩大 remaining.
+        const auto boundary = time();                                                                                                     // 回调期间 Wheel 可能已推进, 不能用上一拍锚点再次计算延期.
+        const auto remaining = deadline > boundary ? deadline - boundary : std::chrono::nanoseconds::zero();                              // 非负剩余时长, 非负业务时间之间的差值可表示.
+        const auto delay = static_cast<std::uint64_t>(remaining / interval + (remaining % interval != std::chrono::nanoseconds::zero())); // 固定正拍长, 商加非零余数向上取整, 不先扩大 remaining.
         static_cast<void>(timer_.schedule(node, std::min(delay, Timer::limit)));
     }
 

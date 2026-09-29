@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/orbit"
 )
 
 // 只验证目录投影与旧观察寿命, 不把它冒充真实准入/Polaris RPC 运行证据.

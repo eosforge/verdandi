@@ -11,6 +11,7 @@ template <class Policy>
 class Watching;
 using Observing = Watching<Selection>;
 struct Registrations;
+struct Estimates;
 } // namespace detail
 class Client;
 
@@ -46,7 +47,7 @@ public:
         std::optional<Record> find(std::string_view uuid) const; // 精确查找, 缺项返回空 optional, 不发 RPC 或插入条目.
 
         // 同步借用稳定 UUID/Value, 回调可抛异常或重入 SDK; 需要保留数据时复制 Value 所有权.
-        // 此桥接只借用本次调用栈, 不分配 std::function 或把模板扩散到网络实现.
+        // 遍历固定本次内容, 回调重新赋值原 View 不影响当前遍历; 桥接不分配 std::function.
         void each(auto&& reader) const {
             auto callback = [&reader](std::string_view key, const Record& value) { std::invoke(reader, key, value); };
             visit(&callback, [](void* context, std::string_view key, const Record& value) { (*static_cast<decltype(callback)*>(context))(key, value); });
@@ -67,6 +68,55 @@ public:
         std::string target_;
         std::optional<Error> error_; // 未发生本次错误时为空.
     };
+
+    class Pool; // Item 仅由所属池构造.
+
+    // 单次选择的拥有式记录, 本地改写须同时匹配权威代次与上次估计值.
+    class Item {
+    public:
+        const std::string& id() const noexcept {
+            return id_;
+        } // 原始逻辑 UUID.
+
+        const Record& record() const noexcept {
+            return record_;
+        } // 完整属性和当前选择估计, 可跨 stop 保留.
+
+        Result<void> update(Value data);                     // 只调整本地估计, 新权威数据/其他并发调整优先, 不发 RPC.
+        Result<void> update(std::vector<std::uint8_t> data); // 移入拥有式数据, 单值至多 1 MiB.
+    private:
+        friend class Pool;
+        friend class Observer;
+        std::string id_;                         // 不借用池内的键.
+        Record record_;                          // 本次选中的固定数据.
+        Value authority_;                        // 当前权威值的代次凭证, 不是业务版本.
+        std::weak_ptr<detail::Observing> owner_; // 旧视图不会延长订阅生命.
+    };
+
+    // 稳定池快照, selector 在 SDK 锁外查询或遍历; 可以自行按业务索引抽样.
+    class Pool {
+    public:
+        std::size_t size() const noexcept;                   // 当前完整池大小, 不发 RPC.
+        std::optional<Item> find(std::string_view id) const; // 查找并叠加同代次本地估计.
+
+        void each(auto&& reader) const {
+            auto callback = [&reader](Item item) { std::invoke(reader, std::move(item)); };
+            visit(&callback, [](void* context, Item item) { (*static_cast<decltype(callback)*>(context))(std::move(item)); });
+        } // 遍历本次固定池, 无全局写锁.
+    private:
+        friend class detail::Selection;
+        void visit(void* context, void (*visitor)(void*, Item)) const; // 仅同步借用回调上下文.
+        std::shared_ptr<const detail::Registrations> contents_;        // 固定权威代次.
+        std::shared_ptr<const detail::Estimates> estimates_;           // 固定本地估计根.
+        std::weak_ptr<detail::Observing> owner_;                       // 调整时重新检查对象是否存活.
+    };
+
+    Result<std::optional<Item>> one(auto&& selector) const {
+        auto callback = [&selector](const Pool& pool) { return std::invoke(selector, pool); };
+        return choose(&callback, [](void* context, const Pool& pool) -> std::optional<Item> { return (*static_cast<decltype(callback)*>(context))(pool); });
+    } // 未就绪/停止返回错误, 无候选返回 nullopt; selector 可在锁外调整本地估计.
+
+    void stop() noexcept; // 停止本对象, 保留已交付内存但拒绝再改写池.
 
     struct Options {
         // 每对象可安装内容与容器的保守字节预算, 默认 64 MiB; 私有候选另允许有界替换峰值.
@@ -90,7 +140,8 @@ public:
 
 private:
     friend class Client;
-    // 应用句柄与私有网络状态分开, 不因旧 View/future 存活而保留自动订阅.
+    Result<std::optional<Item>> choose(void* context, std::optional<Item> (*selector)(void*, const Pool&)) const; // 锁外执行并核验所选对象归属.
+    // 应用句柄与私有网络状态分开, 不因旧 View 存活而保留自动订阅.
     explicit Observer(std::shared_ptr<detail::Observing> observing);
     std::shared_ptr<detail::Observing> observing_; // 空表示默认或已移动句柄.
 };

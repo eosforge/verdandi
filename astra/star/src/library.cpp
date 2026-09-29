@@ -1,5 +1,6 @@
 #include "library.hpp"
 #include <astra/profile.hpp>
+#include <set>
 #include <stdexcept>
 
 namespace astra {
@@ -175,6 +176,49 @@ std::expected<bool, Almanac::Error> Library::apply(const Scope& scope, std::uint
         if (changed_) {
             changed_(scope, committed);
         }
+    }
+    return result;
+}
+
+std::expected<bool, Almanac::Error> Library::apply(const Scope& scope, std::uint64_t version, std::vector<Almanac::Change> changes) {
+
+    if (!scope.valid() || scope.sector.starts_with("__") || changes.empty())
+        return std::unexpected(Almanac::Error::input);
+    const std::lock_guard writer(writer_); // 全局计费及通知串行, 不持路由锁构造候选.
+    const auto book = locate(scope);
+    if (!book)
+        return std::unexpected(Almanac::Error::unready);
+    const auto before = book->usage();
+    if (before.version && version != 0 && version <= *before.version)
+        return false;    // 与单键路径一致, 已完整安装的旧版本不重新计费或通知.
+    auto bytes = bytes_; // 每个唯一目标旧值只扣一次, 防止重复键使计费回绕.
+    std::set<std::string_view> seen;
+    for (const auto& change : changes) {
+        if (!change.key || !Scope::text(*change.key, 1024) || (change.value && change.value->size() > 1024 * 1024) || !seen.insert(*change.key).second)
+            return std::unexpected(Almanac::Error::input);
+        const auto old = book->find(*change.key);
+        if (!old)
+            return std::unexpected(old.error());
+        if (old->value)
+            bytes -= change.key->size() + old->value->size();
+    }
+    // 扣完全部旧值后再逐项检查剩余预算, 不让批次总量在 size_t 中回绕.
+    for (const auto& change : changes) {
+        if (change.value) {
+            const auto cost = change.key->size() + change.value->size();
+            if (cost > limits_.bytes - bytes)
+                return std::unexpected(Almanac::Error::capacity);
+            bytes += cost;
+        }
+    }
+    Almanac::Change committed; // 不在提交后分配通知信封.
+    const auto result = book->apply(version, std::move(changes), limits_.history - (history_ - before.history), &committed);
+    if (result && *result) {
+        const auto after = book->usage();
+        bytes_ = bytes_ - before.bytes + after.bytes;
+        history_ = history_ - before.history + after.history;
+        if (changed_)
+            changed_(scope, committed);
     }
     return result;
 }

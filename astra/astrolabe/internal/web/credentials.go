@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/comet"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/comet"
+	"github.com/eosforge/astra/internal/generated/orbit"
 	"google.golang.org/protobuf/proto"
 )
 

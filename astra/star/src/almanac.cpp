@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace astra {
@@ -214,7 +215,7 @@ std::expected<bool, Almanac::Error> Almanac::apply(std::uint64_t version, std::s
     auto retained = history_.size() + 1;
     auto backlog = history_bytes_ + cost;
     std::size_t evicted{};
-    while (retained > limits_.history || backlog > std::min(limits_.backlog, retention)) {
+    while (retained > limits_.history || backlog > std::min(limits_.backlog, retention) || (evicted != 0 && evicted < history_.size() && history_[evicted - 1].version == history_[evicted].version)) {
         backlog -= evicted < history_.size() ? history_[evicted].bytes() : cost;
         ++evicted;
         --retained;
@@ -267,6 +268,120 @@ std::expected<bool, Almanac::Error> Almanac::apply(std::uint64_t version, std::s
         retired.push_back(std::move(history_.front()));
         history_.pop_front();
     }
+    return true;
+}
+
+std::expected<bool, Almanac::Error> Almanac::apply(std::uint64_t version, std::vector<Change> changes, std::size_t retention, Change* committed) {
+
+    // names 只借用本批共享字符串; 在接触状态之前完整校验, 不另设整批数量或字节上限.
+    std::unordered_set<std::string_view> names;
+    if (!version || changes.empty())
+        return std::unexpected(Error::input);
+    for (auto& change : changes) {
+        if (!change.key || change.batch || !valid(*change.key, change.value.get()) || !names.insert(*change.key).second)
+            return std::unexpected(Error::input);
+        change.version = version;
+    }
+
+    // 旧根/历史正文在解锁后释放, 通知信封的分配也必须早于实际提交.
+    Index retired;
+    std::vector<Change> discarded;
+    auto batch = std::make_shared<std::vector<Change>>(std::move(changes));
+    const std::lock_guard lock(*gate_);
+    if (!ready_)
+        return std::unexpected(Error::unready);
+    if (version <= state_->version)
+        return false;
+    if (state_->version == UINT64_MAX || version != state_->version + 1)
+        return std::unexpected(Error::version);
+    auto bytes = state_->bytes; // 最终计费先扣旧值, 允许同批删除释放空间.
+    auto records = state_->entries.size();
+    for (auto& change : *batch) {
+        const auto old = state_->entries.find(*change.key); // 每个目标唯一, 不修改哈希表.
+        if (old != state_->entries.end()) {
+            change.key = old->second.key;
+            bytes -= change.key->size() + old->second.value->size();
+            --records;
+        }
+    }
+    // 先扣完所有旧值再逐项准入, 不因请求顺序误拒绝, 也不让大批累计字节溢出.
+    for (const auto& change : *batch) {
+        if (change.value) {
+            const auto cost = change.key->size() + change.value->size(); // 单项已通过单值长度检查.
+            if (records >= limits_.records || cost > limits_.bytes - bytes)
+                return std::unexpected(Error::capacity);
+            bytes += cost;
+            ++records;
+        }
+    }
+    auto backlog = history_bytes_; // 历史计数先检查整数容量, 后续追加不再做可能溢出的加法.
+    for (const auto& change : *batch) {
+        const auto cost = change.bytes();
+        if (cost > std::numeric_limits<std::size_t>::max() - backlog)
+            return std::unexpected(Error::capacity);
+        backlog += cost;
+    }
+
+    // 只复制分页根, 页面按需 COW; 新查找项和新历史尾项在失败时一并撤回.
+    Index candidate = state_->index;
+    std::vector<std::shared_ptr<const std::string>> added;
+    added.reserve(batch->size());
+    std::size_t queued{};
+    try {
+        for (const auto& change : *batch) {
+            auto entry = state_->entries.find(*change.key); // 本轮哈希迭代器不跨下一次插入存活.
+            if (entry == state_->entries.end() && change.value) {
+                const auto slot = candidate.next(); // 候选树已经包含前项, 不会复用仍占用槽位.
+                added.push_back(change.key);
+                entry = state_->entries.try_emplace(*change.key, State::Entry{change.key, {}, slot}).first;
+            }
+            if (entry != state_->entries.end()) {
+                candidate.prepare(entry->second.slot);
+                if (change.value)
+                    candidate.set(entry->second.slot, entry->second.value ? nullptr : change.key, {change.value, {}});
+                else
+                    candidate.erase(entry->second.slot);
+            }
+            history_.push_back(change);
+            ++queued;
+        }
+        // 历史只按完整版本淘汰, 不能保留一个批次的后半段伪装连续历史.
+        std::size_t evicted{};
+        while (history_.size() - evicted > limits_.history || backlog > std::min(limits_.backlog, retention)) {
+            const auto oldest = history_[evicted].version;
+            do {
+                backlog -= history_[evicted++].bytes();
+            } while (evicted < history_.size() && history_[evicted].version == oldest);
+        }
+        discarded.reserve(evicted);
+        for (std::size_t index = 0; index < evicted; ++index) {
+            discarded.push_back(std::move(history_.front()));
+            history_.pop_front();
+        }
+    } catch (...) {
+        while (queued > 0) {
+            history_.pop_back();
+            --queued;
+        }
+        for (const auto& key : added)
+            state_->entries.erase(*key);
+        throw;
+    }
+
+    // 下方均不分配. 旧值由 retired 页根和旧视图保活, 版本与完整索引同时发布.
+    retired = std::move(state_->index);
+    state_->index = std::move(candidate);
+    for (const auto& change : *batch) {
+        if (change.value)
+            state_->entries.find(*change.key)->second.value = change.value;
+        else
+            state_->entries.erase(*change.key);
+    }
+    state_->bytes = bytes;
+    state_->version = version;
+    history_bytes_ = backlog;
+    if (committed)
+        *committed = Change{{}, {}, version, std::move(batch)};
     return true;
 }
 

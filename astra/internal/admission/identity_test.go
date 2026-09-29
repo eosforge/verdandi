@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/orbit"
 	"google.golang.org/protobuf/proto"
 )
 
 // fixture 仅使用仓库公开测试身份, 不读取用户部署凭据.
 func fixture(name string) string {
-	return filepath.Join("..", "..", "..", "cluster", "tests", "fixtures", name)
+	return filepath.Join("..", "..", "tests", "fixtures", name)
 }
 
 // identity 为每例独立装载材料, 返回的只读对象不会被其他用例替换.

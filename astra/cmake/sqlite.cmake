@@ -1,6 +1,10 @@
 # 只消费已经获得的官方 amalgamation. 配置阶段不下载, 不查找系统 SQLite 或接受其他版本.
-set(ASTRA_SQLITE_ARCHIVE "${CMAKE_CURRENT_SOURCE_DIR}/../build/deps/common/downloads/fetchcontent/sqlite/sqlite-amalgamation-3530400.zip" CACHE FILEPATH "Existing SQLite 3.53.4 amalgamation archive")
-set(star_sqlite_root "${CMAKE_CURRENT_SOURCE_DIR}/../build/deps/astra/sqlite/3.53.4")
+set(star_cache_root "${CMAKE_CURRENT_SOURCE_DIR}/build")
+if(DEFINED ENV{ASTRA_CACHE_ROOT} AND NOT "$ENV{ASTRA_CACHE_ROOT}" STREQUAL "")
+    set(star_cache_root "$ENV{ASTRA_CACHE_ROOT}")
+endif()
+set(ASTRA_SQLITE_ARCHIVE "${star_cache_root}/deps/common/downloads/fetchcontent/sqlite/sqlite-amalgamation-3530400.zip" CACHE FILEPATH "Existing SQLite 3.53.4 amalgamation archive")
+set(star_sqlite_root "${star_cache_root}/deps/astra/sqlite/3.53.4")
 set(star_sqlite_source "${star_sqlite_root}/sqlite-amalgamation-3530400")
 if(NOT EXISTS "${ASTRA_SQLITE_ARCHIVE}")
     message(FATAL_ERROR "Missing approved SQLite archive: ${ASTRA_SQLITE_ARCHIVE}; no implicit download is allowed")

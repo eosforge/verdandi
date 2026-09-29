@@ -2,6 +2,7 @@
 #include "agenda.hpp"
 #include "borrowing.hpp"
 #include "catalog.hpp"
+#include "context.hpp"
 #include "origin.hpp"
 #include "reading.hpp"
 #include "restore.hpp"
@@ -9,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <shared_mutex>
+#include <span>
 
 namespace astra {
 // Catalog 自有来源的实际提交器, 保留过期版本水位. 只对直接发布/续租编号, 本地清理不广播.
@@ -72,8 +74,20 @@ public:
     void notify(Notify notify, void* context);
     // 单 Key 完整发布, 正业务版本可以跳号; 同版本同正文重试可刷新 TTL, 不制造内容通知.
     std::expected<void, Error> publish(const Scope& scope, std::string_view key, Value value, std::uint64_t version, std::uint32_t ttl);
+
+    // 一个 Scope 中的完整发布条目; 批次共同使用调用方提供的业务版本和 TTL.
+    struct Entry {
+        std::string key; // 唯一 UTF-8 Key, 1..1024 字节.
+        Value value;     // Publish 非空; Renew 必须为空, 不凭水位恢复正文.
+    };
+
+    // 至多 128 条且键/正文合计 1 MiB, 同一 Star 的来源/投影/快照一次提交; 任一拒绝不修改其余键.
+    std::expected<void, Error> publish(const Scope& scope, std::span<const Entry> entries, std::uint64_t version, std::uint32_t ttl, bool renewal = false);
     // 只延长本机有效正文, 不能只凭水位恢复; TTL 每次显式提供, 1s..10m.
     std::expected<void, Error> renew(const Scope& scope, std::string_view key, std::uint64_t version, std::uint32_t ttl);
+    // 同一共享锁内点查 1..128 个唯一 Key 的最高已知版本, 未知返回零; 正文过期不清除水位.
+    // 输出顺序对应 keys, 不分配业务版本、创建 Scope 或扫描整个来源表.
+    std::expected<std::vector<std::uint64_t>, Error> versions(const Scope& scope, std::span<const std::string_view> keys) const;
     // 完整推进真实经过的拍数, 失败传播且不声称已经追平; 已完整提交的先前到期不会回滚.
     void tick();
     // 推进到期后捕获一个公开范围, 未出现范围返回游标零空根, 不创建目录或消耗 Scope 额度.
@@ -118,6 +132,7 @@ public:
     std::expected<void, Error> repair(std::string_view id, std::uint64_t position, const Scope& scope, std::string_view key, std::optional<Record> record);
 
 private:
+    friend class Context<State>; // 共用时钟/目录/记账机制, 所有资源仍由本 State 拥有.
     friend class Reading<State>; // 共用读取同步边界, 不公开私有锁或回收类型.
     friend class Restore<State>;
     // 原子安装一个 Scope 的来源/合并/投影/期限及覆盖证据; 不推进全来源确认.

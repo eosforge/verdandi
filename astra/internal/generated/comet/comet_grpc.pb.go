@@ -239,6 +239,7 @@ var Almanac_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	Catalog_Query_FullMethodName   = "/proto.comet.v1.Catalog/Query"
 	Catalog_Publish_FullMethodName = "/proto.comet.v1.Catalog/Publish"
 	Catalog_Renew_FullMethodName   = "/proto.comet.v1.Catalog/Renew"
 	Catalog_Watch_FullMethodName   = "/proto.comet.v1.Catalog/Watch"
@@ -250,6 +251,8 @@ const (
 //
 // 动态业务数据按 Key 由业务保证单一发布者, Publish/Renew 在接入 Star 内存提交.
 type CatalogClient interface {
+	// 查询相关 Key 的已知水位, 包括已过期正文; 不分配全局版本或锁定写入者.
+	Query(ctx context.Context, in *CatalogQueryRequest, opts ...grpc.CallOption) (*CatalogQueryReply, error)
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishReply, error)
 	Renew(ctx context.Context, in *CatalogRenewRequest, opts ...grpc.CallOption) (*Empty, error)
 	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CatalogWatchReply], error)
@@ -261,6 +264,16 @@ type catalogClient struct {
 
 func NewCatalogClient(cc grpc.ClientConnInterface) CatalogClient {
 	return &catalogClient{cc}
+}
+
+func (c *catalogClient) Query(ctx context.Context, in *CatalogQueryRequest, opts ...grpc.CallOption) (*CatalogQueryReply, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CatalogQueryReply)
+	err := c.cc.Invoke(ctx, Catalog_Query_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *catalogClient) Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishReply, error) {
@@ -308,6 +321,8 @@ type Catalog_WatchClient = grpc.ServerStreamingClient[CatalogWatchReply]
 //
 // 动态业务数据按 Key 由业务保证单一发布者, Publish/Renew 在接入 Star 内存提交.
 type CatalogServer interface {
+	// 查询相关 Key 的已知水位, 包括已过期正文; 不分配全局版本或锁定写入者.
+	Query(context.Context, *CatalogQueryRequest) (*CatalogQueryReply, error)
 	Publish(context.Context, *PublishRequest) (*PublishReply, error)
 	Renew(context.Context, *CatalogRenewRequest) (*Empty, error)
 	Watch(*WatchRequest, grpc.ServerStreamingServer[CatalogWatchReply]) error
@@ -321,6 +336,9 @@ type CatalogServer interface {
 // pointer dereference when methods are called.
 type UnimplementedCatalogServer struct{}
 
+func (UnimplementedCatalogServer) Query(context.Context, *CatalogQueryRequest) (*CatalogQueryReply, error) {
+	return nil, status.Error(codes.Unimplemented, "method Query not implemented")
+}
 func (UnimplementedCatalogServer) Publish(context.Context, *PublishRequest) (*PublishReply, error) {
 	return nil, status.Error(codes.Unimplemented, "method Publish not implemented")
 }
@@ -349,6 +367,24 @@ func RegisterCatalogServer(s grpc.ServiceRegistrar, srv CatalogServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&Catalog_ServiceDesc, srv)
+}
+
+func _Catalog_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CatalogQueryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogServer).Query(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Catalog_Query_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogServer).Query(ctx, req.(*CatalogQueryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Catalog_Publish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -405,6 +441,10 @@ var Catalog_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "proto.comet.v1.Catalog",
 	HandlerType: (*CatalogServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Query",
+			Handler:    _Catalog_Query_Handler,
+		},
 		{
 			MethodName: "Publish",
 			Handler:    _Catalog_Publish_Handler,

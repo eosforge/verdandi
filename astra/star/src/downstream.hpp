@@ -319,54 +319,61 @@ void Downstream<Domain>::changed(const Scope& scope, const Event& change) noexce
     if (group == streams_.end()) {
         return;
     }
-    // 连续性和 reset 归范围所有, 精确目标跳过无关变化也不会丢失完整覆盖证据.
-    progress_.publish(group->second, change.version, !change.name);
-    const auto visit = [&](Stream& stream) {
-        if (stream.overflow) {
-            return;
-        }
-        ++scans_; // 只有实际访问的流才计入; 空闲精确流的跳过由 pump 心跳覆盖, 不再消耗提交锁.
-        // 节点与第二份索引键也计入预算, 同 Key 高频变动只保留一个共享最终值.
-        const auto cost = change.bytes + change.name->key.size() + 64;
-        const auto old = stream.pending.lower_bound(change.name->key); // 一次查找同时确定已有项和新项的插入位置.
-        const bool exists = old != stream.pending.end() && old->first == change.name->key;
-        const auto previous = exists ? old->second.bytes + old->first.size() + 64 : 0;
-        if (previous > stream.bytes || previous > bytes_) {
-            stream.overflow = true; // 内部账本不一致直接拒绝, 不归零后继续做会回绕的减法.
-            enqueue(stream);
-            return;
-        }
-        const auto held = stream.bytes - previous; // 替换后仍保留的其他 Key 字节, 已验证减法合法.
-        const auto total = bytes_ - previous;      // 全局保有量减去同一份旧记录, 与最终记账一致.
-        if (held > limits_.pending || stream.encoded > limits_.pending - held || cost > limits_.pending - held - stream.encoded || total > limits_.bytes || cost > limits_.bytes - total) {
-            stream.overflow = true;
-        } else {
-            try {
-                if (exists) {
-                    old->second = Edition::merge(old->second, change); // 保留 Ephemeris 完整 Attr 的合并依据, 不重新查找或复制索引键.
-                } else {
-                    stream.pending.emplace_hint(old, change.name->key, change); // lower_bound 提供准确位置, 只有新键分配节点.
-                }
-                stream.bytes = held + cost;
-                bytes_ = total + cost;
-                ++matched_; // 只有真正进入后缀的目标才算命中, 溢出与过滤都不计入.
-            } catch (...) {
-                stream.overflow = true;
+    const auto collect = [&](const Event& event) { // 一次通知在同一收集锁内完成整个批次.
+        // 连续性和 reset 归范围所有, 精确目标跳过无关变化也不会丢失完整覆盖证据.
+        progress_.publish(group->second, event.version, !event.name);
+        const auto visit = [&](Stream& stream) {
+            if (stream.overflow) {
+                return;
             }
-        }
-        enqueue(stream);
-    };
-    if (change.name) {
-        // 只收集合并正文; reset 与无关目标的进度由范围轮转统一通知, 不在提交内全量扫描.
-        for (auto* pointer : group->second.broadcast) {
-            visit(*pointer);
-        }
-        if (const auto bucket = group->second.precise.find(change.name->key); bucket != group->second.precise.end()) {
-            for (auto* pointer : bucket->second) {
+            ++scans_; // 只有实际访问的流才计入; 空闲精确流的跳过由 pump 心跳覆盖, 不再消耗提交锁.
+            // 节点与第二份索引键也计入预算, 同 Key 高频变动只保留一个共享最终值.
+            const auto cost = event.bytes + event.name->key.size() + 64;
+            const auto old = stream.pending.lower_bound(event.name->key); // 一次查找同时确定已有项和新项的插入位置.
+            const bool exists = old != stream.pending.end() && old->first == event.name->key;
+            const auto previous = exists ? old->second.bytes + old->first.size() + 64 : 0;
+            if (previous > stream.bytes || previous > bytes_) {
+                stream.overflow = true; // 内部账本不一致直接拒绝, 不归零后继续做会回绕的减法.
+                enqueue(stream);
+                return;
+            }
+            const auto held = stream.bytes - previous; // 替换后仍保留的其他 Key 字节, 已验证减法合法.
+            const auto total = bytes_ - previous;      // 全局保有量减去同一份旧记录, 与最终记账一致.
+            if (held > limits_.pending || stream.encoded > limits_.pending - held || cost > limits_.pending - held - stream.encoded || total > limits_.bytes || cost > limits_.bytes - total) {
+                stream.overflow = true;
+            } else {
+                try {
+                    if (exists) {
+                        old->second = Edition::merge(old->second, event); // 保留 Ephemeris 完整 Attr 的合并依据, 不重新查找或复制索引键.
+                    } else {
+                        stream.pending.emplace_hint(old, event.name->key, event); // lower_bound 提供准确位置, 只有新键分配节点.
+                    }
+                    stream.bytes = held + cost;
+                    bytes_ = total + cost;
+                    ++matched_; // 只有真正进入后缀的目标才算命中, 溢出与过滤都不计入.
+                } catch (...) {
+                    stream.overflow = true;
+                }
+            }
+            enqueue(stream);
+        };
+        if (event.name) {
+            // 只收集合并正文; reset 与无关目标的进度由范围轮转统一通知, 不在提交内全量扫描.
+            for (auto* pointer : group->second.broadcast) {
                 visit(*pointer);
             }
+            if (const auto bucket = group->second.precise.find(event.name->key); bucket != group->second.precise.end()) {
+                for (auto* pointer : bucket->second) {
+                    visit(*pointer);
+                }
+            }
         }
-    }
+    };
+    if (change.batch) {
+        for (const auto& entry : *change.batch)
+            collect(entry);
+    } else
+        collect(change);
     wake_();
 }
 

@@ -28,12 +28,7 @@ void Catalog::State::Hooks::add(const Source::Tree::Key& name) {
 }
 
 Catalog::State::Projection* Catalog::State::locate(const Scope& scope) {
-    const auto sector = scenes_.find(scope.sector); // 内部查找不创建空范围或新的公开游标.
-    if (sector == scenes_.end()) {
-        return nullptr;
-    }
-    const auto spectrum = sector->second.find(scope.spectrum);
-    return spectrum == sector->second.end() ? nullptr : &spectrum->second;
+    return Context<State>::locate(*this, scope);
 }
 
 std::expected<void, Catalog::State::Error> Catalog::State::admit(std::string_view id) {

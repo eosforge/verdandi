@@ -190,8 +190,8 @@ if(VERDANDI_BUILD_TESTS)
     target_link_libraries(verdandi_cpp_tests PRIVATE verdandi::verdandi yyjson)
     verdandi_enable_test_warnings(verdandi_cpp_tests)
     target_compile_definitions(verdandi_cpp_tests PRIVATE
-        VERDANDI_CONFIGURATION_CONFORMANCE="${CMAKE_CURRENT_SOURCE_DIR}/../../testkit/conformance/v1/configuration.json"
-        VERDANDI_CONFIGURATION_EXAMPLE="${CMAKE_CURRENT_SOURCE_DIR}/../../configuration.example.json"
+        VERDANDI_CONFIGURATION_CONFORMANCE="${CMAKE_CURRENT_SOURCE_DIR}/../testkit/conformance/v1/configuration.json"
+        VERDANDI_CONFIGURATION_EXAMPLE="${CMAKE_CURRENT_SOURCE_DIR}/../configuration.example.json"
     )
     add_test(NAME verdandi_cpp_tests COMMAND verdandi_cpp_tests)
 

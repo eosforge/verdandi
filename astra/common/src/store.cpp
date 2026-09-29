@@ -139,7 +139,7 @@ void Store::tick(Clock::Time now, Steady::time_point local) {
     }
 
     // pending 为应补齐的完整拍数, 非负; 不截断追赶, 余下不足一拍保留在锚点差中.
-    const auto pending = now > *clock_ ? static_cast<std::uint64_t>((now - *clock_).count() / interval_.count()) : 0;
+    const auto pending = now > *clock_ ? static_cast<std::uint64_t>((now - *clock_) / interval_) : 0;
 
     // records 同时保存提交内容和失败时需重排的 Key. 空拍不预分配数组.
     std::vector<Store::Delta> records;
@@ -234,12 +234,10 @@ void Store::schedule(Entry& entry, Clock::Time boundary) noexcept {
         return;
     }
 
-    // delay 向上取整且不使用可能溢出的 distance + interval - 1 表达式.
-    const auto remaining = *entry.deadline > boundary ? static_cast<std::uint64_t>((*entry.deadline - boundary).count()) : std::uint64_t{0};
-    // interval 从构造时验证过的正纳秒周期转换, 不可能为零.
-    const auto interval = static_cast<std::uint64_t>(interval_.count());
-    // delay 为向上取整后的拍数, 零由时间轮安排在下一拍, 不同步触发回调.
-    const auto delay = remaining / interval + static_cast<std::uint64_t>(remaining % interval != 0);
+    // remaining 是非负业务时间之间的剩余时长, 差值可表示; 已到期记录保持零延迟.
+    const auto remaining = *entry.deadline > boundary ? *entry.deadline - boundary : std::chrono::nanoseconds::zero();
+    // interval_ 已验证为正. delay 用商加非零余数向上取整, 不先扩大 remaining, 最后转换为时间轮的无符号拍数.
+    const auto delay = static_cast<std::uint64_t>(remaining / interval_ + (remaining % interval_ != std::chrono::nanoseconds::zero()));
     // 裁剪后必定可调度. delay=0 由 Wheel 安排到下一拍, 永远不在 put 内执行回调.
     static_cast<void>(wheel_.schedule(entry, std::min(delay, Timer::limit)));
 }

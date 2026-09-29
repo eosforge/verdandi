@@ -1,6 +1,6 @@
 # Astrolabe
 
-Astrolabe 是 [admin/](../../admin/README.md) 的 Go 管理与实时观测后端. 首版提供必要的登录、Almanac 管理和节点状态入口; 完整 Orrery 界面暂缓. [Go 入口](main.go) 连接 HTTP 管理、Polaris 代理与指标抓取, 旧 C++ 占位入口已退出构建. 实施状态见 [进度](../../docs/progress.md), 实际运行和浏览器验收范围见 [验证记录](../../testkit/validation.md).
+Astrolabe 是 [admin/](../admin/README.md) 的 Go 管理与实时观测后端. 首版提供必要的登录、Almanac 管理和节点状态入口; 完整 Orrery 界面暂缓. [Go 入口](main.go) 连接 HTTP 管理、Polaris 代理与指标抓取, 旧 C++ 占位入口已退出构建. 实施状态见 [进度](../docs/progress.md), 实际运行和浏览器验收范围见 [验证记录](../docs/validation.md).
 
 ## 开发语言与数据职责
 
@@ -60,7 +60,7 @@ Cookie 的跨源与跨站不是同一个概念. 同站部署可以使用 SameSit
 
 Polaris 保存唯一权威底稿, Astrolabe 读取其明确版本的内容供管理编辑. Star 的业务视图用于观察实际安装情况, 不能作为 Polaris 的新权威底稿. 不因 Star 缺失、落后或不可达推导管理 Delete, 不用界面搜索、分页或失败的读取结果清空整个 Scope.
 
-必要管理入口保留单 Key Set/Delete, Set 提交完整 Buffer, 空 Buffer 与 Delete 分开. 批量编辑若由界面组织, 仍是多个单 Key 提交, 不承诺多 Key 原子事务. 首版不增加文件、数据库和 KV 导入适配器, 也不通过此入口替业务持久化动态 Catalog.
+管理入口保留单 Key Set/Delete, 并支持 POST 请求的 `changes` 数组原子提交同 Scope 的多个唯一键. 数组条目为 `{key, value}` (base64) 或 `{key, erase:true}`, 外层共用 sector、spectrum、version, 与旧单键字段互斥. Almanac 批次不设 Key 数量或总字节上限, HTTP 正文也不另设批次上限; 单条 value 仍遵循原有 1 MiB 约束, 配置的存储容量和请求截止继续生效. Astrolabe 使用 `Authority.Batch` 分页提交, 完整标记与正常 EOF 后才提交一次事务. 空 Buffer 与 Delete 分开; 内部凭据范围不开放此批次入口. 当前 Admin 界面仍按单键编辑, 新批次由 HTTP API 提供. 首版不增加文件、数据库和 KV 导入适配器, 也不通过此入口替业务持久化动态 Catalog.
 
 ### 编辑保存与发布
 
@@ -70,11 +70,11 @@ Polaris 保存唯一权威底稿, Astrolabe 读取其明确版本的内容供管
 
 超时、断链或 Astrolabe 重启可能发生在 Polaris 提交之后, 因此结果不确定不等于未提交. 不回滚已确认内容, 不由 Astrolabe 保存第二份持久任务队列, 不通过 Watch 回调反复发布. 原结果只能依据原操作的有效证据确认, 当前内容或版本相同不自动证明历史请求曾经提交.
 
-多次单 Key 提交遇到冲突、失败或结果不确定时停止该轮后续操作, 保留已确认部分. 原不确定结果不会因后续新编辑成功而改写. Polaris 的有界历史不保证永久保留任意旧操作的重试证据, 首版没有任意版本回滚接口.
+原子批次遇到任一确定失败全部回滚, 结果不确定仍须用完整请求确认. 多次独立单 Key 提交遇到冲突、失败或结果不确定时停止该轮后续操作, 保留已确认部分. 原不确定结果不会因后续新编辑成功而改写. Polaris 的有界历史不保证永久保留任意旧操作的重试证据, 首版没有任意版本回滚接口.
 
 ### Star 启动恢复
 
-Star 从 Polaris 接收保留权威版本的完整 Almanac 基线, 包括合法空集合和内部凭据. 恢复不等待浏览器登录、Astrolabe 页面打开或 Comet Go 订阅; 初始化顺序和降级边界只在 [架构](../../docs/architecture.md#启动与运行) 定义.
+Star 从 Polaris 接收保留权威版本的完整 Almanac 基线, 包括合法空集合和内部凭据. 恢复不等待浏览器登录、Astrolabe 页面打开或 Comet Go 订阅; 初始化顺序和降级边界只在 [架构](../docs/architecture.md#启动与运行) 定义.
 
 Polaris 为空时也必须明确完成空基线, 不能把读取失败当成空库. 认证开启但没有 Comet 凭据时拒绝业务登录; Astrolabe 仍可凭独立内部身份向 Polaris 写入首批凭据. Star 无需开放公共 `__` 访问来解除引导依赖.
 
@@ -82,7 +82,7 @@ Polaris 为空时也必须明确完成空基线, 不能把读取失败当成空�
 
 APIKEY/APISECRET 记录属于 `Almanac["__auth"]["comet"]`, 每个 APIKEY 对应一个完整凭据记录, 经 Polaris 持久提交再分发. 不包含 Grant、逐范围权限或注册所有者; 普通 Comet 登录后可访问全部普通业务数据, `__` Sector 仍由 Star 的外部入口拒绝.
 
-管理面使用内部结构校验凭据, 普通 Buffer 可为空不代表凭据必需字段可为空. Star 安装凭据时, 记录、已安装版本、登录查找索引与必要会话失效共同生效, 不提前确认安装. 只需要 APIKEY 查找, 不构建各域/Sector/Spectrum 权限位图; 凭据字段与容量归 [内部协议](../../proto/README.md#credentials).
+管理面使用内部结构校验凭据, 普通 Buffer 可为空不代表凭据必需字段可为空. Star 安装凭据时, 记录、已安装版本、登录查找索引与必要会话失效共同生效, 不提前确认安装. 只需要 APIKEY 查找, 不构建各域/Sector/Spectrum 权限位图; 凭据字段与容量归 [内部协议](../proto/README.md#credentials).
 
 ### 凭据生命周期
 
@@ -92,13 +92,13 @@ Polaris 持久提交与各 Star 安装不是同一瞬间, 未收到更新的 Sta
 
 删除后重建同名 APIKEY 只允许新的登录, 不复活旧 Session, 不重置业务版本/操作顺序或重新获得 TTL. APIKEY 不是 Ephemeris 所有权或 Catalog 发布权威. SDK 自己的活跃对象仍按其原身份、期限和目标恢复, 不因同名凭据出现就自动接管任意 UUID.
 
-若 Star 跳过中间历史安装较新完整凭据快照, 已确认让该 Star 全部旧 Comet Session 重新认证, 包括最终 SECRET 未变的账号. 接受这一恢复时的影响以保持 Credential 只有 secret, 不新增逐账号身份标记; 安装原子性、重复快照及 SDK 恢复只在 [凭据快照](../../proto/README.md#credential-snapshot) 定义.
+若 Star 跳过中间历史安装较新完整凭据快照, 已确认让该 Star 全部旧 Comet Session 重新认证, 包括最终 SECRET 未变的账号. 接受这一恢复时的影响以保持 Credential 只有 secret, 不新增逐账号身份标记; 安装原子性、重复快照及 SDK 恢复只在 [凭据快照](../proto/README.md#credential-snapshot) 定义.
 
 APISECRET 如何交给业务属于部署流程. Comet 不取得凭据表, 不从 Astrolabe/Pulsar 查询 SECRET; SDK 的本地 SECRET 更新不回写 Polaris. 服务密码、摘要、私钥、APISECRET 和会话 token 不进入日志、URL、命令行、错误、指标或前端普通拓扑响应.
 
 ## 实时观测
 
-Astrolabe 从 Pulsar 的 [只读成员查询](../../proto/README.md#directory) 取得名单, 复用进程内有界缓存, 再观察各服务的实际连接、就绪和同步状态. 浏览器刷新不直接触发一次新的 Pulsar 查询. 登记存在不等于在线, 抓取失败不等于已经确认节点退出; 观察携带采样时间与成功/未知/陈旧状态. 不依据一次失败自动删除成员、改写 Almanac 或切换发布权威.
+Astrolabe 从 Pulsar 的 [只读成员查询](../proto/README.md#directory) 取得名单, 复用进程内有界缓存, 再观察各服务的实际连接、就绪和同步状态. 浏览器刷新不直接触发一次新的 Pulsar 查询. 登记存在不等于在线, 抓取失败不等于已经确认节点退出; 观察携带采样时间与成功/未知/陈旧状态. 不依据一次失败自动删除成员、改写 Almanac 或切换发布权威.
 
 Star 已编写独立只读 HTTP GET /metrics, 使用 Prometheus 文本格式, Astrolabe 直接抓取用于实时展示. 首版不部署或依赖 Prometheus/Grafana, 不保存长期指标时序, 不另建私有指标 gRPC. 标准格式为未来外部接入保留可能, 不扩大当前实施范围.
 
@@ -112,7 +112,7 @@ Admin 经适配层消费这些结果, Three.js 渲染器不持有基础设施凭
 
 单管理账号、8 小时内存会话、同源/跨源规则、经 Polaris 持久提交和直接实时观测已经确认. 管理与目录接口见下节, 首版不扩展为账号系统、通用内容导入平台或外部监控集成.
 
-[验收规约](../../testkit/comet.md) 按三域和本页边界维护, 旧 Astrolabe 数据库、直接写 Star、Grant 和 standalone 用例不作为新功能通过标准. 管理 HTTP、真实进程与浏览器已有验证基线, 执行证据和后续未验证改动只维护 [最新验证](../../testkit/validation.md).
+[验收规约](../docs/comet.md) 按三域和本页边界维护, 旧 Astrolabe 数据库、直接写 Star、Grant 和 standalone 用例不作为新功能通过标准. 管理 HTTP、真实进程与浏览器已有验证基线, 执行证据和后续未验证改动只维护 [最新验证](../docs/validation.md).
 
 ## HTTP 接口与当前参数
 
@@ -131,7 +131,7 @@ Admin 经适配层消费这些结果, Three.js 渲染器不持有基础设施凭
 | `GET /api/almanac?sector=...&spectrum=...` | 单分组 NDJSON 快照; 普通行 key/value, value 为 Base64; 最终行 complete/position |
 | `POST /api/almanac` | sector/spectrum/key/version, 以及二选一的 Base64 value 或 erase=true; 成功 position 只来自 Polaris 的持久确认 |
 
-合法空 value 为 `""`, 不等于删除. 每次管理提交仍受 Polaris 的严格版本规则约束. 快照读取不在 Astrolabe 保存第二份完整底稿: 逐页接收、逐行输出, 最终 `complete: true` 只在源 gRPC 正常结束后发送. HTTP 中途关闭、错误行、缺少最终行都表示本次快照不完整, 接入方必须丢弃暂存而不是清空旧视图. 对内部凭据的 Buffer 编码使用 [Credential](../../proto/README.md#credentials), 不把普通配置转为默认凭据.
+合法空 value 为 `""`, 不等于删除. 每次管理提交仍受 Polaris 的严格版本规则约束. 快照读取不在 Astrolabe 保存第二份完整底稿: 逐页接收、逐行输出, 最终 `complete: true` 只在源 gRPC 正常结束后发送. HTTP 中途关闭、错误行、缺少最终行都表示本次快照不完整, 接入方必须丢弃暂存而不是清空旧视图. 对内部凭据的 Buffer 编码使用 [Credential](../proto/README.md#credentials), 不把普通配置转为默认凭据.
 
 实现初值为最多 4 次并发 KDF、16 个普通管理请求和 2 个完整快照流. 密码计算不占会话表锁; 单个修改 RPC 5 秒、快照总接收 30 秒, 慢 HTTP 写入受独立服务器期限约束. 这些限制是工程初值, 尚未测量吞吐、尾延迟或 RSS.
 

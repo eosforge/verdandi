@@ -74,7 +74,9 @@ enum class Operation {
     // 删除不存在的 Key 仍需要权威提交历史.
     absent,
     // 全量候选已就绪后的根/历史交换, 任何准备失败都必须保留旧状态.
-    reset
+    reset,
+    // 多键 COW/目录/历史准备中的每个分配点.
+    batch
 };
 } // namespace
 
@@ -151,6 +153,13 @@ void atomicity(Operation operation) {
             case Operation::absent:
                 CHECK(book.apply(11, "absent", std::nullopt) == true);
                 break;
+            case Operation::batch: {
+                std::vector<astra::Almanac::Change> changes; // 覆盖旧值并新增另一键, 任一失败都必须撤回.
+                for (const auto* key : {"existing", "new"})
+                    changes.push_back({std::make_shared<const std::string>(key), std::make_shared<const astra::Almanac::Buffer>(1, 2), 11});
+                CHECK(book.apply(11, std::move(changes), 1024 * 1024) == true);
+                break;
+            }
             case Operation::reset:
                 CHECK(book.reset(std::move(draft)) == true);
                 break;
@@ -279,6 +288,7 @@ void capture() {
 // 独立故障测试入口, 运行和 Sanitizer 验证均需要用户本轮授权.
 int main() {
     try {
+        atomicity(Operation::batch);
         atomicity(Operation::insert);
         atomicity(Operation::replace);
         atomicity(Operation::erase);

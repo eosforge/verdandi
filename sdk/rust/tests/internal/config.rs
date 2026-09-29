@@ -39,11 +39,7 @@ fn reconnect_delay_uses_exact_milliseconds() {
 
 #[test]
 fn tls_builds_private_roots_client_certificate_and_sni() {
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("testkit")
-        .join("tls");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("testkit").join("tls");
     let certificate = fixture.join("certificate.pem");
     let mut config = Config::new("redis://127.0.0.1:6379");
     config.tls = Some(TlsConfig {

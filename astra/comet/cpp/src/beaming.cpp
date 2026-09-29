@@ -1,13 +1,13 @@
 #include "beaming.hpp"
 #include "selection.hpp"
-#include <astra/profile.hpp>
+#include <algorithm>
 #include <astra/scope.hpp>
 #include <grpc/support/time.h>
 #include <utility>
 
 namespace comet::detail {
-Beaming::Beaming(std::shared_ptr<Core> core, Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, Beacon::Options options) : core_(std::move(core)), scope_(std::move(scope)), attr_(std::move(attr)), ttl_(ttl), wanted_(std::make_shared<Pending>(nullptr, std::move(data))), lifetime_(ttl), changed_(std::move(options.changed)) {
-    const auto bytes = attr_->size() + wanted_->data->size() + 1024; // 固定状态和载荷对象的保守计费, 在工厂接纳之前可整体回滚.
+Beaming::Beaming(std::shared_ptr<Core> core, Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, std::chrono::milliseconds beat, Beacon::Options options) : core_(std::move(core)), scope_(std::move(scope)), attr_(std::move(attr)), data_(std::move(data)), ttl_(ttl), beat_(beat), lifetime_(ttl), changed_(options.changed ? std::make_shared<Notice>(std::move(options.changed)) : nullptr) {
+    const auto bytes = attr_->size() + data_->size() + 2048; // 固定身份、能力和共享载荷保守计费.
     if (!core_->resize(0, bytes)) {
         throw std::length_error("Beacon capacity unavailable");
     }
@@ -22,393 +22,543 @@ Error Beaming::error(Error::Code code, Error::Effect effect) {
     return Error{code, effect, {}, {}, {}};
 }
 
-// Beaming::settle 结算待定请求, 成功发布回执, 失败发布错误.
-// pending 为待定项; result 为 RPC 结果.
-void Beaming::settle(const std::shared_ptr<Pending>& pending, Result<Beacon::Receipt> result) {
-    if (pending && pending->result) {
-        pending->result->set_value(std::move(result));
-        if (pending->admission) {
-            pending->admission->settled();
-            pending->admission.reset();
-        }
-        pending->result.reset(); // 成功和失败都永久结束本次结果, 后台恢复不能重写.
+Beaming::Call::Call(Beaming& owner) : shutdown(owner.core_->shutdown_.get_token(), Cancel{&context}), cancellation(owner.cancellation_.get_token(), Cancel{&context}) {}
+
+Beaming::Operation::~Operation() {
+
+    if (claimed) {
+        owner.core_->returning(false, false);
     }
+    if (admitted) {
+        owner.core_->settled();
+    }
+    static_cast<void>(owner.core_->resize(bytes, 0));
+    {
+        const std::lock_guard lock(owner.mutex_);
+        owner.active_ = false;
+        owner.active_binding_.reset();
+        owner.cancellation_ = std::stop_source{std::nostopstate};
+    }
+    owner.condition_.notify_all();
+    owner.core_->wake(&owner);
+}
+
+Result<void> Beaming::context(grpc::ClientContext& context, const std::shared_ptr<const Binding>& binding, Core::Time deadline) {
+
+    if (closed() || core_->stopped()) {
+        return std::unexpected(error(Error::Code::closed));
+    }
+    if (!core_->current(binding) || cancellation_.stop_requested()) {
+        return std::unexpected(error(Error::Code::instance));
+    }
+    const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - std::chrono::steady_clock::now()).count();
+    if (remaining <= 0) {
+        return std::unexpected(error(Error::Code::timeout));
+    }
+    if (!binding->session.empty()) {
+        context.AddMetadata("comet-session-bin", binding->session);
+    }
+    context.set_deadline(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)));
+    return {};
+}
+
+Result<void> Beaming::begin(Operation& operation, Core::Time deadline, std::size_t bytes, std::shared_ptr<const Binding>& binding) {
+
+    if (!core_->admitting()) {
+        return std::unexpected(error(Error::Code::busy));
+    }
+    operation.admitted = true;
+    if (!core_->resize(0, bytes)) {
+        return std::unexpected(error(Error::Code::busy));
+    }
+    operation.bytes = bytes;
+    auto acquired = core_->acquire(deadline, closed_);
+    if (!acquired) {
+        return std::unexpected(acquired.error());
+    }
+    binding = *acquired;
+    {
+        const std::lock_guard lock(mutex_);
+        active_binding_ = binding;
+    }
+    if (!core_->outgoing(false, false)) {
+        return std::unexpected(error(Error::Code::busy));
+    }
+    operation.claimed = true;
+    return {};
+}
+
+Result<void> Beaming::initialize(Core::Time deadline) {
+
+    std::stop_source cancellation; // 所有可分配的停止令牌先于 active_ 发布.
+    {
+        const std::lock_guard lock(mutex_);
+        cancellation_ = std::move(cancellation);
+        active_ = true;
+    }
+    Operation operation(*this);
+    std::shared_ptr<const Binding> binding;
+    if (auto admitted = begin(operation, deadline, 2 * attr_->size() + 3 * 1024 * 1024 + 8192, binding); !admitted) {
+        return admitted;
+    }
+    proto::comet::v1::CreateRequest request;
+    proto::comet::v1::CreateReply reply;
+    Call call(*this);
+    request.set_instance(binding->instance);
+    request.mutable_scope()->set_sector(scope_.sector);
+    request.mutable_scope()->set_spectrum(scope_.spectrum);
+    request.set_attr(attr_->data(), attr_->size());
+    request.set_data(data_->data(), data_->size());
+    request.set_ttl_ms(static_cast<std::uint32_t>(ttl_.count()));
+    request.set_generation(1);
+    if (auto prepared = context(call.context, binding, deadline); !prepared) {
+        return prepared;
+    }
+    const auto sent = Lifetime::now();
+    if (!sent) {
+        return std::unexpected(error(Error::Code::clock));
+    }
+    const auto status = binding->ephemeris->Create(&call.context, request, &reply); // 不依赖 Core 消费通知才能返回.
+    const std::lock_guard lock(mutex_);
+    if (!status.ok()) {
+        auto failed = Core::failure(status, call.context);
+        if (closed() || core_->stopped()) {
+            failed.code = Error::Code::closed;
+        }
+        failure(binding, failed);
+        return std::unexpected(std::move(failed));
+    }
+    auto result = install(reply, binding, 1, *sent, operation.bytes);
+    if (!result) {
+        return result;
+    }
+    if (closed() || core_->stopped()) {
+        return std::unexpected(error(Error::Code::closed, Error::Effect::unknown));
+    }
+    if (!core_->current(binding)) {
+        return std::unexpected(error(Error::Code::instance, Error::Effect::unknown));
+    }
+    initialized_ = true;
+    sent_ = *sent;
+    core_->wake(this);
+    return {};
+}
+
+Result<void> Beaming::install(const proto::comet::v1::CreateReply& reply, const std::shared_ptr<const Binding>& binding, std::uint64_t generation, Lifetime::Time sent, std::size_t& reserved) {
+
+    const bool valid = Selection::valid(reply.uuid()) && astra::Scope::text(reply.instance(), 128) && (binding->instance.empty() || binding->instance == reply.instance()) && reply.ttl_ms() == static_cast<std::uint32_t>(ttl_.count()) && reply.generation() == generation && reply.capability().size() == 32 && reply.data().size() <= 1024 * 1024 && reply.order() >= confirmed_ && (state_.identity || reply.order() == 0) && (!state_.identity || (reply.uuid() == state_.identity->uuid && reply.capability() == capability_));
+    if (!valid || (reply.order() == confirmed_ && !std::ranges::equal(*data_, reply.data(), [](std::uint8_t left, char right) { return left == static_cast<std::uint8_t>(right); }))) {
+        return std::unexpected(error(Error::Code::protocol, Error::Effect::unknown));
+    }
+    auto data = reply.order() == confirmed_ ? data_ : std::make_shared<const std::vector<std::uint8_t>>(reply.data().begin(), reply.data().end());
+    Beacon::Identity identity{scope_, reply.instance(), reply.uuid()};
+    auto capability = reply.capability(); // 字符串和载荷先准备, 不能部分修改已确认身份.
+    const auto bytes = attr_->size() + data->size() + 2048;
+    const auto growth = bytes > bytes_ ? bytes - bytes_ : 0; // 成功后的缓存增长由在途预留转移, 不二次抢额度.
+    if (growth > reserved) {
+        return std::unexpected(error(Error::Code::internal, Error::Effect::unknown));
+    }
+    if (growth) {
+        reserved -= growth;
+    } else {
+        static_cast<void>(core_->resize(bytes_, bytes));
+    }
+    bytes_ = bytes;
+    data_ = std::move(data);
+    capability_.swap(capability);
+    state_.identity = std::move(identity);
+    binding_ = binding;
+    confirmed_ = reply.order();
+    issued_ = std::max(issued_, confirmed_);
+    renewal_ = 0;
+    static_cast<void>(lifetime_.confirm(sent));
+    failures_ = 0;
+    dirty_ = true;
+    publish(lifetime_.ready(Lifetime::now()) ? Beacon::Phase::ready : Beacon::Phase::uncertain);
+    return {};
+}
+
+Result<Beacon::Receipt> Beaming::update(Value data, std::chrono::milliseconds timeout, Core::Time started) {
+    if (timeout.count() <= 0 || timeout > std::chrono::minutes(1)) {
+        return std::unexpected(error(Error::Code::input));
+    }
+    return submit(std::move(data), started + timeout, {});
+}
+
+Result<Beacon::Receipt> Beaming::submit(Value data, Core::Time deadline, std::optional<std::uint64_t> sample) {
+
+    if (!data || data->size() > 1024 * 1024) {
+        return std::unexpected(error(Error::Code::input));
+    }
+    if (closed() || core_->stopped()) {
+        return std::unexpected(error(Error::Code::closed));
+    }
+    if (Core::notifying()) {
+        return std::unexpected(error(Error::Code::busy));
+    }
+    const auto owned = shared_from_this(); // 在途应用调用独立保活, 不依赖句柄继续存在.
+    std::stop_source cancellation;
+    std::shared_ptr<const Binding> registered;
+    std::uint64_t generation{};
+    Beacon::Receipt receipt;
+    std::string capability;
+    {
+        const std::lock_guard lock(mutex_);
+        if (closed() || core_->stopped()) {
+            return std::unexpected(error(Error::Code::closed));
+        }
+        if (sample && *sample != sampling_generation_) {
+            return std::unexpected(error(Error::Code::obsolete));
+        }
+        if (!initialized_ || active_ || !binding_ || creating_ || permanent_) {
+            return std::unexpected(error(Error::Code::busy));
+        }
+        if (issued_ == UINT64_MAX || (!sample && sampling_generation_ == UINT64_MAX)) {
+            permanent_ = true;
+            publish(Beacon::Phase::failed, error(Error::Code::limit));
+            core_->wake(this);
+            return std::unexpected(error(Error::Code::limit));
+        }
+        registered = binding_;
+        receipt = Beacon::Receipt{*state_.identity, issued_ + 1};
+        capability = capability_;
+        generation = generation_;
+        cancellation_ = std::move(cancellation);
+        active_ = true;
+        if (!sample) {
+            ++sampling_generation_;
+            tick_ = Core::deadline(interval_);
+        }
+    }
+    Operation operation(*this);
+    std::shared_ptr<const Binding> binding;
+    if (auto admitted = begin(operation, deadline, data->size() * 2 + 8192, binding); !admitted) {
+        return std::unexpected(admitted.error());
+    }
+    if (binding->endpoint != registered->endpoint || (!binding->instance.empty() && binding->instance != receipt.identity.instance)) {
+        return std::unexpected(error(Error::Code::instance));
+    }
+    proto::comet::v1::UpdateRequest request;
+    proto::comet::v1::UpdateReply reply;
+    Call call(*this);
+    request.set_instance(receipt.identity.instance);
+    request.mutable_scope()->set_sector(scope_.sector);
+    request.mutable_scope()->set_spectrum(scope_.spectrum);
+    request.set_uuid(receipt.identity.uuid);
+    request.set_capability(capability);
+    request.set_generation(generation);
+    request.set_order(receipt.order);
+    request.set_data(data->data(), data->size());
+    if (auto prepared = context(call.context, binding, deadline); !prepared) {
+        return std::unexpected(prepared.error());
+    }
+    const auto sent = Lifetime::now();
+    if (!sent) {
+        return std::unexpected(error(Error::Code::clock));
+    }
+    {
+        const std::lock_guard lock(mutex_);
+        issued_ = receipt.order; // 未知结果同样消耗版本, 失败内容不保存为恢复缓存.
+        sent_ = *sent;
+    }
+    core_->wake(this);
+    const auto status = binding->ephemeris->Update(&call.context, request, &reply);
+    const std::lock_guard lock(mutex_);
+    if (!status.ok()) {
+        auto failed = Core::failure(status, call.context);
+        if (closed() || core_->stopped()) {
+            failed.code = Error::Code::closed;
+        }
+        failure(binding, failed);
+        return std::unexpected(std::move(failed));
+    }
+    if (reply.order() != receipt.order) {
+        auto failed = error(Error::Code::protocol, Error::Effect::unknown);
+        failure(binding, failed);
+        return std::unexpected(std::move(failed));
+    }
+    if (closed() || core_->stopped()) {
+        return std::unexpected(error(Error::Code::closed, Error::Effect::unknown));
+    }
+    if (!core_->current(binding) || generation != generation_ || !binding_) {
+        return std::unexpected(error(Error::Code::instance, Error::Effect::unknown));
+    }
+    const auto bytes = attr_->size() + data->size() + 2048;
+    // 在途预留覆盖成功缓存增长, 不允许 RPC 成功后因另一个对象抢预算而丢失确认.
+    const auto growth = bytes > bytes_ ? bytes - bytes_ : 0;
+    if (growth) {
+        operation.bytes -= growth;
+        bytes_ += growth;
+    } else {
+        static_cast<void>(core_->resize(bytes_, bytes));
+        bytes_ = bytes;
+    }
+    data_ = std::move(data);
+    confirmed_ = receipt.order;
+    static_cast<void>(lifetime_.confirm(*sent));
+    publish(lifetime_.ready(Lifetime::now()) ? Beacon::Phase::ready : Beacon::Phase::uncertain);
+    return receipt;
 }
 
 Beacon::State Beaming::state() const {
     const std::lock_guard lock(mutex_);
-    auto result = state_; // 有界身份/诊断包装, 不复制 Attr/Data.
+    auto state = state_;
     if (closed() || core_->stopped()) {
-        result.phase = Beacon::Phase::closed;
-    } else if (result.phase == Beacon::Phase::ready && !lifetime_.ready(Lifetime::now())) {
-        result.phase = Beacon::Phase::uncertain; // 休眠醒来即不再沿用旧确认, 无须等待控制轮先运行.
+        state.phase = Beacon::Phase::closed;
+    } else if (state.phase == Beacon::Phase::ready && !lifetime_.ready(Lifetime::now())) {
+        state.phase = Beacon::Phase::uncertain;
     }
-    return result;
+    return state;
 }
 
-// Beaming::update 提交数据更新, 返回 future 回执, 超时未确认即失败.
-// data 为更新载荷; timeout 为等待确认期限.
-std::future<Result<Beacon::Receipt>> Beaming::update(Value data, std::chrono::milliseconds timeout) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.update");
-
-    auto pending = std::make_shared<Pending>(nullptr, std::move(data)); // 先准备结果通道, 失败不替换已接纳期望.
-    pending->result.emplace();
-    auto future = pending->result->get_future();
-    if (!pending->data || pending->data->size() > 1024 * 1024 || timeout.count() <= 0 || timeout > std::chrono::minutes(1)) {
-        settle(pending, std::unexpected(error(Error::Code::input)));
-        return future;
-    }
-    pending->deadline = std::chrono::steady_clock::now() + timeout;
+Result<void> Beaming::changed(std::move_only_function<void(Beacon::State)> callback) {
+    auto next = callback ? std::make_shared<Notice>(std::move(callback)) : nullptr;
     {
-        ASTRA_PROFILE_BEGIN(profile_lock_60, "comet.cpp.beaming.Beaming.update.wait.lock");
         const std::lock_guard lock(mutex_);
-        ASTRA_PROFILE_END(profile_lock_60);
         if (closed() || core_->stopped()) {
-            settle(pending, std::unexpected(error(Error::Code::closed)));
-            return future;
+            return std::unexpected(error(Error::Code::closed));
         }
-        const bool replacing = wanted_->result && wanted_->admission && (!updating_ || updating_->pending != wanted_); // 替代一个未发送调用可移交其现有额度.
-        if (!replacing && !core_->admitting()) {
-            settle(pending, std::unexpected(error(Error::Code::busy)));
-            return future;
-        }
-        if (!replacing) {
-            pending->admission = core_;
-        } // 新调用先取得额度, 拒绝不修改原期望.
-        const auto bytes = attr_->size() + pending->data->size() + 1024;
-        if (!core_->resize(bytes_, bytes)) {
-            settle(pending, std::unexpected(error(Error::Code::busy)));
-            return future;
-        }
-        bytes_ = bytes;
-        if (replacing) {
-            pending->admission = std::move(wanted_->admission);
-        } // 所有资源准备成功后才转移, 旧 future 仍明确结算为替代.
-        if (!updating_ || updating_->pending != wanted_) {
-            settle(wanted_, std::unexpected(error(Error::Code::obsolete))); // 只有未发出的 Update 可以被合并替代.
-        }
-        wanted_ = std::move(pending);
-        applied_ = false;
-        rejected_ = false;
-        data_at_ = Core::Time{};
+        changed_.swap(next);
+        dirty_ = true;
     }
     core_->wake(this);
-    return future;
+    return {};
 }
 
-// Beaming::closed 返回是否已关闭, 关闭后不再接受新更新.
-bool Beaming::closed() const noexcept {
-    return closed_.load(std::memory_order_acquire);
+Result<void> Beaming::tick(std::chrono::milliseconds interval, std::move_only_function<Value()> callback) {
+
+    if (interval.count() <= 0) {
+        return std::unexpected(error(Error::Code::input));
+    }
+    auto next = callback ? std::make_shared<Sample>(std::move(callback)) : nullptr;
+    {
+        const std::lock_guard lock(mutex_);
+        if (closed() || core_->stopped()) {
+            return std::unexpected(error(Error::Code::closed));
+        }
+        if (sampling_generation_ == UINT64_MAX) {
+            return std::unexpected(error(Error::Code::limit));
+        }
+        sampler_.swap(next);
+        interval_ = interval;
+        tick_ = Core::deadline(interval);
+        ++sampling_generation_;
+    }
+    core_->wake(this);
+    return {};
 }
 
-// Beaming::finished 返回是否已结束, 待定全部结算且无在途即结束.
-bool Beaming::finished() const noexcept {
-    return finished_.load(std::memory_order_acquire);
+void Beaming::sample() noexcept {
+
+    std::uint64_t generation{}; // 旧采样结束不能重置手动更新后的新期限.
+    try {
+        std::shared_ptr<Sample> callback;
+        {
+            const std::lock_guard lock(mutex_);
+            if (!closed() && core_->notification()) {
+                callback = sampler_;
+                generation = sampling_generation_;
+            }
+        }
+        if (callback) {
+            Value data;
+            const bool previous = Core::notifying();
+            Core::notify(true);
+            try {
+                data = (*callback)();
+            } catch (...) {
+                callback.reset(); // 捕获析构仍属于回调, 禁止等待正在执行的采样自身.
+                Core::notify(previous);
+                throw;
+            }
+            callback.reset();
+            Core::notify(previous);
+            const auto result = submit(std::move(data), Core::deadline(core_->options_.timeout), generation);
+            if (!result && result.error().code != Error::Code::obsolete && result.error().code != Error::Code::closed) {
+                const std::lock_guard lock(mutex_);
+                if (generation == sampling_generation_) {
+                    publish(state_.phase, result.error());
+                }
+            }
+        }
+    } catch (...) {
+        core_->exception();
+        const std::lock_guard lock(mutex_);
+        if (generation == sampling_generation_ && !closed()) {
+            publish(state_.phase, error(Error::Code::internal));
+        }
+    }
+    {
+        const std::lock_guard lock(mutex_);
+        sampling_ = false;
+        if (generation == sampling_generation_) {
+            tick_ = Core::deadline(interval_); // 跳过错过的拍数, 同对象不会并发执行两个采样器.
+        }
+    }
+    condition_.notify_all();
+    core_->wake(this);
 }
 
-// Beaming::close 关闭信标, 幂等, 待定按取消结算.
 void Beaming::close() noexcept {
-    bool first; // 与通知开始使用同一短锁, 不反向持锁释放 Core 应用拥有数.
+
+    std::stop_source cancellation{std::nostopstate};
+    bool first{};
     {
         const std::lock_guard lock(mutex_);
         first = !closed_.exchange(true, std::memory_order_acq_rel);
         if (first) {
-            retained_ = shared_from_this(); // public 析构后仍能完成有限 Remove, 不变成永久后台拥有者.
+            retained_ = shared_from_this();
             close_at_ = std::chrono::steady_clock::now() + core_->options_.timeout;
+            cancellation = cancellation_;
         }
     }
     if (first) {
+        cancellation.request_stop();
         core_->release();
         core_->wake(this);
     }
 }
 
-// Beaming::wait 等待结束, 超时返回 false, 回调内禁止等待.
 bool Beaming::wait(std::chrono::milliseconds timeout) const {
     if (Core::notifying()) {
         throw std::logic_error("Cannot wait inside a Comet callback");
     }
     std::unique_lock lock(mutex_);
-    return condition_.wait_for(lock, timeout, [this] { return finished() && !notifying_; });
+    return condition_.wait_until(lock, Core::deadline(timeout), [this] { return finished(); });
 }
 
-template <class Call>
-// Beaming::prepare 按绑定与期限准备一元调用, 优先级影响队列顺序.
-// binding/deadline/priority 为绑定、截止与优先级; 返回调用句柄.
-std::shared_ptr<Call> Beaming::prepare(const std::shared_ptr<const Binding>& binding, Core::Time deadline, bool priority) {
+void Beaming::publish(Beacon::Phase phase, std::optional<Error> error) {
+    dirty_ = dirty_ || state_.phase != phase || state_.error.has_value() != error.has_value() || (error && state_.error && (error->code != state_.error->code || error->effect != state_.error->effect));
+    state_.phase = phase;
+    state_.error = std::move(error);
+}
+
+bool Beaming::target(const Binding& binding) const {
+    return binding_ && binding_->endpoint == binding.endpoint && (binding.instance.empty() || (state_.identity && binding.instance == state_.identity->instance));
+}
+
+void Beaming::failure(const std::shared_ptr<const Binding>& binding, Error failed) {
+
+    if (closed()) {
+        return;
+    }
+    if (failed.code == Error::Code::transport || failed.code == Error::Code::session || failed.code == Error::Code::instance) {
+        auto shared = failed;
+        if (shared.code == Error::Code::instance) {
+            shared.code = Error::Code::transport;
+        }
+        core_->lost(binding, std::move(shared));
+    }
+    if (failed.code == Error::Code::ended || failed.code == Error::Code::instance) {
+        binding_.reset();
+        lifetime_.reset();
+    }
+    permanent_ = failed.code == Error::Code::input || failed.code == Error::Code::limit || failed.code == Error::Code::protocol || failed.code == Error::Code::obsolete || failed.code == Error::Code::conflict;
+    failures_ = std::min(failures_ + 1, 32U);
+    retry_ = std::chrono::steady_clock::now() + core_->delay(failures_);
+    publish(permanent_ ? Beacon::Phase::failed : binding_ ? Beacon::Phase::uncertain
+                                                          : Beacon::Phase::recovering,
+            std::move(failed));
+}
+
+template <class T>
+std::shared_ptr<T> Beaming::prepare(const std::shared_ptr<const Binding>& binding, Core::Time deadline, bool priority) {
     if (!binding || deadline <= std::chrono::steady_clock::now()) {
         return {};
     }
-    auto call = std::make_shared<Call>(); // 构造成功之前不接纳任何实际 RPC 槽位.
+    auto call = std::make_shared<T>();
     call->owner = shared_from_this();
     call->binding = binding;
-    call->identity = state_.identity;
     call->priority = priority;
     if (!binding->session.empty()) {
         call->context.AddMetadata("comet-session-bin", binding->session);
     }
     const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - std::chrono::steady_clock::now()).count();
-    call->context.set_deadline(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(std::max(remaining, std::int64_t{0}), GPR_TIMESPAN)));
+    call->context.set_deadline(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(std::max(remaining, std::int64_t{}), GPR_TIMESPAN)));
     call->request.mutable_scope()->set_sector(scope_.sector);
     call->request.mutable_scope()->set_spectrum(scope_.spectrum);
+    call->request.set_uuid(state_.identity->uuid);
+    call->request.set_capability(capability_);
+    call->request.set_generation(generation_);
     return call;
 }
 
-template <class Call>
-// Beaming::admit 接纳调用进入发送队列, 超限返回 false.
-// call 为待发送调用.
-bool Beaming::admit(const std::shared_ptr<Call>& call) {
-    const auto bytes = sizeof(Call) + call->request.SpaceUsedLong() + (call->pending ? call->pending->data->size() : 0); // 在途旧期望与编码副本同时计费.
+template <class T>
+bool Beaming::admit(const std::shared_ptr<T>& call) {
+    const auto bytes = sizeof(T) + call->request.SpaceUsedLong() + (std::same_as<T, Creating> ? 2 * 1024 * 1024 : 2048); // 恢复回执最大 Data 与候选解码都预留.
     if (!core_->resize(0, bytes)) {
         return false;
     }
     call->bytes = bytes;
-    call->automatic = call->priority || !call->pending || !call->pending->result;
-    if (!core_->outgoing(call->priority, call->automatic)) {
+    if (!core_->outgoing(call->priority, true)) {
         return false;
     }
     call->claimed = true;
     return true;
 }
 
-template <class Call>
-// Beaming::complete 调用完成, 按状态结算待定并释放名额.
-// call/status 为调用与 gRPC 状态.
-void Beaming::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.complete");
-    call->code = status.error_code(); // 不复制任意远端 message/details, 控制轮再解析白名单 metadata.
+template <class T>
+void Beaming::complete(const std::shared_ptr<T>& call, const grpc::Status& status) noexcept {
+    call->code = status.error_code();
     call->done.store(true, std::memory_order_release);
     call->owner->core_->wake(call->owner.get());
 }
 
-template <class Call>
-Error Beaming::failure(const std::shared_ptr<Call>& call) {
-    return Core::failure(grpc::Status(call->code, ""), call->context);
-}
+void Beaming::restore(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time) {
 
-// Beaming::same 返回身份是否一致, 不一致触发重建.
-// identity 为待比对身份.
-bool Beaming::same(const std::optional<Beacon::Identity>& identity) const {
-    return identity && state_.identity && *identity == *state_.identity;
-}
-
-// Beaming::target 返回绑定是否属于本信标目标.
-// binding 为待检查绑定.
-bool Beaming::target(const Binding& binding) const {
-    return identity_ && identity_->endpoint == binding.endpoint && (binding.instance.empty() || (state_.identity && binding.instance == state_.identity->instance));
-}
-
-// Beaming::publish 发布阶段与错误, 相同状态不重复通知.
-// phase/error 为阶段与错误.
-void Beaming::publish(Beacon::Phase phase, std::optional<Error> error) {
-    dirty_ = dirty_ || state_.phase != phase || state_.error.has_value() != error.has_value() || (error && state_.error && error->code != state_.error->code);
-    state_.phase = phase;
-    state_.error = std::move(error);
-}
-
-// Beaming::forget 清除已记忆身份, 下次按新身份重建.
-void Beaming::forget() {
-    if (updating_) {
-        updating_->context.TryCancel();
-    }
-    if (renewing_) {
-        renewing_->context.TryCancel();
-    }
-    state_.identity.reset();
-    identity_.reset();
-    lifetime_.reset();
-    renewal_sent_.reset();
-    update_ = renewal_ = 0;
-    wanted_->order = 0;
-    applied_ = false;
-    dirty_ = true;
-}
-
-// Beaming::failed 处理绑定失败, 创建期失败与续期失败分别结算.
-// binding/failure/creation/pending 为绑定、失败、是否创建期与待定项.
-void Beaming::failed(const std::shared_ptr<const Binding>& binding, Error failure, bool creation, const std::shared_ptr<Pending>& pending) {
-
-    if (failure.code == Error::Code::transport || failure.code == Error::Code::session || failure.code == Error::Code::instance) {
-        auto shared = failure;
-        if (shared.code == Error::Code::instance) {
-            shared.code = Error::Code::transport; // 重新取得实际实例, 匿名配置也不会卡在旧身份.
-        }
-        core_->lost(binding, std::move(shared));
-    }
-    if (failure.code == Error::Code::ended || failure.code == Error::Code::instance) {
-        forget();
-    }
-    const bool permanent = failure.code == Error::Code::input || failure.code == Error::Code::limit || failure.code == Error::Code::protocol || failure.code == Error::Code::obsolete || failure.code == Error::Code::conflict;
-    if ((creation && permanent) || failure.code == Error::Code::protocol) {
+    if (generation_ == UINT64_MAX) {
         permanent_ = true;
-    } else if (pending && pending == wanted_ && permanent) {
-        rejected_ = true; // 此值不能靠反复 Create 绕过拒绝, 但原 UUID 仍正常续租.
+        publish(Beacon::Phase::failed, error(Error::Code::limit));
+        return;
     }
-    publish(permanent_ ? Beacon::Phase::failed : state_.identity ? Beacon::Phase::uncertain
-                                                                 : Beacon::Phase::waiting,
-            std::move(failure));
-}
-
-// Beaming::consume 按绑定与时间推进创建/续期/发送, 只在控制轮调用.
-// binding/now 为绑定与当前时间.
-void Beaming::consume(const std::shared_ptr<const Binding>& binding, Core::Time now) {
-
-    const auto retry = [&] { failures_ = std::min(failures_ + 1, 32U); return now + core_->delay(failures_); }; // 只有完整确认才归零失败轮次.
-    if (creating_ && creating_->done.load(std::memory_order_acquire)) {
-        auto call = std::exchange(creating_, {}); // 当前调用拥有副本, 整段回复检查结束后才回收.
-        const bool valid = call->code == grpc::StatusCode::OK && Selection::valid(call->reply.uuid()) && astra::Scope::text(call->reply.instance(), 128) && (call->binding->instance.empty() || call->binding->instance == call->reply.instance()) && call->reply.ttl_ms() == static_cast<std::uint32_t>(ttl_.count());
-        if (valid && (closed() || !binding || (binding->endpoint == call->binding->endpoint && (binding->instance.empty() || binding->instance == call->reply.instance())))) {
-            state_.identity = Beacon::Identity{scope_, call->reply.instance(), call->reply.uuid()};
-            identity_ = call->binding;
-            dirty_ = true;
-            lifetime_.spread(std::hash<std::string>{}(call->reply.uuid()));
-            static_cast<void>(lifetime_.confirm(call->sent));
-            applied_ = wanted_ == call->pending && !wanted_->result; // 显式 Update 即便已被 Create 携带, 仍需真正的正 order 回执.
-            failures_ = 0;
-            publish(lifetime_.ready(Lifetime::now()) ? Beacon::Phase::ready : Beacon::Phase::uncertain);
-            core_->recovered(call->binding);
-        } else if (!valid && !closed()) {
-            failed(call->binding, call->code == grpc::StatusCode::OK ? error(Error::Code::protocol, Error::Effect::unknown) : failure(call), true);
-            create_at_ = retry();
-        } // 已切换目标时旧 Create 成功只作已结束尝试, 未受管理的旧 UUID 交给原 TTL 清理.
-    }
-    if (updating_ && updating_->done.load(std::memory_order_acquire)) {
-        auto call = std::exchange(updating_, {});
-        if (call->code == grpc::StatusCode::OK && call->reply.order() == call->request.order()) {
-            settle(call->pending, Beacon::Receipt{*call->identity, call->request.order()});
-            if (same(call->identity)) {
-                applied_ = wanted_ == call->pending;
-                failures_ = 0;
-                if (applied_) {
-                    publish(lifetime_.ready(Lifetime::now()) ? Beacon::Phase::ready : Beacon::Phase::uncertain);
-                }
-            }
-        } else {
-            auto result = call->code == grpc::StatusCode::OK ? error(Error::Code::protocol, Error::Effect::unknown) : failure(call);
-            settle(call->pending, std::unexpected(result));
-            if (same(call->identity) && !closed()) {
-                failed(call->binding, result, false, call->pending);
-                data_at_ = retry();
-            }
-        }
-    }
-    if (renewing_ && renewing_->done.load(std::memory_order_acquire)) {
-        auto call = std::exchange(renewing_, {});
-        if (same(call->identity)) {
-            if (call->code == grpc::StatusCode::OK && call->reply.order() == call->request.order()) {
-                static_cast<void>(lifetime_.confirm(call->sent));
-                renewal_sent_.reset();
-                failures_ = 0;
-                publish(lifetime_.ready(Lifetime::now()) ? Beacon::Phase::ready : Beacon::Phase::uncertain, rejected_ ? state_.error : std::optional<Error>{});
-                core_->recovered(call->binding);
-            } else if (!closed()) {
-                failed(call->binding, call->code == grpc::StatusCode::OK ? error(Error::Code::protocol, Error::Effect::unknown) : failure(call), false);
-                renew_at_ = retry();
-            }
-        }
-    }
-    if (removing_ && removing_->done.load(std::memory_order_acquire)) {
-        removing_.reset(); // 尽力清理不重试也不把超时包装成远端已经删除.
-    }
-}
-
-// Beaming::create 发起创建调用, 缺 Attr 时先恢复再创建.
-// binding/now/time 为绑定、当前时间与生命时间.
-void Beaming::create(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time) {
-
     auto call = prepare<Creating>(binding, now + core_->options_.timeout, false);
     if (!call) {
         return;
     }
-    call->pending = wanted_;
-    call->sent = time; // 在编码准备前记录只会使预算更保守, 不从回复时间起算.
     call->request.set_instance(binding->instance);
+    call->request.set_generation(generation_ + 1);
     call->request.set_attr(attr_->data(), attr_->size());
-    call->request.set_data(wanted_->data->data(), wanted_->data->size());
+    call->request.set_data(data_->data(), data_->size());
+    call->request.set_order(confirmed_);
     call->request.set_ttl_ms(static_cast<std::uint32_t>(ttl_.count()));
     if (!admit(call)) {
-        create_at_ = now + std::chrono::milliseconds(50);
+        retry_ = now + std::chrono::milliseconds(50);
         return;
     }
-    // 完成可分配的回调包装后才发布在途责任, 未开始的 RPC 不能留下无法完成的持有环.
     std::function<void(const grpc::Status&)> callback = [call](const grpc::Status& status) { complete(call, status); };
+    generation_ = call->request.generation();
+    call->sent = time;
+    sent_ = time;
     creating_ = call;
+    publish(Beacon::Phase::recovering);
     binding->ephemeris->async()->Create(&call->context, &call->request, &call->reply, std::move(callback));
 }
 
-// Beaming::renew 发起续期调用, 独立更新 order, 不合并其他信标.
-// binding/now/time 为绑定、当前时间与生命时间.
 void Beaming::renew(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time) {
 
-    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.renew");
-
-    // 原重试预算已经耗尽时用新 order 重新请求实际租约, 不从旧重复确认制造新 TTL.
-    if (renewal_sent_ && (time < *renewal_sent_ || time - *renewal_sent_ >= ttl_.count())) {
-        renewal_sent_.reset();
-    }
-    if (!renewal_sent_) {
-        if (renewal_ == UINT64_MAX) {
-            permanent_ = true;
-            publish(Beacon::Phase::failed, error(Error::Code::limit));
-            return;
-        }
+    if (renewal_ == UINT64_MAX) {
+        permanent_ = true;
+        publish(Beacon::Phase::failed, error(Error::Code::limit));
+        return;
     }
     auto call = prepare<Renewing>(binding, now + core_->options_.timeout, true);
     if (!call) {
         return;
     }
-    call->sent = renewal_sent_.value_or(time);
     call->request.set_instance(state_.identity->instance);
-    call->request.set_uuid(state_.identity->uuid);
-    call->request.set_order(renewal_sent_ ? renewal_ : renewal_ + 1);
+    call->request.set_order(renewal_ + 1);
     if (!admit(call)) {
-        renew_at_ = now + std::chrono::milliseconds(25);
+        retry_ = now + std::chrono::milliseconds(25);
         return;
     }
-    renewal_ = call->request.order();
-    renewal_sent_ = call->sent; // 实际接纳发送之后才固定起点, 资源等待不冒充一次续租尝试.
-    // 完成可分配的回调包装后才发布在途责任, 未开始的 RPC 不能留下无法完成的持有环.
     std::function<void(const grpc::Status&)> callback = [call](const grpc::Status& status) { complete(call, status); };
+    renewal_ = call->request.order();
+    call->sent = time;
+    sent_ = time;
     renewing_ = call;
     binding->ephemeris->async()->Renew(&call->context, &call->request, &call->reply, std::move(callback));
 }
 
-// Beaming::send 发送待定更新, 按确认期限推进, 超时即失败.
-// binding/now 为绑定与当前时间.
-void Beaming::send(const std::shared_ptr<const Binding>& binding, Core::Time now) {
-
-    if (wanted_->order == 0) {
-        if (update_ == UINT64_MAX) {
-            rejected_ = true;
-            settle(wanted_, std::unexpected(error(Error::Code::limit)));
-            return;
-        }
-    }
-    auto call = prepare<Updating>(binding, wanted_->result ? wanted_->deadline : now + core_->options_.timeout, false);
-    if (!call) {
-        return;
-    }
-    call->pending = wanted_;
-    call->request.set_instance(state_.identity->instance);
-    call->request.set_uuid(state_.identity->uuid);
-    call->request.set_order(wanted_->order != 0 ? wanted_->order : update_ + 1);
-    call->request.set_data(wanted_->data->data(), wanted_->data->size());
-    if (!admit(call)) {
-        data_at_ = now + std::chrono::milliseconds(50);
-        return;
-    }
-    wanted_->order = call->request.order();
-    update_ = wanted_->order; // 首次实际发送才分配 order, 重试保留同值.
-    // 完成可分配的回调包装后才发布在途责任, 未开始的 RPC 不能留下无法完成的持有环.
-    std::function<void(const grpc::Status&)> callback = [call](const grpc::Status& status) { complete(call, status); };
-    updating_ = call;
-    binding->ephemeris->async()->Update(&call->context, &call->request, &call->reply, std::move(callback));
-}
-
-// Beaming::remove 注销信标, 尽力发送删除, 失败不阻塞关闭.
-// binding 为绑定.
 void Beaming::remove(const std::shared_ptr<const Binding>& binding) {
     auto call = prepare<Removing>(binding, close_at_, true);
     if (!call) {
@@ -416,66 +566,64 @@ void Beaming::remove(const std::shared_ptr<const Binding>& binding) {
         return;
     }
     call->request.set_instance(state_.identity->instance);
-    call->request.set_uuid(state_.identity->uuid);
     if (!admit(call)) {
-        return; // 保留额度暂满时仅在已经固定的关闭预算内等待.
+        return;
     }
-    removed_ = true;
-    // 完成可分配的回调包装后才发布在途责任, 未开始的 RPC 不能留下无法完成的持有环.
     std::function<void(const grpc::Status&)> callback = [call](const grpc::Status& status) { complete(call, status); };
+    removed_ = true;
     removing_ = call;
     binding->ephemeris->async()->Remove(&call->context, &call->request, &call->reply, std::move(callback));
 }
 
-// Beaming::notify 在持有锁时唤醒等待者, 退出临界区后不重复通知.
-// lock 为调用方持有的锁, 通知后继续持有.
-void Beaming::notify(std::unique_lock<std::mutex>& lock) {
-    if (!dirty_ || !changed_ || closed() || !core_->notification()) {
-        return;
+void Beaming::consume(const std::shared_ptr<const Binding>& binding) {
+
+    if (creating_ && creating_->done.load(std::memory_order_acquire)) {
+        auto call = std::exchange(creating_, {});
+        if (call->code == grpc::StatusCode::OK && (closed() || (binding && call->binding->endpoint == binding->endpoint && (binding->instance.empty() || binding->instance == call->reply.instance())))) {
+            auto result = install(call->reply, call->binding, call->request.generation(), call->sent, call->bytes);
+            if (!result) {
+                failure(call->binding, result.error());
+            }
+        } else if (!closed() && call->code != grpc::StatusCode::OK && core_->current(call->binding)) {
+            failure(call->binding, Core::failure(grpc::Status(call->code, ""), call->context));
+        }
     }
-    auto snapshot = state_; // 快照在解锁之前稳定拥有, 用户回调不能借内部可写状态.
-    dirty_ = false;
-    notifying_ = true;
-    lock.unlock();
-    const bool previous = Core::notifying();
-    Core::notify(true);
-    try {
-        changed_(std::move(snapshot));
-    } catch (...) {
-        core_->exception();
+    if (renewing_ && renewing_->done.load(std::memory_order_acquire)) {
+        auto call = std::exchange(renewing_, {});
+        if (!closed() && binding_ && call->request.generation() == generation_ && target(*call->binding)) {
+            if (call->code == grpc::StatusCode::OK && call->reply.order() == call->request.order()) {
+                static_cast<void>(lifetime_.confirm(call->sent));
+                failures_ = 0;
+                publish(lifetime_.ready(Lifetime::now()) ? Beacon::Phase::ready : Beacon::Phase::uncertain);
+            } else {
+                failure(call->binding, call->code == grpc::StatusCode::OK ? error(Error::Code::protocol, Error::Effect::unknown) : Core::failure(grpc::Status(call->code, ""), call->context));
+            }
+        }
     }
-    Core::notify(previous);
-    lock.lock();
-    notifying_ = false;
+    if (removing_ && removing_->done.load(std::memory_order_acquire)) {
+        removing_.reset();
+    }
 }
 
 Core::Time Beaming::poll(Core::Time now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& blocked, bool closing) {
 
-    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beaming.poll");
-
     if ((closing || core_->stopped()) && !closed()) {
-        close(); // 此时尚未取得对象锁, 关闭不会反向取得自身锁.
+        close();
     }
-    ASTRA_PROFILE_BEGIN(profile_lock_447, "comet.cpp.beaming.Beaming.poll.wait.lock");
     std::unique_lock lock(mutex_);
-    ASTRA_PROFILE_END(profile_lock_447);
-    consume(binding, now);
-    if (wanted_->result && (!updating_ || updating_->pending != wanted_) && now >= wanted_->deadline) {
-        settle(wanted_, std::unexpected(error(Error::Code::timeout))); // 明确这个 Update 尚未发出, 最新期望仍保留.
+    consume(binding);
+    if (active_binding_ && !core_->current(active_binding_)) {
+        auto cancellation = cancellation_;
+        lock.unlock();
+        cancellation.request_stop();
+        lock.lock(); // 停止回调不在对象锁内调用.
     }
     if (closed()) {
-        publish(Beacon::Phase::closed);
         if (creating_) {
             creating_->context.TryCancel();
         }
-        if (updating_) {
-            updating_->context.TryCancel();
-        }
         if (renewing_) {
             renewing_->context.TryCancel();
-        }
-        if (!updating_ || updating_->pending != wanted_) {
-            settle(wanted_, std::unexpected(error(Error::Code::closed)));
         }
         if (now >= close_at_) {
             removed_ = true;
@@ -483,72 +631,100 @@ Core::Time Beaming::poll(Core::Time now, const std::shared_ptr<const Binding>& b
                 removing_->context.TryCancel();
             }
         }
-        if (!creating_ && !updating_ && !renewing_ && !removed_ && state_.identity) {
-            remove(binding && target(*binding) ? binding : identity_);
+        if (!active_ && !creating_ && !renewing_ && !removed_ && state_.identity) {
+            remove(binding && target(*binding) ? binding : binding_);
         }
-        if (!creating_ && !updating_ && !renewing_ && !removing_ && (removed_ || !state_.identity)) {
-            wanted_->data.reset();
-            attr_.reset();
-            static_cast<void>(core_->resize(bytes_, 0));
-            bytes_ = 0;
+        if (!active_ && !creating_ && !renewing_ && !removing_ && !sampling_ && !notifying_ && (removed_ || !state_.identity)) {
+            publish(Beacon::Phase::closed);
+            auto notice = std::move(changed_); // 用户捕获的析构也可能重入, 先移出再解锁释放.
+            auto sample = std::move(sampler_);
+            lock.unlock();
+            notice.reset();
+            sample.reset();
+            lock.lock();
             finished_.store(true, std::memory_order_release);
-            retained_.reset(); // Core 的本轮快照仍持有本对象, 不在这条语句自我销毁.
+            retained_.reset();
             condition_.notify_all();
             return Core::Time::max();
         }
-        return now + std::chrono::milliseconds(25); // 截止已过时只等真实 callback, 不向过去时间连续安排 Alarm.
+        return now + std::chrono::milliseconds(25);
     }
-
-    if (state_.identity && binding && !target(*binding)) {
-        forget(); // 只有换 Star/实例才换 UUID, 同端点重新认证保留尚未结束的注册.
+    if (!initialized_) {
+        return now + std::chrono::milliseconds(100);
+    }
+    if (binding_ && binding && !target(*binding)) {
+        binding_.reset();
+        lifetime_.reset();
+        if (renewing_) {
+            renewing_->context.TryCancel();
+        }
+        publish(Beacon::Phase::recovering);
     }
     if (creating_ && binding && (creating_->binding->endpoint != binding->endpoint || (!binding->instance.empty() && !creating_->binding->instance.empty() && creating_->binding->instance != binding->instance))) {
         creating_->context.TryCancel();
     }
-    const auto time = Lifetime::now(); // 含挂起的单调时钟用于预算, RPC/退避仍使用参数 now 的 steady_clock.
+    const auto time = Lifetime::now();
     if (!time) {
-        publish(state_.identity ? Beacon::Phase::uncertain : Beacon::Phase::waiting, error(Error::Code::clock));
+        publish(Beacon::Phase::uncertain, error(Error::Code::clock));
     } else if (permanent_) {
         publish(Beacon::Phase::failed, state_.error);
     } else if (!binding) {
-        publish(blocked ? Beacon::Phase::failed : state_.identity ? Beacon::Phase::uncertain
-                                                                  : Beacon::Phase::waiting,
-                blocked);
+        publish(blocked ? Beacon::Phase::failed : Beacon::Phase::uncertain, blocked);
+    } else if (!binding_) {
+        if (!active_ && !creating_ && !renewing_ && now >= retry_) {
+            restore(binding, now, *time);
+        }
     } else {
-        if (!state_.identity && !creating_ && !updating_ && !renewing_ && !rejected_ && now >= create_at_) {
-            create(binding, now, *time);
+        binding_ = binding;
+        const bool due = !sent_ || *time < *sent_ || *time - *sent_ >= beat_.count();
+        if (!renewing_ && !creating_ && due && now >= retry_) {
+            renew(binding, now, *time);
         }
-        if (state_.identity) {
-            identity_ = binding; // 已经由 target 证明是同 Star, 关闭时采用最新有效 Session.
-            if (!renewing_ && now >= renew_at_ && (renewal_sent_ || lifetime_.due(*time))) {
-                renew(binding, now, *time); // 保活先接纳, 普通 Data 不能占用其保留容量.
+        if (sampler_ && !sampling_ && !active_ && now >= tick_) {
+            auto owner = shared_from_this();
+            if (core_->sample([owner] { owner->sample(); })) {
+                sampling_ = true;
+            } else {
+                tick_ = now + std::chrono::milliseconds(50);
             }
-            if (!updating_ && !applied_ && !rejected_ && now >= data_at_) {
-                send(binding, now);
-            }
-            publish(lifetime_.ready(time) ? Beacon::Phase::ready : Beacon::Phase::uncertain, state_.error);
+        }
+        if (!lifetime_.ready(time) && state_.phase == Beacon::Phase::ready) {
+            publish(Beacon::Phase::uncertain);
         }
     }
-    notify(lock);
+    if (dirty_ && changed_ && !closed() && core_->notification()) {
+        auto callback = changed_;
+        auto notification = state_;
+        dirty_ = false;
+        notifying_ = true;
+        lock.unlock();
+        const bool previous = Core::notifying();
+        Core::notify(true);
+        try {
+            (*callback)(std::move(notification));
+        } catch (...) {
+            core_->exception();
+        }
+        callback.reset(); // 回调可在执行中解除自己; 最后一个业务捕获必须在对象锁外释放.
+        Core::notify(previous);
+        lock.lock();
+        notifying_ = false;
+    }
     condition_.notify_all();
-
-    // 阻塞在 RPC 时由其 callback 唤醒; 本地预算/显式未发期限仍有独立的有限唤醒点.
-    auto next = now + std::chrono::seconds(1);
-    if (wanted_->result && (!updating_ || updating_->pending != wanted_)) {
-        next = std::min(next, wanted_->deadline);
-    }
-    if (!permanent_ && binding && time) {
-        if (!state_.identity && !creating_ && !updating_ && !renewing_ && !rejected_) {
-            next = std::min(next, create_at_);
+    auto next = now + std::chrono::seconds(1); // 保证 suspend 返回后观察 BOOTTIME, 不按墙钟延长租约.
+    if (binding && time && !permanent_) {
+        if (!binding_ && !active_ && !creating_ && !renewing_) {
+            next = std::min(next, retry_);
         }
-        if (state_.identity && !renewing_) {
-            next = std::min(next, std::max(renew_at_, now + lifetime_.delay(*time)));
+        if (binding_ && !renewing_) {
+            const auto delay = sent_ && *time >= *sent_ ? std::max(Lifetime::Time{}, beat_.count() - (*time - *sent_)) : 0;
+            next = std::min(next, std::max(retry_, now + std::chrono::milliseconds(delay)));
         }
-        if (state_.identity && !updating_ && !applied_ && !rejected_) {
-            next = std::min(next, data_at_);
+        if (sampler_ && binding_ && !sampling_ && !active_) {
+            next = std::min(next, tick_);
         }
     }
-    return std::max(next, now + std::chrono::milliseconds(1)); // 资源空窗至少让出调度线程, 不同步自旋.
+    return std::max(next, now + std::chrono::milliseconds(1));
 }
 } // namespace comet::detail
 
@@ -573,41 +749,38 @@ Beacon::State Beacon::state() const {
     return beaming_ ? beaming_->state() : State{Phase::closed, {}, {}};
 }
 
-// Beacon::update 提交字节更新, 返回 future 回执.
-// data 为更新载荷; timeout 为确认期限.
-std::future<Result<Beacon::Receipt>> Beacon::update(std::vector<std::uint8_t> data, std::chrono::milliseconds timeout) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beacon.update");
-    if (data.size() > 1024 * 1024) {
-        return update(Value{}, timeout);
+Result<Beacon::Receipt> Beacon::update(std::vector<std::uint8_t> data, std::chrono::milliseconds timeout) {
+    const auto started = std::chrono::steady_clock::now(); // 编码/取得共享拥有权也消耗本次总期限.
+    if (!beaming_) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
     }
-    return update(std::make_shared<const std::vector<std::uint8_t>>(std::move(data)), timeout);
+    auto owned = data.size() <= 1024 * 1024 ? std::make_shared<const std::vector<std::uint8_t>>(std::move(data)) : Value{};
+    return beaming_->update(std::move(owned), timeout, started);
 }
 
-// Beacon::update 提交区间更新, 不复制载荷, 调用期间保持有效.
-// data 为更新区间; timeout 为确认期限.
-std::future<Result<Beacon::Receipt>> Beacon::update(std::span<const std::uint8_t> data, std::chrono::milliseconds timeout) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beacon.update");
-    // 和 Publisher 一样在复制 span 前拒绝超限, 不因重载不同绕过准备内存边界.
-    if (data.size() > 1024 * 1024) {
-        return update(Value{}, timeout);
+Result<Beacon::Receipt> Beacon::update(std::span<const std::uint8_t> data, std::chrono::milliseconds timeout) {
+    const auto started = std::chrono::steady_clock::now(); // 借用输入只在本调用内复制, 之后无外部可写别名.
+    if (!beaming_) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
     }
-    return update(std::vector<std::uint8_t>(data.begin(), data.end()), timeout);
+    auto owned = data.size() <= 1024 * 1024 ? std::make_shared<const std::vector<std::uint8_t>>(data.begin(), data.end()) : Value{};
+    return beaming_->update(std::move(owned), timeout, started);
 }
 
-// Beacon::update 提交共享值更新, 只共享所有权不复制字节.
-// data 为更新值; timeout 为确认期限.
-std::future<Result<Beacon::Receipt>> Beacon::update(Value data, std::chrono::milliseconds timeout) {
+Result<Beacon::Receipt> Beacon::update(Value data, std::chrono::milliseconds timeout) {
+    return beaming_ ? beaming_->update(std::move(data), timeout, std::chrono::steady_clock::now()) : Result<Receipt>(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
+}
 
-    ASTRA_PROFILE_SCOPE("comet.cpp.beaming.Beacon.update");
-    if (beaming_) {
-        return beaming_->update(std::move(data), timeout);
-    }
-    std::promise<Result<Receipt>> result; // 空句柄同样返回已经明确失败的标准 future.
-    auto future = result.get_future();
-    result.set_value(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
-    return future;
+Result<void> Beacon::tick(std::chrono::milliseconds interval, std::move_only_function<Value()> callback) {
+    return beaming_ ? beaming_->tick(interval, std::move(callback)) : Result<void>(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
+}
+
+Result<void> Beacon::changed(std::move_only_function<void(State)> callback) {
+    return beaming_ ? beaming_->changed(std::move(callback)) : Result<void>(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
+}
+
+void Beacon::destroy() noexcept {
+    close();
 }
 
 void Beacon::close() noexcept {

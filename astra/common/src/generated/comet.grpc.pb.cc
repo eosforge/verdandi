@@ -133,6 +133,7 @@ Almanac::Service::~Service() {
 
 
 static const char* Catalog_method_names[] = {
+  "/proto.comet.v1.Catalog/Query",
   "/proto.comet.v1.Catalog/Publish",
   "/proto.comet.v1.Catalog/Renew",
   "/proto.comet.v1.Catalog/Watch",
@@ -145,10 +146,34 @@ std::unique_ptr< Catalog::Stub> Catalog::NewStub(const std::shared_ptr< ::grpc::
 }
 
 Catalog::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options)
-  : channel_(channel), rpcmethod_Publish_(Catalog_method_names[0], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_Renew_(Catalog_method_names[1], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
-  , rpcmethod_Watch_(Catalog_method_names[2], options.suffix_for_stats(),::grpc::internal::RpcMethod::SERVER_STREAMING, channel)
+  : channel_(channel), rpcmethod_Query_(Catalog_method_names[0], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_Publish_(Catalog_method_names[1], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_Renew_(Catalog_method_names[2], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
+  , rpcmethod_Watch_(Catalog_method_names[3], options.suffix_for_stats(),::grpc::internal::RpcMethod::SERVER_STREAMING, channel)
   {}
+
+::grpc::Status Catalog::Stub::Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::proto::comet::v1::CatalogQueryReply* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_Query_, context, request, response);
+}
+
+void Catalog::Stub::async::Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_Query_, context, request, response, std::move(f));
+}
+
+void Catalog::Stub::async::Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response, ::grpc::ClientUnaryReactor* reactor) {
+  ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_Query_, context, request, response, reactor);
+}
+
+::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>* Catalog::Stub::PrepareAsyncQueryRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::proto::comet::v1::CatalogQueryReply, ::proto::comet::v1::CatalogQueryRequest, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_Query_, context, request);
+}
+
+::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>* Catalog::Stub::AsyncQueryRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) {
+  auto* result =
+    this->PrepareAsyncQueryRaw(context, request, cq);
+  result->StartCall();
+  return result;
+}
 
 ::grpc::Status Catalog::Stub::Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::proto::comet::v1::PublishReply* response) {
   return ::grpc::internal::BlockingUnaryCall< ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_Publish_, context, request, response);
@@ -216,6 +241,16 @@ Catalog::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       Catalog_method_names[0],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
+      new ::grpc::internal::RpcMethodHandler< Catalog::Service, ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+          [](Catalog::Service* service,
+             ::grpc::ServerContext* ctx,
+             const ::proto::comet::v1::CatalogQueryRequest* req,
+             ::proto::comet::v1::CatalogQueryReply* resp) {
+               return service->Query(ctx, req, resp);
+             }, this)));
+  AddMethod(new ::grpc::internal::RpcServiceMethod(
+      Catalog_method_names[1],
+      ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< Catalog::Service, ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](Catalog::Service* service,
              ::grpc::ServerContext* ctx,
@@ -224,7 +259,7 @@ Catalog::Service::Service() {
                return service->Publish(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      Catalog_method_names[1],
+      Catalog_method_names[2],
       ::grpc::internal::RpcMethod::NORMAL_RPC,
       new ::grpc::internal::RpcMethodHandler< Catalog::Service, ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
           [](Catalog::Service* service,
@@ -234,7 +269,7 @@ Catalog::Service::Service() {
                return service->Renew(ctx, req, resp);
              }, this)));
   AddMethod(new ::grpc::internal::RpcServiceMethod(
-      Catalog_method_names[2],
+      Catalog_method_names[3],
       ::grpc::internal::RpcMethod::SERVER_STREAMING,
       new ::grpc::internal::ServerStreamingHandler< Catalog::Service, ::proto::comet::v1::WatchRequest, ::proto::comet::v1::CatalogWatchReply>(
           [](Catalog::Service* service,
@@ -246,6 +281,13 @@ Catalog::Service::Service() {
 }
 
 Catalog::Service::~Service() {
+}
+
+::grpc::Status Catalog::Service::Query(::grpc::ServerContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response) {
+  (void) context;
+  (void) request;
+  (void) response;
+  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 
 ::grpc::Status Catalog::Service::Publish(::grpc::ServerContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response) {

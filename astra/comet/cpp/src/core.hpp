@@ -5,8 +5,10 @@
 #include <condition_variable>
 #include <grpcpp/alarm.h>
 #include <mutex>
+#include <stop_token>
 
 namespace comet::detail {
+class Sampling; // 仅 Beacon tick 使用的有界工作通道.
 
 // 一次已确认的公共接入绑定. 在途请求保有旧绑定, 不随 Client 换端点被自动改投.
 struct Binding {
@@ -48,8 +50,10 @@ public:
     Result<std::shared_ptr<Subscribing>> subscriber(Scope scope, std::string target, Subscriber::Options options); // 固定 Catalog 范围/Key, 共用 Watch 容量.
     // Ephemeris 使用同一共享连接/预算, 具体投影只接受完整注册或已知 UUID 的 Data.
     Result<std::shared_ptr<Observing>> observer(Scope scope, std::string target, Observer::Options options);
-    Result<std::shared_ptr<Publishing>> publisher(Scope scope, std::string key, std::chrono::milliseconds ttl, Publisher::Options options); // 固定 Catalog Key 的自动期望.
-    Result<std::shared_ptr<Beaming>> beacon(Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, Beacon::Options options);   // 本地验证和接纳后才调度.
+    Result<std::shared_ptr<Publishing>> publisher(Scope scope);                                                                                                                          // 仅绑定 Catalog 范围, 不缓存业务值或固定 TTL.
+    Result<std::shared_ptr<const Binding>> acquire(Time deadline, const std::atomic_bool& cancelled) const;                                                                              // 等待认证或明确错误, 共用操作截止.
+    bool current(const std::shared_ptr<const Binding>& binding) const;                                                                                                                   // 下一 RPC 开始前确认原目标仍有效.
+    Result<std::shared_ptr<Beaming>> beacon(Scope scope, Value attr, Value data, std::chrono::milliseconds ttl, std::chrono::milliseconds beat, Beacon::Options options, Time deadline); // 本地验证和接纳后才调度.
     // 只替换今后认证的 SECRET, 当前已确认 Session 不因此失效; 未确认尝试需要取消后重登.
     Result<void> secret(std::vector<std::uint8_t> value);
     // 应用 Owner/业务句柄最后关闭时减少拥有数, 零时自动关闭内部生命周期.
@@ -91,6 +95,7 @@ public:
     Schedule schedule() const;
 
 private:
+    std::stop_source shutdown_;  // 显式关闭及最后拥有者释放时, 在 Core 锁外取消同步 RPC.
     std::atomic_bool stopped_{}; // 跨对象共享的停止门, close 单向发布, 不由晚到成功清除.
     friend class ::comet::Client;
     friend class Beaming;
@@ -99,10 +104,12 @@ private:
     friend class Watching;
     // 对象已在锁外准备且尚未对外发布, 成功才接纳一次应用拥有数.
     Result<void> accept(const std::shared_ptr<Activity>& activity);
-    bool outgoing(bool priority, bool automatic) noexcept;  // 显式请求至多 256, 自动恢复 48, 续租/清理独占 16 个槽.
+    bool outgoing(bool priority, bool automatic) noexcept;  // 显式请求至多 256, Beacon 自动恢复 48, 续租/清理独占 16 个槽.
     void returning(bool priority, bool automatic) noexcept; // 实际最终 callback 对象释放时精确归还.
-    bool admitting() noexcept;                              // 同时持有尚未完成 future 的显式调用至多 256, 含尚未发送.
-    void settled() noexcept;                                // future 完成或候选回滚时归还一次.
+    bool admitting() noexcept;                              // 尚未返回的同步发布和 Beacon 调用合计至多 256, 含尚未发送.
+    bool sample(std::move_only_function<void()> callback);  // 在 Client 共享采样线程运行, 满额返回 false.
+    std::shared_ptr<Sampling> sampling_;                    // 惰性建立两个线程, 关闭后不接受新候选.
+    void settled() noexcept;                                // 同步调用返回或候选回滚时归还一次.
     class Login;                                            // 单条真实 Session RPC, 在确认后继续读取结束/非法第二次确认.
     // 构造不安排计时器, 由 prepare 创建, 避免构造中 shared_from_this 或泄露半初始化对象.
     Core(Client::Options options, std::shared_ptr<grpc::ChannelCredentials> credentials, Value secret);
@@ -116,6 +123,7 @@ private:
     Time connecting_until_{}; // 当前唯一端点的就绪截止, 与长期 Session 的确认后寿命分开.
     // 单个失败计数对应有界退避, 不因 TCP 短暂成功立刻清零持续失败.
     std::chrono::milliseconds delay(unsigned failures) const noexcept;
+    static Time deadline(std::chrono::milliseconds timeout) noexcept; // wait 使用饱和加法, 非正数立即检查, 超大正值钳到可表示的最远时刻.
     // 冻结当前选定端点的两种 Channel, 普通重认证可以复用同端点底层连接.
     std::shared_ptr<Binding> connect() const;
     // 生成的失败细节只解析白名单字段, 不回显远端任意文本或未知结果为成功.
@@ -146,8 +154,8 @@ private:
     Time retry_{};                                                // 下一次准入尝试的单调期限.
     std::atomic_size_t calls_{};                                  // 实际未 OnDone 的 Watch 数, 独立于应用对象额度.
     std::atomic_size_t unary_{};                                  // 实际未释放普通写请求, 默认零.
-    std::atomic_size_t admitted_{};                               // 待发和在途显式调用总数, 不含已完成 future 的后台恢复.
-    std::atomic_size_t recovery_{};                               // 自动 Create/Publish/Data 实际在途, 至多 48.
+    std::atomic_size_t admitted_{};                               // 待发和在途显式调用总数, 不含独立的后台恢复.
+    std::atomic_size_t recovery_{};                               // Beacon 自动 Create/Data 实际在途, 至多 48.
     std::atomic_size_t maintenance_{};                            // 实际未释放 Renew/Remove, 默认零.
     std::atomic_size_t bytes_{};                                  // Reading 受控存储总量, 应用额外持有的旧 View 不可强制回收.
     std::atomic_uint64_t exceptions_{};                           // 用户观察者抛出的异常, 饱和累计, 默认 0.

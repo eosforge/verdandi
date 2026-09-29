@@ -21,8 +21,9 @@ var schema = []string{
 // connection 在每次实际建立连接时设置并读取同步参数, 不依赖连接池偶然选中的连接.
 // conn 为新建 SQLite 连接; 设置行上限与同步参数并读回核对, 不符即不可用.
 func connection(conn *sqlite3.SQLiteConn) error {
-	// 单条合法记录最大约 1 MiB, 在 SQLite 解码层限制异常大行, 不等 Go Scan 分配后再拒绝.
-	conn.SetLimit(sqlite3.SQLITE_LIMIT_LENGTH, 2<<20)
+	// 历史行可携带整个批次, 容纳 Limits 允许的最大 64 MiB 历史及行头.
+	// 超出保留预算的批次由 retain 整体淘汰历史, 仍可提交, 此处不是批次总量上限.
+	conn.SetLimit(sqlite3.SQLITE_LIMIT_LENGTH, (64<<20)+1024)
 	conn.SetLimit(sqlite3.SQLITE_LIMIT_SQL_LENGTH, 64<<10)
 	// 关闭自动检查点依赖与不受信 schema, 参数逐连接设置.
 	for _, statement := range []string{"PRAGMA wal_autocheckpoint=1000", "PRAGMA trusted_schema=OFF"} {

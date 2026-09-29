@@ -33,11 +33,11 @@ public:
 
         for (std::size_t index = 0; index < writers_; ++index) {
             const auto record = view.find(keys_[index]); // 借用本次拥有式 View, 不反向轮询 Subscriber.
-            if (!record || record->value->size() != bytes_ || sequence(*record->value) != record->version) {
+            if (!record || record->value->size() != bytes_ || record->version == 0) {
                 fail();
                 return;
             }
-            accept(index, watcher, record->version);
+            accept(index, watcher, sequence(*record->value)); // 应用序号独立于 SDK 查询/冲突修复产生的协议版本.
         }
     }
 

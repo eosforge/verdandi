@@ -44,3 +44,43 @@ bool Reader::wait(std::chrono::milliseconds timeout) const {
     return !reading_ || reading_->wait(timeout);
 }
 } // namespace comet
+
+namespace comet {
+Reader::View Reader::state() const {
+    return load();
+}
+
+void Reader::stop() noexcept {
+    close();
+}
+
+Result<void> Reader::changed(std::move_only_function<void(View)> callback) {
+    return reading_ ? reading_->changed(std::move(callback)) : Result<void>(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
+}
+
+Result<void> Reader::watch(std::move_only_function<void(Map)> callback) {
+    if (!reading_) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    }
+    if (!callback) {
+        return reading_->watch({}, false);
+    }
+    return reading_->watch([callback = std::move(callback)](View view) mutable { callback(Map(std::move(view))); }, false);
+}
+
+Result<void> Reader::watch(std::move_only_function<void(std::string, std::optional<Value>)> callback) {
+    if (!reading_) {
+        return std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}});
+    }
+    if (!callback) {
+        return reading_->watch({}, true);
+    }
+    return reading_->watch([callback = std::move(callback)](View view) mutable {
+        auto key = view.target();
+
+        auto value = view.find(key);
+        callback(std::move(key), value ? std::optional<Value>(std::move(value)) : std::nullopt);
+    },
+                           true);
+}
+} // namespace comet

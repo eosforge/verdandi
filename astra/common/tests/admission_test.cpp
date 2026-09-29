@@ -180,7 +180,7 @@ struct Fixture {
             // 测试服务显式绕过自己的启动检查, 用无效证书验证被测客户端仍拒绝 TLS.
             const auto fixtures = std::filesystem::path(ASTRA_FIXTURES);
             // directory 只选择仓库公开夹具目录, 根据情景提供过期或不受信任证书.
-            const auto directory = scenario == Scenario::expired_certificate ? fixtures / "expired" : fixtures.parent_path().parent_path().parent_path() / "testkit/tls";
+            const auto directory = scenario == Scenario::expired_certificate ? fixtures / "expired" : fixtures / "untrusted";
             // certificate 是所选夹具中固定的证书文件名, 不接收外部路径输入.
             const auto certificate = scenario == Scenario::expired_certificate ? "cert.pem" : "certificate.pem";
             // key 是所选夹具中对应的公开测试私钥文件名.

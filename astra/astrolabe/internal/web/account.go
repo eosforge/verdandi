@@ -13,7 +13,7 @@ import (
 	"os"
 	"unicode/utf8"
 
-	"github.com/eosforge/verdandi/astra/internal/admission"
+	"github.com/eosforge/astra/internal/admission"
 )
 
 // Account 只包含部署指定的单个管理账号摘要, 不保存原始密码或可登录的默认账号.
@@ -25,14 +25,14 @@ type Account struct {
 
 var errInput = errors.New("invalid management configuration or input")
 
-// object 接受一层 JSON 对象, 所有当前 HTTP 输入均为标量; 拒绝重复、未知字段和尾随文档.
-// data 为请求正文; target 为解码目标, 仅标量字段会被填充.
-func object(data []byte, target any) error {
+// object 默认只接受标量字段; arrays 显式允许指定字段为标量对象数组, 不允许进一步嵌套.
+// data 为请求正文; target 为解码目标; 拒绝重复/未知字段和尾随文档.
+func object(data []byte, target any, arrays ...string) error {
 	// 先校验完整 UTF-8, 非法编码直接拒绝, 不进入解析器.
 	if !utf8.Valid(data) {
 		return errInput
 	}
-	// 第一遍只做形状检查: 顶层对象、键唯一且不超 16 个、值全部为标量 (禁嵌套对象/数组).
+	// 第一遍检查顶层和数组条目的唯一字段, 单个对象至多 16 字段, 不限制数组条数.
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
 		return errInput
@@ -46,8 +46,27 @@ func object(data []byte, target any) error {
 		}
 		seen[name] = true
 		var value json.RawMessage
-		if decoder.Decode(&value) != nil || len(value) == 0 || value[0] == '{' || value[0] == '[' {
+		if decoder.Decode(&value) != nil || len(value) == 0 || value[0] == '{' {
 			return errInput
+		}
+		if value[0] == '[' {
+			allowed := false
+			for _, field := range arrays {
+				allowed = allowed || field == name
+			}
+			if !allowed {
+				return errInput
+			}
+			var entries []json.RawMessage
+			if json.Unmarshal(value, &entries) != nil {
+				return errInput
+			}
+			for _, entry := range entries {
+				var fields map[string]json.RawMessage
+				if object(entry, &fields) != nil {
+					return errInput
+				}
+			}
 		}
 	}
 	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {

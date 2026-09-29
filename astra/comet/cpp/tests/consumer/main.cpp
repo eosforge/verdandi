@@ -9,6 +9,28 @@ int main(int count, char** arguments) {
 
     static_assert(std::is_copy_constructible_v<comet::Client>);
     static_assert(!std::is_copy_constructible_v<comet::Reader>);
+    static_assert(std::is_copy_constructible_v<comet::Observer::Item>);
+    static_assert(std::is_same_v<decltype(std::declval<comet::Beacon&>().update(comet::Value{})), comet::Result<comet::Beacon::Receipt>>);
+
+    // 空句柄验证完整新接口的公开声明与实际链接, 不为包消费检查另外创建网络业务.
+    comet::Beacon beacon;
+    comet::Reader reader;
+    comet::Subscriber subscriber;
+    comet::Observer observer;
+    if (beacon.tick(std::chrono::milliseconds(1), [] { return comet::Value{}; }) || beacon.changed([](comet::Beacon::State) {}) || reader.watch([](comet::Reader::Map) {}) || subscriber.watch([](std::string, std::optional<comet::Value>) {}) || reader.changed([](comet::Reader::View) {}) || subscriber.changed([](comet::Subscriber::View) {})) {
+        return 1;
+    }
+    const auto selected = observer.one([](const comet::Observer::Pool& pool) -> std::optional<comet::Observer::Item> {
+        pool.each([](comet::Observer::Item item) { static_cast<void>(item.record()); });
+        return pool.find("missing");
+    });
+    if (selected || selected.error().code != comet::Error::Code::closed) {
+        return 1;
+    }
+    beacon.destroy();
+    reader.stop();
+    subscriber.stop();
+    observer.stop();
     if (count != 3) {
         return 1;
     }

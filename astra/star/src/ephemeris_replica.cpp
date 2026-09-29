@@ -12,26 +12,8 @@ Ephemeris::State::Guard Ephemeris::State::acquire(std::string_view id, std::uniq
     return result;
 }
 
-Ephemeris::State::Ownership::~Ownership() {
-    if (!committed) {
-        for (const auto* name : added) {
-            owner.owners_.erase(name);
-        }
-    }
-}
-
-void Ephemeris::State::Ownership::add(const Source::Tree::Key& name, Replica& replica) {
-    added.push_back(name.get()); // emplace 抛错仍可无异常擦除不存在的新项.
-    owner.owners_.emplace(name.get(), &replica);
-}
-
 Ephemeris::State::Projection* Ephemeris::State::locate(const Scope& scope) {
-    const auto sector = scenes_.find(scope.sector);
-    if (sector == scenes_.end()) {
-        return nullptr;
-    }
-    const auto spectrum = sector->second.find(scope.spectrum);
-    return spectrum == sector->second.end() ? nullptr : &spectrum->second;
+    return Context<State>::locate(*this, scope);
 }
 
 std::expected<void, Ephemeris::State::Error> Ephemeris::State::admit(std::string_view id) {
@@ -229,10 +211,10 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
         return std::unexpected(Error::ended); // 部分字段不能凭空创建半条注册, 等精确完整回补.
     }
     if (old && record) {
-        if (*old->attr != *record->attr || old->ttl != record->ttl || record->update < old->update || record->renewal < old->renewal || record->deadline < old->deadline || (record->renewal == old->renewal && record->deadline != old->deadline) || (record->update == old->update && *record->data != *old->data)) {
+        if (!Ephemeris::follows(*old, *record)) {
             return std::unexpected(Error::conflict);
         }
-        if ((form == Source::Form::data && (record->update <= old->update || record->renewal != old->renewal || record->deadline != old->deadline)) || (form == Source::Form::renew && (record->renewal <= old->renewal || record->update != old->update || *record->data != *old->data || record->deadline < old->deadline))) {
+        if ((form == Source::Form::data && (record->update <= old->update || record->renewal != old->renewal || record->generation != old->generation || record->deadline < old->deadline)) || (form == Source::Form::renew && (record->renewal <= old->renewal || record->update != old->update || *record->data != *old->data || record->deadline < old->deadline))) {
             return std::unexpected(Error::obsolete);
         }
     }
@@ -241,13 +223,6 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
     }
     auto* scene = locate(scope);
     const auto visible = scene ? scene->find(uuid) : Projection::Point{};
-    if (visible.record) {
-        const auto owner = owners_.find(visible.name.get());
-        if (owner == owners_.end() || owner->second != &replica) {
-            return std::unexpected(Error::conflict); // 不覆盖同 UUID 的本机/其他远端注册.
-        }
-    }
-    const bool changed = record ? !visible.record || *visible.record->data != *record->data : visible.record.has_value();
     Pending pending{*this, scope}; // 只用于新投影目录的回滚, 不持有本机时间轮节点.
     if (record && !scene) {
         const auto located = obtain(scope);
@@ -267,17 +242,17 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
     if (origin->bytes() > limits_.replica_bytes || replica_bytes_ - bytes > limits_.replica_bytes - origin->bytes()) {
         return std::unexpected(Error::capacity);
     }
+    auto choice = choose(origin->name(), record, &replica, stamp->time);
+    if (!choice) {
+        return std::unexpected(choice.error());
+    }
     std::optional<Projection::Edit> projection;
-    Ownership ownership{*this, {}, false};
-    if (changed) {
-        auto prepared = scene->prepare(origin->name(), record ? std::optional(Content{record->attr, record->data}) : std::nullopt, std::chrono::steady_clock::now(), record && visible.record.has_value(), retention);
+    if (choice->changed) {
+        auto prepared = scene->prepare(choice->name, choice->content(), std::chrono::steady_clock::now(), choice->record.has_value() && visible.record.has_value(), retention);
         if (!prepared) {
             return std::unexpected(error(prepared.error()));
         }
         projection.emplace(std::move(*prepared));
-        if (record && !visible.record) {
-            ownership.add(origin->name(), replica);
-        }
     }
     const auto timer = replica.timers.find(origin->name().get());
     Timer* hook = timer == replica.timers.end() ? nullptr : timer->second.get(); // reserve 前取得稳定节点, 不保留会失效的迭代器.
@@ -299,7 +274,7 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
     if (!stamp) {
         return std::unexpected(stamp.error());
     }
-    if (record && record->deadline <= stamp->time) {
+    if ((record && record->deadline <= stamp->time) || (choice->record && choice->record->deadline <= stamp->time)) {
         return std::unexpected(Error::ended); // 末次准备期间过期, 放弃本次候选再按当前状态恢复.
     }
 
@@ -321,9 +296,7 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
         retired.timer = std::move(removed->second);
         replica.timers.erase(removed);
     }
-    if (!record && visible.record) {
-        owners_.erase(visible.name.get());
-    }
+    choice->commit();
     if (prepared_coverage) {
         replica.coverage.push_back(std::move(*prepared_coverage));
     } else if (repair) {
@@ -331,7 +304,7 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::receive(std::stri
     } else {
         std::erase_if(replica.coverage, [&](const Replica::Coverage& value) { return value.position <= position; });
     }
-    ownership.committed = pending.committed = true;
+    pending.committed = true;
     if (projection) {
         publish(*scene, before, retired.scene.event);
     }
@@ -456,7 +429,7 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::install(std::stri
                 return;
             }
             const auto old = origin->find(scope, name->key);
-            if (old && ((old->attr != incoming.attr && *old->attr != *incoming.attr) || old->ttl != incoming.ttl || incoming.update < old->update || incoming.renewal < old->renewal || incoming.deadline < old->deadline || (incoming.renewal == old->renewal && incoming.deadline != old->deadline) || (incoming.update == old->update && old->data != incoming.data && *old->data != *incoming.data))) {
+            if (old && !Ephemeris::follows(*old, incoming)) {
                 failure = Error::conflict;
                 return;
             }
@@ -499,44 +472,42 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::install(std::stri
         bool data{};                   // 已有 Attr 的纯 Data 更新提示.
     };
 
-    std::vector<Change> changes; // 当前范围唯一修改列表, 不再分配范围到计划的第二层目录.
-    std::vector<const Source::Name*> removed;
-    Ownership ownership{*this, {}, false};
+    std::vector<Change> changes;
+    std::vector<Choice> choices; // 所有逻辑 ID 的集合与范围投影一同准备, 失败整体回滚.
+    choices.reserve(previous.size() + rows.size());
+    std::optional<Clock::Time> earliest;
+    const auto select = [&](const Source::Tree::Key& name, std::optional<Record> record) -> std::expected<void, Error> {
+        auto choice = choose(name, std::move(record), &replica, stamp->time);
+        if (!choice) {
+            return std::unexpected(choice.error());
+        }
+        if (choice->record) {
+            earliest = earliest ? std::min(*earliest, choice->record->deadline) : choice->record->deadline;
+        }
+        if (choice->changed) {
+            auto* scene = locate(*name->scope);
+            const auto visible = scene ? scene->find(name->key) : Projection::Point{};
+            changes.push_back({choice->name, choice->content(), visible.record.has_value() && choice->record.has_value()});
+        }
+        choices.push_back(std::move(*choice));
+        return {};
+    };
     for (const auto& name : previous) {
         const auto incoming = draft.find(*name->scope, name->key);
         if (incoming && incoming->deadline > stamp->time) {
             continue;
         }
-        auto* scene = locate(*name->scope);
-        const auto current = scene ? scene->find(name->key) : Projection::Point{};
-        const auto owner = current.record ? owners_.find(current.name.get()) : owners_.end();
-        if (owner != owners_.end() && owner->second == &replica) {
-            changes.push_back({current.name, {}, false});
-            removed.push_back(current.name.get());
+        if (auto selected = select(name, {}); !selected) {
+            return selected;
         }
     }
-    std::optional<Clock::Time> earliest; // 最后取时检查新公开记录仍有效, 过期候选不重新获得 TTL.
     for (const auto& row : rows) {
-        const auto& name = row.name; // 私有准备已经校验的原生名称与正文.
-        const auto& incoming = row.record;
-        if (incoming.deadline <= stamp->time) {
+        if (row.record.deadline <= stamp->time) {
             continue;
         }
-        earliest = earliest ? std::min(*earliest, incoming.deadline) : incoming.deadline;
-        auto* scene = locate(*name->scope);
-        const auto current = scene ? scene->find(name->key) : Projection::Point{};
-        if (current.record) {
-            const auto owner = owners_.find(current.name.get());
-            if (owner == owners_.end() || owner->second != &replica || (current.record->attr != incoming.attr && *current.record->attr != *incoming.attr)) {
-                return std::unexpected(Error::conflict);
-            }
-            if (current.record->data == incoming.data || *current.record->data == *incoming.data) {
-                continue;
-            }
-        } else {
-            ownership.add(name, replica);
+        if (auto selected = select(row.name, row.record); !selected) {
+            return selected;
         }
-        changes.push_back({current.record ? current.name : name, Content{incoming.attr, incoming.data}, current.record.has_value()});
     }
 
     // 每个范围只创建一个 COW 批候选. 失败先析构候选, 再撤销新增空范围; 不复制整个公共哈希表.
@@ -591,11 +562,10 @@ std::expected<void, Ephemeris::State::Error> Ephemeris::State::install(std::stri
     replica.coverage.push_back({std::move(marker), draft.position()});
     replica_bytes_ = replica_bytes_ - bytes + replica.source.bytes();
     history_ = history;
-    for (const auto* name : removed) {
-        owners_.erase(name);
+    for (auto& choice : choices) {
+        choice.commit();
     }
     pending.committed = true;
-    ownership.committed = true;
     if (notify_ && old_scene) {
         for (const auto& event : old_scene->events)
             notify_(context_, scope, event);
@@ -624,28 +594,30 @@ void Ephemeris::State::advance(Replica& replica, Clock::Time now, std::vector<Re
         auto& released = retired.back();
         auto* scene = locate(*timer.name->scope);
         const auto visible = scene ? scene->find(timer.name->key) : Projection::Point{};
-        const auto owner = visible.record ? owners_.find(visible.name.get()) : owners_.end();
-        const bool visible_here = owner != owners_.end() && owner->second == &replica;
-        const auto before = visible_here ? scene->history() : 0;
-        const auto retention = visible_here ? allowance(*scene) : 0;
+        const auto before = scene ? scene->history() : 0;
+        const auto retention = scene ? allowance(*scene) : 0;
         const auto bytes = replica.source.bytes();
         auto origin = replica.source.prepare(*timer.name->scope, timer.name->key, {}, std::nullopt, std::chrono::steady_clock::now());
         if (!origin) {
             throw std::runtime_error("Replica expiry could not prepare native state");
         }
+        auto choice = choose(origin->name(), {}, &replica, now);
+        if (!choice) {
+            throw std::runtime_error("Replica expiry could not merge logical registration");
+        }
         std::optional<Projection::Edit> projection;
-        if (visible_here) {
-            auto prepared = scene->prepare(visible.name, {}, std::chrono::steady_clock::now(), false, retention);
+        if (choice->changed) {
+            auto prepared = scene->prepare(choice->name, choice->content(), std::chrono::steady_clock::now(), visible.record.has_value() && choice->record.has_value(), retention);
             if (!prepared) {
                 throw std::runtime_error("Replica expiry could not prepare projection");
             }
             projection.emplace(std::move(*prepared));
         }
-        released.source = origin->commit(); // nullopt position 保持远端已安装连续位置, 不广播本地删除.
+        released.source = origin->commit();
         if (projection) {
             released.scene = projection->commit();
-            owners_.erase(visible.name.get());
         }
+        choice->commit();
         replica_bytes_ = replica_bytes_ - bytes + replica.source.bytes();
         const auto node = replica.timers.find(timer.name.get());
         Agenda::erase(timer);

@@ -51,12 +51,15 @@ public:
 
     // 单次已完成的可见变化, 旧基线已经具备 Attr 时编码器才可选择 data-only.
     struct Event {
-        Key name;                                       // 地址/Key 的固定共享所有权.
-        std::optional<Item> record;                     // 完整公开内容; 空表示删除, 空 Buffer 仍是存在记录.
-        std::uint64_t version{};                        // 此 Scope 的连续视图游标, 与来源位置独立.
-        bool data{};                                    // Ephemeris 仅 Data 变化的提示, 不能替代基线存在性证明.
-        std::size_t bytes{};                            // 本项保守计费, 不包含临时网络编码.
-        std::chrono::steady_clock::time_point stored{}; // 只用于历史窗口, 不进入公开内容.
+        Key name;                                          // 地址/Key 的固定共享所有权.
+        std::optional<Item> record;                        // 完整公开内容; 空表示删除, 空 Buffer 仍是存在记录.
+        std::uint64_t version{};                           // 此 Scope 的连续视图游标, 与来源位置独立.
+        bool data{};                                       // Ephemeris 仅 Data 变化的提示, 不能替代基线存在性证明.
+        std::size_t bytes{};                               // 本项保守计费, 不包含临时网络编码.
+        std::chrono::steady_clock::time_point stored{};    // 只用于历史窗口, 不进入公开内容.
+        std::uint64_t first{};                             // 原子批次的首游标, 零表示普通单项.
+        std::uint64_t last{};                              // 原子批次完整游标, 禁止从批次中间恢复.
+        std::shared_ptr<const std::vector<Event>> batch{}; // 仅内部通知信封, 历史项为空.
     };
 
     // 精确查找同边界取得名称/内容/游标, 空 record 对应明确缺项.
@@ -208,8 +211,8 @@ public:
         Retired retired_;       // 固定通知以及锁外释放的旧内容.
     };
 
-    // 来源整组替换时的一个 Scope 投影候选. 仅克隆被修改的页, 不复制全量 Key 哈希表.
-    // 它不是外部多 Key 写 API; 外层同一域锁覆盖准备和最终提交, 其他 Scope 可同时持有自己的候选.
+    // 来源整组替换或本机原子提交的一个 Scope 投影候选. 仅克隆被修改的页, 不复制全量 Key 哈希表.
+    // 外层同一域锁覆盖准备和最终提交, 其他 Scope 可同时持有自己的候选.
     class Batch {
     public:
         // 旧根/旧历史及完整提交通知交给锁外回收, 不在根交换时销毁大批正文.
@@ -300,6 +303,20 @@ public:
             ++version_;
             failed_ = false;
             return {};
+        }
+
+        // 封闭一个公开原子批次, 历史保留边界和提交通知共享相同首尾, 准备失败不发布.
+        std::shared_ptr<const std::vector<Event>> seal() {
+            for (auto& event : events_) {
+                event.first = owner_->version_ + 1;
+                event.last = version_;
+            }
+            for (auto& event : *history_)
+                if (event.version > owner_->version_) {
+                    event.first = owner_->version_ + 1;
+                    event.last = version_;
+                }
+            return std::make_shared<const std::vector<Event>>(events_);
         }
 
         // 所有 Scope/来源/调度候选准备成功后才调用, 无分配交换并发布完整连续变化.
@@ -498,6 +515,8 @@ public:
             return std::unexpected(Error::history);
         }
         const auto first = std::upper_bound(history_.begin(), history_.end(), since, [](std::uint64_t value, const Event& event) { return value < event.version; });
+        if (first != history_.end() && first->first && (since >= first->first || first->version != first->first))
+            return std::unexpected(Error::history);
         if (first == history_.end()) {
             return std::unexpected(Error::history);
         }

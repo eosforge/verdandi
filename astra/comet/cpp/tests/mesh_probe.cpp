@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <chrono>
 #include <comet/client.hpp>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -93,12 +95,13 @@ void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seco
     std::vector<comet::Beacon> beacons(records);              // 固定 Attr, 后续只更改 Data.
     std::array<comet::Subscriber, 3> subscribers;             // 固定节点, 禁止通过入口退避掩盖复制失败.
     std::array<comet::Observer, 3> observers;                 // 每个节点观察全部三个注册.
+    std::vector<std::uint64_t> versions(records);             // 每条 Key 独立保存实际确认版本, 不把测试轮号当协议版本.
     std::vector<std::string> identities(records);             // 每条记录最初确认的 UUID, 正常运行期间不得无故变化.
     std::array<std::string, 3> instances;                     // 三个不同的接纳 Star, 后续同时核对写回执和视图归属.
     const std::vector<std::uint8_t> attr{'a', 't', 't', 'r'}; // 不变属性的逐字节验证基准.
     for (std::size_t index = 0; index < records; ++index) {
-        auto publisher = clients[index % clients.size()]->publisher(scope, std::to_string(index), 3000ms);
-        auto beacon = clients[index % clients.size()]->beacon(scope, attr, {}, 3000ms);
+        auto publisher = clients[index % clients.size()]->publisher(scope);
+        auto beacon = clients[index % clients.size()]->beacon(scope, attr, {}, 3000ms, 1000ms);
         if (!publisher || !beacon)
             throw std::runtime_error("Cannot create three-source writers");
         publishers[index] = std::move(*publisher);
@@ -133,7 +136,7 @@ void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seco
         throw std::runtime_error("Three writers were not admitted by three distinct Stars");
     }
 
-    // 所有异步调用先发出再等待, 每入口最多 32 个在途写, 不能用逐节点完成代替并发来源验收.
+    // 测试线程并行调用同步 Catalog API, 保持 Catalog 与 Beacon 在三个入口都有本地并发写入.
     const auto deadline = std::chrono::steady_clock::now() + seconds; // 有限单调预算, 不受系统时间回拨影响.
     std::uint64_t version = base;                                     // 跨探针保留单调内容版本, TTL 删除不等于删除来源水位.
     do {
@@ -147,15 +150,16 @@ void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seco
             values[index].assign(2048, static_cast<std::uint8_t>(index));
             for (unsigned byte = 0; byte < sizeof(version); ++byte)
                 values[index][byte] = static_cast<std::uint8_t>(version >> (byte * 8));
-            writes[index] = publishers[index].publish(version, values[index], 10s);
-            updates[index] = beacons[index].update(values[index], 10s);
+            writes[index] = std::async(std::launch::async, [&, index] { return publishers[index].update(std::to_string(index), values[index], 3000ms, 10s); });
+            updates[index] = std::async(std::launch::async, [&, index] { return beacons[index].update(values[index], 10s); });
         }
         for (std::size_t index = 0; index < records; ++index) {
             const auto publication = completed(writes[index]);   // 实际内存提交回执, 不是任务接纳.
             const auto registration = completed(updates[index]); // 固定入口和 UUID 在正常阶段不变.
-            if (publication.instance != instances[index % clients.size()] || publication.version != version || registration.identity.instance != instances[index % clients.size()] || registration.identity.uuid != identities[index]) {
+            if (publication.instance != instances[index % clients.size()] || publication.version <= versions[index] || registration.identity.instance != instances[index % clients.size()] || registration.identity.uuid != identities[index]) {
                 throw std::runtime_error("Three-source commit changed its owner or identity");
             }
+            versions[index] = publication.version;
         }
         until([&] {
             for (std::size_t target = 0; target < clients.size(); ++target) {
@@ -166,20 +170,18 @@ void replication(const std::array<comet::Client*, 3>& clients, std::chrono::seco
                 for (std::size_t source = 0; source < records; ++source) {
                     const auto publication = catalog.find(std::to_string(source)); // 精确来源 Key, 不接受仅有计数相同.
                     const auto registration = services.find(identities[source]);   // 精确 UUID 和完整 Attr/Data.
-                    if (!publication || publication->version != version || *publication->value != values[source] || !registration || *registration->attr != attr || *registration->data != values[source])
+                    if (!publication || publication->version != versions[source] || *publication->value != values[source] || !registration || *registration->attr != attr || *registration->data != values[source])
                         return false;
                 }
             }
             return true;
         });
         if (version == base + 1) {
-            // 超过原 TTL 后仍保活且读投影版本不变, 防止把续租重新广播为业务变化.
-            const auto catalog = subscribers[0].watch(); // 静默续租前的完整 Catalog 视图.
-            const auto services = observers[0].select(); // 静默续租前的读投影提交号.
-            std::this_thread::sleep_for(3500ms);
-            if (subscribers[0].watch().version() != catalog.version() || observers[0].select().version() != services.version() || subscribers[0].watch().size() != records || observers[0].select().size() != records) {
-                throw std::runtime_error("Silent renewals changed or lost the visible projection");
-            }
+            // Catalog 无自动续租, 过期应跨三节点删除; Beacon 的静默续租继续维持注册.
+            const auto services = observers[0].select(); // 保留原投影游标, Renew 不制造 Data 事件.
+            until([&] { return std::ranges::all_of(subscribers, [](const auto& item) { return item.watch().state() == comet::Subscriber::State::ready && item.watch().size() == 0; }); });
+            if (observers[0].select().version() != services.version() || observers[0].select().size() != records)
+                throw std::runtime_error("Beacon renewal lost or changed its projection");
         }
         if (version % 100 == 0 || version == base + 1)
             std::cout << "{\"event\":\"mesh_progress\",\"round\":" << version << "}" << std::endl;
@@ -255,36 +257,43 @@ int main(int count, char** arguments) {
         auto first_catalog = first.subscriber(scope), second_catalog = second.subscriber(scope), third_catalog = third.subscriber(scope);
         auto first_services = first.observer(scope), second_services = second.observer(scope), third_services = third.observer(scope);
         auto first_almanac = first.reader({"integration", "main"}), second_almanac = second.reader({"integration", "main"});
-        auto publisher = producer.publisher(scope, "key", 3000ms);
-        auto beacon = producer.beacon(scope, {'a', 't', 't', 'r'}, {'o', 'n', 'e'}, 3000ms);
+        auto publisher = producer.publisher(scope);
+        auto beacon = producer.beacon(scope, {'a', 't', 't', 'r'}, {'o', 'n', 'e'}, 3000ms, 1000ms);
         if (!first_catalog || !second_catalog || !third_catalog || !first_services || !second_services || !third_services || !first_almanac || !second_almanac || !publisher || !beacon) {
             throw std::runtime_error("Cannot create native mesh objects");
         }
         const std::vector<std::uint8_t> one{'o', 'n', 'e'}, two{'t', 'w', 'o'};
-        static_cast<void>(completed(publisher->publish(base + 1, one, 10s)));
+        const auto initial = publisher->update("key", one, 3000ms, 10s); // 接入确认版本与业务测试轮号分离.
+        if (!initial)
+            throw std::runtime_error("Initial Catalog update failed");
         until([&] { const auto state = beacon->state(); return state.phase == comet::Beacon::Phase::ready && state.identity.has_value(); });
         const auto original = *beacon->state().identity;
-        until([&] { return visible(*first_catalog, *first_services, original.uuid, base + 1, one, one) && visible(*second_catalog, *second_services, original.uuid, base + 1, one, one) && visible(*third_catalog, *third_services, original.uuid, base + 1, one, one); });
+        until([&] { return visible(*first_catalog, *first_services, original.uuid, initial->version, one, one) && visible(*second_catalog, *second_services, original.uuid, initial->version, one, one) && visible(*third_catalog, *third_services, original.uuid, initial->version, one, one); });
         std::cout << "{\"event\":\"mesh_ready\"}" << std::endl; // 外层在此强杀原权威 Star, 不先注销注册.
 
-        until([&] { const auto state = beacon->state(); return state.phase == comet::Beacon::Phase::ready && state.identity && state.identity->instance != original.instance && state.identity->uuid != original.uuid; }, 60s);
+        until([&] { const auto state = beacon->state(); return state.phase == comet::Beacon::Phase::ready && state.identity && state.identity->instance != original.instance && state.identity->uuid == original.uuid; }, 60s);
         const auto replacement = *beacon->state().identity;
-        static_cast<void>(completed(publisher->publish(base + 2, two, 10s)));
-        static_cast<void>(completed(beacon->update(two, 10s)));
-        until([&] { return visible(*second_catalog, *second_services, replacement.uuid, base + 2, two, two) && visible(*third_catalog, *third_services, replacement.uuid, base + 2, two, two) && !second_services->select().find(original.uuid) && !third_services->select().find(original.uuid); });
+        const auto moved = publisher->update("key", two, 3000ms, 10s); // 切换后由显式调用恢复 Key, 无后台重放.
+        if (!moved)
+            throw std::runtime_error("Catalog update after relocation failed");
+        if (!beacon->update(two, 10s))
+            throw std::runtime_error("Beacon update was not confirmed");
+        until([&] { return visible(*second_catalog, *second_services, replacement.uuid, moved->version, two, two) && visible(*third_catalog, *third_services, replacement.uuid, moved->version, two, two) && second_services->select().size() == 1 && third_services->select().size() == 1; });
         std::cout << "{\"event\":\"mesh_failover\"}" << std::endl; // 外层用原部署端口重启 Star A, 由 Pulsar 签发较新身份.
 
         until([&] {
             const auto almanac = first_almanac->load();
-            return visible(*first_catalog, *first_services, replacement.uuid, base + 2, two, two) && first_services->select().instance() != original.instance && almanac.state() == comet::Reader::State::ready && almanac.version() && *almanac.version() == 4;
+            return first_services->select().state() == comet::Observer::State::ready && first_services->select().find(replacement.uuid).has_value() && first_services->select().instance() != original.instance && almanac.state() == comet::Reader::State::ready && almanac.version() && *almanac.version() == 4;
         },
               75s);
         const auto restored = second_almanac->load();
         if (restored.state() != comet::Reader::State::ready || !restored.version() || *restored.version() != 4) {
             throw std::runtime_error("Almanac authority baseline was not retained");
         }
-        static_cast<void>(completed(publisher->publish(base + 3, std::vector<std::uint8_t>{}, 10s)));
-        until([&] { return visible(*first_catalog, *first_services, replacement.uuid, base + 3, {}, two) && visible(*second_catalog, *second_services, replacement.uuid, base + 3, {}, two) && visible(*third_catalog, *third_services, replacement.uuid, base + 3, {}, two); });
+        const auto emptied = publisher->update("key", {}, 3000ms, 10s); // 重新发布空值, 重启等待期间旧 TTL 可以正常过期.
+        if (!emptied)
+            throw std::runtime_error("Empty Catalog update failed");
+        until([&] { return visible(*first_catalog, *first_services, replacement.uuid, emptied->version, {}, two) && visible(*second_catalog, *second_services, replacement.uuid, emptied->version, {}, two) && visible(*third_catalog, *third_services, replacement.uuid, emptied->version, {}, two); });
         publisher->close();
         beacon->close();
         if (!publisher->wait(5s) || !beacon->wait(5s)) {

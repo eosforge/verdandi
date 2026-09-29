@@ -43,8 +43,9 @@ std::optional<Subscriber::Record> Subscriber::View::find(std::string_view key) c
 // Subscriber::View::visit 遍历视图全部记录, 回调期间视图保持有效.
 // context/visitor 为上下文与回调, 回调抛错由调用方处理.
 void Subscriber::View::visit(void* context, void (*visitor)(void*, std::string_view, const Record&)) const {
-    if (contents_) {
-        contents_->data.each([&](std::string_view key, const detail::Publication& record) { visitor(context, key, record.record); });
+    const auto contents = contents_; // 回调可重入并重新赋值原 View, 本次遍历仍固定拥有旧根.
+    if (contents) {
+        contents->data.each([&](std::string_view key, const detail::Publication& record) { visitor(context, key, record.record); });
     }
 }
 } // namespace comet

@@ -1,6 +1,6 @@
 # Verdandi C++23 SDK
 
-> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../../legacy-sdk.md).
+> 冻结版本使用说明, 不作为 Astra/Comet 当前契约. 范围见 [冻结组件](../README.md).
 
 ## Status
 
@@ -41,16 +41,16 @@ library and Verdandi types; third-party types remain private.
 ## Build and verification
 
 The normal cross-platform entry points live in this directory. From the
-repository root:
+sdk/ root:
 
 ```text
-./sdk/cpp/build.ps1 doctor
-./sdk/cpp/build.ps1 all -Profile dev
-./sdk/cpp/build.ps1 all -Profile release -Linkage shared
+./cpp/build.ps1 doctor
+./cpp/build.ps1 all -Profile dev -Offline
+./cpp/build.ps1 all -Profile release -Linkage shared -Offline
 
-bash sdk/cpp/build.sh doctor
-bash sdk/cpp/build.sh all --profile dev
-bash sdk/cpp/build.sh all --profile release --linkage shared
+bash cpp/build.sh doctor
+bash cpp/build.sh all --profile dev --offline
+bash cpp/build.sh all --profile release --linkage shared --offline
 ```
 
 They detect but never install toolchains, use bounded dependency discovery,
@@ -64,7 +64,7 @@ binding; those language projects compile independently with their own normal
 toolchains.
 
 The existing presets remain the focused sanitizer and qualification path. From
-`sdk/cpp`:
+`cpp`:
 
 ```text
 cmake --preset gcc-debug

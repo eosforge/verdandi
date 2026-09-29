@@ -49,13 +49,13 @@ public:
         std::size_t records = 65536;
         // 当前 Key 与 Buffer 的合计字节上限, 默认 64 MiB; 零只允许空 Scope.
         std::size_t bytes = 64 * 1024 * 1024;
-        // 连续单 Key 历史条数上限, 默认 1000; 零表示所有旧游标均需重新取基线.
+        // 逐键历史条数上限, 默认 1000; 同批按完整版本保留/淘汰, 零表示旧游标均需重建基线.
         std::size_t history = 1000;
         // 历史的 Change、Key 与 Buffer 合计计费上限, 默认 8 MiB; 零不保留历史.
         std::size_t backlog = 8 * 1024 * 1024;
     };
 
-    // 一次已完整安装的单 Key 权威提交; 版本无缺口, 即使同值 Set 或缺失 Delete 也占一个位置.
+    // 一个完整权威提交中的逐键变化, 同批共用版本; 同值 Set 或缺失 Delete 也保留提交证据.
     struct Change {
         // 拥有不可变 Key, 长度 1..1024 字节, 与查找表和索引共享原字符串.
         std::shared_ptr<const std::string> key;
@@ -63,6 +63,8 @@ public:
         Value value;
         // Polaris 为该 Scope 分配的版本, 有效增量范围 1..UINT64_MAX.
         std::uint64_t version{};
+        // 仅内部通知使用的完整批次, 历史中的逐项 Change 不持有它.
+        std::shared_ptr<const std::vector<Change>> batch{};
 
         // 返回本历史项的保守逻辑字节计费, 不包含分配器和容器额外成本.
         std::size_t bytes() const noexcept;
@@ -200,6 +202,8 @@ public:
     // retention 为外层此 Scope 可使用的历史字节余额, 默认不额外限制, 不改变合法写入是否提交.
     // committed 可选接收本次已提交的不可变变更, 即使历史预算为零仍可向活动订阅通知; 失败不修改它.
     std::expected<bool, Error> apply(std::uint64_t version, std::string key, std::optional<Buffer> value, std::size_t retention = std::numeric_limits<std::size_t>::max(), Change* committed = nullptr);
+    // 同一权威版本的非空唯一键批次一次发布, 不另设批次数量/总量上限; 仍遵循单值与存储预算, 所有失败保持旧根和版本.
+    std::expected<bool, Error> apply(std::uint64_t version, std::vector<Change> changes, std::size_t retention, Change* committed = nullptr);
     // 短锁捕获根、数量与版本; 未安装基线返回 unready, 不返回临时空 View.
     std::expected<View, Error> view() const;
     // 直接查找 key, 不创建不存在的条目或改变版本; 空/超长 Key 返回 input.

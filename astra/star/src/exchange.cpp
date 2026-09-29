@@ -268,6 +268,9 @@ Result<bool> Exchange::Pipe<Domain>::apply(const Delta& delta, Steady::time_poin
             }
             record->data = std::make_shared<const Ephemeris::Buffer>(delta.data().data().begin(), delta.data().data().end());
             record->update = delta.data().order();
+            if (delta.data().deadline()) {
+                record->deadline = *Parcel::time(delta.data().deadline());
+            }
             form = State::Source::Form::data;
             partial = true;
         } else if (delta.has_erase()) {
@@ -483,33 +486,38 @@ Result<void> Exchange::receive(const Packet& packet, Steady::time_point now) {
     ASTRA_PROFILE_COUNT("star.exchange.received_ack", packet.has_ack());
 
     using enum proto::astra::v1::Domain;
-    if (packet.has_resume()) {
+    // 直接按 oneof 判别, 显式拒绝属于 Session 控制面的消息; 不依赖运行时反射.
+    switch (packet.body_case()) {
+    case Packet::kResume:
         if (packet.resume().domain() == DOMAIN_CATALOG) {
             return catalog_.resume(packet.resume().version());
         }
         if (packet.resume().domain() == DOMAIN_EPHEMERIS) {
             return ephemeris_.resume(packet.resume().version());
         }
-    } else if (packet.has_ack()) {
+        break;
+    case Packet::kAck: {
         const auto& ack = packet.ack();
         const bool accepted = ack.domain() == DOMAIN_CATALOG ? catalog_.acknowledge(ack.version()) : ack.domain() == DOMAIN_EPHEMERIS && ephemeris_.acknowledge(ack.version());
         return accepted ? Result<void>{} : Status::protocol("Invalid cumulative peer acknowledgement");
-    } else if (packet.has_catalog_snapshot()) {
+    }
+    case Packet::kCatalogSnapshot:
         return catalog_.snapshot(packet.catalog_snapshot(), now);
-    } else if (packet.has_ephemeris_snapshot()) {
+    case Packet::kEphemerisSnapshot:
         return ephemeris_.snapshot(packet.ephemeris_snapshot(), now);
-    } else if (packet.has_catalog_changes()) {
+    case Packet::kCatalogChanges:
         return catalog_.changes(packet.catalog_changes(), now);
-    } else if (packet.has_ephemeris_changes()) {
+    case Packet::kEphemerisChanges:
         return ephemeris_.changes(packet.ephemeris_changes(), now);
-    } else if (packet.has_repaired()) {
+    case Packet::kRepaired:
         if (packet.repaired().request().domain() == DOMAIN_CATALOG) {
             return catalog_.repaired(packet.repaired(), now);
         }
         if (packet.repaired().request().domain() == DOMAIN_EPHEMERIS) {
             return ephemeris_.repaired(packet.repaired(), now);
         }
-    } else if (packet.has_repair()) {
+        break;
+    case Packet::kRepair: {
         if (responses_.size() == 8) {
             return Status::capacity("Too many pending peer repairs");
         }
@@ -534,6 +542,13 @@ Result<void> Exchange::receive(const Packet& packet, Steady::time_point now) {
         }
         response_bytes_ += bytes;
         return {};
+    }
+    case Packet::kHello:       // 握手由 Session 消费, 不进入业务恢复状态机.
+    case Packet::kPing:        // 心跳请求同样由 Session 消费.
+    case Packet::kPong:        // 心跳响应同样由 Session 消费.
+    case Packet::kRejection:   // 协议拒绝由 Session 终止连接.
+    case Packet::BODY_NOT_SET: // 空正文及仅含未知字段的包不能作为业务数据.
+        break;
     }
     return Status::protocol("Unexpected peer data message");
 }

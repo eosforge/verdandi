@@ -1811,6 +1811,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisRecord final : public ::go
     kDeadlineFieldNumber = 3,
     kUpdateFieldNumber = 4,
     kRenewalFieldNumber = 5,
+    kGenerationFieldNumber = 7,
     kTtlMsFieldNumber = 6,
   };
   // bytes attr = 1;
@@ -1873,6 +1874,16 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisRecord final : public ::go
   void _internal_set_renewal(::uint64_t value);
 
   public:
+  // uint64 generation = 7;
+  void clear_generation() ;
+  [[nodiscard]] ::uint64_t generation() const;
+  void set_generation(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_generation() const;
+  void _internal_set_generation(::uint64_t value);
+
+  public:
   // uint32 ttl_ms = 6;
   void clear_ttl_ms() ;
   [[nodiscard]] ::uint32_t ttl_ms() const;
@@ -1887,7 +1898,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisRecord final : public ::go
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<3, 6,
+      ::google::protobuf::internal::TcParseTable<3, 7,
                           0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
@@ -1921,6 +1932,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisRecord final : public ::go
     ::uint64_t deadline_;
     ::uint64_t update_;
     ::uint64_t renewal_;
+    ::uint64_t generation_;
     ::uint32_t ttl_ms_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
@@ -2292,6 +2304,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisData final : public ::goog
   enum : int {
     kDataFieldNumber = 1,
     kOrderFieldNumber = 2,
+    kDeadlineFieldNumber = 3,
   };
   // bytes data = 1;
   void clear_data() ;
@@ -2318,11 +2331,21 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisData final : public ::goog
   void _internal_set_order(::uint64_t value);
 
   public:
+  // uint64 deadline = 3;
+  void clear_deadline() ;
+  [[nodiscard]] ::uint64_t deadline() const;
+  void set_deadline(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_deadline() const;
+  void _internal_set_deadline(::uint64_t value);
+
+  public:
   // @@protoc_insertion_point(class_scope:proto.astra.v1.EphemerisData)
  private:
   class _Internal;
   using ParseTableT_ =
-      ::google::protobuf::internal::TcParseTable<1, 2,
+      ::google::protobuf::internal::TcParseTable<2, 3,
                           0, 0,
                           2>;
   static constexpr ParseTableT_ InternalGenerateParseTable_(
@@ -2353,6 +2376,7 @@ class  PROTOBUF_FUTURE_ADD_EARLY_WARN_UNUSED EphemerisData final : public ::goog
     ::google::protobuf::internal::CachedSize _cached_size_;
     ::google::protobuf::internal::ArenaStringPtr data_;
     ::uint64_t order_;
+    ::uint64_t deadline_;
     PROTOBUF_TSAN_DECLARE_MEMBER
   };
   union { Impl_ _impl_; };
@@ -9088,7 +9112,7 @@ inline void EphemerisRecord::_internal_set_renewal(::uint64_t value) {
 inline void EphemerisRecord::clear_ttl_ms() {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.ttl_ms_ = 0u;
-  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+  ClearHasBit(_impl_._has_bits_[0], 0x00000040U);
 }
 inline ::uint32_t EphemerisRecord::ttl_ms() const {
   // @@protoc_insertion_point(field_get:proto.astra.v1.EphemerisRecord.ttl_ms)
@@ -9096,7 +9120,7 @@ inline ::uint32_t EphemerisRecord::ttl_ms() const {
 }
 inline void EphemerisRecord::set_ttl_ms(::uint32_t value) {
   _internal_set_ttl_ms(value);
-  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
   // @@protoc_insertion_point(field_set:proto.astra.v1.EphemerisRecord.ttl_ms)
 }
 inline ::uint32_t EphemerisRecord::_internal_ttl_ms() const {
@@ -9106,6 +9130,30 @@ inline ::uint32_t EphemerisRecord::_internal_ttl_ms() const {
 inline void EphemerisRecord::_internal_set_ttl_ms(::uint32_t value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.ttl_ms_ = value;
+}
+
+// uint64 generation = 7;
+inline void EphemerisRecord::clear_generation() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.generation_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0], 0x00000020U);
+}
+inline ::uint64_t EphemerisRecord::generation() const {
+  // @@protoc_insertion_point(field_get:proto.astra.v1.EphemerisRecord.generation)
+  return _internal_generation();
+}
+inline void EphemerisRecord::set_generation(::uint64_t value) {
+  _internal_set_generation(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  // @@protoc_insertion_point(field_set:proto.astra.v1.EphemerisRecord.generation)
+}
+inline ::uint64_t EphemerisRecord::_internal_generation() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.generation_;
+}
+inline void EphemerisRecord::_internal_set_generation(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.generation_ = value;
 }
 
 // -------------------------------------------------------------------
@@ -9569,6 +9617,30 @@ inline ::uint64_t EphemerisData::_internal_order() const {
 inline void EphemerisData::_internal_set_order(::uint64_t value) {
   ::google::protobuf::internal::TSanWrite(&_impl_);
   _impl_.order_ = value;
+}
+
+// uint64 deadline = 3;
+inline void EphemerisData::clear_deadline() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.deadline_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0], 0x00000004U);
+}
+inline ::uint64_t EphemerisData::deadline() const {
+  // @@protoc_insertion_point(field_get:proto.astra.v1.EphemerisData.deadline)
+  return _internal_deadline();
+}
+inline void EphemerisData::set_deadline(::uint64_t value) {
+  _internal_set_deadline(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  // @@protoc_insertion_point(field_set:proto.astra.v1.EphemerisData.deadline)
+}
+inline ::uint64_t EphemerisData::_internal_deadline() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.deadline_;
+}
+inline void EphemerisData::_internal_set_deadline(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.deadline_ = value;
 }
 
 // -------------------------------------------------------------------

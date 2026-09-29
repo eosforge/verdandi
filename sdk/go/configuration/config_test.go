@@ -20,7 +20,7 @@ func TestLoadSharedExample(t *testing.T) {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	config, err := LoadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "configuration.example.json"))
+	config, err := LoadFile(filepath.Join(filepath.Dir(file), "..", "..", "configuration.example.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestTLSObjectBuildsPrivateRootsClientCertificateAndSNI(t *testing.T) {
 	if !ok {
 		t.Fatal("runtime.Caller failed")
 	}
-	fixture := filepath.Join(filepath.Dir(file), "..", "..", "..", "testkit", "tls")
+	fixture := filepath.Join(filepath.Dir(file), "..", "..", "testkit", "tls")
 	config := Config{
 		Version: "v1",
 		Redis: Redis{

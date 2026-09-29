@@ -1,164 +1,176 @@
 # Comet 原生 C++ SDK
 
-首版原生 C++ SDK 位于 astra/comet/cpp, 接入 Almanac、Ephemeris 与 Catalog, 与冻结的 Redis SDK 分开. 本文定义三域对象、所有权、恢复约束和独立 CMake 消费方式. 当前实施状态见 [进度](../../../docs/progress.md), 实际通过范围见 [验证记录](../../../testkit/validation.md), 不把设计文字作为通过声明.
+本文描述当前 C++ SDK 源码接口. Publisher 同步原子更新、Beacon 同步注册/更新与 beat/tick、同逻辑 ID 恢复、Reader/Subscriber 回调及 Observer 本地选择均已接线. Star、内部复制和 C++/Go 生成协议随 Beacon 恢复一起更新.
+
+精确构建、测试配置和源码身份统一见 [验证记录](../../docs/validation.md), 不沿用旧版回归作为当前工作区的发布证明. 原始字节接口以 [Client](include/comet/client.hpp)、[Beacon](include/comet/beacon.hpp)、[Observer](include/comet/observer.hpp)、[Subscriber](include/comet/subscriber.hpp) 和 [Reader](include/comet/reader.hpp) 为准.
+
+| 接口 | 当前行为 |
+| --- | --- |
+| Client.beacon | 必须传 beat, 首次注册同步确认后返回句柄 |
+| Beacon.update | 同步 Result, 失败不补发, 只缓存已确认 Data |
+| Beacon 身份与续租 | 同逻辑 ID 恢复, 注册代次独立于 Data 版本, Update 原子延期 |
+| 读取对象 | Reader/Subscriber watch/state/changed/stop; Observer.one/stop, 本地估计受代次和比较交换保护 |
+
+当前 Catalog 入口如下, 不需要应用填写 version:
+
+```cpp
+auto publisher = client.publisher({"routing", "main"});
+if (!publisher) {
+    return std::unexpected(publisher.error());
+}
+auto result = publisher->update("service-a", {1, 2, 3}, std::chrono::seconds(30));
+// result 为 Result<Publisher::Receipt>; 批次重载接受 vector<Publisher::Entry>.
+```
+
+同一 Publisher 的重叠 update 返回 busy, 不排队合并. 同步 RPC 使用调用线程, 共享 Core 控制轮负责认证与切换; Client/Publisher 关闭通过标准停止令牌直接取消同步 RPC, 不等待 watch/changed 回调返回. 停止回调先于 RPC context 析构注销, 旧控制轮快照只能取消其捕获的那次调用. SDK 通知回调内同步 update 返回 busy, 避免阻塞共享控制轮; 显式关闭优先报告 closed.
 
 | 查阅内容 | 唯一定义 |
 | --- | --- |
-| RPC、字段、版本、服务端 TTL、Session、Watch | [协议](../../../proto/README.md#comet) |
+| RPC、字段、版本、服务端 TTL、Session、Watch | [协议](../../proto/README.md#comet) |
 | 三域原生存储、提交与快照 | [存储](../../common/README.md) |
-| Star 初始化、监听与业务认证配置 | [Astra](../../README.md#运行模式与接线) |
+| Star 初始化、监听与业务认证配置 | [Astra](../../docs/build.md#运行模式与接线) |
 | 管理与指标 | [Astrolabe](../../astrolabe/README.md) |
-| 用例和验收证据 | [验收计划](../../../testkit/comet.md) / [最新执行结果](../../../testkit/validation.md) |
+| 用例和验收证据 | [验收计划](../../docs/comet.md) / [实际结果](../../docs/validation.md) |
 
 ## 边界与组织
 
 公共头文件归属 include/comet, 私有实现 src, 测试 tests, C++ 命名空间 comet. gRPC/Protobuf 类型仅在适配层, 不进入应用签名. 首版交付静态库, 不同时实现共享库、C ABI 或其他语言绑定.
 
-SDK 最低语言标准为 C++23, 遵循 [C++ 规范](../../../cpp-coding.md); 服务器继续使用 C++26. 当前 Windows/MSVC 19.51 的 x64 Release 配置已通过 SDK 编译链接、四项本地测试、源码接入和安装包接入; 本机 CMake 将 C++23 映射到 `/std:c++latest`. 当前 C++23 配置尚未执行 Linux 回归, 此前 Linux/GCC 16.2 的 C++26 验证不能直接作为其通过证据. 复用既定 gRPC/Protobuf 与配套 BoringSSL, 不引入独立 OpenSSL 或隐式下载依赖. SDK 不承担 Star 复制、日志保留、发布权威裁决或对时.
+SDK 最低语言标准为 C++23, 遵循 [C++ 规范](../../cpp-coding.md); 服务器继续使用 C++26. Windows/MSVC 19.51 x64 Release 已通过 SDK 编译链接、五项本地测试、源码接入和安装包接入; 本机 CMake 将 C++23 映射到 `/std:c++latest`. Linux/GCC 16.2 的 C++23 SDK 已随 Debug、Release、探针版、ASan/UBSan、TSan 完整矩阵及独立安装包验证通过. Sanitizer 构建向消费端传播编译及链接要求, 避免 Protobuf 插桩布局不一致. 复用既定 gRPC/Protobuf 与配套 BoringSSL, 不引入独立 OpenSSL 或隐式下载依赖. SDK 不承担 Star 复制、日志保留、发布权威裁决或对时.
 
 ## 公共职责
 
-| 对象 | 应用职责 |
-| --- | --- |
-| Client | 共享端点、可选 TLS/业务认证、取消与退出资源 |
-| Reader | 持续取得一个 Almanac 分组或精确 Key, load() 返回最近完整的权威视图 |
-| Publisher | 固定一个 Catalog Key/TTL, 接纳内容版本、自动保活与完整恢复 |
-| Subscriber | 一个 Catalog 分组或精确 Key 的不可变视图和同步状态 |
-| Beacon | 自动创建注册、更新 Data、续租、注销与身份通知 |
-| Observer | 一个 Ephemeris 分组或精确 UUID 的完整注册视图 |
+下表列出当前公共职责. load/watch/select 与 close/wait 的原有快照和退出入口继续保留, 新代码可以使用下列接口.
 
-子对象持有 Client 共享内部资源, 最后一个 Client 公开句柄释放不关闭仍存活的子对象. 显式 Client::close() 才关闭全部对象. 每个业务对象最后一个应用句柄释放则启动自身非阻塞关闭; 内部 RPC/定时器只延长必要清理状态, 不保持自动业务, 不能形成引用环.
+| 对象 | 已确认的公共职责 |
+| --- | --- |
+| Client | 所有角色共享连接、活动 Star、TLS/Session、调度、预算和取消 |
+| Beacon | 同步首次注册与 Data 更新; 可选 tick、必启 beat、已确认数据缓存及同 id 注册恢复 |
+| Observer | 仅 Ephemeris; 从同步到本地的池中 one(selector), stop() 停止 |
+| Publisher | 绑定 Catalog Scope; 同步提交单键或多键原子更新, 内部管理版本, 每次指定 TTL |
+| Subscriber | Catalog 全 Scope 或精确 Key 的 watch/state/changed/stop |
+| Reader | Almanac 只读, 与 Subscriber 同形接口, 保留权威版本下限 |
+
+子对象持有 Client 共享核心. 最后一个 Client 公开句柄释放不关闭仍存活的子对象; 显式 Client::close() 才关闭全部角色. 单个 Beacon::destroy() 或读取对象 stop() 只结束自身. C++ 业务句柄最后释放启动自身非阻塞清理, 不在析构中等待网络, 内部引用不能让已无人持有的业务永久续租.
 
 ### 私有实现收敛
 
-Client 的共享核心集中持有活动端点、Channel/Stub、Session、退出状态、预算和定时资源; Publisher/Beacon 只持有自己的期望/身份及有限尝试, 三种读取对象复用私有 Watch 核心. 新状态先归入真实拥有者, 不为每个阶段另建 Manager/Service/Executor, 不把同一会话或退避配置复制进每个业务对象.
+Client 的共享核心集中持有活动端点、Channel/Stub、Session、退出状态、预算和定时资源; Publisher 持有版本元数据和当前同步调用, Beacon 持有身份、已确认 Data 及有限尝试, 三种读取对象复用私有 Watch 核心. 新状态先归入真实拥有者, 不为每个阶段另建 Manager/Service/Executor, 不把同一会话或退避配置复制进每个业务对象.
 
-当前核心将 Session/Watch 与 unary 分别交给两类共享 Channel, 不按业务对象或 Watch 数量新建连接池. 这用于隔离长流占用的并发流额度, 不保证底层固定两条 TCP 连接. 续租合并和多目标订阅是否值得扩展按 [协议评估边界](../../../proto/README.md#comet-batching) 与性能矩阵判断, 不能从对象数直接推导连接数或批量收益.
+当前核心将 Session/Watch 与 unary 分别交给两类共享 Channel, 不按业务对象或 Watch 数量新建连接池. 这用于隔离长流占用的并发流额度, 不保证底层固定两条 TCP 连接. 续租合并和多目标订阅是否值得扩展按 [协议评估边界](../../proto/README.md#comet-batching) 与性能矩阵判断, 不能从对象数直接推导连接数或批量收益.
 
-相同待办只保留一次唤醒, 在实际调度时重查当前期望及截止; 已取消但未完成的 RPC 仍按真实寿命单独归还资源. 通用能力限于已有网络、定时、所有权和完成机制, 不把 Publisher 的内容版本规则与 Beacon 的独立顺序强行合成一个业务状态机.
+相同待办只保留一次唤醒, 在实际调度时重查当前操作及截止; 已取消但未完成的 RPC 仍按真实寿命单独归还资源. 通用能力限于已有网络、定时、所有权和完成机制, 不把 Publisher 的内容版本规则与 Beacon 的独立顺序强行合成一个业务状态机.
 
-Core 的本地完成事件进入独立弱引用就绪队列, 同对象重复事件合并; 普通网络唤醒只解析 K 个实际就绪对象, 不扫描 N 个目录对象. 接纳时预留队列容量, noexcept 唤醒不分配, 队列不延长对象寿命. 只有活动期限到达或共享身份/关闭/满额归还时才扫描目录; 自动续租和操作超时仍按各自截止调度, 不降为每秒清算. 定向推进保存保守的最早期限, 旧值至多造成额外一次提前维护, 不延后任务. 处理期间的新事件可再次入队, 至多八轮后交还线程. 不增加执行器、逐对象线程或用户可操作的排队状态; 普通构建与回归已通过, 性能结果见 [验证记录](../../../testkit/validation.md); 尚未测量数千空闲 Watch 的定向收益, 不宣称各负载普遍提速.
+Core 的本地完成事件进入独立弱引用就绪队列, 同对象重复事件合并; 普通网络唤醒只解析 K 个实际就绪对象, 不扫描 N 个目录对象. 接纳时预留队列容量, noexcept 唤醒不分配, 队列不延长对象寿命. 只有活动期限到达或共享身份/关闭/满额归还时才扫描目录; 自动续租和操作超时仍按各自截止调度, 不降为每秒清算. 定向推进保存保守的最早期限, 旧值至多造成额外一次提前维护, 不延后任务. 处理期间的新事件可再次入队, 至多八轮后交还线程. 不增加执行器、逐对象线程或用户可操作的排队状态; 普通构建与回归已通过, 性能结果见 [验证记录](../../docs/validation.md); 尚未测量数千空闲 Watch 的定向收益, 不宣称各负载普遍提速.
 
+当前不可变 View 的 each 遍历会固定本次数据根, 即使用户回调重新赋值原 View, 当前 Key/Value 和剩余条目仍有效. 回调持有的参数仍只在该次回调及所属数据根存活期间有效; 跨回调保存正文需复制 Value 所有权. 取消、基线缓存及遍历修复的实际执行范围与源码身份见统一验证记录.
 
-### 异步写入与同步等待
+### 同步写入与明确结果
 
-显式写入返回 `std::future<Result<T>>`, 其中 `Result<T> = std::expected<T, Error>`. SDK 内部通过标准 promise 完成结果, 不提供专有 Operation 句柄、Task 或 Executor 协议, 不使用 std::async 为每次 RPC 新建等待线程. 参数/接纳失败返回已经就绪的失败 future, 同步便捷方法等待同一条异步路径, 不另建写入状态机. 订阅、自动续租和连接恢复仍由 SDK 的网络与定时逻辑推进.
+当前 Client 及各角色的 wait(timeout) 只等待本地清理. 非正超时立即检查完成状态; 极大正值按 steady_clock 可表示的最远时刻饱和处理, 不发生毫秒转换或截止相加的有符号溢出. wait 不隐式 close, SDK 通知回调内仍禁止阻塞等待.
 
-每个请求的结果只完成一次: 确认提交、未发送即被替代、明确失败, 或已发但结果不确定. Catalog 合并同 Key 的较高内容版本, Ephemeris Data 合并最新接纳值; 在途请求不可改写. 后台恢复处理对象的最新期望, 不把迟到结果或后来成功改写进旧 future. 标准 future 只消费一次, 应用需要共享时自行调用 share(); 已发超时不等于未提交.
+当前 `client.beacon(...)`、`beacon.update(data)`、`publisher.update(batch, ttl)` 均为同步 RPC 调用. 工厂或操作返回 `std::expected<T, Error>`; Beacon 工厂为 `std::expected<Beacon, Error>`, 不是不能表达错误类型的 optional. 公共写入不再返回 future, 不另保留“接纳成功后继续提交”的第二种成功语义.
 
-请求仅有一个从接纳起计算的操作 deadline, 覆盖排队、建连、认证和这次 RPC, 发送时把剩余预算传给 gRPC; 不再维护独立的排队总超时与另一份完整 RPC 超时. future.wait_for() 只限制调用者这次等待, 不取消请求或启动重试, 这是标准等待语义. 同步等待和 future.get() 禁止在 SDK 回调/I/O 执行路径中阻塞.
+成功表示这一次操作已获接入 Star 的提交确认, 不表示所有副本已更新或业务已经持久化. 明确未提交、明确拒绝与已发送但结果不确定分别表达. 超时/断链/取消可能发生在远端提交之后, 不把这些错误伪装成未写入; 迟到成功不能改写已经返回的结果.
 
-结果就绪不依赖任何用户观察者回调. 丢弃 future 不取消请求, 也不保持业务对象自动续租; 对象 close() 负责停止其业务活动, 已接纳请求仍须结算. promise/future 不能替代对 gRPC 在途缓冲、取消及一次完成竞争的必要保护. 标准类型语义见 [C++ futures](https://eel.is/c++draft/futures).
+每个调用只有一个 deadline, 包含准备、认证、版本查询、允许的有限冲突修复及 RPC. 子步骤使用剩余预算, 不能每步重新计时. 返回失败后不继续补发这次 update, 不保存失败 Data 为待发送期望, 不合并或覆盖其他同步调用的结果. 原 RPC 可能尚在远端完成, 本地缓冲和额度须保留到实际完成.
 
-### 明确的业务结果
+同一调用捕获目标实例及生命周期. Client 切换不能将原失败请求暗中改投新 Star; 后续新调用可使用新的就绪目标. Beacon 自动注册恢复是独立生命周期操作, 不是重新执行一个失败 update. Catalog 仅有下文明确限定的一次调用内版本冲突修复.
 
-公开接口采用 `std::expected` 表达可预期的失败, 包括参数错误、版本冲突、认证失败、内部范围拒绝、资源超限与超时, 不以抛异常作为这些情况的正常控制流. 同步返回值与异步完成值使用相同的业务结果模型, 不将同一失败在同步接口中改成异常. 结果与错误类型属于 Comet, 不向公共头文件泄漏 gRPC/Protobuf 类型; 具体名称及方法签名随接口实现确定.
-
-错误原因与提交是否确定须分别表达. 已发送请求超时、取消或断链时可能已经提交, 不能仅凭一个超时错误码推断可以安全重试; 未发送即被 Data 合并替代也不能冒充确认提交. 请求接纳失败与已接纳操作的最终结果遵循同一分类, 仍保留此前确定的单次本地完成语义.
-
-采用 `std::expected` 不等于承诺所有函数 `noexcept` 或所有内存耗尽均可恢复. 分配失败、程序错误和用户回调异常不能伪装成普通的业务拒绝; 用户回调异常继续按回调边界捕获与报告规则处理, 资源耗尽时是否能够形成错误结果须以实际实现保证为准.
+结果返回不依赖 watch/changed 等观察回调完成. 预期业务错误用值表达, 不泄漏 gRPC/Protobuf; 分配失败和程序错误不因使用 expected 就自动变成可恢复错误, 不承诺所有入口 noexcept.
 
 ### 原始载荷与可插拔编解码
 
-首版提供原始 Buffer 接口与可插拔编解码适配, 应用选择 Almanac/Catalog 记录、Ephemeris Attr/Data 的内容格式. 不在首版内置基于 C++26 反射的自动序列化体系, 不为业务载荷固定 JSON、MessagePack 或另一套 Schema; 传输协议仍使用 Protobuf/gRPC.
+Data、Attr 和 Catalog/Almanac 值由应用决定格式与完整性. 应用的类型适配在调用前编码成 Value, 在读取回调内显式解码; SDK 不固定 JSON、注册 codec 或借 C++26 反射另建序列化框架. 编解码错误由应用适配层保留, 不作为 nullopt 删除事件传入业务. tick 回调只返回 Data, 不要求套一层 Result/Optional; 合法空 Data 仍是一次完整值更新, 不是“跳过”.
 
-原始 Buffer 是可独立使用的基础接口, 类型适配调用同一套写入和订阅能力, 不另建同步状态机. Star 不解释普通业务 Buffer 的字段, 也不要求不同应用使用同一种编解码器.
-
-原始载荷的空值/删除与标识限制服从 [协议](../../../proto/README.md#comet). 原始入口允许合法零字节值, 应用编解码器可以根据自身类型拒绝空内容, 不能把解码失败伪装成删除.
-
-编码失败时不提交对应请求; 解码失败向应用明确报告, 不伪装成空载荷、记录删除或网络断线, 不破坏已收到的原始记录. 异步发送按下文规则持有载荷, 不借用已经释放的临时缓冲. 具体适配签名和错误类型随公开接口定义, 不把 Protobuf 生成类型引入应用签名.
+编码失败不发请求, 解码失败明确报告, 不伪装成删除、空值或网络错误. Star 不解释普通业务 Buffer 的字段.
 
 ### 标准字节容器与所有权
 
-SDK 不定义 class Buffer 或 copy/take 胶水类. 本文其余 Buffer 用语仅表示不透明字节载荷, 公开接口直接使用标准类型: `std::vector<std::uint8_t>` 拥有数据, `std::span<const std::uint8_t>` 借用输入, `std::shared_ptr<const std::vector<std::uint8_t>>` 共享不可变数据. 这些标准容器仍可供三个原生存储共享, 不要求 SDK 与服务端使用相同物理容器.
+不新增 Buffer 胶水类. C++ 原始入口按用途使用拥有数据的 `std::vector<std::uint8_t>`、借用输入 `std::span<const std::uint8_t>` 和共享不可变载荷 `std::shared_ptr<const std::vector<std::uint8_t>>`. vector 按值接收, span 在跨越调用寿命前转成拥有存储; 支持共享入口时 nullptr 拒绝, 指向空 vector 合法. 不为每个方法机械排列全部重载.
 
-异步写入的 vector 入口按值接收, 应用传 std::move 转移, 传左值则按标准语义复制. span 入口在返回前复制到 SDK 拥有的存储, 不把借用内存留到异步任务; shared_ptr 入口共享载荷, nullptr 明确拒绝, 非空指针指向空 vector 则是合法空值. 入口按实际用途选择这些类型, 不为每个方法机械生成三套重载.
+同步返回不证明 gRPC 已释放输入. 一旦请求可能超过调用返回时刻存活, SDK 必须拥有其缓冲, 不保留应用临时借用; 取消和超时均如此. 共享/移交之后应用不能通过可写别名修改在途内容. Key、范围和回调载荷遵循同一所有权约束.
 
-Beacon::update 保留 vector 移交、span 复制及 shared_ptr 共享三个直接入口: 应用可能把同一 Data 发给多个注册, 或转发已经取得的不可变载荷, 仅保留前两者会迫使这些路径额外复制. Publisher::publish 同样支持这些载荷入口, 恢复复用已接纳的不可变内容. Client::secret 和初始 beacon 则只提供按值 vector 入口, 不为 Attr/Data 的混合类型排列所有重载; 借用方在这些低频入口显式构造拥有容器. 公共接口不为此引入泛型万能转发模板或新的 Buffer 类.
+Publisher 只持有当前调用及仍未结束 RPC 所需内容, 不保存跨调用恢复副本. Beacon 额外保存固定 Attr、最近成功确认的完整 Data 及其版本, 用于注册恢复. “仍在清理中的请求缓冲”不等于“允许后台补发的业务缓存”. 生成消息在真实完成后才复用, 不为排队、发送、恢复各复制一份 Protobuf.
 
-const shared_ptr 不会消除应用已有的可写别名; 共享或移交后, 应用不得再经原指针修改载荷. SDK 持有排队、在途及恢复所需所有权, 回调和取消竞争不提前释放缓冲. 读取返回 shared_ptr<const vector> 并随不可变 View 共享, 临时 span 的有效期不得超过其拥有者; Key/范围字符串同样在异步接纳时拥有存储.
-
-生成消息属于单次在途操作, 公共原始载荷只在适配边界交给它, 不为排队/重试/恢复各保存一份内容副本. 网络操作实际完成后才清空或复用生成对象, 不先引入共享可写 Protobuf 池或跨调用 Arena 来掩盖生命周期.
-
-不承诺标准容器能消除 Protobuf/gRPC/TLS 编码复制或 shared_ptr 分配. 内存预算覆盖实际载荷及在途引用, 不只计算句柄大小; Beacon 保存固定 Attr/最新 Data, Publisher 保存最新期望的完整内容/版本, 用于各自自动恢复.
+读取回调的值可安全保留, 后台不得改写已交付快照. Observer 的短期可变选择视图采用独立规则, 见下文; const shared_ptr 本身不是对可写别名和业务逻辑并发的保护.
 
 <a id="catalog"></a>
 
 ## Catalog Publisher
 
-服务端版本与期限判定只在 [Catalog 协议](../../../proto/README.md#catalog) 定义. Publisher 固定绑定一个 Scope、Key 和请求 TTL, 多 Key 使用多个对象共享 Client. 业务负责持久保存自身内容和版本, SDK 不生成业务版本、不操作业务数据库, 不提供删除或替换整个 Scope 的接口.
+`pub = client.publisher(sector, spectrum)` 只绑定 Scope. `pub.update(batch, ttl)` 同步提交一组 Key/Data 的完整新值, 单键是批次的特例. 这里的 batch 仅表示集合语义, 不强制变长参数或某一种 C++ 容器. 不绑定固定 Key/TTL, 不要求应用提供 version, 不提供公开续租或 Delete.
 
-### 单 Key 生命周期
+### 版本与原子提交
 
-工厂完成本地参数、TTL 可表示性和资源校验后创建对象. 首个 publish 尚未接纳时没有期望内容, 不发布空记录或发送续租; 合法零字节内容只能通过显式 publish 建立. 对象绑定的 Key/TTL 不在运行中修改, 改配置需关闭并新建对象; 这不自动删除旧 Star 的记录或撤销在途请求.
+- 同 Scope 允许多个 Publisher 写不同 Key, 使用者保证每个 Key 的写入者唯一. SDK/Star 不增加分布式所有权锁、选主或全局版本服务.
+- 同批共享一个版本, Star 逐 Key 比较. 不同 Publisher 的不相交 Key 可以使用相同数值; 较大的 Scope 视图游标不能使另一 Key 的合法更新被跳过.
+- SDK 内部通过初始化/查询 RPC 取得目标 Star 已知的相关 Key 版本. 新批次版本高于这些版本及该 Publisher 已发出的版本; 可跳号, 溢出明确失败. 未知结果消耗过的版本不能配上另一份内容重新使用.
+- 同一目标和精确 Key 集合的连续成功更新复用已确认基线, 正常后续调用只发 Publish. Key 集合按排序后全文比较, 换序仍相同; 换目标、换集合、未知结果或其他已接纳调用失败后重新 Query. 只保留最近一批至多 128 个 Key、实例和水位, 计入共享预算, 不保留 Data 或累计历史 Key 表.
+- 进程重启/新建 Publisher 通过内部查询建立基线, 不要求业务保存 version. 查询不是全网最新值或唯一发号证明; 多 Star 的暂时不一致仍允许. 业务自行持久化需要保留的 Data.
+- 整批校验、准备与内存提交原子完成, 任一条失败不提交部分键. 全 Scope Watch、快照及回调在完整批次边界安装. 两条精确 Key 订阅不提供联合原子读取.
+- 版本是数据排序依据, 不是全网事务 ID. 来源历史与传播需要辨认批次时不得只凭该数值合并不同 Publisher 的提交; 内部批次标识和传输边界在协议实施时明确. 不承诺跨 Star 的全局事务顺序或同时可见.
 
-publish(version, value) 接纳该 Key 的完整期望值. 正常每个对象只有一个当前发布尝试和至多一个最新待发位置, 不设 FIFO、retry/discard、暂停队列或通用执行器. 较高版本替换未发送的较低版本, 较低版本不能挤掉较高期望; 同版本且仍持有载荷时逐字节校验, 内容不一致在本地拒绝. 被替代的未发送调用明确完成为已替代, 在途请求继续按它的固定内容和目标结算, 不能把“后调用”直接当成“较新内容”.
+### 失败与有限修复
 
-同版本同字节的再次 publish 也只保留一个待发送调用: 新调用替代尚未发送的旧调用, 旧 future 明确完成为已替代, 不挂一串等待同一回执的 promise. 已在途调用不合并其结果; 新调用若随后发送, 就是独立的保活尝试. 同版本异内容仍拒绝, 不以替代绕过一致性检查.
+只在服务端明确返回版本冲突且证明整批未提交时, SDK 才可在原调用内查询同一目标 Star 的相关 Key 版本, 重新分配版本并重发原完整批次一次. 查询结果用于版本基线, 不替换用户本次提交的 Data. 第二次失败、查询失败、目标切换或原 deadline 耗尽即返回; 不转成后台循环.
 
-本地接纳失败不替换原期望值. 接纳后由对象持有完整不可变载荷和业务版本, 参数、准备资源及关闭检查在发布期望前完成. 已退役但 gRPC 尚未完成的尝试仍占真实在途预算, 不能靠取消后立即无限新建请求绕过容量. 多 Key 并行不引入分组级发布队列或要求版本彼此连续.
+超时/断链等不确定结果不进入该修复路径, 普通认证、格式、容量错误也不自动加版本重发. 返回失败后内容不保留为待发业务缓存. SDK 可保留版本元数据, 以及仍未完成 RPC 的必要缓冲, 但不能以后再提交它们.
 
-首次 Publish 成功后按固定 TTL 自动保活. 纯续租携带当前绑定实例/Scope/Key、已确认内容版本及对象配置的 TTL; 有较新期望待发布时优先推进内容, 不让旧版本续租的迟到结果确认新值. 发布成功同时刷新租约, 无内容变化时续租不重复发送值, Catalog 不使用 Ephemeris 的 order. TTL 每次明确发送, 不以 0 表示沿用 Star 保存值, 对象配置始终固定.
+### TTL 与切换 Star
 
-断线、结果不确定或目标缺失/到期时, 对象按有界退避恢复最新期望. 换 Star 先完整 Publish, 不假设新目标已拥有载荷, 不改业务版本. 同版本成功回执只确认这次在该 Star 的受理, 不清除旧尝试的不确定性; 旧实例或已被新期望替代的结果不能回退对象状态. Star 明确报告版本/内容冲突后停止该期望的自动重发与无效续租, 等应用提交合法新值, 不自动加号覆盖别人.
+每次 update 都显式附带新的 TTL. SDK 不自动 Renew, 不按定时器重复 Data; Star 在该次受理时计算期限, 服务端到期后通过 Watch 告知删除. 订阅者不按客户端墙钟自行删键, SDK 无需与 Star 对时.
 
-显式 publish 的 deadline 只约束这一次结果, 不撤回已经接纳的期望生命周期. 尚未发送即超时的调用明确报告该次未提交, 该期望仍可能在后续自动恢复中生效; 已发送则保留结果不确定性. 应用需要停止后续恢复时调用 close(), 已在途 RPC 仍可能远端成功. 不为一个超时删除仍应保活的业务期望, 也不让后台成功重复完成原 future.
-
-close() 停止该 Key 的后续发布、续租和换入口恢复, 不发送 Catalog Delete, 不影响同 Client 的其他对象. 远端按最后实际受理的期限清理; close 之前的在途保活可能晚到并延期, 所以本地关闭完成不等于远端已经消失或将在 close + TTL 前必然消失.
-
-### 本地保活估计
-
-复用下文 [本地租约预算](#本地租约预算) 的经过时间来源、TTL/3 加抖动、挂起恢复及有界调度, 不连接 Pulsar 或比较客户端墙钟. 每次实际 Publish/Renew 都记录自身发送起点; 合法确认只据该起点加请求 TTL 形成保守估计, 不从回执到达时算完整 TTL. Catalog 重试是新的保活尝试, 不套用 Ephemeris 同 order 重试的旧起点规则.
-
-不同 Publish/Renew 回执可能交错. 只更新当前实例与相应已确认内容的有效信息, 不用旧回执覆盖更晚确认或新期望. 本地预算耗尽报告不确定, 由 Star 判定继续续租还是完整恢复, 不据此断言全网已删除. 错过多次计划只处理当前工作, 不补发一串历史保活.
-
-应用可以观察期望版本、当前目标的已确认版本及保活状态, 三者不伪装成一个“全网成功”. std::future 只是单次结果, 不自动提供 co_await/then 或对等复制确认, 不为这些状态引入 SDK 协程调度器.
+切换 Star 后, Publisher 保留内部已经发出版本的依据, 必要时查询新目标, 下一次显式 update 带完整 Data, 因而目标缺少 Key 也可创建. 切换不恢复旧内容或整个 Scope, 不使旧失败调用变成功. 关闭 Publisher 停止新调用, 不发送 Delete; 之前可能已经提交的记录按最后实际期限到期.
 
 <a id="registry"></a>
 <a id="ephemeris"></a>
 
 ## Beacon
 
-服务端 UUID、来源实例、固定 Attr、可更新 Data、TTL 与操作 order 规则见 [Ephemeris 协议](../../../proto/README.md#registry). SDK 只管理自己创建的生命周期, 不接管传入的已有 UUID, Observer 读取也不产生写入句柄.
+当前入口见 [beacon.hpp](include/comet/beacon.hpp). 工厂首次注册总期限由 Beacon::Options::timeout 控制, update 的可选 timeout 默认 3 秒, 均接受 (0, 1 min].
 
-Beacon::Identity.uuid 与 Observer 的精确 target 使用 16 字节原始 UUIDv4, std::string 仅作为拥有字节的容器, 内容可以包含 NUL. 应用原样传递完整长度, 不使用 strlen 或把它直接当成日志/JSON 文本; 展示时在应用边界编码. 旧的 36 字符 UUID 文本不作为当前协议的别名接受.
+`beacon = client.beacon(sector, spectrum, attr, data, ttl, beat)` 合并初始化和首次提交. 工厂同步等首次注册确认, 成功才返回可用句柄; 失败由外部决定是否重新调用, 不在返回错误后继续初次注册. 初次注册超时可能留下无人续租的远端记录, 由 TTL 回收.
+
+Attr、ttl、beat 在创建时固定; update 仅提交完整 Data. SDK 与 Star 分别校验自己负责的条件, 不以客户端验证代替服务端的 TTL/身份/版本/容量检查. beat 必须始终启用并满足 `0 < beat < ttl`; tick 可不配置. tick 间隔在调用 tick() 时验证, 必须大于零, 不用 interval=0 关闭保活.
+
+### 更新、tick 与 beat
+
+`beacon.update(data)` 同步返回, SDK 内部分配 Data 版本/order. 成功的新 Update 在 Star 的同一提交边界替换 Data 并延长期限, 固定 TTL 不变. 同一 order 的重复确认不能再次延期; 只改顺序但内容不变可不触发内容通知.
+
+`beacon.tick(interval, callback)` 设置或替换自动采样任务, callback 只返回 Data. 同一 Beacon 的采样串行, 不重叠、不积攒错过的历史 tick. 合法的手动 update 重置 tick 倒计时; 比它更早启动而晚返回的采样结果作废, 不能覆盖新手动值. 采样异常通过状态/错误报告, 不以空 Data 冒充失败. 内部提交走同一同步结果规则, 失败后不补发该采样值.
+
+beat 在一个 beat 间隔内没有实际发出的新 Update 时才发 Renew. 有新 Update 可省去独立 Renew; 本地参数失败、只写缓存或比较出相同内容不能无限推迟保活. 实际新 Update/Renew 的发送安排下一次检查, 但发送成功不等于远端租约已确认. 数据比对只能在不改变同步结果和 TTL 语义时省带宽, 不能仅凭本地相等返回“本次已提交”.
 
 ### 创建和身份恢复
 
-- 新 Beacon、应用进程重启或新 Client 创建对象时, 发起新 Create; 相同 APIKEY 不使其自动接管旧 UUID. 同一对象的移动、同 Star 重连或 SECRET 更新可继续使用尚未结束的原 UUID, 不因 TCP 重建就重新注册.
-- 创建每次尝试捕获固定 Attr、当前最新 Data 和 TTL. 一个对象只有当前创建尝试, 不并发请求全部端点, 不叠加配置的 gRPC retry/hedging; 透明重试的边界见 [gRPC](https://grpc.io/docs/guides/retry/).
-- Create 超时/断链后结果保持不确定, SDK 按有界退避发起新 Create, 不查询旧创建结果或保存去重缓存. 未确认 UUID 不续租; 迟到成功不覆盖当前身份, 可在清理预算内尽力注销.
-- 新注册成功后发布 Identity 通知; 创建期间接纳的新 Data 继续作为期望值, 不被创建请求中的旧副本覆盖. 尚待确认的显式 update 在 UUID 确认后发送正 order 的 Update, 即使某次 Create 已带有相同字节, 也不伪造 order=0 的 Update 成功回执. 未知旧记录可能暂时与新记录并存, SDK 不按 Attr/Data 隐式去重, 较大 TTL 延长重复窗口.
-- Star 明确结束注册或切换实例时自动用原 Attr、固定 TTL 和最新 Data 请求新 UUID. 原 RPC 的迟到结果不能进入新身份. 参数、内部范围或 TTL 永久错误停止对应恢复, 不无限创建.
-- close()、析构或 Client 关闭停止续租、Data 恢复和重注册, 有界尽力注销. 不可达时交给服务端 TTL 清理, 不能以成功本地关闭保证远端立即删除.
+成功创建过的 Beacon 随 Client 活动 Star 变化接收内部通知, 自动恢复注册; 应用句柄、tick 设置和回调不变. 保持同一逻辑 id, 恢复使用固定 Attr/TTL 与最近成功确认的 Data/版本. 失败或结果不确定的 update 不替换这个恢复缓存, 也不因恢复顺便补发.
+
+同 Star 重连优先继续仍有效的注册. 换 Star、实例重建或租约结束需要恢复时, 注册代次与 Data 版本分别处理: 不能仅为了让缓存覆盖其他副本就把旧内容改成较高版本. 目标已知更高 Data 版本时不得用较旧缓存覆盖. 旧操作按目标、注册代次与尝试隔离, 迟到 Update/Renew/Remove 不影响新注册.
+
+这里接受弱恢复: 旧 Star 停止续租, 残留按 TTL 消失; 不同 Star 暂时持有不同数据或切换后暂见较旧值均允许. 例如本地确认到 v10, v11 在 A 提交但回执丢失, B 尚未知 v11, 恢复时暂用 v10 是允许的, 不能将其冒充 v12. 单份订阅投影按逻辑 id 去重, 不承诺全网瞬时只有一个来源或全局永不回退.
+
+新工厂调用/新进程不自动认领任意外部 id. Star 首次签发 32 字节随机 capability, 与 Scope、Attr 和 TTL 一起导出固定版本/变体位的 16 字节逻辑 UUID. SDK 私有保存能力, 恢复携带 generation 和已确认 order/Data; 目标返回实际采用的 Data/order, 包括它已知的较新内容. 能力不进入 Watch、复制或诊断. 只知道 UUID 或共用 APIKEY 无法恢复新版注册. 新版 SDK 需要同步更新 Star 和复制协议, 不支持与旧 Star 混用.
+
+`state()` 与 `changed(callback)` 同时提供, 报告已就绪、恢复、失败、租约不确定和关闭等状态及具体原因. 原因或状态未变的每次 beat 不必触发通知. 永久参数/身份错误停止相应恢复, 不无限重试或生成新身份绕过错误.
 
 ### 本地租约预算
 
-服务端 TTL 单位、固定性和合法范围只在 [Ephemeris 协议](../../../proto/README.md#registry) 定义. SDK 配置请求时长并检查本地可表示性; Create 成功后使用确认的固定 TTL, 不自动适配服务端更严格的上限. 改时长需新建 Beacon.
+SDK 不比较服务端绝对截止与本机墙钟, 不连接 Pulsar. 每次新 Create、恢复、Update 或 Renew 保存首次发送的本地经过时间, 成功后以首次发送时刻 + 确认 TTL 形成保守预算. 同 order 重试保留原起点, 不能从迟到回执重新给满 TTL; beat 调度与租约已确认状态分别记录.
 
-SDK 约每个 TTL/3 发起一次自动续租并加入抖动, 时间安排使用本地单调时钟, 不直接拿服务端绝对截止减去客户端墙钟, 也不要求 Comet 连接 Pulsar. 调度精度和抖动必须支持 1 秒租约, 不能把 TTL 的 1 秒下限又作为续租间隔的最小值. TTL/3 是发起频率, 不是租约仍然有效的证明.
+预算耗尽标记不确定, 不凭本地估计断言全网删除; 恢复探测仍有有限 RPC deadline 和退避. 本地读时失败暂停依赖该时间的发送并报告错误, 不伪造时钟. 系统挂起恢复后立即重查预算, 不补发错过的所有 tick/beat.
 
-SDK 为当前 Create 尝试、每个实际发送的新 Renew order 保存首次发送时的本地单调时间. 成功确认后, 本地预算以首次发送时刻 + 固定 TTL 为截止估计, 不从响应到达或重试发送时刻重新起算; 同一 order 的重试始终保留首次起点, 重新认证或重连不刷新它. 下一次正常续租也以该起点安排, 若回执到达时已错过计划时刻则尽快发起新 order, 仍遵守退避和并发限制. 只保留当前尝试和最新确认所需信息, 不增加完整续租历史.
+Linux 使用包含 suspend 的 CLOCK_BOOTTIME, Windows 使用 QueryInterruptTimePrecise; 普通 RPC 的单调 deadline 与租约经过时间分开. 不声称跨机器时钟速率、长时间挂起下的严格存活证明, 最终期限由 Star 判定.
 
-同序号成功仅确认原续租, 迟到响应不能延长本地预算, 已被新尝试或新身份替换的回调不得回写状态. 本地预算耗尽时报告租约不确定, 不直接断言 Star 已删除; 仍可用新 order 和有限 RPC 预算请求续租, 由 Star 判断尚存还是已结束, 不能因旧预算非正而永远不再发出恢复请求. 只有当前有效尝试确认且本地预算仍有余量时才恢复已确认状态. 此估计避免把传输延迟算成新增 TTL, 不承诺跨机器时钟速率差、进程挂起或异常跳变下的严格存活证明; 最终有效性由 Star 在提交边界判定.
+### destroy 与生命周期
 
-首版 Linux 的租约预算使用 CLOCK_BOOTTIME, 计入系统休眠经过时间; 仅写“steady_clock”不足以保证这一点, Linux CLOCK_MONOTONIC 不含系统 suspend. 这只是本地经过时间, 不访问 Pulsar, 不变成第二套业务纪元. 计时器唤醒及 state() 观察均重查预算, 醒来已耗尽则报告不确定, 不沿用睡前确认状态. 错过多次 TTL/3 只安排一次当前续租, 不逐次补发历史定时事件. 普通 RPC/退避等待沿用其单调 deadline, 不以本地租约时钟替换 gRPC 的时间实现; 参见 [Linux 时钟定义](https://man7.org/linux/man-pages/man2/clock_gettime.2.html).
+`beacon.destroy()` 立即完成本地逻辑关闭, 幂等且不等待网络, 与 Client 或其他角色的存活无关. 停止新 update、tick、beat、注册恢复, 取消旧尝试并在有界清理预算内尽力注销; 不保证远端立即消失.
 
-注册状态不把网络恢复或发出请求当作续租成功. 例: 原续租已生效却丢失响应, 同 order 重试不能从新的发送或收到回执时刻重新给予完整 TTL. 本地读时失败报告不确定并暂停依赖该读时的发送, 不伪造时间; 时钟恢复后仍只发当前尝试.
-
-### Data 合并与恢复
-
-只合并尚未发送的 Data, 保留最新完整值. 正常同 UUID 最多一个当前 Data 尝试; 在途内容固定, 不修改 gRPC 使用的内存, 被替代的未发送调用明确完成替代结果. 每个实际新发送分配 order, 重试保留原号和字节, 由服务端在提交边界阻止旧 Data 回写.
-
-已发送但结果不确定时, 原 future 结算一次, SDK 继续恢复最新期望 Data, 没有后续更新也保留该值. 后来的恢复成功不改写旧结果; 已接纳更晚值时只推进最新值. 续租独立, Data 不隐式延长 TTL. 本地参数/资源接纳失败或接纳前 deadline 已耗尽, 均不替换已经接纳的期望值. 服务端明确拒绝某个 Data 内容时停止该值的自动重发, 向应用报告, 合法新值可替换它; 不因 Data 超限就停止尚合法 UUID 的正常续租. 会话/身份错误仍走对应共享认证和来源检查, 关闭停止全部恢复.
-
-显式 update 的 deadline 只结束该次请求尝试, 不作为撤回已接纳期望值的接口. 未发送到期的尝试不得继续发送, 其 future 说明该尝试未提交; 最新期望仍可能随后续自动创建/恢复生效, 与原 future 的结果分开. 被新值合并替代的旧值则不再是期望状态. Data 的永久拒绝不得通过反复新建 UUID 绕过, 需要新身份时应先等待合法期望值或应用修正配置.
-
-归属实例、UUID 和当前尝试都参与回调隔离, 不依赖 TCP 顺序或取消完成保证. 各类操作的协议判定见 [请求顺序](../../../proto/README.md#registry-请求顺序).
+可以从自身回调调用 destroy. 关闭前已经开始的回调允许结束, 返回的采样值丢弃; 关闭先生效则不得再启动新通知或采样. 已开始同步 RPC 仍结算一次, 远端可能已提交. 内部清理到真实完成才释放资源, 不在自身回调等待自己, 已关闭句柄永不因切换 Star 或换凭据而复活.
 
 ## 业务认证
 
-部署凭据来源和服务端授权见 [Astrolabe](../../astrolabe/README.md) 与 [Session 协议](../../../proto/README.md#session). Client 默认启用 auth, 匿名模式必须显式关闭且服务端允许; 不在失败后降级. Comet 只配置 Star 业务地址, 不连接 Pulsar 或内部管理/指标端口.
+部署凭据来源和服务端授权见 [Astrolabe](../../astrolabe/README.md) 与 [Session 协议](../../proto/README.md#session). Client 默认启用 auth, 匿名模式必须显式关闭且服务端允许; 不在失败后降级. Comet 只配置 Star 业务地址, 不连接 Pulsar 或内部管理/指标端口.
 
 同一 Client/Star 合并并发认证, 持有一条当前 Session 流. 认证开启时, 首条确认前不得发送受保护业务, 后续调用复用该会话 metadata. 首次确认使用独立短等待, 确认后取消该计时, 不把短 deadline 设为长期 Session 的寿命. 迟到确认/结束不能覆盖新会话.
 
@@ -172,9 +184,9 @@ Client 仍有业务拥有者时可以维持空闲 Session; 流失效后按退避
 
 同名 APIKEY 删除后重建不使旧 Session 重新有效. 原注册对象可经 Client::secret 恢复认证, 再按来源实例与实际期限处理原 UUID; 新 Client/新对象不自动接管已有 UUID. 这是 SDK 的对象生命周期约束, 不是 APIKEY 所有者校验, 具体见 [凭据生命周期](../../astrolabe/README.md#凭据生命周期).
 
-同一 Star 内重新认证不改变订阅范围或直接清空已接收视图, 订阅继续按最后完整游标恢复. Ephemeris 的未过期 UUID 可在认证恢复后继续管理; 认证中断期间 TTL 仍正常经过, 确认过期后才按既定规则生成新 UUID. 更换 SECRET 不改变 Catalog 的业务版本或旧调用结果; 认证恢复后 Publisher 继续恢复它持有的最新期望, 不修改已发请求. 切换 Star 或实例变化仍遵守独立的恢复与重注册规则.
+同一 Star 内重新认证不改变订阅范围或直接清空已接收视图, 订阅继续按最后完整游标恢复. Ephemeris 的有效注册可在认证恢复后继续管理; 认证中断期间 TTL 仍正常经过, 必须恢复注册时保持同一 Beacon 的逻辑 id. 更换 SECRET 不改变旧调用结果; Publisher 只为后续显式 update 恢复连接和版本准备, 不补发已经失败的内容. 切换 Star 或实例变化仍遵守独立的恢复与重注册规则.
 
-服务端因 [凭据快照恢复](../../../proto/README.md#credential-snapshot) 统一结束旧 Session 时, 复用上述共享重认证路径, 不为每个业务对象分别登录或仅因此切换 Star. 已确认 Session 的失效不同于首次登录被拒绝: 当前 SECRET 仍有效时自动重认证即可, 无需应用调用 Client::secret; 新登录明确拒绝才暂停. 旧流迟到结束和旧快照的延迟清理不能覆盖新会话, 视图、UUID、操作顺序及 TTL 继续按原恢复规则处理.
+服务端因 [凭据快照恢复](../../proto/README.md#credential-snapshot) 统一结束旧 Session 时, 复用上述共享重认证路径, 不为每个业务对象分别登录或仅因此切换 Star. 已确认 Session 的失效不同于首次登录被拒绝: 当前 SECRET 仍有效时自动重认证即可, 无需应用调用 Client::secret; 新登录明确拒绝才暂停. 旧流迟到结束和旧快照的延迟清理不能覆盖新会话, 视图、UUID、操作顺序及 TTL 继续按原恢复规则处理.
 
 <a id="tls"></a>
 
@@ -182,7 +194,7 @@ Client 仍有业务拥有者时可以维持空闲 Session; 流失效后按退避
 
 TLS 与 APIKEY/APISECRET 分别配置. Client 默认启用 TLS, 应用可显式关闭以使用明文 gRPC, 所选方式必须与目标业务监听匹配. 单机部署也使用相同 TLS 配置, 不存在 standalone 自动关闭分支. SDK 不在连接前猜测服务端模式, 不在证书错误或握手失败后自动降级. 自签 CA 和正规 CA 都保留服务端证书链及主机名验证, 不通过关闭验证支持自签证书.
 
-Star 的默认值、材料缺失处理和内部链路边界统一见 [运行模式](../../README.md#运行模式与接线), SDK 不复制服务端配置矩阵.
+Star 的默认值、材料缺失处理和内部链路边界统一见 [运行模式](../../docs/build.md#运行模式与接线), SDK 不复制服务端配置矩阵.
 
 各平台统一由 CMake 生成私有字节列表, 可选内嵌 CA 公钥证书, 支持外部证书文件覆盖, 不使用 `#embed`. 此处“公钥”指 TLS 可用的 X.509 CA 证书/信任束, 不是节点 Ed25519 准入公钥, 也不是裸公钥固定. 首版不因此增加双向 TLS 或客户端私钥.
 
@@ -191,112 +203,107 @@ Star 的默认值、材料缺失处理和内部链路边界统一见 [运行模�
 - 每个项目可以嵌入自己的自签 CA 或选择外部信任束, 也可使用正规 CA. Star 部署匹配的服务端证书和私钥, 始终验证证书链与目标主机名.
 - Star 服务端私钥、CA 签发私钥和 APISECRET 均不编入 SDK. 可选嵌入路径为空时不生成或引用证书字节文件, 支持无内嵌 CA 的外部加载模式.
 
-TLS 和业务 Session 的协议关系见 [业务会话](../../../proto/README.md#session); Comet 的证书配置不更改管理或节点信任.
+TLS 和业务 Session 的协议关系见 [业务会话](../../proto/README.md#session); Comet 的证书配置不更改管理或节点信任.
 
 ## 回调与生命周期
 
-观察者使用 `std::move_only_function<void(View)>` 或对应 State/Identity 参数的同类回调, 不提供 SDK 自有执行器、用户线程池或 Task 投递/拒收/放弃状态机. 回调在产生通知的 SDK 执行路径直接调用, 通常是 gRPC I/O 完成路径, 本地状态变化也可能来自调用线程; 不承诺固定线程身份. 应用需要 UI 线程或耗时处理时, 回调只向自己的有界队列投递拥有数据的 View/结果并立即返回.
+watch/changed 在完整状态发布、解除内部状态锁之后调用用户代码. 同一个读取对象的内容通知有序, 可合并未交付的中间状态; 状态和不同对象的通知可能并发. 通知使用拥有存储的值, 不借用马上回收的网络消息, 不依赖回调完成才返回写入结果.
 
-回调必须快速且非阻塞, 不睡眠、不等待 SDK RPC/future/关闭完成, 不持锁等待另一条 SDK 通知. gRPC 明确要求 reaction 快速返回, 阻塞可能影响进程内其他 RPC; SDK 不再承诺任意慢回调与自动续租、其他对象完全隔离. std::move_only_function 只表达可移动调用对象, 不自带线程调度或并发安全. 参见 [gRPC C++ 最佳实践](https://grpc.io/docs/languages/cpp/best_practices/) 和 [C++ move_only_function](https://eel.is/c++draft/func.wrap.move).
+通知必须快速且非阻塞, 不在 SDK I/O 回调中执行同步 RPC、等待本地清理或持锁等待另一通知. 应用需要写入或耗时处理时投递到自身有界执行环境. tick 是单独的采样任务, 其业务回调和随后同步提交由 SDK 有界工作资源推进, 不把等待放在共享 gRPC reaction 上; 不承诺任意慢采样不影响该 Beacon 自身任务.
 
-SDK 在发布完整视图、结算结果并解除内部状态锁后调用用户代码. 单个订阅的数据通知沿已安装边界串行发出, 可合并中间状态; 该数据回调返回前不启动会产生下一数据通知的读取处理, 不用通用串行执行器补顺序; 不承诺所有状态、身份和不同对象的通知全局串行, 相关回调可并发, 应用保护自己的共享状态. 生命周期状态通知包含取得时的状态, 如需最新状态可直接查询对象. 不为了统一这些顺序重新建立通用通知队列或在锁内执行用户代码.
+回调可立即 stop/destroy, SDK 捕获 C++ 回调边界异常并有界报告, 不重放回调、不回滚已提交数据. 用户提供的上下文须覆盖已开始回调的寿命. 逻辑关闭和资源完全排空是两个边界, 取消不等于 gRPC OnDone; 内部清理不得自等或保留业务引用环.
 
-用户回调可调用非阻塞 close() 或提交新的异步操作; 不得同步等待. SDK 捕获回调边界的 C++ 异常, 作有界诊断后继续后续合法通知, 不重放回调、不回滚数据或改写 future. 诊断不泄露凭据或载荷, 不递归调用同一失败回调. 应用自建队列的拒收、执行顺序和任务生命周期由应用处理, 不再回传为 SDK 的调度状态机.
-
-close() 幂等且非阻塞, 停止新增业务、续租与恢复并安排取消/尽力注销. 与通知开始有确定顺序: 关闭先生效则跳过尚未开始的观察者通知, 已开始的允许结束. 它不丢弃已接纳写入的结果; 在途状态和缓冲保留到 gRPC 完成, 不因公开句柄释放就提前销毁. 另保留对象的本地清理等待, 只能从 SDK 回调之外使用, 不等待网络保证远端注销成功.
-
-wait(duration) 只等待本地已接纳 RPC/定时清理及已开始 SDK 回调结束, 返回完成或等待超时; 它不隐式 close、不改变操作 deadline, 超时后对象仍须安全存活并可再次等待. closed 表示停止新业务, 不等于已排空; 已交付 View/future 的生命期不要求与对象一起结束.
-
-对象工厂先完成本地校验、预算接纳及私有核心构造, 再启动异步操作. 工厂失败不发 RPC 或通知; 成功接纳后回调可能在工厂返回前由另一执行路径发生, 不承诺“收到返回句柄之后才通知”. 应用使用回调参数及事先准备的上下文, 不能依赖尚未赋值的返回句柄; 无需为此增加 start() 或自定义任务队列.
-
-最后一个业务对象的应用拥有者释放等价于非阻塞 close(), 不在析构中等待网络或 join 线程, 移动后的空句柄不关闭已移交对象. 内部请求仅保持所需私有状态, 不把保留 future/旧 View 当作仍有业务拥有者, 不用引用环保持会话. 最后 Client 句柄释放不关闭仍由业务对象持有的共享核心; 显式 Client::close() 才关闭其所有对象. 应用回调捕获资源须存活到本地清理完成; 应用另行投递的任务不在 SDK 清理等待范围内.
+Beacon 工厂要等首次 RPC 确认, 其余角色工厂完成本地校验后可开始后台同步. 应用之后挂接 watch/changed 时必须能取得当前完整基线/当前状态, 不能因同步早于挂接而永远漏掉首次通知. stop/destroy 已生效后不再启动回调. 回调使用 move_only_function; 不引入公开 Task/Executor 或跨语言包装. tick 返回 Value, 空指针是输入错误, 指向空 vector 是合法更新; tick(interval, {}) 解除采样, beat 保持启用.
 
 <a id="subscription"></a>
 
 ## 订阅与不可变视图
 
-每个 Reader/Subscriber/Observer 绑定一个对应域的分组, target 为空观察全 Scope, 非空精确匹配 Key/UUID; 多对象共享 Client, 不合并各自取消与恢复位置. Observer 不跟随旧 UUID 的新注册身份, 应用通过关闭并新建 Observer 改变目标, 或观察全 Scope; 首版不增加运行期修改范围的接口. 合法的未创建普通范围按 [Watch 协议](../../../proto/README.md#订阅流与安装边界) 安装就绪空基线, 不轮询或创建业务版本.
+Reader/Subscriber 在完整安装后交付拥有式 Map 或精确 Key/optional<Value>, state/changed 返回含状态及数据的 View. Observer 的 Pool/Item 用于本地选择及受控估计; 旧式 load/watch/select 不可变 View 入口继续可用.
 
-SDK 的跨页安装、恢复版本和 Data-only 前置条件以协议为准. Observer 内部收到合法 data 增量时在准备的新视图中共享已有不可变 Attr 并替换 Data, 对应用始终提供完整注册, 不原地改动已交付的旧 View. 未知 UUID 的 data 不能创建空 Attr, 批次失败不能推进恢复版本; 详细规则见 [Ephemeris 增量](../../../proto/README.md#registry-delta).
+### Subscriber 与 Reader
 
-Star 之间的来源序号与精确回补不暴露给这些订阅对象. Star 已按完整记录恢复一个 Ephemeris UUID 时, 对曾观察到其删除的 Comet 发送完整 record; 不能把内部 Data/续租帧直接转给缺少 Attr 的 Observer, 也不能要求 SDK 代替 Star 向来源补齐.
+Catalog 支持 `client.subscriber(sector, spectrum)` 和 `client.subscriber(sector, spectrum, key)`. Almanac 的 `client.reader(...)` 使用同形接口:
+
+| 入口 | 回调含义 |
+| --- | --- |
+| 全 Scope: `watch(callback(Map<Key, Data>))` | 每次给出已完整安装的逻辑 Map |
+| 精确 Key: `watch(callback(Key, std::optional<Data>))` | 有值表示存在, nullopt 表示完整基线确认不存在或后续删除 |
+| `state()` / `changed(callback)` | 查询/接收就绪、陈旧、恢复、失败、关闭状态及原因 |
+| `stop()` | 立即停止当前对象, 幂等, 不关闭共享 Client |
+
+首份完整基线交付一次, 包括空 Map 或精确 Key 不存在; 之后在完整变化边界通知. optional 中的空 Data 是合法值, 未同步、断流和解码失败不是 nullopt. 应用可以自行缓存已交付值. 全量 Map 是逻辑接口, 网络仍使用快照和增量, 不要求每次传输整表或深拷贝全 Map.
+
+多页或原子多键批次必须完整准备再安装和通知, 不暴露半页/半批. 共享快照可以降低复制, 但任何已经交付的数据不得被后续网络更新或对象关闭改写/释放. 不要求应用遵循服务端 Index::View 的读完成协议, 也不将生成类型或私有页结构暴露为公共 ABI.
+
+### Observer 的短期可变选择视图
+
+Observer 仅作用于 Ephemeris: `observer = client.observer(sector, spectrum)`, 初版只提供 `one(selector)` 与 `stop()`. 内部持续 Watch, one 从本地池选择, 不逐次发 RPC. 未就绪/停止、没有可用项、选中一个视图分别表达; 暂不增加 watch/change 或统一的权重接口.
+
+选中视图包含完整注册和业务 Data, 允许业务为短期选择调整 Data 中的估计字段, 影响后续 one. 它不是长期自动更新的远端对象, 不产生写回 Star 的操作. 同一 id 的新权威 Data 安装后覆盖本地估计, 较旧视图的迟到修改不能覆盖新的数据代次. 引用保留可以保证内存安全, 不保证永远属于当前可选择池.
+
+Selector 负责筛选、禁止使用、优先命中、打分/权重和本次选择后的本地调整, Data 可提供相应业务函数. 不固定只取最小权重, 不硬编码“加 M”或“填到 500”, 不让 SDK 凭空定义通用负载单位. 高请求量可选抽样/P2C、分桶或索引; 不强制每次全池遍历, 也不声称任意 selector 都是 O(1).
+
+选择与本地调整需要受控的并发边界, 同时保证网络新版本优先. 不能把任意长用户逻辑放在整个池的写锁下, 也不能返回裸可写指针后失去代次校验. Observer::Pool 为固定快照, selector 返回 optional<Observer::Item>; one 返回 Result<optional<Item>>. Item::record() 提供完整 Attr/Data, Item::update(Value) 以权威值身份和上次本地值作比较交换. 不同 Item 副本可并发竞争, 失败分别返回 obsolete 或 conflict; 同一个 Item 实例由调用方串行修改. stop 后旧 Item 仍可读, 不能再写入本地池.
+
+stop 只结束此 Observer, 后续 one 明确报已停止. 已取得视图的存储仍有效, 但不能继续修改已停止或已替换的池.
 
 ### 内部订阅复用
 
-Reader、Subscriber 与 Observer 共用私有 Watch 核心, 统一处理单流生命周期、批次完成边界、暂存/预算、旧流隔离、取消与退避. 按生成回复类型和三域投影/恢复策略作必要专门化, 模板及 gRPC 类型仅留在私有实现, 不扩散到公共头或重新演化为通用 Task/Executor 框架.
+Reader、Subscriber 和 Observer 共用私有 Watch 核心: 有界暂存、complete 安装、旧流隔离、取消、认证与退避. Observer 另外维护短期本地选择状态, 不修改共享权威快照. 三域的版本及恢复策略独立, 不因代码复用而合并.
 
-Almanac 策略保留权威分组版本及 Reader 已确认下限; Catalog 策略处理完整值/每 Key 内容版本/本地删除, 允许换 Star 后安装较低版本的完整视图; Ephemeris 策略处理完整 record/data/erase 与完整记录可见性. 共用流程不抹平业务差异, 复用安装/故障场景并分别验证投影; Handler 不在锁下调用用户代码.
-
-### 共享不可变读取视图
-
-Reader/Subscriber/Observer 向应用返回共享的不可变快照句柄, 不在每次读取时复制完整容器. 应用持有的快照在后续更新、删除、重同步及对象关闭后仍保持内容有效且不变; 读取和遍历不需要长期占用 SDK 的写入锁. 应用需要可修改容器时自行显式复制, 不通过读取接口修改 SDK 本地状态或已经发布的 Buffer.
-
-快照中的数据、实例/范围及恢复边界来自同一完整已应用状态, Catalog 记录另带自身业务版本, Almanac 带权威分组版本, Ephemeris 仍只暴露完整 Attr/Data 对. 后台先准备新状态再发布新视图, 不原地修改已交付的容器或载荷, 也不让未收齐的快照分块可见. 实现优先共享未变化的页/记录, 一个 complete 边界统一发布一次; 不把“每条 data 都复制整张 Map”作为默认热路径. 公共 View 只承诺只读查询/遍历和所有权, 不暴露要求每次生成完整 std::unordered_map 的容器 ABI. 优先复用现有页级共享思路, 不未经测量另引入第三方持久化容器或通用框架; 实际构建成本、查找成本和持有旧视图时的分配仍须验证, 不声称每次增量 O(1).
-
-现有服务内 Index::View 的读完成协议不能直接交给应用承担, 见 [索引复用边界](../../common/README.md#快照与历史). 公共视图的存储及必要回收状态独立于 Client 的网络生命周期, 应用无须重新进入已关闭对象来完成读取; 并发更新与旧视图最后释放须有明确同步, 不能单凭 use_count()==1 就复用可能仍被读的页面.
-
-读取结果所携带的就绪/陈旧等状态表示取得该视图时的观察, 不在断线后偷偷改写应用已经持有的旧结果. 状态变化后新读取结果及状态通知须反映变化, 内容未变时可复用同一数据快照. 已保存的旧视图不能证明当前连接健康或其中 Ephemeris 实例仍可用, 应用需要当前状态时重新读取或接收状态通知.
-
-通知可以合并尚未交付的中间视图, 但已经交付的视图不可被重用为写缓冲. 读取快照及其 Buffer 所有权与订阅/Client 的业务生命周期分离, 持有旧快照不维持网络连接、订阅或自动续租. SDK 不主动积累无界的已发布历史; 应用长期持有多份旧快照会延迟相关存储回收, 不承诺内部队列预算能限制应用保留全部历史的内存. 应用最后释放且内部不再使用时才可回收, 不能为了满足预算而使已交付句柄悬空.
+Ephemeris data 增量只替换已有完整记录的 Data 并保留 Attr; 缺少 Attr 不能创建半条注册, 按 [协议](../../proto/README.md#registry-delta) 有限重置. 纯续租不重复交付未变内容. 同逻辑 id 的来源去重由 Star 投影负责, SDK 不直接合并来源 stream.
 
 ### 断线与恢复
 
-断线保留最后完整视图并标记陈旧, 首次同步未完成保持未就绪. 新快照在独立状态构建, 失败不混合新旧数据. 状态描述取得时的观察, 不替应用保证 Ephemeris 当前可用, 应用决定是否使用陈旧视图.
+同步未完成时是未就绪, 断线后保留最后完整数据为陈旧, 新快照独立构建, 失败不混合新旧状态. Catalog/Observer 切换 Star 后接受新目标的完整投影, 允许暂时缺项或较低 Data 版本; 不从旧本地视图拼补缺项. 旧流迟到帧不得进入新目标.
 
-已确认的新 Catalog Subscriber 在切换 Star 后, 完整安装新目标提供的视图. 新目标可能暂时缺少某些 Key, 也可能保有较低内容版本; 这些差异按新视图呈现, 不保留旧目标的个别记录拼成另一份合成状态, 不为防回退在 SDK 累积永久逐 Key 版本表. 旧完整视图只在恢复期间作为陈旧结果保留, 安装完成不表示已经取得全网最新内容.
+Almanac Reader 保留同一对象、同一权威范围已见版本下限. 已见 v100 后转到只有 v90 的 Star, 继续保留陈旧 v100 并等待目标达到至少 v100, 不安装 v90; 新建 Reader 不自动继承别的对象下限. 这不保证随时得到 Polaris 全局最新版本, Almanac 没有 Catalog TTL 或自动到期.
 
-这是跨 Star 的视图策略, 不是允许旧流或同一来源的旧提交覆盖新状态. 恢复游标仍绑定目标实例、域、范围与完整安装位置, 原流迟到帧和回调不得更新新目标. Catalog 内容版本与视图游标分别解释; 单个 Star 继续遵守已保留的 Key 最高版本约束. Almanac Reader 则保留已确认的分组权威版本下限, 不能复用 Catalog 的跨节点回退策略; 共享 Watch 核心须保留这一策略差异.
-
-服务端因慢消费者积压结束流后, SDK 从最后完整位置退避重连, 由服务端决定增量或 reset. 不关闭共享 Client 或无关 Beacon, 刚建立连接不清零持续失败退避. 永久认证/范围/格式错误和本地容量失败不冒充暂时积压进行无限重试; 关闭停止恢复.
+回调通知可以合并中间状态, 不是必达事件日志. 永久格式/范围错误、无法容纳完整视图的本地容量错误停止自动下载并明确报告, 不无限重试同一坏快照. 应用持有旧值的内存不能由 SDK 强制回收, 也不会因此维持订阅或 Client.
 
 ### 错误后的恢复入口
 
-| 观察结果 | SDK 动作 | 应用恢复入口 |
-| --- | --- | --- |
-| Session 登录被明确拒绝 | 暂停该 Client 的认证及依赖它的自动操作, 保留最后完整视图为陈旧 | Client::secret 提交当前应使用的值; 不变更 APIKEY |
-| 普通 RPC 的旧 Session 失效 | 合并重认证, 隔离旧回调, 不改写原尝试 | Publisher/Beacon 恢复最新期望, 三类订阅恢复完整位置 |
-| 内部业务范围拒绝, 非法固定 Attr/TTL | 相应对象停止自动恢复, 其他对象继续 | 修正配置后关闭并新建该业务对象; SECRET 更新不复活这种永久失败 |
-| 当前 Data 内容被拒绝 | 只停止该值的重放, 合法旧注册仍按既定规则续租 | update 一个合法新值; 接纳失败不替换期望值 |
-| Almanac Star 尚未达到 Reader 已见版本 | 保留旧完整视图及下限, 按暂时落后有界退避, 不下载较旧快照 | 等目标追平或显式关闭; 不将此错误当成 Publisher 内容冲突 |
-| Watch 畸形报文或本地视图容量不足 | 保留旧完整视图为陈旧, 停止自动下载 | 修复服务端/预算/范围后重建订阅; 缺 Attr 仅有协议指定的一次重置机会 |
-| 暂时断链、接纳忙或本地业务时钟不可用 | 在共享连接/各对象现有恢复状态内退避, 不每个错误开独立连接循环 | 不要求人工干预; close 可终止, 不伪造业务成功; 单纯 Pulsar 失联不使已校准 Star 拒绝续租 |
-| 版本或 order 终止性耗尽 | 明确报告且停止会再次触及该耗尽的自动操作 | 不回绕、自动清库或换 UUID 掩盖; 按对象错误处理 |
+下表描述当前 SDK 的恢复规则. 自动 Beacon 恢复与显式业务写入分别持有结果和截止.
 
-Publisher 的每次调用只返回一次结果, 对象后台恢复最新期望而非恢复一个发布 FIFO. 未发送时失败与已发送不确定继续分开, 原 future 不因后来恢复而重写. 退避只有完成有效认证/业务恢复才消减, TLS 连接成功、半张快照或错误详情中的 retry_ms 不等于恢复成功. retry_ms 仅为暂时错误的提示, 不能超出当前操作剩余 deadline 或使永久错误自动重试.
+| 观察结果 | SDK 动作 |
+| --- | --- |
+| 初次 Beacon 注册失败 | 工厂返回错误, 外部决定是否重新注册 |
+| 显式 Update/Publish 失败或不确定 | 返回一次结果, 不后台补发; Beacon 保留此前已确认缓存 |
+| Catalog 明确版本冲突且整批未提交 | 原调用内查询同目标并修复一次, 不超原 deadline |
+| 成功 Beacon 的 Star 切换/注册失效 | 有界恢复同 id 注册, 报告状态, 不重放失败 update |
+| 旧 Session 失效 | Client 合并重认证; 不改旧调用结果, 恢复 Watch/Beacon |
+| 登录明确拒绝 | 暂停认证, 应用可用 Client::secret 更新同一 APIKEY 的 SECRET |
+| Almanac 目标版本暂时落后 | 保留旧视图和版本下限, 有界重连等待 |
+| 永久参数/范围/容量/协议错误 | 停止相应自动恢复, 明确原因; 不影响无关角色 |
+| 版本/order 耗尽 | 明确失败, 不回绕或新身份掩盖 |
 
-SDK 不为业务方法配置 gRPC retry/hedging 策略, 防止与自身恢复叠加; 也不允许解析器的服务配置偷偷为 Publish/Create 增加应用可见重放. gRPC 的有限透明重试仅遵守库对请求未交给服务端应用的保证, 不提供 exactly-once. 见 [gRPC Retry](https://grpc.io/docs/guides/retry/).
+恢复成功和单次写入成功分别记录, retry_ms 不能覆盖总 deadline 或使永久错误自动重试. 业务方法不配置额外 gRPC retry/hedging, 防止与明确的一次修复或注册恢复叠加. 库的透明重试仅遵循“尚未交给服务端应用”的保证, 不提供 exactly-once.
 
 ## 多 Star 接入约束
 
-- Client 的端点配置允许多个地址, 同一时刻选定一个活动 Star, 同一会话下的业务 RPC 绑定该实例. 地址列表用于有界退避切换, 不交给 gRPC 对不同 Star 做逐 RPC round-robin, 不并行创建全部端点的注册.
-- 目标地址必须稳定路由到所选 Star; TCP 重建不等于业务换实例. 如果部署使用会把不同 RPC 分发到不同 Star 的代理/解析策略, 不满足首版会话契约, 应显式提供各 Star 地址. Channel 可以复用或重建连接, 活动目标与实例检查不能省略.
-- 切换由 Client 统一推进, 每次尝试捕获原目标/实例/会话, 旧请求不会自动改投; Catalog 冲突、单个 Data 非法、局部容量错误或时钟暂时失格不单独触发整个 Client 的切换风暴.
-- 恢复位置绑定 Star 实例与订阅范围. 换实例或范围时不能把旧节点的本地提交号直接交给新节点当作相同历史.
-- 首版切换后重新快照, 保留未来服务端选择增量的协议空间; 不要求跨 Star 全局排序来完成 SDK 基础闭环.
-- 已确认身份的 Ephemeris 过期或切换后自动请求新注册, 由目标 Star 分配新 UUID, 使用固定 Attr、最新 Data 和固定 TTL 并通知. 创建不确定时也允许退避重新创建, 旧注册由原 Star 的 TTL 清理, 新旧 UUID 可能并存. 旧 RPC 的晚到结果不得更新新的 Beacon, 主动关闭后不自动重注册.
-- Catalog 换入口完整恢复同 Key/最新内容版本, Star 可直接接纳更高版本, 不要求逐版本补齐. SDK 不自动改号, 不把传输失败当成未提交, 不用原 future 代表后台恢复结果.
-- 订阅断线后保留最后完整视图并标记陈旧, 首次同步前保持未就绪; 应用决定是否使用旧视图. 服务端无业务持久化和复制时, SDK 不承诺跨节点无损恢复或全群重启后恢复数据.
+Client 同时选择一个活动 Star. 多地址用于有界切换, 不逐 RPC round-robin 或同时向全部端点创建 Beacon. 地址须稳定路由到指定 Star, 连接重建不等于实例变更, 每次操作仍校验实际实例.
+
+一次业务错误不单独触发整个 Client 切换风暴. 切换由共享核心处理, 原写入不改投, 新写入使用新目标; Watch 清除不适用的实例游标, Almanac 另保留权威版本下限. Beacon 按稳定 id 弱恢复, Catalog 等下一次显式完整更新. 服务端无业务持久化时不承诺全群重启无损.
 
 <a id="rpc"></a>
 
-Star 已在内部合并来源组, SDK 只持有本次 Scope 的完整视图及标量恢复位置, 不新增来源版本表或逐来源订阅. 纯续租及无可见变化的 order 更新不触发内容回调; Beacon 的租约确认独立处理, 不靠 Watch 内容版本变化证明续租成功.
-
 ## 协议适配
 
-RPC 名称、字段和服务端错误只维护在 [Comet 协议](../../../proto/README.md#comet). 适配层映射到下文结果类型, 不把 Protobuf 生成类型泄漏到公共头文件. proto/comet.proto 已生成业务服务类型, 但原生 SDK 和 Star 完整业务入口尚在实施, 不将本文签名视为已有可调用实现; 具体状态见 [进度](../../../docs/progress.md).
+Schema、服务及字段号以 [协议](../../proto/README.md#comet) 和 comet.proto 为准. Catalog.Query、Beacon 的 capability/generation/order 恢复、Update 原子延长 TTL 及内部来源合并已接线. Star 与 SDK 需要一起部署; Go 仅同步生成协议, 本次没有实现 Go SDK.
 
 ## 本地资源
 
-以下是可配置、未实测的初值, 服务端和编码上限独立见 [协议预算](../../../proto/README.md#服务端与编码预算). 不通过 Limits/Inspect 动态协商, 本地预检查不代替服务端拒绝.
+以下是可配置、未实测的初值, 服务端和编码上限独立见 [协议预算](../../proto/README.md#服务端与编码预算). 不通过 Limits/Inspect 动态协商, 本地预检查不代替服务端拒绝.
 
 | 项目 | 初值 | 计量与处理 |
 | --- | --- | --- |
-| Client 同时接纳的显式 unary | 256 | 包含连接/认证等待、待发最新值及在途, 不设 Publisher FIFO; 超限立即拒绝, 自动续租与清理保留独立额度 |
-| Client 自动恢复 / 续租 / 清理在途 | 合计 64, 其中至少 16 留给续租/清理 | 新 Publish/Create/Data 恢复不能占满保留额度; 等待项合并在各对象状态中, 不无限创建 RPC |
+| Client 同时接纳的显式 unary | 256 | 包含连接/认证等待、版本准备及在途, 不设 Publisher FIFO; 超限立即拒绝, 自动续租与清理保留独立额度 |
+| Client 自动恢复 / 续租 / 清理在途 | 合计 64, 其中至少 16 留给续租/清理 | Beacon 注册恢复不能占满保留额度; 等待项合并在各对象状态中, 不无限创建 RPC |
 | Client 订阅对象 / 实际 Watch RPC | 各 64 | 空范围也占用对象额度, RPC 含等待/取消中但尚未完成的旧流; 超限不暗中创建更多连接 |
 | SDK 单读取视图 / 在建批次 | 各 64 MiB | 安装时另计旧视图仍被持有的存储, 超限不发布部分状态 |
-| Client 受控存储总预算 | 256 MiB | 连接/认证等待中的请求、Catalog 期望/待发值、Ephemeris Attr/Data、在途、当前视图及在建状态合计; 应用额外保留的历史视图不能强制回收 |
-| 显式 unary 操作 deadline | 3 秒 | 从接纳起覆盖排队/连接/认证/RPC, 发送只用剩余预算; 自动续租优先在本地租约预算内发起, 预算耗尽后的探测仍使用有限 RPC deadline, 不将其当成租约延长 |
+| Client 受控存储总预算 | 256 MiB | 连接/认证等待中的请求、Catalog 单次调用载荷、Ephemeris Attr/Data、在途、当前视图及在建状态合计; 应用额外保留的历史视图不能强制回收 |
+| 显式 unary 操作 deadline | 3 秒 | 从接纳起覆盖连接/认证/版本查询/有限冲突修复/RPC, 发送只用剩余预算; 自动续租优先在本地租约预算内发起, 预算耗尽后的探测仍使用有限 RPC deadline, 不将其当成租约延长 |
 | Session 首次确认等待 | 3 秒 | Client 本地可取消等待预算, 成功确认后撤销, 不作为长期 Session RPC 的总 deadline |
 | 恢复退避 | 初值 100 ms, 上限 5 秒并加抖动 | 成功建立连接不立即清零持续失败的退避; 续租调度受更近的租约期限约束 |
 
@@ -310,94 +317,131 @@ Client 并发与总字节同时约束连接/认证等待及在途请求, 不引�
 
 长期流数量与视图字节分别限额, 空分组或空精确订阅也消耗 HTTP/2 流、服务端观察项和本地对象. Session 不消耗 Watch 业务额度; 重认证先暂停新 Watch, 取消依赖旧会话的流, 在旧 Session 实际结束并有传输容量后发起新登录, 再恢复 Watch, 防止登录被自己的待恢复订阅堵住. 这些计数不能预约对端的 HTTP/2 流名额; 传输排队仍服从本地确认超时, 不把应用保留额度声称为物理优先级.
 
-外部 Keepalive 的两端约定见 [协议](../../../proto/README.md#外部链路保活). 长期流/unary 分离只处理流名额互相挤占, 普通 unary 的 CPU/网络负载仍可能拖慢 Renew; 保留额度及按期限调度不构成延迟保证, 必须在并发 Publish/Update 压力下验收, 不先加第三类 Channel 或每对象连接.
+外部 Keepalive 的两端约定见 [协议](../../proto/README.md#外部链路保活). 长期流/unary 分离只处理流名额互相挤占, 普通 unary 的 CPU/网络负载仍可能拖慢 Renew; 保留额度及按期限调度不构成延迟保证, 必须在并发 Publish/Update 压力下验收, 不先加第三类 Channel 或每对象连接.
 
 所有流的接纳、等待和在途仍计入本地预算. 每条流最多一个在途读和一个在途写, 复用消息对象须等对应完成后再清空或改写. Session 首次成功确认后继续读取结束, 不因不期待第二条业务消息就停止接收流终止; 非法第二次确认按协议错误处理. 回调可能并发, 取消不代表 OnDone 已到达, 资源释放使用真实完成边界; 参见 [gRPC Callback 规则](https://grpc.io/docs/languages/cpp/best_practices/).
 
-自动任务共享有界定时/调度资源, 不为每个 future、Publisher、Beacon 或 Scope 启动线程. 同一 Publisher 当前将 Publish/Renew 串行到一个实际尝试, 新正文优先且 Publish 自身确认保活, 待发内容按 Key 合并. 同一 Beacon 正常最多一个当前 Create、一个 Data 和一个 Renew 尝试, Create 与已有 UUID 的操作互斥; 取消中旧尝试仍按上文计费. 调度按续租期限与清理优先选择, 普通业务超限不侵占保留资源. 最后拥有者释放仅发起异步关闭, 内部线程不得在自己的回调上 join 或以脱离管理的线程访问已释放状态; 应用退出/卸载库前在外部等待本地清理完成.
+自动任务共享有界定时/调度资源, 不为每个 Publisher、Beacon 或 Scope 启动线程. 同一对象的版本分配与实际提交有明确顺序, 不用“最新待发值”覆盖另一同步调用. Catalog 没有自动发布或续租任务; Beacon 的注册恢复、tick 与 beat 复用有界调度, 恢复与当前注册的操作隔离, 已取消的旧尝试仍按真实寿命计费. tick 的业务采样及同步 RPC 等待不得占用共享 gRPC reaction 线程; 每个启用 tick 的 Client 延迟创建 2 个采样线程, 共享 64 个候选槽; 满额仅推迟下一次采样, 不积累历史. 关闭后排空任务并回收线程, Client::wait 完成线程回收; 不引入公开 Task/Executor 协议. 最后拥有者释放仅发起关闭, 内部线程不得在自己的回调上 join 或访问已释放状态; 应用卸载库前须确保本地清理结束.
+
 
 ## C++ 公共接口
 
-公开类型属于 `comet`, 头文件不包含 gRPC/Protobuf 类型. Client/Reader 的实际声明见 [client.hpp](include/comet/client.hpp) 和 [reader.hpp](include/comet/reader.hpp), 其余对象仍为待实现的签名形状. 使用标准 expected、promise/future 和 move_only_function, 不增加通用任务框架或第三方异步库.
+本节概述公共接口, 具体类型与重载见 include/comet. 所有 Scope 均由两个字符串组成.
 
-| 类型 / 方法形状 | 约定 |
-| --- | --- |
-| `Result<T> = std::expected<T, Error>` | 可预期失败用值表达, 提交确定性独立记录 |
-| `std::span<const std::uint8_t>` 输入 | 仅在提供此重载的写入入口使用, 返回前复制, 不跨异步边界保留借用内存 |
-| `std::vector<std::uint8_t>` / `std::shared_ptr<const std::vector<std::uint8_t>>` 输入 | 按具体入口提供移交 / 共享, 不机械展开全部重载; 空容器合法, 提供共享入口时空 shared_ptr 拒绝 |
-| `Client::open(Options) -> Result<Client>` | 校验本地配置并建立共享核心, 不冒充远端已就绪; TLS/auth 由本地显式配置 |
-| `Client::secret(std::vector<std::uint8_t>) -> Result<void>` | 替换同一 APIKEY 的 SECRET 供后续认证, 不改服务端或已关闭状态 |
-| `Client::reader(Scope, std::string target = {}) -> Result<Reader>` | Almanac 持续订阅, target 为空为全 Scope, 非空为精确 Key |
-| `Client::publisher(Scope, std::string key, TTL) -> Result<Publisher>` | 固定一个 Catalog Key/TTL, 首个 publish 前不创建值或续租 |
-| `Client::subscriber(Scope, std::string target = {}) -> Result<Subscriber>` | target 为空订阅整个 Catalog 分组, 非空为精确 Key, 异步期间拥有字符串 |
-| `Client::beacon(Scope, std::vector<std::uint8_t> attr, std::vector<std::uint8_t> data, TTL) -> Result<Beacon>` | 接纳自动注册, 以状态/身份通知报告, 不接管已有 UUID; 首版 Attr/Data 均按值移交, 不展开混合类型重载 |
-| `Client::observer(Scope, std::string target = {}) -> Result<Observer>` | target 为空订阅整个 Ephemeris 分组, 非空为精确 UUID, 非法 UUID 拒绝 |
-| `Publisher::publish(std::uint64_t version, std::vector<std::uint8_t>) -> std::future<Result<Receipt>>` | 接纳完整期望值; 另有 span/shared_ptr 入口, 不自动产生业务版本 |
-| `Publisher::state() -> State` | 当前期望/确认版本、目标及保活状态, 不代表全网确认 |
-| `Reader::load()` | 最近完整不可变 Almanac 视图及同步状态, 不在每次调用发 RPC |
-| `Beacon::state() -> State` | 当前创建/退避/租约状态与已确认身份, 不冒充实时远端查询 |
-| `Beacon::update(std::vector<std::uint8_t>) -> std::future<Result<Receipt>>` | 最新 Data 更新; 另提供 span/shared_ptr 重载, 不修改 Attr/TTL |
-| `Subscriber::view()` / `Observer::select()` | 共享不可变视图及完整实例/范围/version, 未就绪与空状态区分 |
-| `close()` / `wait(duration)` | 幂等非阻塞关闭 / 等待本地清理, 禁止在 SDK 回调中等待 |
+以下用伪代码概述调用形状, C++ 实际传入 Scope{sector, spectrum}; batch 使用 vector<Publisher::Entry>, selector 接受 const Observer::Pool& 并返回 optional<Observer::Item>. 版本、注册代次和传输元数据由 SDK 管理, 普通业务调用不传 version.
 
-对象创建选项可接收 `std::move_only_function<void(View)>` 形式的 on_view, 以及对应 State/Identity 的观察者, 工厂表省略 Options 参数. 不提供运行期回调替换和专有完成句柄; 自动注册的每次已确认身份及失败原因通过 state/通知观察, 不为每次后台创建额外暴露一个可轮询操作对象. 显式写入通过 future 获得结果, 不再复制一套完成回调分发管道.
+```text
+beacon = client.beacon(sector, spectrum, attr, data, ttl, beat) // 同步 expected<Beacon, Error>
+beacon.update(data)                                         // 同步结果
+beacon.tick(interval, callbackReturningData)                 // 可选, interval > 0
+beacon.state()
+beacon.changed(callback)
+beacon.destroy()                                            // 本地立即关闭
 
-Scope/Receipt/Options/TTL 按职责收敛到所属类型, 订阅 target 直接使用标准字符串, 不提供 Target 类或 variant 包装. Client 可复制共享, 业务对象可移动不可复制; vector 按标准语义拥有/复制, shared_ptr<const vector> 与 View 共享不可变数据. future 可移动且 get() 一次消费, 需要多处观察时由应用 share(). 保存结果或 View 不保持网络业务生命周期. promise/future 的共享状态可能分配, 不声称天然零开销, 标准接口误用与业务错误分开.
+observer = client.observer(sector, spectrum)
+view = observer.one(selector)
+observer.stop()
 
-Publisher 的单次结果与最新期望生命周期见 [Catalog](#catalog), 没有 Patch/submit/Version 恢复工作流. 应用在 SDK 回调之外需要同步等待时使用同一 future, 不新增另一套同步发布状态机.
+pub = client.publisher(sector, spectrum)
+pub.update(batch, ttl)                                      // 同步, 单键/多键完整值
 
-成功回执仍需逐项校验: Publish 的 instance/version 对应本次请求, Create 的实际实例、UUID 格式及确认 TTL 与请求契约一致, Ephemeris Update/Renew 的 order 等于请求; Catalog Renew 则确认其固定请求上下文. 然后才从请求上下文还原 Receipt 的 Scope/UUID 并检查当前生命周期. 非法成功响应按协议错误处理, 已发写入效果保持不确定; 不用省略字段或旧回执覆盖新身份.
+sub = client.subscriber(sector, spectrum)
+sub.watch(callback(Map<Key, Data>))
+exact = client.subscriber(sector, spectrum, key)
+exact.watch(callback(Key, optional<Data>))
+sub.state() / sub.changed(callback) / sub.stop()
 
-Beacon 的最新期望 Data 与单次 update() 的 future 分开. 未发送值被替代时其 future 完成明确替代结果, 已发请求内容固定; 后台恢复和新 UUID 成功不会改写原结果. 创建期间的新 Data 留在期望状态, 确认 UUID 后再发送, 固定 Attr 与 TTL 不变.
+reader = client.reader(sector, spectrum[, key])              // 与 subscriber 同形
+reader.watch(callback)
+reader.state() / reader.changed(callback) / reader.stop()
+```
+
+下面片段在持有 client 的应用作用域内使用实际 C++ 类型. 示例保留 Beacon/Observer/Subscriber 句柄直到业务结束; 所有 Result 都应由应用处理错误.
+
+```cpp
+using namespace std::chrono_literals;
+auto beacon = client.beacon({"services", "main"}, {1}, {2}, 30s, 10s);
+if (!beacon) {
+    return std::unexpected(beacon.error());
+}
+auto updated = beacon->update(std::vector<std::uint8_t>{3});
+if (!updated) {
+    return std::unexpected(updated.error());
+}
+auto sampled = beacon->tick(1s, []() -> comet::Value {
+    return std::make_shared<const std::vector<std::uint8_t>>(1, 4);
+});
+if (!sampled) {
+    return std::unexpected(sampled.error());
+}
+
+auto observer = client.observer({"services", "main"});
+if (!observer) {
+    return std::unexpected(observer.error());
+}
+const auto id = beacon->state().identity->uuid;
+auto selected = observer->one([&id](const comet::Observer::Pool& pool) {
+    return pool.find(id);
+}); // 尚未收到完整基线时返回 busy 或当前恢复错误, 业务可以在随后再次选择.
+if (selected && *selected) {
+    auto adjusted = (**selected).update(std::vector<std::uint8_t>{5});
+    if (!adjusted) {
+        return std::unexpected(adjusted.error());
+    }
+}
+```
+
+Observer 的本地调整不改变 Beacon/Star 的 Data. Reader/Subscriber 的 `watch` 回调可以保存传入的 Map/Value; 解除回调时用对应的空 move_only_function, 精确和全 Scope 重载不能互换. destroy/stop 为非阻塞关闭, 应用结束时用 Client::close 和 Client::wait 排空本地资源.
+
+Client::open、Client::secret 与显式 Client::close 继续承担配置、凭据和共享关闭. Publisher 的句柄释放/共享 Client 关闭负责结束本地资源, 不附带远端删除; 不扩展业务 update 为任意任务框架. C++23 使用 expected/optional 和标准所有权类型, 业务错误不抛异常作为正常控制流.
 
 ### 本地结果与诊断
 
-| 类型 | 必需内容与约束 |
-| --- | --- |
-| Error | 原因、提交确定性及受限细节, 区分未接纳/未发送/已发不确定; Publish 错误保留实际使用的预期实例, 与服务端报告的当前实例区分, 空值不形成可重试身份 |
-| Publisher::Receipt | 确认的实例、Scope/Key 与本次内容版本, 不等于下游视图游标 |
-| Publisher::State | 最新期望版本、当前目标已确认版本、保活/恢复状态及原因 |
-| Beacon::Identity | 所属实例、范围与已确认 UUID |
-| Beacon::Receipt | 所属身份与已确认 Data 顺序, 不表示续租成功 |
-| Beacon::State | 创建、退避、永久失败、租约状态及最近原因的快照 |
-| Reader::View | 同步状态、实例/范围、Almanac 权威分组版本及共享不可变数据 |
-| Subscriber::View / Observer::View | 同步状态、实例/范围、本地视图游标及共享不可变数据; Catalog 记录另带内容版本 |
+Error 必须包含具体原因和提交确定性, 区分原请求目标与响应声称的实例. 成功回执须匹配本次目标、版本/order、身份及 TTL 契约; 不合法回执按协议错误处理, 已发送请求仍可能提交. 内部诊断可以记录版本, 不要求应用理解或生成它们.
 
-Almanac 使用权威分组版本, Catalog/Ephemeris 使用接入 Star 的视图游标. Catalog 每条记录的内容版本不能被游标替代, Ephemeris 的操作 order 也不是视图版本; 不建立两种编号的映射表. 观察者交付不决定 future 何时就绪. 诊断有界且不含凭据/载荷; SDK 不负责应用自有线程池的拒收、重试或关闭.
+Beacon 状态区分就绪、恢复、租约不确定和关闭; Subscriber/Reader 状态区分未就绪、可用、陈旧和错误. 状态快照不是远端实时查询. Catalog Key 版本、Almanac 权威版本、Ephemeris Data order 和 Star Watch 游标不能互换, 不建立编号映射字典.
+
+### C++ / Go / Rust 的实现边界
+
+- C++23: expected 表达同步结果, optional 表达精确 Key 的存在性, 共享不可变存储供回调保留; Observer 需要带代次的受控可变视图, 不能裸引用逃逸到后台修改.
+- Go: 同步返回值/error, 有界 RPC 使用 Context; map/[]byte 的可写别名需要复制或拥有权转移. 精确 Key 用明确存在性区分空值和删除, stop/destroy 立即逻辑停止, goroutine 清理在内部完成, 不依赖终结器.
+- Rust: Result/Option、拥有载荷和 Arc 等承载相同语义; 需要 Send/Sync 的回调在所属边界声明. 同步 façade 不能阻塞内部异步 I/O 执行线程, Drop 仅作清理兜底.
+
+三种语言共用业务契约, 不强行统一容器 ABI 或运行时. Data 由应用保持完整, 不另加通用权重服务. 这里只评估可实现性, 不恢复已废弃的 Rust 项目, Go SDK 也未因此实现.
 
 ## 静态库与 CMake 交付契约
 
-已确认首版只交付原生 C++ 静态库, 提供源码树接入和安装后的 CMake 包, 不同时维护共享库、C ABI 或其他语言绑定. [CMakeLists.txt](CMakeLists.txt) 已加入下列目标和安装定义, 实际构建、安装及独立消费结果见 [验证记录](../../../testkit/validation.md).
+已确认首版只交付原生 C++ 静态库, 提供源码树接入和安装后的 CMake 包, 不同时维护共享库、C ABI 或其他语言绑定. [CMakeLists.txt](CMakeLists.txt) 已加入下列目标和安装定义, 实际构建、安装及独立消费结果见 [验证记录](../../docs/validation.md).
 
 | 接入项 | 首版约定 |
 | --- | --- |
 | 库与目标 | 静态库名 `comet`, 应用链接 `comet::comet`; 不要求应用直接链接 Astra 的服务端目标 |
-| 源码树接入 | `add_subdirectory` 接入 `astra/comet/cpp/`, 复用同一依赖解析规则; 单独构建 SDK 不连带生成 Star/Pulsar/Astrolabe 可执行程序 |
+| 源码树接入 | `add_subdirectory` 接入 `comet/cpp/`, 复用同一依赖解析规则; 单独构建 SDK 不连带生成 Star/Pulsar/Astrolabe 可执行程序 |
 | 安装后接入 | `find_package(Comet CONFIG REQUIRED)` 取得同名目标; 包含公共头文件、静态归档、CMake 导出和许可证, 不引用构建机器的源码/缓存绝对路径 |
 | 公开依赖 | 公共头文件只暴露 Comet 类型及所需标准库类型, 不包含 gRPC/Protobuf 生成头; 消费者最低要求 C++23, CMake 导出 `cxx_std_23`; 当前本机 MSVC/CMake 将其映射为 `/std:c++latest` |
 | 链接依赖 | 导出目标传递静态链接实际需要的 gRPC/Protobuf 等依赖; “不暴露生成类型”不等于最终链接不需要第三方库, 不把排列归档顺序留给应用 |
-| 协议生成 | 沿用[统一生成规则](../../../proto/README.md#generation): 生成源码纳入源码版本管理, 仅显式生成/检查时使用匹配工具, 普通库构建不运行 protoc; 安装包使用者无需生成协议或连接 Pulsar |
+| 协议生成 | 沿用[统一生成规则](../../proto/README.md#generation): 生成源码纳入源码版本管理, 仅显式生成/检查时使用匹配工具, 普通库构建不运行 protoc; 安装包使用者无需生成协议或连接 Pulsar |
 | 依赖获取 | 复用已批准版本和项目内缓存; 缺少依赖明确失败并说明, 配置/构建/安装不隐式下载, 不写全局包路径或用户配置 |
 | TLS 材料 | 可选编译嵌入公开 CA 证书, 外部文件覆盖遵循既定规则; 安装包和生成头不含私钥或 APISECRET, 不因静态链接承诺无运行时依赖 |
 
-静态库接入仍要求编译器、标准库、编译选项及依赖 ABI 相容, 安装包检查构建时的平台与编译器版本, 不允许将 Linux 归档直接用于 Windows. 当前 C++23 配置已验证 Windows/MSVC 19.51 x64 Release 的源码及安装包接入, 尚未执行 Linux 回归; 不据此承诺跨编译器二进制兼容. Windows 暂不启用 Linux 专用探针或 Sanitizer. 已安装包只分发自身拥有的文件; 第三方依赖由导出的 CMake 依赖查找取得, 若以后要发布包含依赖的完整二进制包, 另行定义其平台和许可证清单.
+静态库接入仍要求编译器、标准库、编译选项及依赖 ABI 相容, 安装包检查构建时的平台与编译器版本, 不允许将 Linux 归档直接用于 Windows. Windows/MSVC 与 Linux 的实际源码及安装包验收范围以 [验证记录](../../docs/validation.md) 为准; 不据此承诺跨编译器二进制兼容. Windows 暂不启用 Linux 专用探针或 Sanitizer. 已安装包只分发自身拥有的文件; 第三方依赖由导出的 CMake 依赖查找取得, 若以后要发布包含依赖的完整二进制包, 另行定义其平台和许可证清单.
 
 构建脚本按使用者实际选择启用测试与示例, 普通库构建和包接入不暗中运行测试. 独立消费用例分别检查源码树接入与安装包接入, 确认只链接 `comet::comet` 即可完成最小程序, 并检查缺依赖时不会触发网络下载. 嵌入公开 CA、显式外部 CA 和关闭公共 TLS 的配置也纳入该用例; 真实 TLS 握手由 RPC 用例验证, 不由配置成功推断.
 
 ## Windows 独立构建
 
-Windows 适配入口只构建 Comet SDK, 不通过 `astra/build.py` 构建服务端. 当前选择 Visual Studio 18/MSVC 19.51、x64 Release 和 `/MD` 运行库; 依赖也必须使用匹配的架构、运行库和构建配置. SDK 和生成协议均要求 C++23, 不继承父级服务器工程的 C++26 设置. 当前本机 MSVC/CMake 将 `cxx_std_23` 映射到 `/std:c++latest`, 固定版本 gRPC 另需下述兼容入口. 工具链版本门槛暂时保留, 更早编译器的支持需独立验证. 实际通过边界以[最新验证记录](../../../testkit/validation.md)为准.
+Windows 适配入口只构建 Comet SDK, 不通过 `tools/build.py` 构建服务端. 当前选择 Visual Studio 18/MSVC 19.51、x64 Release 和 `/MD` 运行库; 依赖也必须使用匹配的架构、运行库和构建配置. SDK 和生成协议均要求 C++23, 不继承父级服务器工程的 C++26 设置. 当前本机 MSVC/CMake 将 `cxx_std_23` 映射到 `/std:c++latest`, 固定版本 gRPC 另需下述兼容入口. 工具链版本门槛暂时保留, 更早编译器的支持需独立验证. 实际通过边界以[最新验证记录](../../docs/validation.md)为准.
 
 Windows 依赖需要经过 ABI 配套验证. 当前通过组合使用锁定的 gRPC 1.84.0、Protobuf 36.1.0 及配套依赖, C++ 依赖统一配置 `CMAKE_CXX_STANDARD=23`, 架构与运行库为 x64 Release `/MD`. SDK 的生成协议目标显式使用与手写代码相同的模式, 避免 Protobuf 全局类型随标准模式变化导致链接失败. 切换依赖标准时使用新的构建目录或重新生成能力检测缓存, 避免 Abseil 的旧检测结果留在安装头文件中. `build/deps/comet-msvc/install` 已用于本机接入验证, 不代表 Debug、其他工具链或目标机器均已验证.
 
-构建兼容入口 [GrpcMSVC.cmake](cmake/GrpcMSVC.cmake) 已通过原失败文件编译、gRPC 重建及 SDK 接入验证. 配置 Windows gRPC 依赖时追加 `-DCMAKE_PROJECT_grpc_INCLUDE=<仓库绝对路径>/astra/comet/cpp/cmake/GrpcMSVC.cmake`. 入口仅为 `fused_filters.cc` 定义上游开关 `GRPC_NO_FILTER_FUSION=1`, 不改依赖源码、标准模式或其他库; SDK 构建自身添加此开关无法修复已经构建的依赖. 此开关跳过可选融合过滤器注册, 普通认证、压缩和消息大小过滤器链保留; `fuse_filters` 在固定版本中默认关闭, SDK 未主动开启. 当前构建不能再选择融合路径, 以后启用须移除入口并重新验证. 本轮未测量性能, 不据默认配置推断性能差值.
+构建兼容入口 [GrpcMSVC.cmake](cmake/GrpcMSVC.cmake) 已通过原失败文件编译、gRPC 重建及 SDK 接入验证. 配置 Windows gRPC 依赖时追加 `-DCMAKE_PROJECT_grpc_INCLUDE=<Astra 根目录>/comet/cpp/cmake/GrpcMSVC.cmake`. 入口仅为 `fused_filters.cc` 定义上游开关 `GRPC_NO_FILTER_FUSION=1`, 不改依赖源码、标准模式或其他库; SDK 构建自身添加此开关无法修复已经构建的依赖. 此开关跳过可选融合过滤器注册, 普通认证、压缩和消息大小过滤器链保留; `fuse_filters` 在固定版本中默认关闭, SDK 未主动开启. 当前构建不能再选择融合路径, 以后启用须移除入口并重新验证. 本轮未测量性能, 不据默认配置推断性能差值.
 
 租约时钟在 Windows 使用 `QueryInterruptTimePrecise`, 保留包含系统挂起时间的计时语义; 运行系统要求 Windows 10/Windows Server 2016 或以上, 参见 [Microsoft API 文档](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-queryinterrupttimeprecise)和[时钟语义](https://learn.microsoft.com/en-us/windows/win32/sysinfo/interrupt-time). 不通过墙钟或调整系统计时器精度实现租约预算.
 
 以下命令说明独立构建入口的用法, 从仓库根目录执行; 前提是已获准并准备好 ABI 匹配的 Windows 依赖. 命令本身不会获取依赖, 安装 SDK 也不写入系统目录. 实际验收另使用 `tests/consumer` 检查源码树接入和安装包接入.
 
 ```powershell
-cmake -S astra/comet/cpp -B build/comet-msvc/sdk -G "Visual Studio 18 2026" -A x64 "-DCMAKE_PREFIX_PATH=$PWD/build/deps/comet-msvc/install" -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
+cmake -S comet/cpp -B build/comet-msvc/sdk -G "Visual Studio 18 2026" -A x64 "-DCMAKE_PREFIX_PATH=$PWD/build/deps/comet-msvc/install" -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL
 cmake --build build/comet-msvc/sdk --config Release --parallel 4
 cmake --install build/comet-msvc/sdk --config Release --prefix "$PWD/build/comet-msvc/install" --component Comet
 ```
@@ -408,9 +452,10 @@ MSVC SDK 自身采用 `/W4 /WX`, 针对 gRPC 1.84 在 MSVC STL 中实例化旧 T
 
 ## 验收准则
 
-- 在完整基础设施下闭合 Almanac 读取、Catalog 发布/保活/订阅与 Ephemeris 生命周期, 结果确定性和旧身份隔离满足协议; 多 Star 来源复制按单独验收项实施.
-- 快照/增量只在完整边界发布, Data-only 不破坏固定 Attr、删除传播和重连恢复.
-- 认证/TLS/内部隔离明确, 资源、并发和退出有界, 不因关闭或迟到回调留下悬空引用.
-- 原生 API 和静态包能由外部最小程序接入, 详细故障与并发用例集中于 [验收计划](../../../testkit/comet.md).
+- 验证同步结果、未知提交、一次版本修复和“返回失败后不补发”, 不拿旧 future/期望值恢复用例直接证明新接口正确.
+- 覆盖 Beacon 首次失败、成功后的同 id 恢复、tick/beat 竞争、Update 延期、缓存只保留已确认值及立即 destroy.
+- 验证 Observer 选择和本地调整被新权威 Data 覆盖, Subscriber/Reader 的 Map/optional、空基线、完整批次和状态通知.
+- 标准多节点模型至少三台 Star, 每台均有本地写入, 覆盖交叉订阅和双向复制. 定向单/双节点用例不替代系统验收.
+- 认证/TLS、预算、旧回调隔离、C++23 静态包与跨语言所有权边界按 [验收规约](../../docs/comet.md) 检查.
 
-验收计划不等于已执行. 测试和前置构建仍须本轮授权, 实际结果只写 [validation.md](../../../testkit/validation.md).
+新契约的实际验证需当轮明确授权, 结果只维护在 [validation.md](../../docs/validation.md).

@@ -15,9 +15,9 @@ import sys
 import time
 from pathlib import Path
 
-REPOSITORY = Path(__file__).resolve().parents[3]
-CSHARP = REPOSITORY / "sdk" / "csharp"
-CPP = REPOSITORY / "sdk" / "cpp"
+REPOSITORY = Path(__file__).resolve().parents[2]
+CSHARP = REPOSITORY / "csharp"
+CPP = REPOSITORY / "cpp"
 sys.path.insert(0, str(REPOSITORY))
 
 from testkit.support import temporary_directory
@@ -103,7 +103,7 @@ def build_native(runtime, vcpkg_root):
     if not os.environ.get("VERDANDI_NATIVE_LIBRARY"):
         run_command(
             "CSharp native build",
-            [sys.executable, "-B", "sdk/cpp/build.py", "build", "--profile", "dev", "--linkage", "shared", "--offline", "--jobs", "1"],
+            [sys.executable, "-B", "cpp/build.py", "build", "--profile", "dev", "--linkage", "shared", "--offline", "--jobs", "1"],
             REPOSITORY,
             os.environ.copy(),
         )

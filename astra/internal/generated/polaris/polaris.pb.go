@@ -9,8 +9,8 @@
 package polaris
 
 import (
-	astra "github.com/eosforge/verdandi/astra/internal/generated/astra"
-	comet "github.com/eosforge/verdandi/astra/internal/generated/comet"
+	astra "github.com/eosforge/astra/internal/generated/astra"
+	comet "github.com/eosforge/astra/internal/generated/comet"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -25,12 +25,14 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// 单 Key 修改, 版本要求当前 +1; 已保留相同提交证据的旧请求可确认原结果.
+// 同范围单 Key 或多 Key 原子修改, 版本要求当前 +1; 保留完整提交证据的旧请求可确认原结果.
 type CommitRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scope         *comet.Scope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
-	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Change        *comet.AlmanacChange   `protobuf:"bytes,3,opt,name=change,proto3" json:"change,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Scope   *comet.Scope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Version uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Change  *comet.AlmanacChange   `protobuf:"bytes,3,opt,name=change,proto3" json:"change,omitempty"`
+	// 与 change 互斥, 非空唯一 Key 批次, 整批只推进一次版本; 大批次使用 Batch 分页, 不用于内部凭据范围.
+	Changes       []*comet.AlmanacChange `protobuf:"bytes,4,rep,name=changes,proto3" json:"changes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -86,6 +88,84 @@ func (x *CommitRequest) GetChange() *comet.AlmanacChange {
 	return nil
 }
 
+func (x *CommitRequest) GetChanges() []*comet.AlmanacChange {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
+// 同一原子批次的运输页. 不限制整批 Key 数和总字节, 每页仍遵循 RPC 帧容量.
+// 所有页必须具有相同 scope/version; 最后一页 complete 后必须正常 EOF, 才允许一次持久提交.
+// 取消、缺少 complete、额外页或任意非法项均不提交已经收到的前缀.
+type BatchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scope         *comet.Scope           `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Changes       []*comet.AlmanacChange `protobuf:"bytes,3,rep,name=changes,proto3" json:"changes,omitempty"`
+	Complete      bool                   `protobuf:"varint,4,opt,name=complete,proto3" json:"complete,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchRequest) Reset() {
+	*x = BatchRequest{}
+	mi := &file_polaris_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchRequest) ProtoMessage() {}
+
+func (x *BatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_polaris_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchRequest.ProtoReflect.Descriptor instead.
+func (*BatchRequest) Descriptor() ([]byte, []int) {
+	return file_polaris_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BatchRequest) GetScope() *comet.Scope {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *BatchRequest) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *BatchRequest) GetChanges() []*comet.AlmanacChange {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
+func (x *BatchRequest) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
 // 只表达完整安装/持久提交版本; 未报告的 Scope 是无基线, 显式 0 是完整空基线.
 type Position struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -97,7 +177,7 @@ type Position struct {
 
 func (x *Position) Reset() {
 	*x = Position{}
-	mi := &file_polaris_proto_msgTypes[1]
+	mi := &file_polaris_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -109,7 +189,7 @@ func (x *Position) String() string {
 func (*Position) ProtoMessage() {}
 
 func (x *Position) ProtoReflect() protoreflect.Message {
-	mi := &file_polaris_proto_msgTypes[1]
+	mi := &file_polaris_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -122,7 +202,7 @@ func (x *Position) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Position.ProtoReflect.Descriptor instead.
 func (*Position) Descriptor() ([]byte, []int) {
-	return file_polaris_proto_rawDescGZIP(), []int{1}
+	return file_polaris_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Position) GetScope() *comet.Scope {
@@ -150,7 +230,7 @@ type Inventory struct {
 
 func (x *Inventory) Reset() {
 	*x = Inventory{}
-	mi := &file_polaris_proto_msgTypes[2]
+	mi := &file_polaris_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -162,7 +242,7 @@ func (x *Inventory) String() string {
 func (*Inventory) ProtoMessage() {}
 
 func (x *Inventory) ProtoReflect() protoreflect.Message {
-	mi := &file_polaris_proto_msgTypes[2]
+	mi := &file_polaris_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -175,7 +255,7 @@ func (x *Inventory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Inventory.ProtoReflect.Descriptor instead.
 func (*Inventory) Descriptor() ([]byte, []int) {
-	return file_polaris_proto_rawDescGZIP(), []int{2}
+	return file_polaris_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Inventory) GetPositions() []*Position {
@@ -205,7 +285,7 @@ type Snapshot struct {
 
 func (x *Snapshot) Reset() {
 	*x = Snapshot{}
-	mi := &file_polaris_proto_msgTypes[3]
+	mi := &file_polaris_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -217,7 +297,7 @@ func (x *Snapshot) String() string {
 func (*Snapshot) ProtoMessage() {}
 
 func (x *Snapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_polaris_proto_msgTypes[3]
+	mi := &file_polaris_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -230,7 +310,7 @@ func (x *Snapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
 func (*Snapshot) Descriptor() ([]byte, []int) {
-	return file_polaris_proto_rawDescGZIP(), []int{3}
+	return file_polaris_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Snapshot) GetScope() *comet.Scope {
@@ -263,16 +343,18 @@ func (x *Snapshot) GetVersion() uint64 {
 
 // 有序权威补丁, 不按 Key 合并中间提交, 包含合法同值 Set 或缺失 Delete.
 type Patch struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       uint64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	Change        *comet.AlmanacChange   `protobuf:"bytes,2,opt,name=change,proto3" json:"change,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Version uint64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Change  *comet.AlmanacChange   `protobuf:"bytes,2,opt,name=change,proto3" json:"change,omitempty"`
+	// 与 change 互斥, 一个完整权威事务, 不得拆页或逐 Key 安装.
+	Changes       []*comet.AlmanacChange `protobuf:"bytes,3,rep,name=changes,proto3" json:"changes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Patch) Reset() {
 	*x = Patch{}
-	mi := &file_polaris_proto_msgTypes[4]
+	mi := &file_polaris_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -284,7 +366,7 @@ func (x *Patch) String() string {
 func (*Patch) ProtoMessage() {}
 
 func (x *Patch) ProtoReflect() protoreflect.Message {
-	mi := &file_polaris_proto_msgTypes[4]
+	mi := &file_polaris_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -297,7 +379,7 @@ func (x *Patch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Patch.ProtoReflect.Descriptor instead.
 func (*Patch) Descriptor() ([]byte, []int) {
-	return file_polaris_proto_rawDescGZIP(), []int{4}
+	return file_polaris_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Patch) GetVersion() uint64 {
@@ -314,6 +396,13 @@ func (x *Patch) GetChange() *comet.AlmanacChange {
 	return nil
 }
 
+func (x *Patch) GetChanges() []*comet.AlmanacChange {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
 // 一个批次只属于同一 Scope, 每项必须严格连续, 重放不成为新提交.
 type Updates struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -325,7 +414,7 @@ type Updates struct {
 
 func (x *Updates) Reset() {
 	*x = Updates{}
-	mi := &file_polaris_proto_msgTypes[5]
+	mi := &file_polaris_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -337,7 +426,7 @@ func (x *Updates) String() string {
 func (*Updates) ProtoMessage() {}
 
 func (x *Updates) ProtoReflect() protoreflect.Message {
-	mi := &file_polaris_proto_msgTypes[5]
+	mi := &file_polaris_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -350,7 +439,7 @@ func (x *Updates) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Updates.ProtoReflect.Descriptor instead.
 func (*Updates) Descriptor() ([]byte, []int) {
-	return file_polaris_proto_rawDescGZIP(), []int{5}
+	return file_polaris_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Updates) GetScope() *comet.Scope {
@@ -387,7 +476,7 @@ type Packet struct {
 
 func (x *Packet) Reset() {
 	*x = Packet{}
-	mi := &file_polaris_proto_msgTypes[6]
+	mi := &file_polaris_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -399,7 +488,7 @@ func (x *Packet) String() string {
 func (*Packet) ProtoMessage() {}
 
 func (x *Packet) ProtoReflect() protoreflect.Message {
-	mi := &file_polaris_proto_msgTypes[6]
+	mi := &file_polaris_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -412,7 +501,7 @@ func (x *Packet) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Packet.ProtoReflect.Descriptor instead.
 func (*Packet) Descriptor() ([]byte, []int) {
-	return file_polaris_proto_rawDescGZIP(), []int{6}
+	return file_polaris_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Packet) GetBody() isPacket_Body {
@@ -558,11 +647,17 @@ var File_polaris_proto protoreflect.FileDescriptor
 
 const file_polaris_proto_rawDesc = "" +
 	"\n" +
-	"\rpolaris.proto\x12\x10proto.polaris.v1\x1a\vastra.proto\x1a\vcomet.proto\"\x8d\x01\n" +
+	"\rpolaris.proto\x12\x10proto.polaris.v1\x1a\vastra.proto\x1a\vcomet.proto\"\xc6\x01\n" +
 	"\rCommitRequest\x12+\n" +
 	"\x05scope\x18\x01 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\x125\n" +
-	"\x06change\x18\x03 \x01(\v2\x1d.proto.comet.v1.AlmanacChangeR\x06change\"Q\n" +
+	"\x06change\x18\x03 \x01(\v2\x1d.proto.comet.v1.AlmanacChangeR\x06change\x127\n" +
+	"\achanges\x18\x04 \x03(\v2\x1d.proto.comet.v1.AlmanacChangeR\achanges\"\xaa\x01\n" +
+	"\fBatchRequest\x12+\n" +
+	"\x05scope\x18\x01 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\x127\n" +
+	"\achanges\x18\x03 \x03(\v2\x1d.proto.comet.v1.AlmanacChangeR\achanges\x12\x1a\n" +
+	"\bcomplete\x18\x04 \x01(\bR\bcomplete\"Q\n" +
 	"\bPosition\x12+\n" +
 	"\x05scope\x18\x01 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\"a\n" +
@@ -575,10 +670,11 @@ const file_polaris_proto_rawDesc = "" +
 	"\bcomplete\x18\x03 \x01(\bR\bcomplete\x12\x1d\n" +
 	"\aversion\x18\x04 \x01(\x04H\x00R\aversion\x88\x01\x01B\n" +
 	"\n" +
-	"\b_version\"X\n" +
+	"\b_version\"\x91\x01\n" +
 	"\x05Patch\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x04R\aversion\x125\n" +
-	"\x06change\x18\x02 \x01(\v2\x1d.proto.comet.v1.AlmanacChangeR\x06change\"i\n" +
+	"\x06change\x18\x02 \x01(\v2\x1d.proto.comet.v1.AlmanacChangeR\x06change\x127\n" +
+	"\achanges\x18\x03 \x03(\v2\x1d.proto.comet.v1.AlmanacChangeR\achanges\"i\n" +
 	"\aUpdates\x12+\n" +
 	"\x05scope\x18\x01 \x01(\v2\x15.proto.comet.v1.ScopeR\x05scope\x121\n" +
 	"\apatches\x18\x02 \x03(\v2\x17.proto.polaris.v1.PatchR\apatches\"\xc0\x03\n" +
@@ -591,13 +687,14 @@ const file_polaris_proto_rawDesc = "" +
 	"\facknowledged\x18\x06 \x01(\v2\x1a.proto.polaris.v1.PositionH\x00R\facknowledged\x12-\n" +
 	"\x05probe\x18\a \x01(\v2\x15.proto.comet.v1.EmptyH\x00R\x05probe\x12-\n" +
 	"\x05ready\x18\b \x01(\v2\x15.proto.comet.v1.EmptyH\x00R\x05readyB\x06\n" +
-	"\x04body2\xcb\x01\n" +
+	"\x04body2\x92\x02\n" +
 	"\tAuthority\x12E\n" +
-	"\x06Commit\x12\x1f.proto.polaris.v1.CommitRequest\x1a\x1a.proto.polaris.v1.Position\x12:\n" +
+	"\x06Commit\x12\x1f.proto.polaris.v1.CommitRequest\x1a\x1a.proto.polaris.v1.Position\x12E\n" +
+	"\x05Batch\x12\x1e.proto.polaris.v1.BatchRequest\x1a\x1a.proto.polaris.v1.Position(\x01\x12:\n" +
 	"\x04List\x12\x15.proto.comet.v1.Empty\x1a\x1b.proto.polaris.v1.Inventory\x12;\n" +
 	"\x04Load\x12\x15.proto.comet.v1.Scope\x1a\x1a.proto.polaris.v1.Snapshot0\x012I\n" +
 	"\aAlmanac\x12>\n" +
-	"\x04Open\x12\x18.proto.polaris.v1.Packet\x1a\x18.proto.polaris.v1.Packet(\x010\x01BGZEgithub.com/eosforge/verdandi/astra/internal/generated/polaris;polarisb\x06proto3"
+	"\x04Open\x12\x18.proto.polaris.v1.Packet\x1a\x18.proto.polaris.v1.Packet(\x010\x01B>Z<github.com/eosforge/astra/internal/generated/polaris;polarisb\x06proto3"
 
 var (
 	file_polaris_proto_rawDescOnce sync.Once
@@ -611,51 +708,58 @@ func file_polaris_proto_rawDescGZIP() []byte {
 	return file_polaris_proto_rawDescData
 }
 
-var file_polaris_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_polaris_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_polaris_proto_goTypes = []any{
 	(*CommitRequest)(nil),       // 0: proto.polaris.v1.CommitRequest
-	(*Position)(nil),            // 1: proto.polaris.v1.Position
-	(*Inventory)(nil),           // 2: proto.polaris.v1.Inventory
-	(*Snapshot)(nil),            // 3: proto.polaris.v1.Snapshot
-	(*Patch)(nil),               // 4: proto.polaris.v1.Patch
-	(*Updates)(nil),             // 5: proto.polaris.v1.Updates
-	(*Packet)(nil),              // 6: proto.polaris.v1.Packet
-	(*comet.Scope)(nil),         // 7: proto.comet.v1.Scope
-	(*comet.AlmanacChange)(nil), // 8: proto.comet.v1.AlmanacChange
-	(*astra.Hello)(nil),         // 9: proto.astra.v1.Hello
-	(*comet.Empty)(nil),         // 10: proto.comet.v1.Empty
+	(*BatchRequest)(nil),        // 1: proto.polaris.v1.BatchRequest
+	(*Position)(nil),            // 2: proto.polaris.v1.Position
+	(*Inventory)(nil),           // 3: proto.polaris.v1.Inventory
+	(*Snapshot)(nil),            // 4: proto.polaris.v1.Snapshot
+	(*Patch)(nil),               // 5: proto.polaris.v1.Patch
+	(*Updates)(nil),             // 6: proto.polaris.v1.Updates
+	(*Packet)(nil),              // 7: proto.polaris.v1.Packet
+	(*comet.Scope)(nil),         // 8: proto.comet.v1.Scope
+	(*comet.AlmanacChange)(nil), // 9: proto.comet.v1.AlmanacChange
+	(*astra.Hello)(nil),         // 10: proto.astra.v1.Hello
+	(*comet.Empty)(nil),         // 11: proto.comet.v1.Empty
 }
 var file_polaris_proto_depIdxs = []int32{
-	7,  // 0: proto.polaris.v1.CommitRequest.scope:type_name -> proto.comet.v1.Scope
-	8,  // 1: proto.polaris.v1.CommitRequest.change:type_name -> proto.comet.v1.AlmanacChange
-	7,  // 2: proto.polaris.v1.Position.scope:type_name -> proto.comet.v1.Scope
-	1,  // 3: proto.polaris.v1.Inventory.positions:type_name -> proto.polaris.v1.Position
-	7,  // 4: proto.polaris.v1.Snapshot.scope:type_name -> proto.comet.v1.Scope
-	8,  // 5: proto.polaris.v1.Snapshot.entries:type_name -> proto.comet.v1.AlmanacChange
-	8,  // 6: proto.polaris.v1.Patch.change:type_name -> proto.comet.v1.AlmanacChange
-	7,  // 7: proto.polaris.v1.Updates.scope:type_name -> proto.comet.v1.Scope
-	4,  // 8: proto.polaris.v1.Updates.patches:type_name -> proto.polaris.v1.Patch
-	9,  // 9: proto.polaris.v1.Packet.hello:type_name -> proto.astra.v1.Hello
-	2,  // 10: proto.polaris.v1.Packet.inventory:type_name -> proto.polaris.v1.Inventory
-	2,  // 11: proto.polaris.v1.Packet.plan:type_name -> proto.polaris.v1.Inventory
-	3,  // 12: proto.polaris.v1.Packet.snapshot:type_name -> proto.polaris.v1.Snapshot
-	5,  // 13: proto.polaris.v1.Packet.updates:type_name -> proto.polaris.v1.Updates
-	1,  // 14: proto.polaris.v1.Packet.acknowledged:type_name -> proto.polaris.v1.Position
-	10, // 15: proto.polaris.v1.Packet.probe:type_name -> proto.comet.v1.Empty
-	10, // 16: proto.polaris.v1.Packet.ready:type_name -> proto.comet.v1.Empty
-	0,  // 17: proto.polaris.v1.Authority.Commit:input_type -> proto.polaris.v1.CommitRequest
-	10, // 18: proto.polaris.v1.Authority.List:input_type -> proto.comet.v1.Empty
-	7,  // 19: proto.polaris.v1.Authority.Load:input_type -> proto.comet.v1.Scope
-	6,  // 20: proto.polaris.v1.Almanac.Open:input_type -> proto.polaris.v1.Packet
-	1,  // 21: proto.polaris.v1.Authority.Commit:output_type -> proto.polaris.v1.Position
-	2,  // 22: proto.polaris.v1.Authority.List:output_type -> proto.polaris.v1.Inventory
-	3,  // 23: proto.polaris.v1.Authority.Load:output_type -> proto.polaris.v1.Snapshot
-	6,  // 24: proto.polaris.v1.Almanac.Open:output_type -> proto.polaris.v1.Packet
-	21, // [21:25] is the sub-list for method output_type
-	17, // [17:21] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	8,  // 0: proto.polaris.v1.CommitRequest.scope:type_name -> proto.comet.v1.Scope
+	9,  // 1: proto.polaris.v1.CommitRequest.change:type_name -> proto.comet.v1.AlmanacChange
+	9,  // 2: proto.polaris.v1.CommitRequest.changes:type_name -> proto.comet.v1.AlmanacChange
+	8,  // 3: proto.polaris.v1.BatchRequest.scope:type_name -> proto.comet.v1.Scope
+	9,  // 4: proto.polaris.v1.BatchRequest.changes:type_name -> proto.comet.v1.AlmanacChange
+	8,  // 5: proto.polaris.v1.Position.scope:type_name -> proto.comet.v1.Scope
+	2,  // 6: proto.polaris.v1.Inventory.positions:type_name -> proto.polaris.v1.Position
+	8,  // 7: proto.polaris.v1.Snapshot.scope:type_name -> proto.comet.v1.Scope
+	9,  // 8: proto.polaris.v1.Snapshot.entries:type_name -> proto.comet.v1.AlmanacChange
+	9,  // 9: proto.polaris.v1.Patch.change:type_name -> proto.comet.v1.AlmanacChange
+	9,  // 10: proto.polaris.v1.Patch.changes:type_name -> proto.comet.v1.AlmanacChange
+	8,  // 11: proto.polaris.v1.Updates.scope:type_name -> proto.comet.v1.Scope
+	5,  // 12: proto.polaris.v1.Updates.patches:type_name -> proto.polaris.v1.Patch
+	10, // 13: proto.polaris.v1.Packet.hello:type_name -> proto.astra.v1.Hello
+	3,  // 14: proto.polaris.v1.Packet.inventory:type_name -> proto.polaris.v1.Inventory
+	3,  // 15: proto.polaris.v1.Packet.plan:type_name -> proto.polaris.v1.Inventory
+	4,  // 16: proto.polaris.v1.Packet.snapshot:type_name -> proto.polaris.v1.Snapshot
+	6,  // 17: proto.polaris.v1.Packet.updates:type_name -> proto.polaris.v1.Updates
+	2,  // 18: proto.polaris.v1.Packet.acknowledged:type_name -> proto.polaris.v1.Position
+	11, // 19: proto.polaris.v1.Packet.probe:type_name -> proto.comet.v1.Empty
+	11, // 20: proto.polaris.v1.Packet.ready:type_name -> proto.comet.v1.Empty
+	0,  // 21: proto.polaris.v1.Authority.Commit:input_type -> proto.polaris.v1.CommitRequest
+	1,  // 22: proto.polaris.v1.Authority.Batch:input_type -> proto.polaris.v1.BatchRequest
+	11, // 23: proto.polaris.v1.Authority.List:input_type -> proto.comet.v1.Empty
+	8,  // 24: proto.polaris.v1.Authority.Load:input_type -> proto.comet.v1.Scope
+	7,  // 25: proto.polaris.v1.Almanac.Open:input_type -> proto.polaris.v1.Packet
+	2,  // 26: proto.polaris.v1.Authority.Commit:output_type -> proto.polaris.v1.Position
+	2,  // 27: proto.polaris.v1.Authority.Batch:output_type -> proto.polaris.v1.Position
+	3,  // 28: proto.polaris.v1.Authority.List:output_type -> proto.polaris.v1.Inventory
+	4,  // 29: proto.polaris.v1.Authority.Load:output_type -> proto.polaris.v1.Snapshot
+	7,  // 30: proto.polaris.v1.Almanac.Open:output_type -> proto.polaris.v1.Packet
+	26, // [26:31] is the sub-list for method output_type
+	21, // [21:26] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_polaris_proto_init() }
@@ -663,8 +767,8 @@ func file_polaris_proto_init() {
 	if File_polaris_proto != nil {
 		return
 	}
-	file_polaris_proto_msgTypes[3].OneofWrappers = []any{}
-	file_polaris_proto_msgTypes[6].OneofWrappers = []any{
+	file_polaris_proto_msgTypes[4].OneofWrappers = []any{}
+	file_polaris_proto_msgTypes[7].OneofWrappers = []any{
 		(*Packet_Hello)(nil),
 		(*Packet_Inventory)(nil),
 		(*Packet_Plan)(nil),
@@ -680,7 +784,7 @@ func file_polaris_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_polaris_proto_rawDesc), len(file_polaris_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

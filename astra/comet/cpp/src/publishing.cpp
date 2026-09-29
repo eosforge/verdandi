@@ -1,388 +1,298 @@
 #include "publishing.hpp"
 #include <algorithm>
-#include <astra/profile.hpp>
 #include <astra/scope.hpp>
 #include <grpc/support/time.h>
+#include <limits>
+#include <stdexcept>
 
 namespace comet::detail {
-Publishing::Publishing(std::shared_ptr<Core> core, Scope scope, std::string key, std::chrono::milliseconds ttl, Publisher::Options options) : core_(std::move(core)), scope_(std::move(scope)), key_(std::move(key)), ttl_(ttl), lifetime_(ttl), changed_(std::move(options.changed)) {
-    lifetime_.spread(std::hash<std::string>{}(key_)); // 固定 Key 抖动避免同批对象每次一起续租.
-}
+Publishing::Publishing(std::shared_ptr<Core> core, Scope scope) : core_(std::move(core)), scope_(std::move(scope)) {}
 
 Publishing::~Publishing() {
-    static_cast<void>(core_->resize(bytes_, 0));
+    discard();
 }
 
-Publishing::Call::~Call() {
-    if (owner) {
-        if (claimed) {
-            owner->core_->returning(renewal, automatic);
-        }
-        static_cast<void>(owner->core_->resize(bytes, 0));
-    }
+Publishing::Call::Call(Publishing& owner) : shutdown(owner.core_->shutdown_.get_token(), Cancel{&context}), cancellation(owner.cancellation_.get_token(), Cancel{&context}) {}
+
+void Publishing::discard() noexcept {
+    std::vector<std::string>{}.swap(keys_);
+    std::string{}.swap(instance_);
+    confirmed_.reset();
+    static_cast<void>(core_->resize(bytes_, 0));
+    bytes_ = 0;
 }
 
 Error Publishing::error(Error::Code code, Error::Effect effect) {
     return Error{code, effect, {}, {}, {}};
 }
 
-// Publishing::settle 结算待定发布, 成功发布回执, 失败发布错误.
-// pending 为待定项; result 为 RPC 结果.
-void Publishing::settle(const std::shared_ptr<Pending>& pending, Result<Publisher::Receipt> result) {
-    if (pending && pending->result) {
-        pending->result->set_value(std::move(result));
-        if (pending->admission) {
-            pending->admission->settled();
-            pending->admission.reset();
-        }
-        pending->result.reset();
-    }
-}
+Publishing::Operation::~Operation() {
 
-// Publishing::publish 提交版本发布, 返回 future 回执, 版本冲突即失败.
-// version/value/timeout 为期望版本、载荷与确认期限.
-std::future<Result<Publisher::Receipt>> Publishing::publish(std::uint64_t version, Value value, std::chrono::milliseconds timeout) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publishing.publish");
-
-    auto pending = std::make_shared<Pending>(nullptr, version, std::move(value)); // 先准备结果, 失败不替换旧期望.
-    pending->result.emplace();
-    auto future = pending->result->get_future();
-    if (!version || !pending->value || pending->value->size() > 1024 * 1024 || timeout.count() <= 0 || timeout > std::chrono::minutes(1)) {
-        settle(pending, std::unexpected(error(Error::Code::input)));
-        return future;
-    }
-    pending->deadline = std::chrono::steady_clock::now() + timeout;
+    // 当前栈上 RPC 已返回才回收, 不以 TryCancel 作为网络完成依据.
+    if (claimed)
+        owner.core_->returning(false, false);
+    if (admitted)
+        owner.core_->settled();
+    static_cast<void>(owner.core_->resize(bytes, 0));
     {
-        ASTRA_PROFILE_BEGIN(profile_lock_53, "comet.cpp.publishing.Publishing.publish.wait.lock");
+        const std::lock_guard lock(owner.mutex_);
+        if (!confirmed)
+            owner.confirmed_.reset();
+        if (owner.closed())
+            owner.discard();
+        owner.cancellation_ = std::stop_source{std::nostopstate};
+        owner.binding_.reset();
+        owner.active_ = false;
+    }
+    owner.condition_.notify_all();
+    owner.core_->wake(&owner);
+}
+
+Result<void> Publishing::prepare(grpc::ClientContext& context, const std::shared_ptr<const Binding>& binding, Core::Time deadline) {
+
+    // 查询、提交和修复共用一个截止; 新步骤不能因换实例自动改投.
+    if (closed() || core_->stopped())
+        return std::unexpected(error(Error::Code::closed));
+    if (!core_->current(binding))
+        return std::unexpected(error(Error::Code::instance));
+    const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - std::chrono::steady_clock::now()).count(); // 剩余纳秒, 不重置预算.
+    if (remaining <= 0)
+        return std::unexpected(error(Error::Code::timeout));
+    context.set_deadline(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(remaining, GPR_TIMESPAN)));
+    if (!binding->session.empty())
+        context.AddMetadata("comet-session-bin", binding->session);
+
+    if (closed() || core_->stopped())
+        return std::unexpected(error(Error::Code::closed));
+    if (cancellation_.stop_requested())
+        return std::unexpected(error(Error::Code::instance));
+    return {};
+}
+
+Result<std::uint64_t> Publishing::query(const std::shared_ptr<const Binding>& binding, const std::vector<Publisher::Entry>& entries, Core::Time deadline, std::string& instance) {
+
+    // 请求只携带相关 Key, 不拉取 Scope 全表或正文; 查询无业务副作用.
+    proto::comet::v1::CatalogQueryRequest request;
+    proto::comet::v1::CatalogQueryReply reply;
+    Call call(*this); // 已停止的令牌立即取消, 回调在 context 析构前注销.
+    request.set_instance(instance);
+    request.mutable_scope()->set_sector(scope_.sector);
+    request.mutable_scope()->set_spectrum(scope_.spectrum);
+    for (const auto& entry : entries)
+        request.add_keys(entry.key);
+    if (auto prepared = prepare(call.context, binding, deadline); !prepared)
+        return std::unexpected(prepared.error());
+    const auto status = binding->catalog->Query(&call.context, request, &reply); // 阻塞应用线程, 不占 Core 控制轮.
+    if (!status.ok()) {
+        auto failure = Core::failure(status, call.context); // 查询失败不会提交原业务批次.
+        failure.effect = Error::Effect::unapplied;
+        if (closed() || core_->stopped())
+            failure.code = Error::Code::closed;
+        if (failure.code == Error::Code::session || failure.code == Error::Code::transport || failure.code == Error::Code::instance)
+            core_->lost(binding, failure);
+        return std::unexpected(std::move(failure));
+    }
+
+    // 不接受缺项、错序、额外 Key 或实例漂移, 防止错误基线驱动后续写入.
+    if (!astra::Scope::text(reply.instance(), 128) || (!instance.empty() && reply.instance() != instance) || reply.entries_size() != static_cast<int>(entries.size()))
+        return std::unexpected(error(Error::Code::protocol));
+    std::uint64_t maximum = issued_; // 未知结果已消耗的版本也不能复用.
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+        const auto& row = reply.entries(static_cast<int>(index)); // 响应必须与请求逐项对应.
+        if (row.key() != entries[index].key)
+            return std::unexpected(error(Error::Code::protocol));
+        maximum = std::max(maximum, row.version());
+    }
+    if (maximum == std::numeric_limits<std::uint64_t>::max())
+        return std::unexpected(error(Error::Code::limit));
+    instance = reply.instance();
+    return maximum + 1;
+}
+
+Result<Publisher::Receipt> Publishing::update(std::vector<Publisher::Entry> entries, std::chrono::milliseconds ttl, std::chrono::milliseconds timeout) {
+
+    // 非法超大 timeout 不参与加法, 合法调用从本地准备开始共用唯一截止.
+    if (timeout.count() <= 0 || timeout > std::chrono::minutes(1) || ttl < std::chrono::seconds(1) || ttl > std::chrono::minutes(10) || entries.empty() || entries.size() > 128)
+        return std::unexpected(error(Error::Code::input));
+    const auto deadline = std::chrono::steady_clock::now() + timeout; // 包括认证和查询在内的绝对单调截止.
+    if (closed() || core_->stopped())
+        return std::unexpected(error(Error::Code::closed));
+    if (Core::notifying())
+        return std::unexpected(error(Error::Code::busy));
+    std::size_t bytes{}; // 单项先限长, 再累加有界键与正文, 避免溢出.
+    std::size_t names{}; // Key 还会出现在查询和本地基线中, 单独计入编码预算.
+    for (const auto& entry : entries) {
+        if (!astra::Scope::text(entry.key, 1024) || !entry.value || entry.value->size() > 1024 * 1024)
+            return std::unexpected(error(Error::Code::input));
+        names += entry.key.size();
+        bytes += entry.key.size() + entry.value->size();
+        if (bytes > 1024 * 1024)
+            return std::unexpected(error(Error::Code::input));
+    }
+
+    // 消费调用方移入的容器, 原地排序同时规范化 Key 集合并消除逐 Key 树节点分配.
+    std::ranges::sort(entries, {}, &Publisher::Entry::key);
+    if (std::ranges::adjacent_find(entries, {}, &Publisher::Entry::key) != entries.end())
+        return std::unexpected(error(Error::Code::input));
+
+    // 同对象只接纳一个同步调用, 不替换、合并或排队; 强引用跨越整个实际网络寿命.
+    const auto owned = shared_from_this();
+    std::stop_source cancellation; // 可分配步骤先于 active_ 发布, 异常不能遗留忙碌标志.
+    {
         const std::lock_guard lock(mutex_);
-        ASTRA_PROFILE_END(profile_lock_53);
-        if (closed() || core_->stopped()) {
-            settle(pending, std::unexpected(error(Error::Code::closed)));
-            return future;
+        if (closed() || core_->stopped())
+            return std::unexpected(error(Error::Code::closed));
+        if (active_)
+            return std::unexpected(error(Error::Code::busy));
+        cancellation_ = std::move(cancellation);
+        active_ = true;
+    }
+    Operation operation(*this); // 从这里开始所有退出路径精确归还已取得的资源.
+    if (!core_->admitting())
+        return std::unexpected(error(Error::Code::busy));
+    operation.admitted = true;
+    const auto reserved = 3 * bytes + 3 * names + entries.size() * 768 + 8192; // 正文、请求/回复和下一份 Key 基线的有界保守预算.
+    if (!core_->resize(0, reserved))
+        return std::unexpected(error(Error::Code::busy));
+    operation.bytes = reserved;
+    auto selected = core_->acquire(deadline, closed_); // 初次认证也消耗原截止.
+    if (!selected)
+        return std::unexpected(selected.error());
+    const auto binding = *selected; // 整个调用固定目标, 切换只影响后续显式调用.
+    {
+        const std::lock_guard lock(mutex_);
+        binding_ = binding;
+    }
+    if (!core_->outgoing(false, false))
+        return std::unexpected(error(Error::Code::busy));
+    operation.claimed = true;
+
+    // 同一绑定和精确 Key 集合可以沿用已确认水位; 换目标、换集合或失败后重新查询.
+    const bool initialized = confirmed_.lock() == binding && std::ranges::equal(keys_, entries, {}, {}, &Publisher::Entry::key);
+    std::string instance = initialized ? instance_ : binding->instance; // 匿名接入由首次 Query 确认实例.
+    std::vector<std::string> keys;                                      // 只在换集合时准备下一份 Key 基线, 不保留业务正文.
+    if (!initialized) {
+        keys.reserve(entries.size());
+        for (const auto& entry : entries)
+            keys.push_back(entry.key);
+    }
+
+    // 正文只编码一次, 唯一一次冲突修复仅替换版本; 不随 RPC 重试再复制整个批次.
+    proto::comet::v1::PublishRequest request;
+    request.mutable_scope()->set_sector(scope_.sector);
+    request.mutable_scope()->set_spectrum(scope_.spectrum);
+    request.set_ttl_ms(static_cast<std::uint32_t>(ttl.count()));
+    for (const auto& entry : entries) {
+        auto* row = request.add_entries(); // 单一原子批次, 不拆成逐 Key 写入.
+        row->set_key(entry.key);
+        row->set_value(entry.value->data(), entry.value->size());
+    }
+    for (unsigned attempt = 0; attempt < 2; ++attempt) {
+        std::uint64_t version{}; // 仅在明确整批未提交的版本冲突后允许修复一次.
+        if (!initialized || attempt != 0) {
+            auto queried = query(binding, entries, deadline, instance);
+            if (!queried)
+                return std::unexpected(queried.error());
+            version = *queried;
+        } else {
+            if (issued_ == std::numeric_limits<std::uint64_t>::max())
+                return std::unexpected(error(Error::Code::limit));
+            version = issued_ + 1;
         }
-        if (wanted_ && version < wanted_->version) {
-            settle(pending, std::unexpected(error(Error::Code::version)));
-            return future;
+        Publisher::Receipt receipt{instance, version}; // 可能分配的回执文本在提交前准备.
+        std::size_t retained{};                        // 提交前核对下一份元数据的空间, 不依赖 reserve 的精确容量.
+        if (!initialized) {
+            retained = keys.capacity() * sizeof(std::string) + instance.capacity() + 1;
+            for (const auto& key : keys)
+                retained += key.capacity() + 1;
+            if (retained > operation.bytes)
+                return std::unexpected(error(Error::Code::busy));
         }
-        if (wanted_ && version == wanted_->version) {
-            if (pending->value != wanted_->value && *pending->value != *wanted_->value) {
-                settle(pending, std::unexpected(error(Error::Code::conflict)));
-                return future;
+        request.set_instance(instance);
+        request.set_version(version);
+        proto::comet::v1::PublishReply reply;
+        Call call(*this); // 两个停止源均直接作用于本 RPC, 不借用对象内裸指针.
+        if (auto prepared = prepare(call.context, binding, deadline); !prepared)
+            return std::unexpected(prepared.error());
+        issued_ = version; // 发送前消耗, 未知结果不能换 Data 重用.
+        const auto status = binding->catalog->Publish(&call.context, request, &reply);
+        if (status.ok()) {
+            if (reply.instance() != instance || reply.version() != version)
+                return std::unexpected(error(Error::Code::protocol, Error::Effect::unknown));
+            if (!initialized) {
+                discard();
+                keys_ = std::move(keys);
+                instance_ = std::move(instance);
+                bytes_ = retained;
+                operation.bytes -= bytes_; // 已预留预算转移给有界元数据, 不在提交成功后再争抢额度.
             }
-            pending->value = wanted_->value; // 同版本同内容只复用已有不可变载荷.
+            confirmed_ = binding;
+            operation.confirmed = true;
+            core_->recovered(binding);
+            return receipt;
         }
-        const bool replacing = wanted_ && wanted_->result && wanted_->admission && (!call_ || call_->pending != wanted_); // 替代一个未发送调用可移交其现有额度.
-        if (!replacing && !core_->admitting()) {
-            settle(pending, std::unexpected(error(Error::Code::busy)));
-            return future;
-        }
-        if (!replacing) {
-            pending->admission = core_;
-        } // 新调用先取得额度, 拒绝不修改原期望.
-        const auto bytes = pending->value->size() + 1024;
-        if (!core_->resize(bytes_, bytes)) {
-            settle(pending, std::unexpected(error(Error::Code::busy)));
-            return future;
-        }
-        bytes_ = bytes;
-        if (replacing) {
-            pending->admission = std::move(wanted_->admission);
-        } // 所有资源准备成功后才转移, 旧 future 仍明确结算为替代.
-        if (!call_ || call_->pending != wanted_) {
-            settle(wanted_, std::unexpected(error(Error::Code::obsolete)));
-        }
-        wanted_ = std::move(pending);
-        applied_ = false;
-        rejected_ = false;
-        retry_ = {};
-        report(Publisher::Phase::waiting);
+        auto failure = Core::failure(status, call.context); // 只信任结构化错误的 unapplied 证据.
+        if (closed() || core_->stopped())
+            failure.code = Error::Code::closed; // 本地取消不触发共享 Client 的网络故障切换.
+        if (attempt == 0 && failure.code == Error::Code::version && failure.effect == Error::Effect::unapplied)
+            continue;
+        if (failure.code == Error::Code::session || failure.code == Error::Code::transport || failure.code == Error::Code::instance)
+            core_->lost(binding, failure);
+        return std::unexpected(std::move(failure));
     }
-    core_->wake(this);
-    return future;
+    return std::unexpected(error(Error::Code::internal));
 }
 
-Publisher::State Publishing::state() const {
-    const std::lock_guard lock(mutex_);
-    auto state = state_; // 不让读状态反向修改已发布快照.
-    if (closed() || core_->stopped()) {
-        state.phase = Publisher::Phase::closed;
-    } else if (state.phase == Publisher::Phase::ready && !lifetime_.ready(Lifetime::now())) {
-        state.phase = Publisher::Phase::uncertain;
-    }
-    return state;
-}
-
-// Publishing::closed 返回是否已关闭, 关闭后不再接受新发布.
 bool Publishing::closed() const noexcept {
     return closed_.load(std::memory_order_acquire);
 }
 
-// Publishing::finished 返回是否已结束, 待定全部结算且无在途即结束.
 bool Publishing::finished() const noexcept {
-    return finished_.load(std::memory_order_acquire);
+    const std::lock_guard lock(mutex_);
+    return closed() && !active_;
 }
 
-// Publishing::close 关闭发布器, 幂等, 待定按取消结算.
 void Publishing::close() noexcept {
-    bool first; // 请求结果与停止门一起定序, 对象析构前完成未发送的 future.
+
+    bool first;                                      // 应用拥有数只减少一次, 不在持对象锁时进入 Core.
+    std::stop_source cancellation{std::nostopstate}; // 快照只指向本次操作, 不持对象锁触发回调.
     {
         const std::lock_guard lock(mutex_);
         first = !closed_.exchange(true, std::memory_order_acq_rel);
-        if (first) {
-            if (!call_ || call_->pending != wanted_) {
-                settle(wanted_, std::unexpected(error(Error::Code::closed)));
-            }
-            if (call_) {
-                call_->context.TryCancel();
-            }
-        }
+        cancellation = cancellation_;
+        if (!active_)
+            discard();
     }
-    if (first) {
+    cancellation.request_stop();
+    if (first)
         core_->release();
-        core_->wake(this);
-    }
-}
-
-// Publishing::wait 等待结束, 超时返回 false, 回调内禁止等待.
-bool Publishing::wait(std::chrono::milliseconds timeout) const {
-    if (Core::notifying()) {
-        throw std::logic_error("Cannot wait inside a Comet callback");
-    }
-    std::unique_lock lock(mutex_);
-    return condition_.wait_for(lock, timeout, [this] { return finished() && !notifying_; });
-}
-
-// Publishing::target 返回绑定是否属于本发布目标.
-// binding 为待检查绑定.
-bool Publishing::target(const Binding& binding) const {
-    return binding_ && state_.confirmed && binding_->endpoint == binding.endpoint && (binding.instance.empty() || binding.instance == state_.confirmed->instance);
-}
-
-// Publishing::report 发布阶段与失败, 相同状态不重复通知.
-// phase/failure 为阶段与失败.
-void Publishing::report(Publisher::Phase phase, std::optional<Error> failure) {
-    dirty_ = dirty_ || state_.phase != phase || state_.error.has_value() != failure.has_value() || (failure && state_.error && failure->code != state_.error->code);
-    state_.phase = phase;
-    state_.error = std::move(failure);
-}
-
-// Publishing::complete 调用完成, 按状态结算待定并释放名额.
-// call/status 为调用与 gRPC 状态.
-void Publishing::complete(const std::shared_ptr<Call>& call, const grpc::Status& status) noexcept {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publishing.complete");
-    call->code = status.error_code();
-    call->done.store(true, std::memory_order_release);
-    call->owner->core_->wake(call->owner.get());
-}
-
-// Publishing::consume 按绑定与时间推进发送, 只在控制轮调用.
-// binding/now 为绑定与当前时间.
-void Publishing::consume(const std::shared_ptr<const Binding>& binding, Core::Time now) {
-
-    if (!call_ || !call_->done.load(std::memory_order_acquire)) {
-        return;
-    }
-    auto call = std::exchange(call_, {}); // 在整段检查期间保有回复/metadata, 最后 callback 引用独立存活.
-    std::optional<Error> failure;
-    std::optional<Publisher::Receipt> receipt;
-    if (call->code != grpc::StatusCode::OK) {
-        failure = Core::failure(grpc::Status(call->code, ""), call->context);
-    } else if (!call->renewal) {
-        const auto& reply = std::get<Publish>(call->message).reply;
-        if (!astra::Scope::text(reply.instance(), 128) || (!call->binding->instance.empty() && reply.instance() != call->binding->instance) || reply.version() != call->pending->version) {
-            failure = error(Error::Code::protocol, Error::Effect::unknown);
-        } else {
-            receipt = Publisher::Receipt{reply.instance(), reply.version()};
-            settle(call->pending, *receipt); // 明确回执属于原调用, 不被较新期望覆盖.
-        }
-    }
-    if (failure && !call->renewal) {
-        settle(call->pending, std::unexpected(*failure));
-    }
-    const auto instance = receipt ? std::string_view(receipt->instance) : std::visit([](const auto& message) { return std::string_view(message.request.instance()); }, call->message); // 失败尝试没有成功回执, 仍按自己的消息类型取固定身份.
-    const bool current = wanted_ == call->pending && (!binding || (binding->endpoint == call->binding->endpoint && (binding->instance.empty() || instance.empty() || binding->instance == instance)));
-    if (closed()) {
-        return;
-    } // 结算完成后关闭状态绝不被晚到成功复活.
-
-    if (failure && (failure->code == Error::Code::session || failure->code == Error::Code::transport || failure->code == Error::Code::instance)) {
-        auto shared = *failure;
-        if (shared.code == Error::Code::instance) {
-            shared.code = Error::Code::transport;
-        }
-        core_->lost(call->binding, std::move(shared)); // 共享 Core 自行拒绝不是当前绑定的旧故障.
-    }
-    if (!current) {
-        return;
-    } // 被更新替换/换 Star 的结果只结算自己的 future.
-    if (!failure) {
-        if (receipt) {
-            state_.confirmed = std::move(receipt);
-            binding_ = call->binding;
-            applied_ = true;
-            dirty_ = true;
-        }
-        static_cast<void>(lifetime_.confirm(call->sent));
-        failures_ = 0;
-        retry_ = {};
-        report(lifetime_.ready(Lifetime::now()) ? Publisher::Phase::ready : Publisher::Phase::uncertain);
-        core_->recovered(call->binding);
-    } else {
-        rejected_ = failure->code == Error::Code::input || failure->code == Error::Code::version || failure->code == Error::Code::conflict || failure->code == Error::Code::obsolete || failure->code == Error::Code::limit || failure->code == Error::Code::protocol;
-        if (failure->code == Error::Code::ended || failure->code == Error::Code::instance || !call->renewal) {
-            applied_ = false;
-        }
-        failures_ = std::min(failures_ + 1, 32U);
-        retry_ = now + core_->delay(failures_);
-        report(rejected_ ? Publisher::Phase::failed : Publisher::Phase::uncertain, *failure);
-    }
-}
-
-// Publishing::send 发送待定发布, 版本冲突本地即失败, 不发网络.
-// binding/now/time/renewal 为绑定、当前时间、生命时间与是否续期.
-void Publishing::send(const std::shared_ptr<const Binding>& binding, Core::Time now, Lifetime::Time time, bool renewal) {
-
-    auto call = std::make_shared<Call>(); // 只在有内容且允许发送时构造, 不为等待状态预分配 RPC.
-    call->owner = shared_from_this();
-    call->binding = binding;
-    call->pending = wanted_;
-    call->renewal = renewal;
-    call->sent = time;
-    if (!binding->session.empty()) {
-        call->context.AddMetadata("comet-session-bin", binding->session);
-    }
-    const auto deadline = !renewal && wanted_->result ? wanted_->deadline : now + core_->options_.timeout;
-    const auto remaining = std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - std::chrono::steady_clock::now()).count();
-    call->context.set_deadline(gpr_time_add(gpr_now(GPR_CLOCK_MONOTONIC), gpr_time_from_nanos(std::max(remaining, std::int64_t{0}), GPR_TIMESPAN)));
-    if (renewal) {
-        call->message.emplace<Renew>();
-    }
-    const auto size = std::visit([&](auto& message) {
-        auto& request = message.request; // 两种请求共享固定字段, 正文只在完整 Publish 填写.
-        request.set_instance(renewal ? state_.confirmed->instance : binding->instance);
-        request.mutable_scope()->set_sector(scope_.sector);
-        request.mutable_scope()->set_spectrum(scope_.spectrum);
-        request.set_key(key_);
-        request.set_version(wanted_->version);
-        request.set_ttl_ms(static_cast<std::uint32_t>(ttl_.count()));
-        if constexpr (std::is_same_v<std::remove_cvref_t<decltype(message)>, Publish>) {
-            request.set_value(wanted_->value->data(), wanted_->value->size());
-        }
-        return request.SpaceUsedLong();
-    },
-                                 call->message);
-    const auto bytes = sizeof(Call) + size + wanted_->value->size();
-    if (!core_->resize(0, bytes)) {
-        retry_ = now + std::chrono::milliseconds(50);
-        return;
-    }
-    call->bytes = bytes;
-    call->automatic = renewal || !wanted_->result;
-    if (!core_->outgoing(renewal, call->automatic)) {
-        retry_ = now + std::chrono::milliseconds(50);
-        return;
-    }
-    call->claimed = true;
-    // std::function 转换本身可能分配, 必须在发布 call_ 之前完成, 否则未开始的调用会永久占住在途槽.
-    std::function<void(const grpc::Status&)> callback = [call](const grpc::Status& status) { complete(call, status); };
-    call_ = call;
-    std::visit([&](auto& message) {
-        if constexpr (std::is_same_v<std::remove_cvref_t<decltype(message)>, Publish>) {
-            binding->catalog->async()->Publish(&call->context, &message.request, &message.reply, std::move(callback));
-        } else {
-            binding->catalog->async()->Renew(&call->context, &message.request, &message.reply, std::move(callback));
-        }
-    },
-               call->message);
-}
-
-// Publishing::notify 在持有锁时唤醒等待者, 退出临界区后不重复通知.
-// lock 为调用方持有的锁.
-void Publishing::notify(std::unique_lock<std::mutex>& lock) {
-    if (!dirty_ || !changed_ || closed() || !core_->notification()) {
-        return;
-    }
-    auto snapshot = state_; // 快照先完整准备, 回调期间可以重入 publish/close.
-    dirty_ = false;
-    notifying_ = true;
-    lock.unlock();
-    const bool previous = Core::notifying();
-    Core::notify(true);
-    try {
-        changed_(std::move(snapshot));
-    } catch (...) {
-        core_->exception();
-    }
-    Core::notify(previous);
-    lock.lock();
-    notifying_ = false;
-}
-
-Core::Time Publishing::poll(Core::Time now, const std::shared_ptr<const Binding>& binding, const std::optional<Error>& blocked, bool closing) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publishing.poll");
-
-    if ((closing || core_->stopped()) && !closed()) {
-        close();
-    }
-    ASTRA_PROFILE_BEGIN(profile_lock_320, "comet.cpp.publishing.Publishing.poll.wait.lock");
-    std::unique_lock lock(mutex_);
-    ASTRA_PROFILE_END(profile_lock_320);
-    consume(binding, now);
-    if (wanted_ && wanted_->result && (!call_ || call_->pending != wanted_) && now >= wanted_->deadline) {
-        settle(wanted_, std::unexpected(error(Error::Code::timeout)));
-    }
-    if (closed()) {
-        report(Publisher::Phase::closed);
-        if (call_) {
-            call_->context.TryCancel();
-            return now + std::chrono::milliseconds(25);
-        }
-        settle(wanted_, std::unexpected(error(Error::Code::closed)));
-        wanted_.reset();
-        static_cast<void>(core_->resize(bytes_, 0));
-        bytes_ = 0;
-        finished_.store(true, std::memory_order_release);
-        condition_.notify_all();
-        return Core::Time::max();
-    }
-    const auto time = Lifetime::now();
-    if (binding && binding_ && !target(*binding)) {
-        binding_.reset();
-        lifetime_.reset();
-        applied_ = false;
-        if (call_) {
-            call_->context.TryCancel();
-        }
-    }
-    if (rejected_) {
-        report(Publisher::Phase::failed, state_.error);
-    } else if (!binding) {
-        report(blocked ? Publisher::Phase::failed : wanted_ ? Publisher::Phase::uncertain
-                                                            : Publisher::Phase::waiting,
-               blocked);
-    } else if (!time) {
-        report(Publisher::Phase::uncertain, error(Error::Code::clock));
-    } else if (wanted_) {
-        if (!call_ && now >= retry_ && (!applied_ || lifetime_.due(*time))) {
-            send(binding, now, *time, applied_); // 有待发正文优先完整 Publish, 无需另发一次保活.
-        }
-        report(applied_ && lifetime_.ready(time) ? Publisher::Phase::ready : Publisher::Phase::uncertain, state_.error);
-    }
-    notify(lock);
     condition_.notify_all();
-
-    auto next = now + std::chrono::seconds(1); // 本地预算检查, 不伪装成保活 RPC.
-    if (wanted_ && wanted_->result && (!call_ || call_->pending != wanted_)) {
-        next = std::min(next, wanted_->deadline);
-    }
-    if (wanted_ && !call_ && binding && time && !rejected_) {
-        next = std::min(next, std::max(retry_, applied_ ? now + lifetime_.delay(*time) : now));
-    }
-    return std::max(next, now + std::chrono::milliseconds(1));
+    core_->wake(this);
 }
+
+bool Publishing::wait(std::chrono::milliseconds timeout) const {
+    if (Core::notifying())
+        throw std::logic_error("Cannot wait inside an SDK callback");
+    std::unique_lock lock(mutex_); // 只等待实际调用排空, 不隐式关闭.
+    return condition_.wait_until(lock, Core::deadline(timeout), [this] { return closed() && !active_; });
+}
+
+Core::Time Publishing::poll(Core::Time, const std::shared_ptr<const Binding>&, const std::optional<Error>&, bool closing) {
+
+    if (closing)
+        close();
+    std::shared_ptr<const Binding> binding; // 只检查当前实际调用, 不采用控制轮更早取得的绑定快照.
+    std::stop_source cancellation{std::nostopstate};
+    {
+        const std::lock_guard lock(mutex_);
+        binding = binding_;
+        cancellation = cancellation_;
+    }
+    if (binding && !core_->current(binding))
+        cancellation.request_stop(); // 不持对象锁进入 Core; 即使新调用已开始, 也只取消旧操作.
+    return Core::Time::max();
+}
+
 } // namespace comet::detail
 
 namespace comet {
@@ -402,55 +312,21 @@ Publisher::~Publisher() {
     close();
 }
 
-Publisher::State Publisher::state() const {
-    return publishing_ ? publishing_->state() : State{Phase::closed, {}, {}};
+Result<Publisher::Receipt> Publisher::update(std::vector<Entry> entries, std::chrono::milliseconds ttl, std::chrono::milliseconds timeout) {
+    return publishing_ ? publishing_->update(std::move(entries), ttl, timeout) : Result<Receipt>(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
 }
 
-// Publisher::publish 提交字节发布, 返回 future 回执.
-// version/value/timeout 为期望版本、载荷与确认期限.
-std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, std::vector<std::uint8_t> value, std::chrono::milliseconds timeout) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publisher.publish");
-    if (value.size() > 1024 * 1024) {
-        return publish(version, Value{}, timeout);
-    }
-    return publish(version, std::make_shared<const std::vector<std::uint8_t>>(std::move(value)), timeout);
+Result<Publisher::Receipt> Publisher::update(std::string key, std::vector<std::uint8_t> data, std::chrono::milliseconds ttl, std::chrono::milliseconds timeout) {
+    std::vector<Entry> entries; // 避免 initializer_list 将已经移入的 Key 再复制一遍.
+    entries.push_back({std::move(key), std::make_shared<const std::vector<std::uint8_t>>(std::move(data))});
+    return update(std::move(entries), ttl, timeout);
 }
 
-// Publisher::publish 提交区间发布, 不复制载荷, 调用期间保持有效.
-// version/value/timeout 为期望版本、载荷区间与确认期限.
-std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, std::span<const std::uint8_t> value, std::chrono::milliseconds timeout) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publisher.publish");
-    // 借用输入先验限, 拒绝超限时不复制潜在巨大的调用方缓冲.
-    if (value.size() > 1024 * 1024) {
-        return publish(version, Value{}, timeout);
-    }
-    return publish(version, std::vector<std::uint8_t>(value.begin(), value.end()), timeout);
-}
-
-// Publisher::publish 提交共享值发布, 只共享所有权不复制字节.
-// version/value/timeout 为期望版本、共享载荷与确认期限.
-std::future<Result<Publisher::Receipt>> Publisher::publish(std::uint64_t version, Value value, std::chrono::milliseconds timeout) {
-
-    ASTRA_PROFILE_SCOPE("comet.cpp.publishing.Publisher.publish");
-    if (publishing_) {
-        return publishing_->publish(version, std::move(value), timeout);
-    }
-    std::promise<Result<Receipt>> result;
-    auto future = result.get_future();
-    result.set_value(std::unexpected(Error{Error::Code::closed, Error::Effect::unapplied, {}, {}, {}}));
-    return future;
-}
-
-// Publisher::close 关闭发布器, 幂等, 待定按取消结算.
 void Publisher::close() noexcept {
-    if (publishing_) {
+    if (publishing_)
         publishing_->close();
-    }
 }
 
-// Publisher::wait 等待结束, 超时返回 false, 回调内禁止等待.
 bool Publisher::wait(std::chrono::milliseconds timeout) const {
     return !publishing_ || publishing_->wait(timeout);
 }

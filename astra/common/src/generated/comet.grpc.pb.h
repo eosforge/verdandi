@@ -455,6 +455,14 @@ class Catalog final {
   class StubInterface {
    public:
     virtual ~StubInterface() {}
+    // 查询相关 Key 的已知水位, 包括已过期正文; 不分配全局版本或锁定写入者.
+    virtual ::grpc::Status Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::proto::comet::v1::CatalogQueryReply* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CatalogQueryReply>> AsyncQuery(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CatalogQueryReply>>(AsyncQueryRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CatalogQueryReply>> PrepareAsyncQuery(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CatalogQueryReply>>(PrepareAsyncQueryRaw(context, request, cq));
+    }
     virtual ::grpc::Status Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::proto::comet::v1::PublishReply* response) = 0;
     std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>> AsyncPublish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>>(AsyncPublishRaw(context, request, cq));
@@ -481,6 +489,9 @@ class Catalog final {
     class async_interface {
      public:
       virtual ~async_interface() {}
+      // 查询相关 Key 的已知水位, 包括已过期正文; 不分配全局版本或锁定写入者.
+      virtual void Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       virtual void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, std::function<void(::grpc::Status)>) = 0;
       virtual void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       virtual void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response, std::function<void(::grpc::Status)>) = 0;
@@ -491,6 +502,8 @@ class Catalog final {
     virtual class async_interface* async() { return nullptr; }
     class async_interface* experimental_async() { return async(); }
    private:
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CatalogQueryReply>* AsyncQueryRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::CatalogQueryReply>* PrepareAsyncQueryRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>* AsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::PublishReply>* PrepareAsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) = 0;
     virtual ::grpc::ClientAsyncResponseReaderInterface< ::proto::comet::v1::Empty>* AsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) = 0;
@@ -502,6 +515,13 @@ class Catalog final {
   class Stub final : public StubInterface {
    public:
     Stub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
+    ::grpc::Status Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::proto::comet::v1::CatalogQueryReply* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>> AsyncQuery(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>>(AsyncQueryRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>> PrepareAsyncQuery(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>>(PrepareAsyncQueryRaw(context, request, cq));
+    }
     ::grpc::Status Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::proto::comet::v1::PublishReply* response) override;
     std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>> AsyncPublish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>>(AsyncPublishRaw(context, request, cq));
@@ -528,6 +548,8 @@ class Catalog final {
     class async final :
       public StubInterface::async_interface {
      public:
+      void Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response, std::function<void(::grpc::Status)>) override;
+      void Query(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response, ::grpc::ClientUnaryReactor* reactor) override;
       void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, std::function<void(::grpc::Status)>) override;
       void Publish(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response, ::grpc::ClientUnaryReactor* reactor) override;
       void Renew(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response, std::function<void(::grpc::Status)>) override;
@@ -544,6 +566,8 @@ class Catalog final {
    private:
     std::shared_ptr< ::grpc::ChannelInterface> channel_;
     class async async_stub_{this};
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>* AsyncQueryRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::CatalogQueryReply>* PrepareAsyncQueryRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogQueryRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>* AsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::PublishReply>* PrepareAsyncPublishRaw(::grpc::ClientContext* context, const ::proto::comet::v1::PublishRequest& request, ::grpc::CompletionQueue* cq) override;
     ::grpc::ClientAsyncResponseReader< ::proto::comet::v1::Empty>* AsyncRenewRaw(::grpc::ClientContext* context, const ::proto::comet::v1::CatalogRenewRequest& request, ::grpc::CompletionQueue* cq) override;
@@ -551,6 +575,7 @@ class Catalog final {
     ::grpc::ClientReader< ::proto::comet::v1::CatalogWatchReply>* WatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request) override;
     ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>* AsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq, void* tag) override;
     ::grpc::ClientAsyncReader< ::proto::comet::v1::CatalogWatchReply>* PrepareAsyncWatchRaw(::grpc::ClientContext* context, const ::proto::comet::v1::WatchRequest& request, ::grpc::CompletionQueue* cq) override;
+    const ::grpc::internal::RpcMethod rpcmethod_Query_;
     const ::grpc::internal::RpcMethod rpcmethod_Publish_;
     const ::grpc::internal::RpcMethod rpcmethod_Renew_;
     const ::grpc::internal::RpcMethod rpcmethod_Watch_;
@@ -561,9 +586,31 @@ class Catalog final {
    public:
     Service();
     virtual ~Service();
+    // 查询相关 Key 的已知水位, 包括已过期正文; 不分配全局版本或锁定写入者.
+    virtual ::grpc::Status Query(::grpc::ServerContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response);
     virtual ::grpc::Status Publish(::grpc::ServerContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response);
     virtual ::grpc::Status Renew(::grpc::ServerContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response);
     virtual ::grpc::Status Watch(::grpc::ServerContext* context, const ::proto::comet::v1::WatchRequest* request, ::grpc::ServerWriter< ::proto::comet::v1::CatalogWatchReply>* writer);
+  };
+  template <class BaseClass>
+  class WithAsyncMethod_Query : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_Query() {
+      ::grpc::Service::MarkMethodAsync(0);
+    }
+    ~WithAsyncMethod_Query() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Query(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogQueryRequest* /*request*/, ::proto::comet::v1::CatalogQueryReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestQuery(::grpc::ServerContext* context, ::proto::comet::v1::CatalogQueryRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::CatalogQueryReply>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
   };
   template <class BaseClass>
   class WithAsyncMethod_Publish : public BaseClass {
@@ -571,7 +618,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_Publish() {
-      ::grpc::Service::MarkMethodAsync(0);
+      ::grpc::Service::MarkMethodAsync(1);
     }
     ~WithAsyncMethod_Publish() override {
       BaseClassMustBeDerivedFromService(this);
@@ -582,7 +629,7 @@ class Catalog final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestPublish(::grpc::ServerContext* context, ::proto::comet::v1::PublishRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::PublishReply>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -591,7 +638,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_Renew() {
-      ::grpc::Service::MarkMethodAsync(1);
+      ::grpc::Service::MarkMethodAsync(2);
     }
     ~WithAsyncMethod_Renew() override {
       BaseClassMustBeDerivedFromService(this);
@@ -602,7 +649,7 @@ class Catalog final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestRenew(::grpc::ServerContext* context, ::proto::comet::v1::CatalogRenewRequest* request, ::grpc::ServerAsyncResponseWriter< ::proto::comet::v1::Empty>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -611,7 +658,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithAsyncMethod_Watch() {
-      ::grpc::Service::MarkMethodAsync(2);
+      ::grpc::Service::MarkMethodAsync(3);
     }
     ~WithAsyncMethod_Watch() override {
       BaseClassMustBeDerivedFromService(this);
@@ -622,23 +669,50 @@ class Catalog final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestWatch(::grpc::ServerContext* context, ::proto::comet::v1::WatchRequest* request, ::grpc::ServerAsyncWriter< ::proto::comet::v1::CatalogWatchReply>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncServerStreaming(2, context, request, writer, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncServerStreaming(3, context, request, writer, new_call_cq, notification_cq, tag);
     }
   };
-  typedef WithAsyncMethod_Publish<WithAsyncMethod_Renew<WithAsyncMethod_Watch<Service > > > AsyncService;
+  typedef WithAsyncMethod_Query<WithAsyncMethod_Publish<WithAsyncMethod_Renew<WithAsyncMethod_Watch<Service > > > > AsyncService;
+  template <class BaseClass>
+  class WithCallbackMethod_Query : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_Query() {
+      ::grpc::Service::MarkMethodCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::proto::comet::v1::CatalogQueryRequest* request, ::proto::comet::v1::CatalogQueryReply* response) { return this->Query(context, request, response); }));}
+    void SetMessageAllocatorFor_Query(
+        ::grpc::MessageAllocator< ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_Query() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Query(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogQueryRequest* /*request*/, ::proto::comet::v1::CatalogQueryReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Query(
+      ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::CatalogQueryRequest* /*request*/, ::proto::comet::v1::CatalogQueryReply* /*response*/)  { return nullptr; }
+  };
   template <class BaseClass>
   class WithCallbackMethod_Publish : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_Publish() {
-      ::grpc::Service::MarkMethodCallback(0,
+      ::grpc::Service::MarkMethodCallback(1,
           new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::proto::comet::v1::PublishRequest* request, ::proto::comet::v1::PublishReply* response) { return this->Publish(context, request, response); }));}
     void SetMessageAllocatorFor_Publish(
         ::grpc::MessageAllocator< ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(0);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -659,13 +733,13 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_Renew() {
-      ::grpc::Service::MarkMethodCallback(1,
+      ::grpc::Service::MarkMethodCallback(2,
           new ::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::proto::comet::v1::CatalogRenewRequest* request, ::proto::comet::v1::Empty* response) { return this->Renew(context, request, response); }));}
     void SetMessageAllocatorFor_Renew(
         ::grpc::MessageAllocator< ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>* allocator) {
-      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(1);
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(2);
       static_cast<::grpc::internal::CallbackUnaryHandler< ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>*>(handler)
               ->SetMessageAllocator(allocator);
     }
@@ -686,7 +760,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithCallbackMethod_Watch() {
-      ::grpc::Service::MarkMethodCallback(2,
+      ::grpc::Service::MarkMethodCallback(3,
           new ::grpc::internal::CallbackServerStreamingHandler< ::proto::comet::v1::WatchRequest, ::proto::comet::v1::CatalogWatchReply>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::proto::comet::v1::WatchRequest* request) { return this->Watch(context, request); }));
@@ -702,15 +776,32 @@ class Catalog final {
     virtual ::grpc::ServerWriteReactor< ::proto::comet::v1::CatalogWatchReply>* Watch(
       ::grpc::CallbackServerContext* /*context*/, const ::proto::comet::v1::WatchRequest* /*request*/)  { return nullptr; }
   };
-  typedef WithCallbackMethod_Publish<WithCallbackMethod_Renew<WithCallbackMethod_Watch<Service > > > CallbackService;
+  typedef WithCallbackMethod_Query<WithCallbackMethod_Publish<WithCallbackMethod_Renew<WithCallbackMethod_Watch<Service > > > > CallbackService;
   typedef CallbackService ExperimentalCallbackService;
+  template <class BaseClass>
+  class WithGenericMethod_Query : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_Query() {
+      ::grpc::Service::MarkMethodGeneric(0);
+    }
+    ~WithGenericMethod_Query() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Query(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogQueryRequest* /*request*/, ::proto::comet::v1::CatalogQueryReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
   template <class BaseClass>
   class WithGenericMethod_Publish : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_Publish() {
-      ::grpc::Service::MarkMethodGeneric(0);
+      ::grpc::Service::MarkMethodGeneric(1);
     }
     ~WithGenericMethod_Publish() override {
       BaseClassMustBeDerivedFromService(this);
@@ -727,7 +818,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_Renew() {
-      ::grpc::Service::MarkMethodGeneric(1);
+      ::grpc::Service::MarkMethodGeneric(2);
     }
     ~WithGenericMethod_Renew() override {
       BaseClassMustBeDerivedFromService(this);
@@ -744,7 +835,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithGenericMethod_Watch() {
-      ::grpc::Service::MarkMethodGeneric(2);
+      ::grpc::Service::MarkMethodGeneric(3);
     }
     ~WithGenericMethod_Watch() override {
       BaseClassMustBeDerivedFromService(this);
@@ -756,12 +847,32 @@ class Catalog final {
     }
   };
   template <class BaseClass>
+  class WithRawMethod_Query : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_Query() {
+      ::grpc::Service::MarkMethodRaw(0);
+    }
+    ~WithRawMethod_Query() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Query(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogQueryRequest* /*request*/, ::proto::comet::v1::CatalogQueryReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void RequestQuery(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
   class WithRawMethod_Publish : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_Publish() {
-      ::grpc::Service::MarkMethodRaw(0);
+      ::grpc::Service::MarkMethodRaw(1);
     }
     ~WithRawMethod_Publish() override {
       BaseClassMustBeDerivedFromService(this);
@@ -772,7 +883,7 @@ class Catalog final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestPublish(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(0, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -781,7 +892,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_Renew() {
-      ::grpc::Service::MarkMethodRaw(1);
+      ::grpc::Service::MarkMethodRaw(2);
     }
     ~WithRawMethod_Renew() override {
       BaseClassMustBeDerivedFromService(this);
@@ -792,7 +903,7 @@ class Catalog final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestRenew(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncUnary(1, context, request, response, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncUnary(2, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -801,7 +912,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawMethod_Watch() {
-      ::grpc::Service::MarkMethodRaw(2);
+      ::grpc::Service::MarkMethodRaw(3);
     }
     ~WithRawMethod_Watch() override {
       BaseClassMustBeDerivedFromService(this);
@@ -812,8 +923,30 @@ class Catalog final {
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
     void RequestWatch(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
-      ::grpc::Service::RequestAsyncServerStreaming(2, context, request, writer, new_call_cq, notification_cq, tag);
+      ::grpc::Service::RequestAsyncServerStreaming(3, context, request, writer, new_call_cq, notification_cq, tag);
     }
+  };
+  template <class BaseClass>
+  class WithRawCallbackMethod_Query : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_Query() {
+      ::grpc::Service::MarkMethodRawCallback(0,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Query(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_Query() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status Query(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogQueryRequest* /*request*/, ::proto::comet::v1::CatalogQueryReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* Query(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
   };
   template <class BaseClass>
   class WithRawCallbackMethod_Publish : public BaseClass {
@@ -821,7 +954,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_Publish() {
-      ::grpc::Service::MarkMethodRawCallback(0,
+      ::grpc::Service::MarkMethodRawCallback(1,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Publish(context, request, response); }));
@@ -843,7 +976,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_Renew() {
-      ::grpc::Service::MarkMethodRawCallback(1,
+      ::grpc::Service::MarkMethodRawCallback(2,
           new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->Renew(context, request, response); }));
@@ -865,7 +998,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithRawCallbackMethod_Watch() {
-      ::grpc::Service::MarkMethodRawCallback(2,
+      ::grpc::Service::MarkMethodRawCallback(3,
           new ::grpc::internal::CallbackServerStreamingHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
             [this](
                    ::grpc::CallbackServerContext* context, const::grpc::ByteBuffer* request) { return this->Watch(context, request); }));
@@ -882,12 +1015,39 @@ class Catalog final {
       ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)  { return nullptr; }
   };
   template <class BaseClass>
+  class WithStreamedUnaryMethod_Query : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_Query() {
+      ::grpc::Service::MarkMethodStreamed(0,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::proto::comet::v1::CatalogQueryRequest, ::proto::comet::v1::CatalogQueryReply>* streamer) {
+                       return this->StreamedQuery(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_Query() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status Query(::grpc::ServerContext* /*context*/, const ::proto::comet::v1::CatalogQueryRequest* /*request*/, ::proto::comet::v1::CatalogQueryReply* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status StreamedQuery(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::CatalogQueryRequest,::proto::comet::v1::CatalogQueryReply>* server_unary_streamer) = 0;
+  };
+  template <class BaseClass>
   class WithStreamedUnaryMethod_Publish : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_Publish() {
-      ::grpc::Service::MarkMethodStreamed(0,
+      ::grpc::Service::MarkMethodStreamed(1,
         new ::grpc::internal::StreamedUnaryHandler<
           ::proto::comet::v1::PublishRequest, ::proto::comet::v1::PublishReply>(
             [this](::grpc::ServerContext* context,
@@ -914,7 +1074,7 @@ class Catalog final {
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithStreamedUnaryMethod_Renew() {
-      ::grpc::Service::MarkMethodStreamed(1,
+      ::grpc::Service::MarkMethodStreamed(2,
         new ::grpc::internal::StreamedUnaryHandler<
           ::proto::comet::v1::CatalogRenewRequest, ::proto::comet::v1::Empty>(
             [this](::grpc::ServerContext* context,
@@ -935,14 +1095,14 @@ class Catalog final {
     // replace default version of method with streamed unary
     virtual ::grpc::Status StreamedRenew(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::proto::comet::v1::CatalogRenewRequest,::proto::comet::v1::Empty>* server_unary_streamer) = 0;
   };
-  typedef WithStreamedUnaryMethod_Publish<WithStreamedUnaryMethod_Renew<Service > > StreamedUnaryService;
+  typedef WithStreamedUnaryMethod_Query<WithStreamedUnaryMethod_Publish<WithStreamedUnaryMethod_Renew<Service > > > StreamedUnaryService;
   template <class BaseClass>
   class WithSplitStreamingMethod_Watch : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
    public:
     WithSplitStreamingMethod_Watch() {
-      ::grpc::Service::MarkMethodStreamed(2,
+      ::grpc::Service::MarkMethodStreamed(3,
         new ::grpc::internal::SplitServerStreamingHandler<
           ::proto::comet::v1::WatchRequest, ::proto::comet::v1::CatalogWatchReply>(
             [this](::grpc::ServerContext* context,
@@ -964,7 +1124,7 @@ class Catalog final {
     virtual ::grpc::Status StreamedWatch(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::proto::comet::v1::WatchRequest,::proto::comet::v1::CatalogWatchReply>* server_split_streamer) = 0;
   };
   typedef WithSplitStreamingMethod_Watch<Service > SplitStreamedService;
-  typedef WithStreamedUnaryMethod_Publish<WithStreamedUnaryMethod_Renew<WithSplitStreamingMethod_Watch<Service > > > StreamedService;
+  typedef WithStreamedUnaryMethod_Query<WithStreamedUnaryMethod_Publish<WithStreamedUnaryMethod_Renew<WithSplitStreamingMethod_Watch<Service > > > > StreamedService;
 };
 
 // 注册只能在来源 Star 更新或续租, 两种 order 独立, 切换 Star 必须重新 Create.

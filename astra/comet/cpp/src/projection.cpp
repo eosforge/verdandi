@@ -41,8 +41,9 @@ Value Reader::View::find(std::string_view key) const {
 // Reader::View::visit 遍历视图全部记录, 只共享所有权不复制字节.
 // context/visitor 为上下文与回调.
 void Reader::View::visit(void* context, void (*visitor)(void*, std::string_view, const Value&)) const {
-    if (contents_) {
-        contents_->data.each([&](std::string_view key, const detail::Datum& record) { visitor(context, key, record.value); });
+    const auto contents = contents_; // 回调可重入并重新赋值原 View, 本次遍历仍固定拥有旧根.
+    if (contents) {
+        contents->data.each([&](std::string_view key, const detail::Datum& record) { visitor(context, key, record.value); });
     }
 }
 } // namespace comet
@@ -104,8 +105,11 @@ Result<std::optional<Reader::View>> Projection::accept(const proto::comet::v1::A
     if (!valid_ || (page.mode() != proto::comet::v1::MODE_RESET && page.mode() != proto::comet::v1::MODE_APPLY) || page.complete() != page.has_version() || page.complete() != !page.instance().empty() || (!page.complete() && page.changes().empty()) || page.ByteSizeLong() > 8 * 1024 * 1024) {
         return fail(Error::Code::protocol);
     }
-    if (page.complete() && (!astra::Scope::text(page.instance(), 128) || (!expected_.empty() && expected_ != page.instance()) || (current_ && page.version() < current_->version))) {
+    if (page.complete() && (!astra::Scope::text(page.instance(), 128) || (!expected_.empty() && expected_ != page.instance()))) {
         return fail(Error::Code::protocol);
+    }
+    if (page.complete() && current_ && page.version() < current_->version) {
+        return fail(Error::Code::version); // 换到落后 Star 不安装回退视图, 恢复请求仍带原权威下限.
     }
     if (!draft_) {
         if ((page.mode() == proto::comet::v1::MODE_RESET && !first_) || (page.mode() == proto::comet::v1::MODE_APPLY && !current_)) {

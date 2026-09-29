@@ -4,6 +4,8 @@
 #include <astra/profile.hpp>
 #include <cerrno>
 #include <chrono>
+#include <openssl/rand.h>
+#include <openssl/sha.h>
 #include <sys/random.h>
 #include <system_error>
 
@@ -36,6 +38,45 @@ bool Ephemeris::valid(std::string_view uuid) noexcept {
     }
     const auto bytes = reinterpret_cast<const std::uint8_t*>(uuid.data());
     return (bytes[6] & 0xf0U) == 0x40U && (bytes[8] & 0xc0U) == 0x80U; // 仅接受版本 4 与 RFC 变体, 不解释文本别名.
+}
+
+bool Ephemeris::follows(const Record& previous, const Record& incoming) noexcept {
+    return previous.ttl == incoming.ttl && *previous.attr == *incoming.attr && incoming.generation >= previous.generation && incoming.update >= previous.update && incoming.deadline >= previous.deadline && (incoming.generation > previous.generation || (incoming.renewal >= previous.renewal && (incoming.update != previous.update || incoming.renewal != previous.renewal || incoming.deadline == previous.deadline))) && (incoming.update != previous.update || *incoming.data == *previous.data);
+}
+
+std::string Ephemeris::capability() {
+    std::string result(32, '\0');
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(result.data()), result.size()) != 1) {
+        throw std::runtime_error("Ephemeris random source failed");
+    }
+    return result;
+}
+
+std::string Ephemeris::identity(const Scope& scope, const Value& attr, std::uint32_t ttl, std::string_view capability) {
+
+    if (capability.size() != 32 || !attr || !scope.valid()) {
+        return {};
+    }
+    SHA256_CTX context;
+    SHA256_Init(&context);
+    const auto field = [&](std::string_view value) {
+        const auto size = static_cast<std::uint32_t>(value.size());
+        const std::array<std::uint8_t, 4> length{static_cast<std::uint8_t>(size >> 24), static_cast<std::uint8_t>(size >> 16), static_cast<std::uint8_t>(size >> 8), static_cast<std::uint8_t>(size)};
+        SHA256_Update(&context, length.data(), length.size());
+        SHA256_Update(&context, value.data(), value.size());
+    }; // 有长度前缀的域分离, 不允许通过拼接碰撞改变固定注册参数.
+    field("astra.ephemeris.capability.v1");
+    field(capability);
+    field(scope.sector);
+    field(scope.spectrum);
+    field(std::string_view(reinterpret_cast<const char*>(attr->data()), attr->size()));
+    const std::array<std::uint8_t, 4> duration{static_cast<std::uint8_t>(ttl >> 24), static_cast<std::uint8_t>(ttl >> 16), static_cast<std::uint8_t>(ttl >> 8), static_cast<std::uint8_t>(ttl)};
+    SHA256_Update(&context, duration.data(), duration.size());
+    std::array<unsigned char, SHA256_DIGEST_LENGTH> digest{};
+    SHA256_Final(digest.data(), &context);
+    digest[6] = static_cast<unsigned char>((digest[6] & 0x0fU) | 0x40U);
+    digest[8] = static_cast<unsigned char>((digest[8] & 0x3fU) | 0x80U);
+    return std::string(reinterpret_cast<const char*>(digest.data()), 16);
 }
 
 std::string Ephemeris::uuid() {
@@ -105,6 +146,11 @@ std::expected<Ephemeris::Change, Ephemeris::Error> Ephemeris::update(const Recor
     }
 
     auto record = current; // 保留固定 Attr、TTL、deadline 和独立续租顺序, 不分配载荷.
+    const auto deadline = reading.deadline_after(std::chrono::milliseconds(current.ttl));
+    if (!deadline) {
+        return std::unexpected(error(deadline.error()));
+    }
+    record.deadline = std::max(current.deadline, *deadline);
     record.update = order;
     if (!same) {
         record.data = std::move(data);

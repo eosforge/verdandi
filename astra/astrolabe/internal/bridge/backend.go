@@ -10,14 +10,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/eosforge/verdandi/astra/internal/admission"
-	"github.com/eosforge/verdandi/astra/internal/generated/comet"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
-	"github.com/eosforge/verdandi/astra/internal/generated/polaris"
+	"github.com/eosforge/astra/internal/admission"
+	"github.com/eosforge/astra/internal/generated/comet"
+	"github.com/eosforge/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/polaris"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // Backend 的目录观察和单个连接按短锁交换, 不在锁内发 RPC、等网络或关闭 Channel.
@@ -152,11 +153,39 @@ func (backend *Backend) begin(ctx context.Context) (context.Context, polaris.Aut
 // Commit 恰好执行一次内部 RPC, 不建立队列、改写期望版本或等待所有 Star 同步.
 // request 为提交内容; 返回权威确认的位置, 失败由调用方按位置语义判定重试.
 func (backend *Backend) Commit(ctx context.Context, request *polaris.CommitRequest) (*polaris.Position, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ctx, client, err := backend.begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return client.Commit(ctx, request)
+	if request == nil || len(request.Changes) == 0 || request.Change != nil {
+		return client.Commit(ctx, request)
+	}
+	stream, err := client.Batch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// 每页以 256 KiB 为打包目标, 单条大值独占一页; 总量不受单帧发送上限约束.
+	page := &polaris.BatchRequest{Scope: request.Scope, Version: request.Version}
+	size := proto.Size(page) + 16
+	for _, change := range request.Changes {
+		cost := proto.Size(change) + 6
+		if len(page.Changes) != 0 && size+cost > 256<<10 {
+			if err := stream.Send(page); err != nil {
+				return nil, err
+			}
+			page = &polaris.BatchRequest{Scope: request.Scope, Version: request.Version}
+			size = proto.Size(page) + 16
+		}
+		page.Changes = append(page.Changes, change)
+		size += cost
+	}
+	page.Complete = true
+	if err := stream.Send(page); err != nil {
+		return nil, err
+	}
+	return stream.CloseAndRecv()
 }
 
 // List 只读取权威范围元信息, 不从 Star 的业务缓存推导管理内容.

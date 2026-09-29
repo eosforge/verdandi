@@ -34,9 +34,9 @@ public:
         return true;
     } // Almanac 始终携带自身最后完整权威版本.
 
-    bool repair(Error::Code) noexcept {
-        return false;
-    } // 普通协议错误不通过无限重拉掩盖.
+    bool repair(Error::Code code) noexcept {
+        return code == Error::Code::version;
+    } // 权威落后保留完整下限并退避重试, 损坏协议仍永久失败.
 
     // scope/target 已由工厂作外部边界检查, bytes/records 为本地安装预算.
     // reserve 调整共享 Client 的保守持有计费, 缩小/归零必须成功, 空回调供独立核心使用.

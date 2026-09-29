@@ -61,7 +61,7 @@ fn arguments_are_deterministic_and_embedded_scripts_match_canonical_sources() {
     assert_eq!(renew_arguments(uuid, 9), vec![uuid.into(), "9".into()]);
     assert_eq!(unregister_arguments(uuid), vec![uuid.into()]);
 
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("lua").join("registration");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("lua").join("registration");
     let scripts = [
         ("register", REGISTRATION_REGISTER_LUA),
         ("update", REGISTRATION_UPDATE_LUA),

@@ -47,7 +47,7 @@ public:
         std::optional<Record> find(std::string_view key) const; // 精确查找, 缺项返回 nullopt, 不发 RPC 或插入条目.
 
         // 同步借用稳定 Key/Value, 回调可抛异常或重入 SDK; 需要保留数据时复制 Value 所有权.
-        // 此桥接只借用本次调用栈, 不分配 std::function 或把模板扩散到网络实现.
+        // 遍历固定本次内容, 回调重新赋值原 View 不影响当前遍历; 桥接不分配 std::function.
         void each(auto&& reader) const {
             auto callback = [&reader](std::string_view key, const Record& value) { std::invoke(reader, key, value); };
             visit(&callback, [](void* context, std::string_view key, const Record& value) { (*static_cast<decltype(callback)*>(context))(key, value); });
@@ -68,6 +68,33 @@ public:
         std::string target_;
         std::optional<Error> error_; // 未发生本次错误时为空.
     };
+
+    // 隐藏 Catalog 版本的业务字典, 与完整 View 共享同一不可变根.
+    class Map {
+    public:
+        explicit Map(View view) : view_(std::move(view)) {}
+
+        std::size_t size() const noexcept {
+            return view_.size();
+        } // 完整字典大小.
+
+        Value find(std::string_view key) const {
+            const auto entry = view_.find(key);
+            return entry ? entry->value : Value{};
+        } // 空指针仅表示缺项.
+
+        void each(auto&& reader) const {
+            view_.each([&](std::string_view key, const Record& record) { std::invoke(reader, key, record.value); });
+        } // 同步借用键和不可变值.
+    private:
+        View view_; // 保留完整批次, 不拥有网络资源.
+    };
+
+    View state() const;                                                                            // 当前状态与诊断, 不等待 RPC.
+    Result<void> changed(std::move_only_function<void(View)> callback);                            // 替换状态回调, 立即安排当前状态.
+    Result<void> watch(std::move_only_function<void(Map)> callback);                               // 全 Scope 完整 Map, 空回调解除.
+    Result<void> watch(std::move_only_function<void(std::string, std::optional<Value>)> callback); // 精确 Key 完整基线与后续变化, Key 拥有存储.
+    void stop() noexcept;                                                                          // 幂等停止本对象, 已交付值仍可保留.
 
     struct Options {
         // 每对象可安装内容与容器的保守字节预算, 默认 64 MiB; 私有候选另允许有界替换峰值.
@@ -91,7 +118,7 @@ public:
 
 private:
     friend class Client;
-    // 应用句柄与私有网络状态分开, 不因旧 View/future 存活而保留自动订阅.
+    // 应用句柄与私有网络状态分开, 不因旧 View 存活而保留自动订阅.
     explicit Subscriber(std::shared_ptr<detail::Subscribing> subscribing);
     std::shared_ptr<detail::Subscribing> subscribing_; // 空表示默认或已移动句柄.
 };

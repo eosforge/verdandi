@@ -535,7 +535,7 @@ const file_orbit_proto_rawDesc = "" +
 	"\x0eROLE_ASTROLABE\x10\x042\xaf\x01\n" +
 	"\tAdmission\x12U\n" +
 	"\bRegister\x12#.proto.orbit.v1.RegistrationRequest\x1a$.proto.orbit.v1.RegistrationResponse\x12K\n" +
-	"\x04List\x12 .proto.orbit.v1.DirectoryRequest\x1a!.proto.orbit.v1.DirectoryResponseBCZAgithub.com/eosforge/verdandi/astra/internal/generated/orbit;orbitb\x06proto3"
+	"\x04List\x12 .proto.orbit.v1.DirectoryRequest\x1a!.proto.orbit.v1.DirectoryResponseB:Z8github.com/eosforge/astra/internal/generated/orbit;orbitb\x06proto3"
 
 var (
 	file_orbit_proto_rawDescOnce sync.Once

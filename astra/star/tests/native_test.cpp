@@ -12,7 +12,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include <string>
 
 namespace {
 using namespace std::chrono_literals;
@@ -48,10 +47,10 @@ void ephemeris() {
 
     const auto changed = Ephemeris::update(*initial, bytes("next"), 17, clock(1200ms));
     CHECK(changed && changed->changed && changed->visible);
-    CHECK(changed->record.deadline == initial->deadline && changed->record.attr == attr && changed->record.update == 17 && changed->record.renewal == 0);
+    CHECK(changed->record.deadline == Clock::Time(2200ms) && changed->record.attr == attr && changed->record.update == 17 && changed->record.renewal == 0);
     CHECK(initial->data == data && initial->update == 0); // 返回候选本身不提交状态.
     const auto repeated = Ephemeris::update(changed->record, bytes("next"), 17, clock(1300ms));
-    CHECK(repeated && !repeated->changed && !repeated->visible);
+    CHECK(repeated && !repeated->changed && !repeated->visible && repeated->record.deadline == changed->record.deadline);
     error(Ephemeris::update(changed->record, bytes("old"), 16, clock()), Ephemeris::Error::obsolete);
     error(Ephemeris::update(changed->record, bytes("different"), 17, clock()), Ephemeris::Error::conflict);
     const auto same = Ephemeris::update(changed->record, bytes("next"), 18, clock());

@@ -20,6 +20,8 @@ public:
     bool empty() const;
     // 复用本服务的固定状态和 Gateway, 首次 reset 与连续 apply 均按 complete 提交.
     grpc::ServerWriteReactor<proto::comet::v1::CatalogWatchReply>* Watch(grpc::CallbackServerContext* context, const proto::comet::v1::WatchRequest* request) override;
+    // 返回当前 Star 已知的逐 Key 水位, 供 SDK 初始化和一次显式冲突修复使用.
+    grpc::ServerUnaryReactor* Query(grpc::CallbackServerContext* context, const proto::comet::v1::CatalogQueryRequest* request, proto::comet::v1::CatalogQueryReply* reply) override;
     // 单 Key 完整正文和正内容版本, 首次 Publish 可以省略 instance.
     grpc::ServerUnaryReactor* Publish(grpc::CallbackServerContext* context, const proto::comet::v1::PublishRequest* request, proto::comet::v1::PublishReply* reply) override;
     // 显式 TTL 只续接当前实例已有完整来源, 缺项/过期明确失败.

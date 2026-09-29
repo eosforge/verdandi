@@ -4,15 +4,16 @@ package server
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"github.com/eosforge/verdandi/astra/internal/admission"
-	"github.com/eosforge/verdandi/astra/internal/generated/comet"
-	"github.com/eosforge/verdandi/astra/internal/generated/orbit"
-	"github.com/eosforge/verdandi/astra/internal/generated/polaris"
-	"github.com/eosforge/verdandi/astra/polaris/internal/storage"
+	"github.com/eosforge/astra/internal/admission"
+	"github.com/eosforge/astra/internal/generated/comet"
+	"github.com/eosforge/astra/internal/generated/orbit"
+	"github.com/eosforge/astra/internal/generated/polaris"
+	"github.com/eosforge/astra/polaris/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -84,8 +85,8 @@ func (authority *Authority) begin(ctx context.Context) (*orbit.Member, error) {
 	return member, nil
 }
 
-// Commit 单次请求只修改一个 Key, 返回仅证明 Polaris 的持久事务已经成功提交.
-// request 为提交内容 (范围+期望版本+单键变更, 整体不超 2 MiB); 返回确认位置.
+// Commit 原子提交一个单键或唯一键批次, 返回仅证明 Polaris 的持久事务已经成功提交.
+// request 为一帧可容纳的完整提交; 超出单帧的批次使用 Batch, 不限制整批总量.
 func (authority *Authority) Commit(ctx context.Context, request *polaris.CommitRequest) (*polaris.Position, error) {
 	// 先占许可, 退出时归还, 任何提前返回都不泄漏许可.
 	member, err := authority.begin(ctx)
@@ -93,11 +94,93 @@ func (authority *Authority) Commit(ctx context.Context, request *polaris.CommitR
 		return nil, err
 	}
 	defer func() { <-authority.slots }()
-	// 请求形状校验: 三部分非空且整体有界, 防止超大请求进入事务.
-	if request == nil || request.Scope == nil || request.Change == nil || proto.Size(request) > 2<<20 {
+	return authority.commit(ctx, member, request)
+}
+
+// Batch 暂存同一范围/版本的运输页, 收到显式完整页和正常 EOF 后才允许一次提交.
+// 不把已接收的前缀写入 records/history; 中断、跨页重复或不一致均由整批校验拒绝.
+func (authority *Authority) Batch(stream grpc.ClientStreamingServer[polaris.BatchRequest, polaris.Position]) error {
+	ctx := stream.Context()
+	member, err := authority.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { <-authority.slots }()
+	var request *polaris.CommitRequest
+	complete := false
+	for {
+		page, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if !authority.directory.Current(member) {
+			return status.Error(codes.Unauthenticated, "Management admission replaced")
+		}
+		if complete || page == nil || page.Scope == nil || page.Version == 0 || len(page.Changes) == 0 {
+			return status.Error(codes.InvalidArgument, "Invalid batch page")
+		}
+		if request == nil {
+			request = &polaris.CommitRequest{Scope: page.Scope, Version: page.Version}
+		} else if !proto.Equal(request.Scope, page.Scope) || request.Version != page.Version {
+			return status.Error(codes.InvalidArgument, "Batch position changed")
+		}
+		request.Changes = append(request.Changes, page.Changes...)
+		complete = page.Complete
+	}
+	if !complete {
+		return status.Error(codes.InvalidArgument, "Incomplete batch")
+	}
+	result, err := authority.commit(ctx, member, request)
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(result)
+}
+
+// commit 共用单帧和多帧提交校验, 调用方已占管理许可; 完整检查后只进入一次持久事务.
+func (authority *Authority) commit(ctx context.Context, member *orbit.Member, request *polaris.CommitRequest) (*polaris.Position, error) {
+	if request == nil || request.Scope == nil || (request.Change == nil) == (len(request.Changes) == 0) {
 		return nil, status.Error(codes.InvalidArgument, "Invalid authority commit")
 	}
 	scope := storage.Scope{Sector: string(request.Scope.Sector), Spectrum: string(request.Scope.Spectrum)}
+	if len(request.Changes) != 0 {
+		if strings.HasPrefix(scope.Sector, "__") {
+			return nil, status.Error(codes.InvalidArgument, "Invalid batch scope")
+		}
+		changes := make([]storage.Change, 0, len(request.Changes))
+		for _, item := range request.Changes {
+			if item == nil {
+				return nil, status.Error(codes.InvalidArgument, "Missing batch entry")
+			}
+			entry := storage.Change{Key: item.Key}
+			switch action := item.Action.(type) {
+			case *comet.AlmanacChange_Value:
+				if action == nil {
+					return nil, status.Error(codes.InvalidArgument, "Missing value action")
+				}
+				entry.Value = action.Value
+			case *comet.AlmanacChange_Erase:
+				if action == nil || action.Erase == nil {
+					return nil, status.Error(codes.InvalidArgument, "Missing erase action")
+				}
+				entry.Erase = true
+			default:
+				return nil, status.Error(codes.InvalidArgument, "Missing batch action")
+			}
+			changes = append(changes, entry)
+		}
+		if !authority.directory.Current(member) {
+			return nil, status.Error(codes.Unauthenticated, "Management admission replaced")
+		}
+		version, err := authority.store.CommitBatch(ctx, scope, storage.Version(request.Version), changes)
+		if err != nil {
+			return nil, failure(err)
+		}
+		return &polaris.Position{Scope: request.Scope, Version: uint64(version)}, nil
+	}
 	change := storage.Change{Version: storage.Version(request.Version), Key: request.Change.Key}
 	// 动作二选一: 设值携带载荷, 删除必须是显式擦除.
 	switch action := request.Change.Action.(type) {
